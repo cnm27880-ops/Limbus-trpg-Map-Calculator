@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Limbus Command v7.3</title>
+    <title>Limbus Command v7.4</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <style>
@@ -172,6 +172,18 @@
         /* Helper */
         .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:#222; border:1px solid var(--accent-green); color:#fff; padding:10px 20px; border-radius:30px; z-index:3000; opacity:0; transition:all 0.3s; pointer-events:none; font-size:0.9rem; }
         .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+        /* Connection Status */
+        .conn-status { display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:0.75rem; background:var(--bg-card); }
+        .conn-dot { width:8px; height:8px; border-radius:50%; animation: pulse 2s infinite; }
+        .conn-dot.online { background:var(--accent-green); }
+        .conn-dot.offline { background:var(--accent-red); animation:none; }
+        .conn-dot.connecting { background:var(--accent-yellow); }
+        @keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.5; } }
+
+        /* Player Code Display */
+        .player-code { font-family:'JetBrains Mono',monospace; font-size:1.5rem; font-weight:bold; letter-spacing:4px; color:var(--accent-yellow); background:var(--bg-input); padding:8px 16px; border-radius:8px; border:2px dashed var(--accent-yellow); margin:10px 0; cursor:pointer; }
+        .player-code:hover { background:var(--bg-card); }
         
         #tile-info-panel {
             background: rgba(0,0,0,0.6); border: 1px solid var(--border);
@@ -191,18 +203,23 @@
 <div id="login-layer">
     <div class="login-box" id="login-main">
         <div class="login-title">LIMBUS</div>
-        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.3</div>
+        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.4</div>
         <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
         <button class="login-btn btn-host" onclick="initSystem('st')">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
     </div>
     <div class="login-box hidden" id="login-join">
         <div class="login-title">加入房間</div>
-        <input type="text" id="input-host-id" placeholder="貼上 ST 的 ID" style="width:100%;text-align:center;margin-bottom:10px;">
+        <input type="text" id="input-host-id" placeholder="貼上 ST 的房間 ID" style="width:100%;text-align:center;margin-bottom:10px;">
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">或輸入你的 4 位數識別碼來快速重連</div>
+        <input type="text" id="input-player-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
         <button class="login-btn btn-join" onclick="initSystem('player')">連線</button>
         <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
     </div>
-    <div class="login-box hidden" id="login-loading"><div style="color:var(--accent-green);">連線中...</div></div>
+    <div class="login-box hidden" id="login-loading">
+        <div style="color:var(--accent-green);margin-bottom:10px;">連線中...</div>
+        <div id="loading-status" style="font-size:0.8rem;color:var(--text-dim);"></div>
+    </div>
 </div>
 
 <!-- Nav -->
@@ -213,6 +230,10 @@
         <button class="nav-tab" data-page="calc" onclick="switchPage('calc')">🎲 計算</button>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
+        <div class="conn-status" id="conn-status" title="連線狀態">
+            <div class="conn-dot connecting" id="conn-dot"></div>
+            <span id="conn-text">連線中</span>
+        </div>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋</button>
         <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製ID">---</span>
     </div>
@@ -524,12 +545,55 @@ const STORAGE_KEY = 'limbus_session';
 
 // Persistent player ID (survives reconnections)
 let myPlayerId = null;
+let myPlayerCode = null; // 4-digit player code
+
+// Connection state
+let connectionState = 'disconnected'; // 'disconnected', 'connecting', 'connected'
+let heartbeatInterval = null;
+let reconnectTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const HEARTBEAT_INTERVAL = 5000; // 5 seconds
+const RECONNECT_DELAY = 2000; // 2 seconds base delay
 
 /* --- 2. INIT & CONN --- */
 
 // Generate a unique player ID
 function generatePlayerId() {
     return 'player_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// Generate a 4-digit player code
+function generatePlayerCode() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+// Update connection status UI
+function setConnectionStatus(status, text = null) {
+    connectionState = status;
+    const dot = document.getElementById('conn-dot');
+    const txt = document.getElementById('conn-text');
+    if (!dot || !txt) return;
+
+    dot.className = 'conn-dot';
+    switch(status) {
+        case 'connected':
+            dot.classList.add('online');
+            txt.innerText = text || '已連線';
+            txt.style.color = 'var(--accent-green)';
+            break;
+        case 'connecting':
+            dot.classList.add('connecting');
+            txt.innerText = text || '連線中';
+            txt.style.color = 'var(--accent-yellow)';
+            break;
+        case 'disconnected':
+        default:
+            dot.classList.add('offline');
+            txt.innerText = text || '離線';
+            txt.style.color = 'var(--accent-red)';
+            break;
+    }
 }
 
 // Save session to localStorage
@@ -539,7 +603,9 @@ function saveSession() {
         role: myRole,
         hostId: hostId,
         peerId: myPeerId,
-        playerId: myPlayerId
+        playerId: myPlayerId,
+        playerCode: myPlayerCode,
+        timestamp: Date.now()
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 }
@@ -557,6 +623,134 @@ function clearSession() {
     localStorage.removeItem(STORAGE_KEY);
 }
 
+// Start heartbeat for connection health check
+function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatInterval = setInterval(() => {
+        if (myRole === 'st') {
+            // ST sends heartbeat to all players
+            for (const peerId in connections) {
+                const conn = connections[peerId];
+                if (conn && conn.open) {
+                    try {
+                        conn.send({ type: 'heartbeat', timestamp: Date.now() });
+                    } catch(e) {
+                        console.warn('Heartbeat failed for', peerId);
+                    }
+                }
+            }
+        } else if (hostConn && hostConn.open) {
+            // Player sends heartbeat to ST
+            try {
+                hostConn.send({ type: 'heartbeat', playerId: myPlayerId, timestamp: Date.now() });
+            } catch(e) {
+                console.warn('Heartbeat failed');
+                handleConnectionLost();
+            }
+        } else if (connectionState === 'connected') {
+            // Connection seems lost
+            handleConnectionLost();
+        }
+    }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Handle connection lost
+function handleConnectionLost() {
+    if (connectionState === 'disconnected') return;
+
+    setConnectionStatus('disconnected', '斷線');
+    showToast('連線中斷，嘗試重連...');
+
+    // Try to reconnect
+    attemptReconnect();
+}
+
+// Attempt to reconnect
+function attemptReconnect() {
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+    }
+
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        showToast('重連失敗，請手動重新連線');
+        setConnectionStatus('disconnected', '重連失敗');
+        return;
+    }
+
+    reconnectAttempts++;
+    const delay = RECONNECT_DELAY * Math.min(reconnectAttempts, 5);
+    setConnectionStatus('connecting', `重連中 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+    reconnectTimeout = setTimeout(() => {
+        if (myRole === 'st') {
+            // ST just needs to reconnect the peer
+            if (peer && peer.disconnected && !peer.destroyed) {
+                peer.reconnect();
+            }
+        } else if (hostId) {
+            // Player needs to reconnect to ST
+            if (hostConn) {
+                try { hostConn.close(); } catch(e) {}
+            }
+            connectToHost(hostId);
+        }
+    }, delay);
+}
+
+// Reset reconnection state
+function resetReconnectState() {
+    reconnectAttempts = 0;
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+}
+
+// Handle page visibility change (for mobile background/foreground)
+function setupVisibilityHandler() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // Page became visible - check connection and refresh
+            console.log('Page visible, checking connection...');
+
+            if (myRole === 'player' && hostConn) {
+                if (!hostConn.open) {
+                    // Connection seems closed, try to reconnect
+                    handleConnectionLost();
+                } else {
+                    // Connection seems ok, request state refresh
+                    hostConn.send({ type: 'requestState', playerId: myPlayerId });
+                }
+            }
+
+            // Force re-render to fix any visual glitches
+            setTimeout(() => {
+                renderAll();
+            }, 100);
+        } else {
+            // Page going to background
+            console.log('Page hidden');
+        }
+    });
+
+    // Also handle page focus/blur for additional reliability
+    window.addEventListener('focus', () => {
+        setTimeout(() => {
+            if (myRole === 'player' && hostConn && hostConn.open) {
+                hostConn.send({ type: 'requestState', playerId: myPlayerId });
+            }
+            renderAll();
+        }, 200);
+    });
+}
+
 // Check for existing session on page load
 function checkExistingSession() {
     const session = loadSession();
@@ -564,6 +758,9 @@ function checkExistingSession() {
         document.getElementById('input-name').value = session.name;
         if (session.hostId && session.role === 'player') {
             document.getElementById('input-host-id').value = session.hostId;
+        }
+        if (session.playerCode) {
+            document.getElementById('input-player-code').value = session.playerCode;
         }
         // Show reconnect option
         if (session.role === 'st' || session.hostId) {
@@ -579,16 +776,28 @@ function showReconnectOption(session) {
         reconnectDiv = document.createElement('div');
         reconnectDiv.id = 'reconnect-option';
         reconnectDiv.style.cssText = 'margin-top:15px;padding:12px;background:rgba(67,160,71,0.1);border:1px solid var(--accent-green);border-radius:8px;';
+
+        const codeDisplay = session.playerCode
+            ? `<div style="margin:10px 0;"><div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">你的識別碼：</div><div class="player-code" onclick="copyPlayerCode('${session.playerCode}')">${session.playerCode}</div><div style="font-size:0.65rem;color:var(--text-dim);">點擊複製，用於跨裝置重連</div></div>`
+            : '';
+
         reconnectDiv.innerHTML = `
             <div style="color:var(--accent-green);font-size:0.9rem;margin-bottom:8px;">🔄 偵測到上次連線</div>
             <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
                 ${session.role === 'st' ? '身份: ST (房主)' : '房間: ' + (session.hostId || '').substring(0,8) + '...'}
             </div>
+            ${codeDisplay}
             <button class="login-btn" style="background:var(--accent-green);padding:10px;" onclick="reconnectSession()">快速重連</button>
             <button class="login-btn btn-back" style="padding:8px;margin-top:6px;" onclick="clearSessionAndRefresh()">清除並重新開始</button>
         `;
         mainBox.appendChild(reconnectDiv);
     }
+}
+
+function copyPlayerCode(code) {
+    navigator.clipboard.writeText(code).then(() => {
+        showToast('識別碼已複製: ' + code);
+    });
 }
 
 function clearSessionAndRefresh() {
@@ -616,17 +825,28 @@ function initSystem(role, savedPeerId = null) {
     myName = name;
     myRole = role;
 
-    // Initialize or restore player ID
+    // Initialize or restore player ID and code
     const session = loadSession();
-    if (session && session.playerId) {
+    const inputPlayerCode = document.getElementById('input-player-code')?.value?.trim();
+
+    if (inputPlayerCode && inputPlayerCode.length === 4) {
+        // User entered a player code - use it to restore identity
+        myPlayerCode = inputPlayerCode;
+        myPlayerId = 'code_' + inputPlayerCode;
+    } else if (session && session.playerId) {
         myPlayerId = session.playerId;
+        myPlayerCode = session.playerCode || generatePlayerCode();
     } else {
         myPlayerId = generatePlayerId();
+        myPlayerCode = generatePlayerCode();
     }
 
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
     document.getElementById('login-loading').classList.remove('hidden');
+
+    setConnectionStatus('connecting', '建立連線中...');
+    document.getElementById('loading-status').innerText = '正在連接伺服器...';
 
     // Create peer with optional saved ID for ST reconnection
     const peerOptions = {};
@@ -642,6 +862,7 @@ function initSystem(role, savedPeerId = null) {
 
         if (role === 'st') {
             hostId = id; // ST's own ID is the room ID
+            setConnectionStatus('connected', 'ST 已就緒');
         }
 
         document.getElementById('my-id').innerText = id;
@@ -649,6 +870,9 @@ function initSystem(role, savedPeerId = null) {
 
         // Save session
         saveSession();
+
+        // Setup visibility handler for mobile
+        setupVisibilityHandler();
 
         if (role === 'st') {
             document.getElementById('st-map-controls').style.display = 'flex';
@@ -661,6 +885,12 @@ function initSystem(role, savedPeerId = null) {
             }
             updateToolbar();
             renderAll();
+
+            // Start heartbeat for ST
+            startHeartbeat();
+
+            // Show player code for ST
+            showToast(`房間已建立！你的識別碼：${myPlayerCode}`);
         } else {
             // Show player toolbar (for adding their own units)
             document.getElementById('st-map-controls').style.display = 'none';
@@ -735,18 +965,28 @@ function connectToHost(targetHostId) {
     if (!targetHostId) return;
     hostId = targetHostId;
 
+    setConnectionStatus('connecting', '連接房間中...');
+    document.getElementById('loading-status').innerText = '正在連接房間...';
+
     hostConn = peer.connect(targetHostId, { reliable: true });
 
     hostConn.on('open', () => {
-        showToast('已連接到房間');
+        setConnectionStatus('connected');
+        resetReconnectState();
+        showToast(`已連接！你的識別碼：${myPlayerCode}`);
+
         // Send join message with player info (use persistent playerId for ownership)
         hostConn.send({
             type: 'join',
             peerId: myPeerId,
             playerId: myPlayerId,
+            playerCode: myPlayerCode,
             playerName: myName
         });
         saveSession();
+
+        // Start heartbeat for player
+        startHeartbeat();
     });
 
     hostConn.on('data', data => {
@@ -754,12 +994,18 @@ function connectToHost(targetHostId) {
     });
 
     hostConn.on('close', () => {
-        showToast('與房間斷線');
+        console.log('Connection to host closed');
         hostConn = null;
+        handleConnectionLost();
     });
 
     hostConn.on('error', err => {
+        console.error('Connection error:', err);
+        setConnectionStatus('disconnected', '連線錯誤');
         showToast('連線錯誤: ' + err.type);
+
+        // Try to reconnect
+        setTimeout(() => attemptReconnect(), RECONNECT_DELAY);
     });
 }
 
@@ -794,15 +1040,37 @@ function handleSTMessage(conn, data) {
     const playerId = data.playerId || peerId;
 
     switch (data.type) {
+        case 'heartbeat':
+            // Respond to heartbeat
+            if (conn.open) {
+                conn.send({ type: 'heartbeat-ack', timestamp: Date.now() });
+            }
+            // Update player's peerId in case it changed (reconnection)
+            if (state.players[playerId] && state.players[playerId].peerId !== peerId) {
+                state.players[playerId].peerId = peerId;
+                // Update connections map
+                delete connections[state.players[playerId].peerId];
+                connections[peerId] = conn;
+            }
+            break;
+
+        case 'requestState':
+            // Player requests fresh state (after visibility change)
+            if (conn.open) {
+                conn.send({ type: 'state', payload: state });
+            }
+            break;
+
         case 'join':
             // Register player with their persistent playerId
             state.players[playerId] = {
                 id: playerId,
                 peerId: peerId,
+                code: data.playerCode,
                 name: data.playerName,
                 online: true
             };
-            showToast(`${data.playerName} 加入了房間`);
+            showToast(`${data.playerName} 加入了房間 (${data.playerCode || ''})`);
             broadcastState();
             break;
 
@@ -868,7 +1136,22 @@ function handlePlayerMessage(data) {
     switch (data.type) {
         case 'state':
             state = data.payload;
+            setConnectionStatus('connected');
             renderAll();
+            break;
+
+        case 'heartbeat':
+            // ST sent a heartbeat, respond with ack
+            if (hostConn && hostConn.open) {
+                hostConn.send({ type: 'heartbeat-ack', playerId: myPlayerId, timestamp: Date.now() });
+            }
+            setConnectionStatus('connected');
+            break;
+
+        case 'heartbeat-ack':
+            // ST acknowledged our heartbeat - connection is healthy
+            setConnectionStatus('connected');
+            resetReconnectState();
             break;
     }
 }

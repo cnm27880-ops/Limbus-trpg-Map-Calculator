@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Limbus Command v7.1 (Fixes)</title>
+    <title>Limbus Command v7.2</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <style>
@@ -73,21 +73,26 @@
         .map-container { position:absolute; left:50%; top:50%; transform-origin: center center; will-change:transform; user-select: none; }
         
         #battle-map { display:grid; border:2px solid #444; background:var(--bg-main); box-shadow: 0 0 50px rgba(0,0,0,0.5); }
-        .cell { width:var(--grid-size); height:var(--grid-size); border:1px solid rgba(255,255,255,0.05); position:relative; }
+        .cell { width:var(--grid-size); height:var(--grid-size); border:1px solid rgba(255,255,255,0.05); position:relative; touch-action: none; }
         
         /* Tile Vis */
         .cell.deploy-target { background:rgba(253,216,53,0.3) !important; box-shadow:inset 0 0 0 2px var(--accent-yellow); cursor: crosshair; }
 
         /* Tokens */
-        .token { 
-            position:absolute; inset:2px; /* 填滿格子但在內縮一點 */
-            border-radius:50%; border:2px solid #fff; 
-            background-size:cover; background-position:center; background-color:#333; 
-            z-index:10; display:flex; align-items:center; justify-content:center; 
-            font-weight:700; font-size:16px; color:#fff; text-shadow:0 1px 3px #000; 
-            pointer-events: auto; cursor: pointer; transition: transform 0.1s;
+        .token {
+            position:absolute;
+            width: calc(var(--grid-size) - 4px);
+            height: calc(var(--grid-size) - 4px);
+            border-radius:50%; border:2px solid #fff;
+            background-size:cover; background-position:center; background-color:#333;
+            z-index:10; display:flex; align-items:center; justify-content:center;
+            font-weight:700; font-size:16px; color:#fff; text-shadow:0 1px 3px #000;
+            pointer-events: auto; cursor: grab; transition: transform 0.1s, left 0.15s, top 0.15s;
+            touch-action: none;
         }
+        .token:active { cursor: grabbing; }
         .token.selected { transform:scale(1.15); box-shadow:0 0 0 3px var(--accent-yellow); z-index:20; }
+        .token.dragging { z-index: 100; transition: none; opacity: 0.9; transform: scale(1.1); }
         .token.enemy { border-color:var(--accent-red); } 
         .token.player { border-color:var(--accent-green); }
 
@@ -186,7 +191,7 @@
 <div id="login-layer">
     <div class="login-box" id="login-main">
         <div class="login-title">LIMBUS</div>
-        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.1</div>
+        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.2</div>
         <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
         <button class="login-btn btn-host" onclick="initSystem('st')">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
@@ -465,6 +470,13 @@ let isDraggingMap = false;
 let lastPointer = { x: 0, y: 0 };
 let lastDist = 0; // For pinch zoom
 
+// Token Drag State
+let isDraggingToken = false;
+let draggedUnit = null;
+let draggedElement = null;
+let dragStartPos = { x: 0, y: 0 };
+let tokenStartPos = { x: 0, y: 0 };
+
 /* --- 2. INIT & CONN --- */
 function initSystem(role) {
     const name = document.getElementById('input-name').value.trim();
@@ -537,7 +549,7 @@ function sendState() {
 /* --- 3. CAMERA LOGIC (PAN & ZOOM) --- */
 function initCameraEvents() {
     const vp = document.getElementById('map-viewport');
-    
+
     // Wheel Zoom
     vp.addEventListener('wheel', e => {
         e.preventDefault();
@@ -545,19 +557,30 @@ function initCameraEvents() {
         zoomCamera(delta);
     }, { passive: false });
 
-    // Pointer Events (Mouse & Touch)
+    // Pointer Events (Mouse & Touch) - Map Panning
     vp.addEventListener('pointerdown', e => {
+        // Don't start map drag if clicking on a token (handled separately)
+        if (isDraggingToken || e.target.classList.contains('token')) return;
+
         isDraggingMap = true;
         lastPointer = { x: e.clientX, y: e.clientY };
         vp.setPointerCapture(e.pointerId);
     });
 
     vp.addEventListener('pointermove', e => {
+        // Handle token dragging
+        if (isDraggingToken && draggedElement) {
+            e.preventDefault();
+            handleTokenDragMove(e);
+            return;
+        }
+
+        // Handle map panning
         if (!isDraggingMap) return;
         e.preventDefault();
         const dx = e.clientX - lastPointer.x;
         const dy = e.clientY - lastPointer.y;
-        
+
         cam.x += dx;
         cam.y += dy;
         lastPointer = { x: e.clientX, y: e.clientY };
@@ -565,14 +588,30 @@ function initCameraEvents() {
     });
 
     vp.addEventListener('pointerup', e => {
+        // Handle token drop
+        if (isDraggingToken) {
+            endTokenDrag(e);
+            return;
+        }
+
+        // Handle map pan end
+        if (isDraggingMap) {
+            isDraggingMap = false;
+            vp.releasePointerCapture(e.pointerId);
+        }
+    });
+
+    vp.addEventListener('pointercancel', e => {
+        if (isDraggingToken) {
+            cancelTokenDrag();
+        }
         isDraggingMap = false;
-        vp.releasePointerCapture(e.pointerId);
     });
 
     // Touch Pinch (Simple)
     vp.addEventListener('touchmove', e => {
-        if(e.touches.length === 2) {
-            e.preventDefault(); // Stop page scroll
+        if(e.touches.length === 2 && !isDraggingToken) {
+            e.preventDefault();
             const dist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
@@ -584,7 +623,7 @@ function initCameraEvents() {
             lastDist = dist;
         }
     }, { passive: false });
-    
+
     vp.addEventListener('touchend', () => { lastDist = 0; });
 }
 
@@ -601,6 +640,90 @@ function applyCamera() {
 function resetCamera() {
     cam = { x: 0, y: 0, scale: 1.0 };
     applyCamera();
+}
+
+/* --- 3.5 TOKEN DRAG LOGIC --- */
+function startTokenDrag(e, unit, element) {
+    isDraggingToken = true;
+    draggedUnit = unit;
+    draggedElement = element;
+    dragStartPos = { x: e.clientX, y: e.clientY };
+
+    const gridSize = 50;
+    tokenStartPos = {
+        x: unit.x * gridSize + 2,
+        y: unit.y * gridSize + 2
+    };
+
+    element.classList.add('dragging');
+    element.setPointerCapture(e.pointerId);
+    selectUnit(unit.id);
+}
+
+function handleTokenDragMove(e) {
+    if (!isDraggingToken || !draggedElement) return;
+
+    const dx = (e.clientX - dragStartPos.x) / cam.scale;
+    const dy = (e.clientY - dragStartPos.y) / cam.scale;
+
+    draggedElement.style.left = (tokenStartPos.x + dx) + 'px';
+    draggedElement.style.top = (tokenStartPos.y + dy) + 'px';
+}
+
+function endTokenDrag(e) {
+    if (!isDraggingToken || !draggedUnit) {
+        cancelTokenDrag();
+        return;
+    }
+
+    // Calculate which cell we dropped on
+    const gridSize = 50;
+    const dx = (e.clientX - dragStartPos.x) / cam.scale;
+    const dy = (e.clientY - dragStartPos.y) / cam.scale;
+
+    const newPixelX = tokenStartPos.x + dx;
+    const newPixelY = tokenStartPos.y + dy;
+
+    // Convert to grid coordinates
+    let newX = Math.round(newPixelX / gridSize);
+    let newY = Math.round(newPixelY / gridSize);
+
+    // Clamp to map bounds
+    newX = Math.max(0, Math.min(state.mapW - 1, newX));
+    newY = Math.max(0, Math.min(state.mapH - 1, newY));
+
+    // Update unit position
+    draggedUnit.x = newX;
+    draggedUnit.y = newY;
+
+    // Cleanup
+    if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+        draggedElement.releasePointerCapture(e.pointerId);
+    }
+
+    isDraggingToken = false;
+    draggedUnit = null;
+    draggedElement = null;
+
+    sendState();
+    renderAll();
+}
+
+function cancelTokenDrag() {
+    if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+        // Reset position
+        const gridSize = 50;
+        if (draggedUnit) {
+            draggedElement.style.left = (draggedUnit.x * gridSize + 2) + 'px';
+            draggedElement.style.top = (draggedUnit.y * gridSize + 2) + 'px';
+        }
+    }
+
+    isDraggingToken = false;
+    draggedUnit = null;
+    draggedElement = null;
 }
 
 /* --- 4. MAP LOGIC --- */
@@ -730,32 +853,47 @@ function renderMap() {
 
             // Interactions
             div.onpointerdown = (e) => {
-                if(isDraggingMap) return;
+                if(isDraggingMap || isDraggingToken) return;
+                // Stop propagation for cursor tool when deploying (prevents camera pan)
+                if(currentTool === 'cursor' && selectedUnitId !== null && myRole === 'st') {
+                    e.stopPropagation();
+                }
                 handleMapInput(x, y, e);
             };
-            div.onpointerenter = (e) => { if(e.buttons === 1 && !isDraggingMap) handleMapInput(x, y, e); };
+            div.onpointerenter = (e) => { if(e.buttons === 1 && !isDraggingMap && !isDraggingToken) handleMapInput(x, y, e); };
             
             grid.appendChild(div);
         }
     }
     
     // Tokens
+    const gridSize = 50; // matches CSS --grid-size
     state.units.filter(u => u.x >= 0).forEach(u => {
         const t = document.createElement('div');
         t.className = `token ${u.type} ${u.id === selectedUnitId ? 'selected' : ''}`;
-        
-        // Correct positioning within grid
-        t.style.left = `calc(${u.x} * var(--grid-size))`;
-        t.style.top = `calc(${u.y} * var(--grid-size))`;
-        
+        t.dataset.unitId = u.id;
+
+        // Correct positioning within grid (2px offset to center the 46px token in 50px cell)
+        t.style.left = (u.x * gridSize + 2) + 'px';
+        t.style.top = (u.y * gridSize + 2) + 'px';
+
         if(u.avatar) t.style.backgroundImage = `url(${u.avatar})`;
         else t.innerText = u.name[0].toUpperCase();
-        
+
+        // Token pointer events - supports both click select and drag move
         t.onpointerdown = (e) => {
-            if(currentTool === 'cursor') {
-                e.stopPropagation();
+            if(currentTool !== 'cursor') return;
+            e.stopPropagation();
+            e.preventDefault();
+
+            if(myRole !== 'st') {
+                // Players can only select, not move
                 selectUnit(u.id);
+                return;
             }
+
+            // Start drag for ST
+            startTokenDrag(e, u, t);
         };
         grid.appendChild(t);
     });

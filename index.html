@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limbus Command v6.1</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0a0a0b; --bg-panel: #131316; --bg-card: #1a1a1f; --bg-input: #0d0d0f;
+            --border: #2a2a30; --border-focus: #404048;
+            --accent-red: #e53935; --accent-green: #43a047; --accent-blue: #1e88e5;
+            --accent-orange: #fb8c00; --accent-yellow: #fdd835; --accent-purple: #8e24aa; --accent-cyan: #00bcd4;
+            --text-main: #e8e8ec; --text-dim: #6e6e78; --text-muted: #48484f;
+            --grid-size: 42px; --sidebar-width: 340px; --nav-height: 56px;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin:0; padding:0; background:var(--bg-main); color:var(--text-main); font-family:'Noto Sans TC',-apple-system,sans-serif; height:100vh; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
+        ::-webkit-scrollbar { width:6px; height:6px; } ::-webkit-scrollbar-track { background:var(--bg-main); } ::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
+        button { cursor:pointer; border:none; font-family:inherit; transition:all 0.15s ease; } button:active { transform:scale(0.97); }
+        input, select { background:var(--bg-input); border:1px solid var(--border); color:var(--text-main); padding:10px 12px; border-radius:6px; font-size:0.9rem; font-family:inherit; }
+        input:focus, select:focus { outline:none; border-color:var(--border-focus); }
+        input[type="number"] { font-family:'JetBrains Mono',monospace; }
+        .hidden { display:none !important; }
+
+        #login-layer { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; display:flex; justify-content:center; align-items:center; padding:20px; }
+        .login-box { background:var(--bg-panel); padding:32px; border-radius:12px; border:1px solid var(--border); text-align:center; width:100%; max-width:380px; }
+        .login-title { font-size:1.8rem; font-weight:700; color:var(--accent-red); margin-bottom:4px; letter-spacing:2px; }
+        .login-subtitle { color:var(--text-dim); font-size:0.85rem; margin-bottom:24px; }
+        .login-input { width:100%; text-align:center; margin-bottom:12px; }
+        .login-btn { width:100%; padding:14px; font-weight:600; font-size:1rem; color:#000; border-radius:8px; margin-top:8px; }
+        .btn-host { background:linear-gradient(135deg,var(--accent-red),#c62828); }
+        .btn-join { background:linear-gradient(135deg,var(--accent-blue),#1565c0); }
+        .btn-back { background:var(--bg-card); color:var(--text-dim); margin-top:16px; }
+
+        .navbar { height:var(--nav-height); background:var(--bg-panel); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:8px; flex-shrink:0; z-index:100; }
+        .nav-tabs { display:flex; gap:4px; flex:1; }
+        .nav-tab { background:transparent; color:var(--text-dim); padding:10px 16px; font-size:0.9rem; font-weight:500; border-radius:8px; display:flex; align-items:center; gap:6px; }
+        .nav-tab.active { background:var(--bg-card); color:var(--text-main); }
+        .nav-tab:hover:not(.active) { background:rgba(255,255,255,0.05); }
+        .nav-info { display:flex; align-items:center; gap:8px; }
+        .id-badge { background:var(--bg-card); color:var(--accent-green); padding:6px 10px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:0.75rem; cursor:pointer; border:1px dashed var(--border); max-width:100px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .id-badge:hover { border-color:var(--accent-green); }
+        .sidebar-toggle { display:none; background:var(--bg-card); color:var(--text-dim); padding:8px 12px; border-radius:6px; font-size:0.85rem; }
+        .sidebar-toggle.active { color:var(--accent-yellow); }
+
+        .main-wrapper { flex:1; display:flex; overflow:hidden; position:relative; }
+        .page { position:absolute; inset:0; display:none; overflow:hidden; }
+        .page.active { display:flex; }
+
+        #page-map { flex-direction:row; }
+        .sidebar { width:var(--sidebar-width); background:var(--bg-panel); border-right:1px solid var(--border); display:none; flex-direction:column; overflow:hidden; flex-shrink:0; }
+        .sidebar.show { display:flex; }
+        .sidebar-header { padding:16px; background:var(--bg-card); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+        .sidebar-title { font-weight:600; color:var(--accent-yellow); font-size:0.9rem; }
+        .sidebar-content { flex:1; overflow-y:auto; padding:12px; }
+
+        .map-toolbar { background:var(--bg-panel); border-bottom:1px solid var(--border); padding:10px 12px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+        .tool-btn { width:40px; height:40px; background:var(--bg-card); color:var(--text-dim); border-radius:8px; font-size:1.1rem; display:flex; align-items:center; justify-content:center; }
+        .tool-btn.active { background:var(--accent-yellow); color:#000; }
+        .tool-btn:hover:not(.active) { background:var(--bg-input); color:var(--text-main); }
+        .tool-separator { width:1px; height:24px; background:var(--border); margin:0 4px; }
+        .map-size-group { display:flex; gap:6px; align-items:center; margin-left:auto; }
+        .size-input { width:50px; text-align:center; padding:8px; }
+        .size-label { color:var(--text-dim); font-size:0.8rem; }
+        .apply-btn { background:var(--bg-card); color:var(--text-main); padding:8px 14px; border-radius:6px; font-size:0.85rem; }
+
+        .map-viewport { flex:1; background:#050506; position:relative; overflow:hidden; touch-action:none; }
+        .map-container { position:absolute; transform-origin:0 0; will-change:transform; }
+        #battle-map { display:grid; border:2px solid var(--border); user-select:none; background:var(--bg-main); }
+        .cell { width:var(--grid-size); height:var(--grid-size); border:1px solid rgba(255,255,255,0.03); position:relative; }
+        .t-floor { background:#111114; } .t-wall { background:#2a2a30; background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.3) 4px,rgba(0,0,0,0.3) 8px); }
+        .t-cover { background:rgba(67,160,71,0.15); box-shadow:inset 0 0 0 2px var(--accent-green); }
+        .t-hazard { background:rgba(229,57,53,0.15); box-shadow:inset 0 0 0 2px var(--accent-red); }
+        .cell.deploy-target { background:rgba(253,216,53,0.3) !important; box-shadow:inset 0 0 0 2px var(--accent-yellow); }
+
+        .token { position:absolute; top:3px; left:3px; right:3px; bottom:3px; border-radius:50%; border:2px solid #fff; background-size:cover; background-position:center; background-color:#333; z-index:10; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:14px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.8); cursor:grab; }
+        .token.selected { transform:scale(1.1); box-shadow:0 0 0 3px var(--accent-yellow); z-index:20; }
+        .token.enemy { border-color:var(--accent-red); } .token.player { border-color:var(--accent-green); }
+
+        #page-units { flex-direction:column; background:var(--bg-main); }
+        .units-toolbar { background:var(--bg-panel); border-bottom:1px solid var(--border); padding:12px; display:flex; gap:8px; flex-wrap:wrap; }
+        .units-btn { background:var(--bg-card); color:var(--text-main); padding:10px 16px; border-radius:8px; font-size:0.85rem; font-weight:500; display:flex; align-items:center; gap:6px; }
+        .units-btn.primary { background:var(--accent-yellow); color:#000; }
+        .units-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+
+        .unit-card { background:var(--bg-card); border-radius:10px; padding:14px; border-left:4px solid var(--text-muted); display:flex; flex-direction:column; gap:10px; }
+        .unit-card.enemy { border-left-color:var(--accent-red); } .unit-card.player { border-left-color:var(--accent-green); }
+        .unit-card.active-turn { box-shadow:0 0 0 2px var(--accent-yellow); background:#1f1f24; }
+        .unit-header { display:flex; align-items:center; gap:12px; }
+        .unit-avatar { width:48px; height:48px; border-radius:8px; background:var(--bg-input); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-weight:600; font-size:1.2rem; cursor:pointer; background-size:cover; background-position:center; flex-shrink:0; }
+        .unit-avatar.enemy { border-color:var(--accent-red); color:var(--accent-red); } .unit-avatar.player { border-color:var(--accent-green); color:var(--accent-green); }
+        .unit-info { flex:1; min-width:0; } .unit-name { font-weight:600; font-size:1rem; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .unit-status { font-size:0.8rem; color:var(--text-dim); }
+        .unit-init { width:56px; text-align:center; font-family:'JetBrains Mono',monospace; font-weight:600; font-size:1.1rem; color:var(--accent-yellow); background:var(--bg-input); border:1px solid var(--border); padding:8px; border-radius:6px; }
+        .hp-bar-wrap { height:12px; background:var(--bg-input); border-radius:4px; display:flex; overflow:hidden; border:1px solid var(--border); }
+        .hp-chunk { height:100%; transition:width 0.2s; }
+        .hp-empty { background:#1a1a1f; } .hp-b { background:var(--accent-blue); } .hp-l { background:var(--accent-orange); } .hp-a { background:var(--accent-red); }
+        .unit-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        .action-btn { flex:1; min-width:44px; padding:8px 6px; background:var(--bg-input); color:var(--text-dim); border-radius:6px; font-size:0.75rem; font-weight:500; border:1px solid transparent; }
+        .action-btn:hover { color:var(--text-main); border-color:var(--border); }
+        .action-btn.dmg-b { color:var(--accent-blue); } .action-btn.dmg-l { color:var(--accent-orange); } .action-btn.dmg-a { color:var(--accent-red); } .action-btn.heal { color:var(--accent-green); }
+        .bulk-dmg-row { display:flex; gap:6px; align-items:center; margin-top:4px; padding-top:10px; border-top:1px solid var(--border); }
+        .bulk-dmg-input { width:50px; text-align:center; padding:6px; font-size:0.85rem; }
+        .bulk-dmg-label { font-size:0.75rem; color:var(--text-dim); }
+
+        #page-calc { flex-direction:column; background:var(--bg-main); overflow-y:auto; padding:16px; }
+        .calc-container { max-width:650px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+        .calc-section { background:var(--bg-card); border-radius:12px; padding:16px; border:1px solid var(--border); }
+        .calc-section-title { font-size:0.8rem; font-weight:600; color:var(--text-dim); margin-bottom:12px; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:8px; }
+        .calc-section-title.atk { color:var(--accent-green); } .calc-section-title.def { color:var(--accent-red); } .calc-section-title.boss { color:var(--accent-purple); }
+        .calc-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+        .calc-field { display:flex; flex-direction:column; gap:6px; } .calc-field.full { grid-column:1/-1; }
+        .calc-label { font-size:0.8rem; color:var(--text-dim); }
+        .calc-field input, .calc-field select { width:100%; }
+
+        .def-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+        .def-tag { padding:6px 12px; background:var(--bg-input); border:1px solid var(--border); border-radius:20px; font-size:0.8rem; color:var(--text-dim); cursor:pointer; transition:all 0.2s; }
+        .def-tag:hover { border-color:var(--text-dim); }
+        .def-tag.active { color:#000; }
+        .def-tag.physical.active { background:var(--accent-orange); border-color:var(--accent-orange); }
+        .def-tag.agility.active { background:var(--accent-green); border-color:var(--accent-green); }
+        .def-tag.supernatural.active { background:var(--accent-purple); border-color:var(--accent-purple); }
+        .def-tag.other.active { background:var(--accent-blue); border-color:var(--accent-blue); }
+
+        .def-inputs { display:flex; flex-direction:column; gap:10px; }
+        .def-input-row { display:none; align-items:center; gap:10px; padding:10px; background:var(--bg-input); border-radius:8px; animation:fadeIn 0.2s ease; }
+        .def-input-row.show { display:flex; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+        .def-input-label { flex:1; font-size:0.85rem; min-width:80px; }
+        .def-input-field { width:70px; text-align:center; padding:8px; }
+
+        .atk-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+        .atk-tag { padding:6px 12px; background:var(--bg-input); border:1px solid var(--border); border-radius:20px; font-size:0.8rem; color:var(--text-dim); cursor:pointer; }
+        .atk-tag:hover { border-color:var(--text-dim); }
+        .atk-tag.active { background:var(--accent-red); color:#000; border-color:var(--accent-red); }
+
+        .boss-toggle { display:flex; align-items:center; gap:12px; padding:12px; background:var(--bg-input); border-radius:8px; cursor:pointer; }
+        .boss-toggle input[type="checkbox"] { width:20px; height:20px; accent-color:var(--accent-purple); }
+        .boss-toggle-label { flex:1; } .boss-toggle-title { font-weight:600; color:var(--accent-purple); margin-bottom:2px; } .boss-toggle-desc { font-size:0.75rem; color:var(--text-dim); }
+        .boss-options { margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); display:none; }
+        .boss-options.show { display:block; }
+
+        .boss-actions-list { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+        .boss-action-item { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-input); border-radius:8px; border-left:3px solid var(--accent-purple); flex-wrap:wrap; }
+        .boss-action-num { font-weight:600; color:var(--accent-purple); min-width:60px; }
+        .boss-action-init { display:flex; gap:6px; flex-wrap:wrap; }
+        .boss-action-init label { display:flex; align-items:center; gap:4px; padding:4px 10px; background:var(--bg-card); border-radius:4px; font-size:0.8rem; cursor:pointer; }
+        .boss-action-init input[type="radio"] { accent-color:var(--accent-yellow); }
+        .boss-action-remove { margin-left:auto; background:transparent; color:var(--text-dim); padding:4px 8px; font-size:1rem; }
+        .boss-action-remove:hover { color:var(--accent-red); }
+        .boss-add-action { padding:10px; background:var(--bg-card); border:1px dashed var(--border); border-radius:8px; color:var(--text-dim); font-size:0.85rem; }
+        .boss-add-action:hover { border-color:var(--accent-purple); color:var(--accent-purple); }
+
+        .boss-summary { margin-top:12px; padding:12px; background:rgba(142,36,170,0.1); border-radius:8px; border:1px solid var(--accent-purple); }
+        .boss-summary-title { font-weight:600; color:var(--accent-purple); margin-bottom:8px; font-size:0.9rem; }
+        .boss-summary-content { font-size:0.85rem; color:var(--text-dim); line-height:1.6; }
+
+        .calc-buttons { display:grid; grid-template-columns:1fr 2fr; gap:10px; }
+        .calc-btn { padding:14px; border-radius:8px; font-weight:600; font-size:1rem; }
+        .calc-btn-reset { background:var(--bg-card); color:var(--text-dim); }
+        .calc-btn-calc { background:linear-gradient(135deg,var(--accent-green),#2e7d32); color:#000; }
+        .calc-result { background:var(--bg-input); border-radius:10px; padding:20px; text-align:center; border:1px solid var(--border); }
+        .result-main { font-size:2rem; font-weight:700; color:var(--accent-green); font-family:'JetBrains Mono',monospace; }
+        .result-detail { font-size:0.85rem; color:var(--text-dim); margin-top:8px; line-height:1.6; text-align:left; }
+        .result-note { font-size:0.8rem; color:var(--accent-orange); margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); }
+
+        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:1000; display:none; justify-content:center; align-items:center; padding:20px; }
+        .modal-overlay.show { display:flex; }
+        .modal { background:var(--bg-panel); border-radius:12px; border:1px solid var(--border); width:100%; max-width:420px; max-height:90vh; overflow-y:auto; }
+        .modal-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+        .modal-title { font-weight:600; font-size:1.1rem; }
+        .modal-close { background:transparent; color:var(--text-dim); font-size:1.5rem; width:32px; height:32px; border-radius:6px; }
+        .modal-close:hover { color:var(--text-main); background:var(--bg-card); }
+        .modal-body { padding:20px; display:flex; flex-direction:column; gap:16px; }
+        .modal-field { display:flex; flex-direction:column; gap:6px; }
+        .modal-field label { font-size:0.85rem; color:var(--text-dim); }
+        .modal-field input, .modal-field select { width:100%; }
+        .modal-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+        .modal-footer { padding:16px 20px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+        .modal-btn { padding:10px 20px; border-radius:6px; font-weight:500; }
+        .modal-btn-cancel { background:var(--bg-card); color:var(--text-dim); }
+        .modal-btn-confirm { background:var(--accent-green); color:#000; }
+
+        .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--bg-panel); border:1px solid var(--accent-green); color:var(--text-main); padding:12px 24px; border-radius:8px; z-index:2000; opacity:0; transition:all 0.3s ease; pointer-events:none; }
+        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+        @media (min-width:1024px) { .sidebar-toggle { display:flex; } .sidebar.show { display:flex; } }
+        @media (max-width:1023px) { .map-size-group { display:none; } .nav-tab { padding:8px 12px; font-size:0.85rem; } }
+        @media (max-width:480px) { .nav-tab span.tab-text { display:none; } .nav-tab { padding:10px 14px; } .id-badge { display:none; } .calc-grid { grid-template-columns:1fr; } }
+        #file-upload { display:none; }
+    </style>
+</head>
+<body>
+<input type="file" id="file-upload" accept="image/*">
+<div class="toast" id="toast"></div>
+
+<div id="login-layer">
+    <div class="login-box" id="login-main">
+        <div class="login-title">LIMBUS</div>
+        <div class="login-subtitle">無恐戰術指揮系統 v6.1</div>
+        <input type="text" id="input-name" class="login-input" placeholder="輸入代號" maxlength="20">
+        <button class="login-btn btn-host" onclick="initSystem('st')">我是 ST（建房）</button>
+        <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
+    </div>
+    <div class="login-box hidden" id="login-join">
+        <div class="login-title">加入房間</div>
+        <input type="text" id="input-host-id" class="login-input" placeholder="貼上 ST 的 ID" maxlength="60">
+        <button class="login-btn btn-join" onclick="initSystem('player')">連線</button>
+        <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
+    </div>
+    <div class="login-box hidden" id="login-loading"><div style="color:var(--accent-green);">正在建立連線...</div></div>
+</div>
+
+<nav class="navbar">
+    <div class="nav-tabs">
+        <button class="nav-tab active" data-page="map" onclick="switchPage('map')">🗺️ <span class="tab-text">地圖</span></button>
+        <button class="nav-tab" data-page="units" onclick="switchPage('units')">⚔️ <span class="tab-text">單位</span></button>
+        <button class="nav-tab" data-page="calc" onclick="switchPage('calc')">🎲 <span class="tab-text">計算</span></button>
+    </div>
+    <div class="nav-info">
+        <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋 側欄</button>
+        <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製">---</span>
+    </div>
+</nav>
+
+<div class="main-wrapper">
+    <div id="page-map" class="page active">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header"><span class="sidebar-title">⚔️ 戰鬥序列</span><button class="modal-close" onclick="toggleSidebar()">×</button></div>
+            <div class="sidebar-content" id="sidebar-units"></div>
+        </aside>
+        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+            <div class="map-toolbar">
+                <button class="tool-btn active" data-tool="cursor" onclick="setTool('cursor')" title="選擇/移動">👆</button>
+                <button class="tool-btn" data-tool="wall" onclick="setTool('wall')" title="牆壁">🧱</button>
+                <button class="tool-btn" data-tool="cover" onclick="setTool('cover')" title="掩體">🛡️</button>
+                <button class="tool-btn" data-tool="hazard" onclick="setTool('hazard')" title="險地">🔥</button>
+                <button class="tool-btn" data-tool="floor" onclick="setTool('floor')" title="清除">🧹</button>
+                <div class="tool-separator"></div>
+                <button class="tool-btn" onclick="resetMapView()" title="重置視角">🎯</button>
+                <button class="tool-btn" onclick="clearSelection()" title="取消選取">✕</button>
+                <div class="map-size-group" id="st-map-controls">
+                    <span class="size-label">W</span><input type="number" id="map-w" class="size-input" value="15" min="5" max="40">
+                    <span class="size-label">H</span><input type="number" id="map-h" class="size-input" value="15" min="5" max="40">
+                    <button class="apply-btn" onclick="resizeMap()">套用</button>
+                </div>
+            </div>
+            <div class="map-viewport" id="map-viewport"><div class="map-container" id="map-container"><div id="battle-map"></div></div></div>
+        </div>
+    </div>
+
+    <div id="page-units" class="page">
+        <div class="units-toolbar" id="units-toolbar">
+            <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
+            <button class="units-btn" onclick="openAddUnitModal()">+ 新增單位</button>
+            <button class="units-btn" onclick="openBatchModal()">📋 批量新增</button>
+            <button class="units-btn" onclick="sortByInit()">排序</button>
+        </div>
+        <div class="units-list" id="units-list"></div>
+    </div>
+
+    <div id="page-calc" class="page">
+        <div class="calc-container">
+            <div class="calc-section">
+                <label class="boss-toggle">
+                    <input type="checkbox" id="boss-mode" onchange="toggleBossMode()">
+                    <div class="boss-toggle-label"><div class="boss-toggle-title">🔮 特殊 BOSS 模式</div><div class="boss-toggle-desc">啟用房規 BOSS 計算（每個行動獨立計算）</div></div>
+                </label>
+                <div class="boss-options" id="boss-options">
+                    <div class="calc-grid">
+                        <div class="calc-field"><span class="calc-label">支線等級</span><input type="number" id="boss-tier" value="1" min="1" max="10" onchange="updateBossSummary()"></div>
+                        <div class="calc-field"><span class="calc-label">本回合是否對抗</span><select id="boss-engage" onchange="updateBossSummary()"><option value="yes">有對抗行動</option><option value="no">本回合未對抗（你的DP+）</option></select></div>
+                    </div>
+                    <div class="boss-actions-list" id="boss-actions-list"></div>
+                    <button class="boss-add-action" onclick="addBossAction()">+ 新增對抗行動</button>
+                    <div class="boss-summary"><div class="boss-summary-title">📊 BOSS 行動 DP 調整預覽</div><div class="boss-summary-content" id="boss-summary-content">尚未設定行動</div></div>
+                </div>
+            </div>
+
+            <div class="calc-section">
+                <div class="calc-section-title atk">🗡️ 攻擊方</div>
+                <div class="atk-tags">
+                    <span class="atk-tag" data-type="pen" onclick="toggleAtkTag('pen')">破甲</span>
+                    <span class="atk-tag" data-type="speed" onclick="toggleAtkTag('speed')">高速</span>
+                    <span class="atk-tag" data-type="magic" onclick="toggleAtkTag('magic')">破魔</span>
+                </div>
+                <div class="calc-grid">
+                    <div class="calc-field"><span class="calc-label">攻擊 DP</span><input type="number" id="c-atk" value="10" min="0" max="100"></div>
+                    <div class="calc-field"><span class="calc-label">攻擊附加成功</span><input type="number" id="c-atk-auto" value="0" min="0" max="50"></div>
+                    <div class="calc-field def-input-row" id="row-pen"><span class="def-input-label">破甲值</span><input type="number" class="def-input-field" id="c-pen" value="0" min="0" max="50"></div>
+                    <div class="calc-field def-input-row" id="row-speed"><span class="def-input-label">高速值</span><input type="number" class="def-input-field" id="c-speed" value="0" min="0" max="50"></div>
+                    <div class="calc-field def-input-row" id="row-magic"><span class="def-input-label">破魔值</span><input type="number" class="def-input-field" id="c-magic" value="0" min="0" max="50"></div>
+                    <div class="calc-field"><span class="calc-label">意志加值</span><select id="c-will"><option value="0">不使用</option><option value="3">+3 (完美)</option></select></div>
+                </div>
+            </div>
+
+            <div class="calc-section">
+                <div class="calc-section-title def">🛡️ 防禦方</div>
+                <div style="margin-bottom:8px;font-size:0.75rem;color:var(--text-muted);">點擊啟用需要的防禦類型：</div>
+                <div class="def-tags">
+                    <span class="def-tag physical" data-def="armor" onclick="toggleDefTag('armor')">盔甲</span>
+                    <span class="def-tag physical" data-def="shield" onclick="toggleDefTag('shield')">盾牌</span>
+                    <span class="def-tag physical" data-def="natural" onclick="toggleDefTag('natural')">天生</span>
+                    <span class="def-tag agility" data-def="base" onclick="toggleDefTag('base')">基礎</span>
+                    <span class="def-tag agility" data-def="dodge" onclick="toggleDefTag('dodge')">閃避</span>
+                    <span class="def-tag agility" data-def="block" onclick="toggleDefTag('block')">格擋(非盾)</span>
+                    <span class="def-tag agility" data-def="shieldBlock" onclick="toggleDefTag('shieldBlock')">格擋(盾牌)</span>
+                    <span class="def-tag supernatural" data-def="force" onclick="toggleDefTag('force')">力場</span>
+                    <span class="def-tag supernatural" data-def="deflect" onclick="toggleDefTag('deflect')">偏斜</span>
+                    <span class="def-tag supernatural" data-def="magicArmor" onclick="toggleDefTag('magicArmor')">法術護甲</span>
+                    <span class="def-tag other" data-def="insight" onclick="toggleDefTag('insight')">洞察</span>
+                    <span class="def-tag other" data-def="cover" onclick="toggleDefTag('cover')">掩蔽</span>
+                    <span class="def-tag other" data-def="env" onclick="toggleDefTag('env')">環境</span>
+                    <span class="def-tag other" data-def="other" onclick="toggleDefTag('other')">其他</span>
+                </div>
+                <div class="def-inputs" id="def-inputs">
+                    <div class="def-input-row" id="def-armor"><span class="def-input-label" style="color:var(--accent-orange)">盔甲防禦</span><input type="number" class="def-input-field" data-def="armor" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-shield"><span class="def-input-label" style="color:var(--accent-orange)">盾牌防禦</span><input type="number" class="def-input-field" data-def="shield" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-natural"><span class="def-input-label" style="color:var(--accent-orange)">天生防禦</span><input type="number" class="def-input-field" data-def="natural" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-base"><span class="def-input-label" style="color:var(--accent-green)">基礎防禦</span><input type="number" class="def-input-field" data-def="base" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-dodge"><span class="def-input-label" style="color:var(--accent-green)">閃避防禦</span><input type="number" class="def-input-field" data-def="dodge" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-block"><span class="def-input-label" style="color:var(--accent-green)">格擋(非盾牌)</span><input type="number" class="def-input-field" data-def="block" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-shieldBlock"><span class="def-input-label" style="color:var(--accent-green)">格擋(盾牌)</span><input type="number" class="def-input-field" data-def="shieldBlock" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-force"><span class="def-input-label" style="color:var(--accent-purple)">力場防禦</span><input type="number" class="def-input-field" data-def="force" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-deflect"><span class="def-input-label" style="color:var(--accent-purple)">偏斜防禦</span><input type="number" class="def-input-field" data-def="deflect" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-magicArmor"><span class="def-input-label" style="color:var(--accent-purple)">法術護甲</span><input type="number" class="def-input-field" data-def="magicArmor" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-insight"><span class="def-input-label" style="color:var(--accent-blue)">洞察防禦</span><input type="number" class="def-input-field" data-def="insight" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-cover"><span class="def-input-label" style="color:var(--accent-blue)">掩蔽防禦</span><input type="number" class="def-input-field" data-def="cover" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-env"><span class="def-input-label" style="color:var(--accent-blue)">環境防禦</span><input type="number" class="def-input-field" data-def="env" value="0" min="0" max="50"></div>
+                    <div class="def-input-row" id="def-other"><span class="def-input-label" style="color:var(--accent-blue)">其他防禦</span><input type="number" class="def-input-field" data-def="other" value="0" min="0" max="50"></div>
+                </div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+                    <div class="calc-grid">
+                        <div class="calc-field"><span class="calc-label">本回合已受擊次數</span><input type="number" id="c-hits" value="0" min="0" max="30"></div>
+                        <div class="calc-field"><span class="calc-label" style="color:var(--accent-orange)">防禦附加成功</span><input type="number" id="c-def-auto" value="0" min="0" max="50"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="calc-buttons">
+                <button class="calc-btn calc-btn-reset" onclick="resetCalc()">🔄 重置</button>
+                <button class="calc-btn calc-btn-calc" onclick="calculateDP()">⚡ 計算</button>
+            </div>
+            <div class="calc-result">
+                <div class="result-main" id="result-main">---</div>
+                <div class="result-detail" id="result-detail">輸入數值後點擊計算</div>
+                <div class="result-note" id="result-note" style="display:none"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-add-unit">
+    <div class="modal">
+        <div class="modal-header"><span class="modal-title">新增單位</span><button class="modal-close" onclick="closeModal('modal-add-unit')">×</button></div>
+        <div class="modal-body">
+            <div class="modal-field"><label>名稱</label><input type="text" id="add-name" placeholder="例如：雜兵"></div>
+            <div class="modal-row">
+                <div class="modal-field"><label>HP 格數</label><input type="number" id="add-hp" value="10" min="1" max="50"></div>
+                <div class="modal-field"><label>類型</label><select id="add-type"><option value="enemy">敵方</option><option value="player">我方</option></select></div>
+            </div>
+            <div class="modal-field"><label><input type="checkbox" id="add-avatar"> 上傳頭像</label></div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn modal-btn-cancel" onclick="closeModal('modal-add-unit')">取消</button>
+            <button class="modal-btn modal-btn-confirm" onclick="confirmAddUnit()">新增</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal-batch">
+    <div class="modal">
+        <div class="modal-header"><span class="modal-title">批量新增單位</span><button class="modal-close" onclick="closeModal('modal-batch')">×</button></div>
+        <div class="modal-body">
+            <div class="modal-field"><label>名稱前綴</label><input type="text" id="batch-prefix" placeholder="例如：小混混"></div>
+            <div class="modal-row">
+                <div class="modal-field"><label>起始編號</label><input type="number" id="batch-start" value="1" min="1" max="99"></div>
+                <div class="modal-field"><label>數量</label><input type="number" id="batch-count" value="5" min="1" max="20"></div>
+            </div>
+            <div class="modal-row">
+                <div class="modal-field"><label>HP 格數</label><input type="number" id="batch-hp" value="10" min="1" max="50"></div>
+                <div class="modal-field"><label>類型</label><select id="batch-type"><option value="enemy">敵方</option><option value="player">我方</option></select></div>
+            </div>
+            <div style="background:var(--bg-input);padding:12px;border-radius:6px;font-size:0.85rem;color:var(--text-dim);">預覽：<span id="batch-preview">小混混1, 小混混2, ...</span></div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn modal-btn-cancel" onclick="closeModal('modal-batch')">取消</button>
+            <button class="modal-btn modal-btn-confirm" onclick="confirmBatchAdd()">批量新增</button>
+        </div>
+    </div>
+</div>
+.map((u,idx)=>{
+        const ia=idx===state.turnIdx,a=u.hpArr.filter(x=>x===3).length,l=u.hpArr.filter(x=>x===2).length,b=u.hpArr.filter(x=>x===1).length,em=u.maxHp-a-l-b;
+        const hc=u.hpArr.map(h=>'<div class="hp-chunk '+(h===0?'hp-empty':h===1?'hp-b':h===2?'hp-l':'hp-a')+'" style="width:'+(100/u.maxHp)+'%"></div>').join('');
+        const as=u.avatar?'background-image:url('+u.avatar+')':'',at=u.avatar?'':escapeHtml(u.name.charAt(0).toUpperCase());
+        const db=u.x>=0?'<button class="action-btn" onclick="recallUnit('+u.id+')">📍收</button>':'<button class="action-btn" onclick="startDeploy('+u.id+')">📍部署</button>';
+        const sa=myRole==='st'?'<div class="unit-actions"><button class="action-btn dmg-b" onclick="modifyHP('+u.id+',\'b\',1)">+B</button><button class="action-btn dmg-l" onclick="modifyHP('+u.id+',\'l\',1)">+L</button><button class="action-btn dmg-a" onclick="modifyHP('+u.id+',\'a\',1)">+A</button><button class="action-btn heal" onclick="modifyHP('+u.id+',\'heal\',1)">治療</button>'+db+'<button class="action-btn" onclick="deleteUnit('+u.id+')">✕</button></div><div class="bulk-dmg-row"><span class="bulk-dmg-label">批量:</span><input type="number" class="bulk-dmg-input" id="bulk-'+u.id+'" value="1" min="1" max="50"><button class="action-btn dmg-b" onclick="modifyHP('+u.id+',\'b\',document.getElementById(\'bulk-'+u.id+'\').value)">B</button><button class="action-btn dmg-l" onclick="modifyHP('+u.id+',\'l\',document.getElementById(\'bulk-'+u.id+'\').value)">L</button><button class="action-btn dmg-a" onclick="modifyHP('+u.id+',\'a\',document.getElementById(\'bulk-'+u.id+'\').value)">A</button><button class="action-btn heal" onclick="modifyHP('+u.id+',\'heal\',document.getElementById(\'bulk-'+u.id+'\').value)">治</button></div>':'';
+        return '<div class="unit-card '+u.type+(ia?' active-turn':'')+'"><div class="unit-header"><div class="unit-avatar '+u.type+'" style="'+as+'" onclick="uploadTargetId='+u.id+';document.getElementById(\'file-upload\').click();">'+at+'</div><div class="unit-info"><div class="unit-name">'+escapeHtml(u.name)+'</div><div class="unit-status">'+em+'完好 / '+b+'B / '+l+'L / '+a+'A</div></div><input type="number" class="unit-init" value="'+u.init+'" onchange="updateInit('+u.id+',this.value)" '+(myRole!=='st'?'readonly':'')+' min="-50" max="100" title="先攻值"></div><div class="hp-bar-wrap">'+hc+'</div>'+sa+'</div>';
+    }).join('');
+}
+
+function renderSidebarUnits(){
+    const c=document.getElementById('sidebar-units');if(!c)return;
+    if(state.units.length===0){c.innerHTML='<div style="text-align:center;color:var(--text-dim);padding:20px;">尚無單位</div>';return;}
+    c.innerHTML=state.units.map((u,idx)=>{
+        const ia=idx===state.turnIdx,a=u.hpArr.filter(x=>x===3).length,l=u.hpArr.filter(x=>x===2).length,b=u.hpArr.filter(x=>x===1).length,em=u.maxHp-a-l-b;
+        const hc=u.hpArr.map(h=>'<div class="hp-chunk '+(h===0?'hp-empty':h===1?'hp-b':h===2?'hp-l':'hp-a')+'" style="width:'+(100/u.maxHp)+'%"></div>').join('');
+        return '<div class="unit-card '+u.type+(ia?' active-turn':'')+'" style="margin-bottom:8px;"><div class="unit-header"><div class="unit-info" style="flex:1;"><div class="unit-name">'+escapeHtml(u.name)+'</div><div class="unit-status">'+em+'✓ '+b+'B '+l+'L '+a+'A</div></div><span style="color:var(--accent-yellow);font-family:\'JetBrains Mono\';font-weight:600;">'+u.init+'</span></div><div class="hp-bar-wrap">'+hc+'</div></div>';
+    }).join('');
+}
+
+window.addEventListener('load',()=>{
+    document.getElementById('input-name').focus();
+    if(window.innerWidth>=1024){
+        document.getElementById('sidebar').classList.add('show');
+        document.getElementById('sidebar-toggle').classList.add('active');
+    }
+});
+window.addEventListener('resize',()=>{
+    if(window.innerWidth<1024){
+        document.getElementById('sidebar').classList.remove('show');
+        document.getElementById('sidebar-toggle').classList.remove('active');
+    }
+});
+</script>
+</body>
+</html>

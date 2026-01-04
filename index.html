@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Limbus Command v7.2</title>
+    <title>Limbus Command v7.3</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <style>
@@ -191,7 +191,7 @@
 <div id="login-layer">
     <div class="login-box" id="login-main">
         <div class="login-title">LIMBUS</div>
-        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.2</div>
+        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.3</div>
         <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
         <button class="login-btn btn-host" onclick="initSystem('st')">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
@@ -457,9 +457,13 @@ const MAP_PRESETS = [
     ]}
 ];
 
-let state = { units: [], turnIdx: 0, mapW: 15, mapH: 15, mapData: [], themeId: 0 };
-let myPeerId = null, conn = null, myRole = 'player';
+let state = { units: [], turnIdx: 0, mapW: 15, mapH: 15, mapData: [], themeId: 0, players: {} };
+let myPeerId = null, myRole = 'player', myName = '';
 let peer = null;
+let connections = {}; // ST holds all player connections: {peerId: conn}
+let hostConn = null;  // Player holds connection to ST
+let hostId = null;    // Room ID (ST's peer ID)
+
 let currentTool = 'cursor';
 let selectedUnitId = null;
 let uploadTargetId = null;
@@ -477,73 +481,354 @@ let draggedElement = null;
 let dragStartPos = { x: 0, y: 0 };
 let tokenStartPos = { x: 0, y: 0 };
 
+// Session Storage Keys
+const STORAGE_KEY = 'limbus_session';
+
 /* --- 2. INIT & CONN --- */
-function initSystem(role) {
+
+// Save session to localStorage
+function saveSession() {
+    const session = {
+        name: myName,
+        role: myRole,
+        hostId: hostId,
+        peerId: myPeerId
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+}
+
+// Load session from localStorage
+function loadSession() {
+    try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        return data ? JSON.parse(data) : null;
+    } catch { return null; }
+}
+
+// Clear session
+function clearSession() {
+    localStorage.removeItem(STORAGE_KEY);
+}
+
+// Check for existing session on page load
+function checkExistingSession() {
+    const session = loadSession();
+    if (session && session.name) {
+        document.getElementById('input-name').value = session.name;
+        if (session.hostId && session.role === 'player') {
+            document.getElementById('input-host-id').value = session.hostId;
+        }
+        // Show reconnect option
+        if (session.role === 'st' || session.hostId) {
+            showReconnectOption(session);
+        }
+    }
+}
+
+function showReconnectOption(session) {
+    const mainBox = document.getElementById('login-main');
+    let reconnectDiv = document.getElementById('reconnect-option');
+    if (!reconnectDiv) {
+        reconnectDiv = document.createElement('div');
+        reconnectDiv.id = 'reconnect-option';
+        reconnectDiv.style.cssText = 'margin-top:15px;padding:12px;background:rgba(67,160,71,0.1);border:1px solid var(--accent-green);border-radius:8px;';
+        reconnectDiv.innerHTML = `
+            <div style="color:var(--accent-green);font-size:0.9rem;margin-bottom:8px;">🔄 偵測到上次連線</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
+                ${session.role === 'st' ? '身份: ST (房主)' : '房間: ' + (session.hostId || '').substring(0,8) + '...'}
+            </div>
+            <button class="login-btn" style="background:var(--accent-green);padding:10px;" onclick="reconnectSession()">快速重連</button>
+            <button class="login-btn btn-back" style="padding:8px;margin-top:6px;" onclick="clearSessionAndRefresh()">清除並重新開始</button>
+        `;
+        mainBox.appendChild(reconnectDiv);
+    }
+}
+
+function clearSessionAndRefresh() {
+    clearSession();
+    location.reload();
+}
+
+function reconnectSession() {
+    const session = loadSession();
+    if (!session) return showToast('無法讀取連線資料');
+
+    document.getElementById('input-name').value = session.name;
+    if (session.role === 'st') {
+        initSystem('st', session.peerId);
+    } else if (session.hostId) {
+        document.getElementById('input-host-id').value = session.hostId;
+        initSystem('player');
+    }
+}
+
+function initSystem(role, savedPeerId = null) {
     const name = document.getElementById('input-name').value.trim();
     if (!name) return showToast('請輸入代號');
-    
+
+    myName = name;
+    myRole = role;
+
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
     document.getElementById('login-loading').classList.remove('hidden');
-    
-    myRole = role;
-    peer = new Peer(); 
-    
+
+    // Create peer with optional saved ID for ST reconnection
+    const peerOptions = {};
+    if (role === 'st' && savedPeerId) {
+        // Try to use the same ID for ST reconnection
+        peer = new Peer(savedPeerId, peerOptions);
+    } else {
+        peer = new Peer(peerOptions);
+    }
+
     peer.on('open', id => {
         myPeerId = id;
+
+        if (role === 'st') {
+            hostId = id; // ST's own ID is the room ID
+        }
+
         document.getElementById('my-id').innerText = id;
         document.getElementById('login-layer').classList.add('hidden');
-        
+
+        // Save session
+        saveSession();
+
         if (role === 'st') {
             document.getElementById('st-map-controls').style.display = 'flex';
             document.getElementById('units-toolbar').style.display = 'flex';
             document.getElementById('tile-info-panel').style.display = 'block';
-            initMapData();
+
+            // Initialize map if new session
+            if (!state.mapData || state.mapData.length === 0) {
+                initMapData();
+            }
             updateToolbar();
             renderAll();
         } else {
+            // Show player toolbar (for adding their own units)
             document.getElementById('st-map-controls').style.display = 'none';
-            document.getElementById('units-toolbar').style.display = 'none';
-            if(document.getElementById('input-host-id').value) {
-                connectToHost(document.getElementById('input-host-id').value.trim());
+            document.getElementById('units-toolbar').style.display = 'flex';
+
+            const inputHostId = document.getElementById('input-host-id').value.trim();
+            if (inputHostId) {
+                hostId = inputHostId;
+                saveSession();
+                connectToHost(inputHostId);
             }
         }
         initCameraEvents();
     });
 
     peer.on('connection', c => {
-        setupConnection(c);
-        if (myRole === 'st') { setTimeout(() => sendState(), 500); }
+        handleNewConnection(c);
     });
 
     peer.on('error', err => {
-        showToast('連線錯誤: ' + err.type);
-        document.getElementById('login-layer').classList.remove('hidden');
-        document.getElementById('login-loading').classList.add('hidden');
+        console.error('Peer error:', err);
+        if (err.type === 'unavailable-id') {
+            // ID already taken, generate new one for ST
+            showToast('房間ID已被佔用，產生新ID...');
+            peer = new Peer();
+            peer.on('open', id => {
+                myPeerId = id;
+                hostId = id;
+                document.getElementById('my-id').innerText = id;
+                document.getElementById('login-layer').classList.add('hidden');
+                saveSession();
+                initMapData();
+                updateToolbar();
+                renderAll();
+                initCameraEvents();
+            });
+            peer.on('connection', c => handleNewConnection(c));
+        } else {
+            showToast('連線錯誤: ' + err.type);
+            document.getElementById('login-layer').classList.remove('hidden');
+            document.getElementById('login-loading').classList.add('hidden');
+        }
+    });
+
+    peer.on('disconnected', () => {
+        showToast('與伺服器斷線，嘗試重連...');
+        setTimeout(() => {
+            if (peer && !peer.destroyed) {
+                peer.reconnect();
+            }
+        }, 2000);
     });
 }
 
 function showJoinStep() {
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.remove('hidden');
+
+    // Pre-fill host ID if available
+    const session = loadSession();
+    if (session && session.hostId) {
+        document.getElementById('input-host-id').value = session.hostId;
+    }
 }
+
 function showMainStep() {
     document.getElementById('login-join').classList.add('hidden');
     document.getElementById('login-main').classList.remove('hidden');
 }
-function connectToHost(hostId) {
-    if(!hostId) return;
-    conn = peer.connect(hostId);
-    setupConnection(conn);
+
+function connectToHost(targetHostId) {
+    if (!targetHostId) return;
+    hostId = targetHostId;
+
+    hostConn = peer.connect(targetHostId, { reliable: true });
+
+    hostConn.on('open', () => {
+        showToast('已連接到房間');
+        // Send join message with player info
+        hostConn.send({
+            type: 'join',
+            playerId: myPeerId,
+            playerName: myName
+        });
+        saveSession();
+    });
+
+    hostConn.on('data', data => {
+        handlePlayerMessage(data);
+    });
+
+    hostConn.on('close', () => {
+        showToast('與房間斷線');
+        hostConn = null;
+    });
+
+    hostConn.on('error', err => {
+        showToast('連線錯誤: ' + err.type);
+    });
 }
-function setupConnection(c) {
-    conn = c;
-    conn.on('data', data => { if (data.type === 'state') { state = data.payload; renderAll(); } });
-    conn.on('close', () => showToast('連線已斷開'));
+
+// ST handles new player connections
+function handleNewConnection(conn) {
+    const playerId = conn.peer;
+    connections[playerId] = conn;
+
+    conn.on('open', () => {
+        console.log('Player connected:', playerId);
+    });
+
+    conn.on('data', data => {
+        handleSTMessage(conn, data);
+    });
+
+    conn.on('close', () => {
+        console.log('Player disconnected:', playerId);
+        delete connections[playerId];
+        // Optionally mark player as offline in state
+        if (state.players[playerId]) {
+            state.players[playerId].online = false;
+            broadcastState();
+        }
+    });
 }
+
+// ST receives messages from players
+function handleSTMessage(conn, data) {
+    const playerId = conn.peer;
+
+    switch (data.type) {
+        case 'join':
+            // Register player
+            state.players[playerId] = {
+                id: playerId,
+                name: data.playerName,
+                online: true
+            };
+            showToast(`${data.playerName} 加入了房間`);
+            broadcastState();
+            break;
+
+        case 'addUnit':
+            // Player adds their own unit
+            const unit = createUnit(data.name, data.hp, data.unitType);
+            unit.ownerId = playerId;
+            unit.ownerName = state.players[playerId]?.name || data.playerName;
+            state.units.push(unit);
+            broadcastState();
+            break;
+
+        case 'moveUnit':
+            // Player moves their own unit
+            const u = state.units.find(u => u.id === data.unitId);
+            if (u && u.ownerId === playerId) {
+                u.x = data.x;
+                u.y = data.y;
+                broadcastState();
+            }
+            break;
+
+        case 'modifyHP':
+            // Player modifies their own unit's HP
+            const unit2 = state.units.find(u => u.id === data.unitId);
+            if (unit2 && unit2.ownerId === playerId) {
+                modifyHPInternal(unit2, data.dmgType, data.amount);
+                broadcastState();
+            }
+            break;
+
+        case 'deleteUnit':
+            // Player deletes their own unit
+            const idx = state.units.findIndex(u => u.id === data.unitId && u.ownerId === playerId);
+            if (idx !== -1) {
+                state.units.splice(idx, 1);
+                broadcastState();
+            }
+            break;
+
+        case 'updateInit':
+            // Player updates their unit's initiative
+            const unit3 = state.units.find(u => u.id === data.unitId);
+            if (unit3 && unit3.ownerId === playerId) {
+                unit3.init = data.init;
+                broadcastState();
+            }
+            break;
+    }
+}
+
+// Player receives messages from ST
+function handlePlayerMessage(data) {
+    switch (data.type) {
+        case 'state':
+            state = data.payload;
+            renderAll();
+            break;
+    }
+}
+
+// ST broadcasts state to all connected players
+function broadcastState() {
+    const message = { type: 'state', payload: state };
+    for (const playerId in connections) {
+        const conn = connections[playerId];
+        if (conn && conn.open) {
+            conn.send(message);
+        }
+    }
+    renderAll();
+}
+
+// Send action to ST (for players)
+function sendToHost(message) {
+    if (hostConn && hostConn.open) {
+        hostConn.send(message);
+    }
+}
+
+// Legacy function for compatibility
 function sendState() {
-    if (!conn) return;
-    conn.send({ type: 'state', payload: state });
+    if (myRole === 'st') {
+        broadcastState();
+    }
 }
 
 /* --- 3. CAMERA LOGIC (PAN & ZOOM) --- */
@@ -692,21 +977,31 @@ function endTokenDrag(e) {
     newX = Math.max(0, Math.min(state.mapW - 1, newX));
     newY = Math.max(0, Math.min(state.mapH - 1, newY));
 
-    // Update unit position
-    draggedUnit.x = newX;
-    draggedUnit.y = newY;
+    // Update unit position based on role
+    if (myRole === 'st') {
+        draggedUnit.x = newX;
+        draggedUnit.y = newY;
+        sendState();
+    } else {
+        // Player sends move request to ST
+        sendToHost({
+            type: 'moveUnit',
+            unitId: draggedUnit.id,
+            x: newX,
+            y: newY
+        });
+    }
 
     // Cleanup
     if (draggedElement) {
         draggedElement.classList.remove('dragging');
-        draggedElement.releasePointerCapture(e.pointerId);
+        try { draggedElement.releasePointerCapture(e.pointerId); } catch(err) {}
     }
 
     isDraggingToken = false;
     draggedUnit = null;
     draggedElement = null;
 
-    sendState();
     renderAll();
 }
 
@@ -803,6 +1098,27 @@ function renderAll() {
     renderMap();
     renderUnitsList();
     renderSidebarUnits();
+    renderUnitsToolbar();
+}
+
+function renderUnitsToolbar() {
+    const toolbar = document.getElementById('units-toolbar');
+    if (!toolbar) return;
+
+    if (myRole === 'st') {
+        toolbar.innerHTML = `
+            <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
+            <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
+            <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
+            <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
+        `;
+    } else {
+        // Players can only add their own units
+        toolbar.innerHTML = `
+            <button class="units-btn" onclick="openAddUnitModal()">+ 新增我的單位</button>
+            <span style="color:var(--text-dim);font-size:0.8rem;padding:8px;">回合控制由 ST 操作</span>
+        `;
+    }
 }
 
 function renderMap() {
@@ -829,11 +1145,12 @@ function renderMap() {
             const div = document.createElement('div');
             div.className = 'cell';
             
-            // Deployment Highlight Logic
-            if (currentTool === 'cursor' && selectedUnitId !== null && myRole === 'st') {
-               // Checking if unit is waiting to deploy
+            // Deployment Highlight Logic - show for units user can control
+            if (currentTool === 'cursor' && selectedUnitId !== null) {
                const u = state.units.find(u => u.id === selectedUnitId);
-               if(u && u.x === -1) div.classList.add('deploy-target');
+               if(u && u.x === -1 && canControlUnit(u)) {
+                   div.classList.add('deploy-target');
+               }
             }
 
             let tileDef = theme.tiles.find(t => t.id === val);
@@ -855,8 +1172,11 @@ function renderMap() {
             div.onpointerdown = (e) => {
                 if(isDraggingMap || isDraggingToken) return;
                 // Stop propagation for cursor tool when deploying (prevents camera pan)
-                if(currentTool === 'cursor' && selectedUnitId !== null && myRole === 'st') {
-                    e.stopPropagation();
+                if(currentTool === 'cursor' && selectedUnitId !== null) {
+                    const u = state.units.find(u => u.id === selectedUnitId);
+                    if(u && canControlUnit(u)) {
+                        e.stopPropagation();
+                    }
                 }
                 handleMapInput(x, y, e);
             };
@@ -886,14 +1206,12 @@ function renderMap() {
             e.stopPropagation();
             e.preventDefault();
 
-            if(myRole !== 'st') {
-                // Players can only select, not move
-                selectUnit(u.id);
-                return;
-            }
+            selectUnit(u.id);
 
-            // Start drag for ST
-            startTokenDrag(e, u, t);
+            // Check if user can control this unit (ST can control all, players only their own)
+            if (canControlUnit(u)) {
+                startTokenDrag(e, u, t);
+            }
         };
         grid.appendChild(t);
     });
@@ -901,12 +1219,25 @@ function renderMap() {
 
 function handleMapInput(x, y, e) {
     if (currentTool === 'cursor') {
-        if(selectedUnitId !== null && myRole === 'st') {
+        if(selectedUnitId !== null) {
             const u = state.units.find(u => u.id === selectedUnitId);
-            if(u) {
-                u.x = x; u.y = y;
-                selectedUnitId = null; // Deselect after move
-                sendState(); renderAll();
+            if(u && canControlUnit(u)) {
+                if (myRole === 'st') {
+                    u.x = x; u.y = y;
+                    selectedUnitId = null;
+                    sendState();
+                    renderAll();
+                } else {
+                    // Player sends move request to ST
+                    sendToHost({
+                        type: 'moveUnit',
+                        unitId: u.id,
+                        x: x,
+                        y: y
+                    });
+                    selectedUnitId = null;
+                    renderAll();
+                }
             }
         }
         return;
@@ -916,7 +1247,7 @@ function handleMapInput(x, y, e) {
     let newVal = (currentTool === 'floor') ? 0 : parseInt(currentTool);
     if (state.mapData[y][x] !== newVal) {
         state.mapData[y][x] = newVal;
-        renderAll(); // Immediate visual
+        renderAll();
     }
 }
 window.addEventListener('pointerup', () => { if(myRole==='st') sendState(); });
@@ -925,20 +1256,29 @@ window.addEventListener('pointerup', () => { if(myRole==='st') sendState(); });
 function renderUnitsList() {
     const list = document.getElementById('units-list');
     if (!list) return;
-    
+
     list.innerHTML = state.units.map((u, idx) => {
         const isTurn = idx === state.turnIdx;
         const a = u.hpArr.filter(x => x === 3).length;
         const l = u.hpArr.filter(x => x === 2).length;
         const b = u.hpArr.filter(x => x === 1).length;
         const empty = u.maxHp - a - l - b;
-        
+
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
-        const hideDetails = isEnemy && !isSt;
+        const canControl = canControlUnit(u);
+        const isMyUnit = u.ownerId === myPeerId;
+        const hideDetails = isEnemy && !isSt && !isMyUnit;
 
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
         if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
+
+        // Owner indicator
+        let ownerTag = '';
+        if (u.ownerName) {
+            const ownerColor = isMyUnit ? 'var(--accent-green)' : 'var(--text-dim)';
+            ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
+        }
 
         const bar = u.hpArr.map(h => {
             let cls = 'hp-empty';
@@ -948,12 +1288,13 @@ function renderUnitsList() {
             return `<div class="hp-chunk ${cls}" style="width:${100/u.maxHp}%"></div>`;
         }).join('');
 
-        const deployBtn = u.x >= 0 
-            ? `<button class="action-btn" onclick="recallUnit(${u.id})">📍收回</button>` 
+        const deployBtn = u.x >= 0
+            ? `<button class="action-btn" onclick="recallUnit(${u.id})">📍收回</button>`
             : `<button class="action-btn" onclick="startDeploy(${u.id})">📍部署</button>`;
-        
+
+        // Show actions for users who can control this unit
         let actions = '';
-        if (isSt) {
+        if (canControl) {
             actions = `
                 <div class="unit-actions">
                     <button class="action-btn dmg-b" onclick="modifyHP(${u.id},'b',1)">+B</button>
@@ -967,14 +1308,17 @@ function renderUnitsList() {
         }
 
         const avaStyle = u.avatar ? `background-image:url(${u.avatar});color:transparent;` : '';
-        const initInput = `<input type="number" class="unit-init" value="${u.init}" onchange="updateInit(${u.id},this.value)" ${!isSt?'readonly':''} style="width:50px;text-align:center;">`;
+        const initInput = `<input type="number" class="unit-init" value="${u.init}" onchange="updateInit(${u.id},this.value)" ${!canControl?'readonly':''} style="width:50px;text-align:center;">`;
+
+        // Highlight user's own unit with a subtle border
+        const myUnitStyle = isMyUnit ? 'border-left-width:6px;' : '';
 
         return `
-            <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}">
+            <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="${myUnitStyle}">
                 <div class="unit-header">
                     <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar(${u.id})">${u.avatar?'':u.name[0]}</div>
                     <div style="flex:1;">
-                        <div style="font-weight:600;">${escapeHtml(u.name)}</div>
+                        <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
                     </div>
                     ${initInput}
@@ -1036,63 +1380,157 @@ function confirmAddUnit() {
     const hp = parseInt(document.getElementById('add-hp').value) || 10;
     const type = document.getElementById('add-type').value;
     const useAvatar = document.getElementById('add-avatar').checked;
-    
-    const u = createUnit(name, hp, type);
-    if(useAvatar) { uploadTargetId = u.id; document.getElementById('file-upload').click(); }
-    state.units.push(u);
-    closeModal('modal-add-unit'); sendState(); renderAll();
+
+    if (myRole === 'st') {
+        // ST creates unit directly
+        const u = createUnit(name, hp, type, myPeerId, myName);
+        if(useAvatar) { uploadTargetId = u.id; document.getElementById('file-upload').click(); }
+        state.units.push(u);
+        closeModal('modal-add-unit');
+        sendState();
+        renderAll();
+    } else {
+        // Player sends request to ST
+        sendToHost({
+            type: 'addUnit',
+            name: name,
+            hp: hp,
+            unitType: type,
+            playerName: myName
+        });
+        closeModal('modal-add-unit');
+        showToast('已請求新增單位');
+    }
 }
 
 function confirmBatchAdd() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以批量新增');
+        return;
+    }
+
     const pre = document.getElementById('batch-prefix').value || 'Unit';
     const start = parseInt(document.getElementById('batch-start').value) || 1;
     const count = parseInt(document.getElementById('batch-count').value) || 5;
     const hp = parseInt(document.getElementById('batch-hp').value) || 10;
     const type = document.getElementById('batch-type').value;
 
-    for(let i=0; i<count; i++) state.units.push(createUnit(`${pre}${start+i}`, hp, type));
-    closeModal('modal-batch'); sendState(); renderAll();
+    for(let i=0; i<count; i++) {
+        state.units.push(createUnit(`${pre}${start+i}`, hp, type, myPeerId, myName));
+    }
+    closeModal('modal-batch');
+    sendState();
+    renderAll();
 }
 
-function createUnit(name, hp, type) {
-    return { id: Date.now()+Math.random(), name, maxHp: hp, hpArr: Array(hp).fill(0), type, init: 0, x: -1, y: -1, avatar: null };
+function createUnit(name, hp, type, ownerId = null, ownerName = null) {
+    return {
+        id: Date.now()+Math.random(),
+        name,
+        maxHp: hp,
+        hpArr: Array(hp).fill(0),
+        type,
+        init: 0,
+        x: -1,
+        y: -1,
+        avatar: null,
+        ownerId: ownerId,
+        ownerName: ownerName
+    };
+}
+
+// Check if current user can control a unit
+function canControlUnit(unit) {
+    if (myRole === 'st') return true;
+    return unit.ownerId === myPeerId;
+}
+
+// Internal HP modification (used by both ST and message handler)
+function modifyHPInternal(unit, type, amount) {
+    for(let i=0; i<amount; i++) {
+        if (type === 'heal') {
+            const idx = unit.hpArr.findIndex(x => x > 0);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else {
+            const val = type==='b'?1:type==='l'?2:3;
+            const eIdx = unit.hpArr.findIndex(x => x === 0);
+            if(eIdx !== -1) unit.hpArr[eIdx] = val;
+            else {
+                const bIdx = unit.hpArr.findIndex(x => x === 1);
+                if(bIdx !== -1 && val >= 1) unit.hpArr[bIdx] = 2;
+                else {
+                    const lIdx = unit.hpArr.findIndex(x => x === 2);
+                    if(lIdx !== -1 && val >= 1) unit.hpArr[lIdx] = 3;
+                }
+            }
+        }
+        unit.hpArr.sort((a,b) => b-a);
+    }
 }
 
 function deleteUnit(id) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法刪除其他人的單位');
+        return;
+    }
+
     if(!confirm('刪除?')) return;
-    state.units = state.units.filter(u => u.id !== id);
-    sendState(); renderAll();
+
+    if (myRole === 'st') {
+        state.units = state.units.filter(u => u.id !== id);
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({ type: 'deleteUnit', unitId: id });
+    }
 }
 
 function modifyHP(id, type, amount) {
     const u = state.units.find(u => u.id === id);
     if(!u) return;
-    for(let i=0; i<amount; i++) {
-        if (type === 'heal') {
-            const idx = u.hpArr.findIndex(x => x > 0);
-            if(idx !== -1) u.hpArr[idx] = 0;
-        } else {
-            const val = type==='b'?1:type==='l'?2:3;
-            const eIdx = u.hpArr.findIndex(x => x === 0);
-            if(eIdx !== -1) u.hpArr[eIdx] = val;
-            else {
-                // Upgrade
-                const bIdx = u.hpArr.findIndex(x => x === 1);
-                if(bIdx !== -1 && val >= 1) u.hpArr[bIdx] = 2;
-                else {
-                    const lIdx = u.hpArr.findIndex(x => x === 2);
-                    if(lIdx !== -1 && val >= 1) u.hpArr[lIdx] = 3;
-                }
-            }
-        }
-        u.hpArr.sort((a,b) => b-a);
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
     }
-    sendState(); renderAll();
+
+    if (myRole === 'st') {
+        modifyHPInternal(u, type, amount);
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({
+            type: 'modifyHP',
+            unitId: id,
+            dmgType: type,
+            amount: amount
+        });
+    }
 }
 
 function updateInit(id, val) {
     const u = state.units.find(u => u.id === id);
-    if(u) { u.init = parseInt(val); sendState(); renderAll(); }
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        u.init = parseInt(val);
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({
+            type: 'updateInit',
+            unitId: id,
+            init: parseInt(val)
+        });
+    }
 }
 function sortByInit() {
     state.units.sort((a,b) => b.init - a.init);
@@ -1111,6 +1549,14 @@ function nextTurn() {
 
 function selectUnit(id) { selectedUnitId = id; renderMap(); }
 function startDeploy(id) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法操控其他人的單位');
+        return;
+    }
+
     switchPage('map');
     selectedUnitId = id;
     renderMap();
@@ -1118,7 +1564,26 @@ function startDeploy(id) {
 }
 function recallUnit(id) {
     const u = state.units.find(u => u.id === id);
-    if(u) { u.x = -1; u.y = -1; sendState(); renderAll(); }
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法操控其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        u.x = -1;
+        u.y = -1;
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({
+            type: 'moveUnit',
+            unitId: id,
+            x: -1,
+            y: -1
+        });
+    }
 }
 function clearSelection() { selectedUnitId = null; currentTool = 'cursor'; renderAll(); }
 
@@ -1331,12 +1796,17 @@ function escapeHtml(t) { return t?t.replace(/&/g,"&amp;").replace(/</g,"&lt;").r
 function copyId() { navigator.clipboard.writeText(myPeerId).then(()=>showToast('已複製')); }
 function showToast(m) { const t=document.getElementById('toast'); t.innerText=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2000); }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('show'); document.getElementById('sidebar-toggle').classList.toggle('active'); }
-function switchPage(p) { 
-    document.querySelectorAll('.page').forEach(e=>e.classList.remove('active')); 
-    document.getElementById('page-'+p).classList.add('active'); 
+function switchPage(p) {
+    document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+    document.getElementById('page-'+p).classList.add('active');
     document.querySelectorAll('.nav-tab').forEach(e=>e.classList.remove('active'));
     document.querySelector(`.nav-tab[data-page="${p}"]`).classList.add('active');
 }
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    checkExistingSession();
+});
 </script>
 </body>
 </html>

@@ -404,6 +404,41 @@
     </div>
 </div>
 
+<!-- HP Modify Modal -->
+<div class="modal-overlay" id="modal-hp">
+    <div class="modal">
+        <div class="modal-header"><span id="hp-modal-title">修改 HP</span><button onclick="closeModal('modal-hp')">×</button></div>
+        <div class="modal-body">
+            <div id="hp-modal-mode-damage" style="display:none;">
+                <div style="margin-bottom:10px;color:var(--text-dim);">選擇傷害類型：</div>
+                <div style="display:flex;gap:8px;margin-bottom:15px;">
+                    <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('b')">B 傷 (鈍擊)</button>
+                    <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('l')">L 傷 (穿刺)</button>
+                    <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('a')">A 傷 (惡化)</button>
+                </div>
+            </div>
+            <div id="hp-modal-mode-heal" style="display:none;">
+                <div style="margin-bottom:10px;color:var(--text-dim);">選擇要治療的傷勢類型：</div>
+                <div style="display:flex;gap:8px;margin-bottom:15px;">
+                    <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('heal-b')">治療 B 傷</button>
+                    <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('heal-l')">治療 L 傷</button>
+                    <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('heal-a')">治療 A 傷</button>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span class="calc-label" style="white-space:nowrap;">數量：</span>
+                <input type="number" id="hp-amount" value="1" min="1" style="flex:1;text-align:center;font-size:1.2rem;">
+            </div>
+            <input type="hidden" id="hp-target-id">
+            <input type="hidden" id="hp-action-type" value="b">
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn" onclick="closeModal('modal-hp')" style="background:var(--bg-card);">取消</button>
+            <button class="modal-btn" onclick="confirmHpModify()" style="background:var(--accent-green);color:#000;">確認</button>
+        </div>
+    </div>
+</div>
+
 <script>
 /* --- 1. CONFIG & DATA --- */
 const MAP_PRESETS = [
@@ -481,10 +516,21 @@ let draggedElement = null;
 let dragStartPos = { x: 0, y: 0 };
 let tokenStartPos = { x: 0, y: 0 };
 
+// Painting Drag State
+let isPaintingDrag = false;
+
 // Session Storage Keys
 const STORAGE_KEY = 'limbus_session';
 
+// Persistent player ID (survives reconnections)
+let myPlayerId = null;
+
 /* --- 2. INIT & CONN --- */
+
+// Generate a unique player ID
+function generatePlayerId() {
+    return 'player_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
 
 // Save session to localStorage
 function saveSession() {
@@ -492,7 +538,8 @@ function saveSession() {
         name: myName,
         role: myRole,
         hostId: hostId,
-        peerId: myPeerId
+        peerId: myPeerId,
+        playerId: myPlayerId
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
 }
@@ -568,6 +615,14 @@ function initSystem(role, savedPeerId = null) {
 
     myName = name;
     myRole = role;
+
+    // Initialize or restore player ID
+    const session = loadSession();
+    if (session && session.playerId) {
+        myPlayerId = session.playerId;
+    } else {
+        myPlayerId = generatePlayerId();
+    }
 
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
@@ -684,10 +739,11 @@ function connectToHost(targetHostId) {
 
     hostConn.on('open', () => {
         showToast('已連接到房間');
-        // Send join message with player info
+        // Send join message with player info (use persistent playerId for ownership)
         hostConn.send({
             type: 'join',
-            playerId: myPeerId,
+            peerId: myPeerId,
+            playerId: myPlayerId,
             playerName: myName
         });
         saveSession();
@@ -733,13 +789,16 @@ function handleNewConnection(conn) {
 
 // ST receives messages from players
 function handleSTMessage(conn, data) {
-    const playerId = conn.peer;
+    const peerId = conn.peer;
+    // Use persistent playerId for ownership (falls back to peerId for backwards compatibility)
+    const playerId = data.playerId || peerId;
 
     switch (data.type) {
         case 'join':
-            // Register player
+            // Register player with their persistent playerId
             state.players[playerId] = {
                 id: playerId,
+                peerId: peerId,
                 name: data.playerName,
                 online: true
             };
@@ -789,6 +848,15 @@ function handleSTMessage(conn, data) {
             const unit3 = state.units.find(u => u.id === data.unitId);
             if (unit3 && unit3.ownerId === playerId) {
                 unit3.init = data.init;
+                broadcastState();
+            }
+            break;
+
+        case 'uploadAvatar':
+            // Player uploads avatar for their own unit
+            const unit4 = state.units.find(u => u.id === data.unitId);
+            if (unit4 && unit4.ownerId === playerId) {
+                unit4.avatar = data.avatar;
                 broadcastState();
             }
             break;
@@ -847,6 +915,12 @@ function initCameraEvents() {
         // Don't start map drag if clicking on a token (handled separately)
         if (isDraggingToken || e.target.classList.contains('token')) return;
 
+        // Don't start map drag if using a paint tool on a cell
+        if (currentTool !== 'cursor' && e.target.classList.contains('cell')) {
+            isPaintingDrag = true;
+            return;
+        }
+
         isDraggingMap = true;
         lastPointer = { x: e.clientX, y: e.clientY };
         vp.setPointerCapture(e.pointerId);
@@ -857,6 +931,11 @@ function initCameraEvents() {
         if (isDraggingToken && draggedElement) {
             e.preventDefault();
             handleTokenDragMove(e);
+            return;
+        }
+
+        // Handle painting drag - cell events handle the actual painting
+        if (isPaintingDrag) {
             return;
         }
 
@@ -879,6 +958,13 @@ function initCameraEvents() {
             return;
         }
 
+        // Handle painting drag end
+        if (isPaintingDrag) {
+            isPaintingDrag = false;
+            if (myRole === 'st') sendState();
+            return;
+        }
+
         // Handle map pan end
         if (isDraggingMap) {
             isDraggingMap = false;
@@ -891,6 +977,7 @@ function initCameraEvents() {
             cancelTokenDrag();
         }
         isDraggingMap = false;
+        isPaintingDrag = false;
     });
 
     // Touch Pinch (Simple)
@@ -986,6 +1073,7 @@ function endTokenDrag(e) {
         // Player sends move request to ST
         sendToHost({
             type: 'moveUnit',
+            playerId: myPlayerId,
             unitId: draggedUnit.id,
             x: newX,
             y: newY
@@ -1001,6 +1089,9 @@ function endTokenDrag(e) {
     isDraggingToken = false;
     draggedUnit = null;
     draggedElement = null;
+
+    // Clear selection after drag move
+    selectedUnitId = null;
 
     renderAll();
 }
@@ -1180,7 +1271,12 @@ function renderMap() {
                 }
                 handleMapInput(x, y, e);
             };
-            div.onpointerenter = (e) => { if(e.buttons === 1 && !isDraggingMap && !isDraggingToken) handleMapInput(x, y, e); };
+            // Allow painting while dragging (when isPaintingDrag is true or buttons pressed)
+            div.onpointerenter = (e) => {
+                if(e.buttons === 1 && !isDraggingMap && !isDraggingToken) {
+                    handleMapInput(x, y, e);
+                }
+            };
             
             grid.appendChild(div);
         }
@@ -1231,6 +1327,7 @@ function handleMapInput(x, y, e) {
                     // Player sends move request to ST
                     sendToHost({
                         type: 'moveUnit',
+                        playerId: myPlayerId,
                         unitId: u.id,
                         x: x,
                         y: y
@@ -1247,10 +1344,28 @@ function handleMapInput(x, y, e) {
     let newVal = (currentTool === 'floor') ? 0 : parseInt(currentTool);
     if (state.mapData[y][x] !== newVal) {
         state.mapData[y][x] = newVal;
-        renderAll();
+
+        // During painting drag, only update the cell visually without full re-render
+        if (isPaintingDrag && e && e.target && e.target.classList.contains('cell')) {
+            const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+            const tileDef = theme.tiles.find(t => t.id === newVal);
+            if (tileDef) {
+                e.target.style.backgroundColor = tileDef.color;
+                if(tileDef.name.includes('牆') || tileDef.name.includes('掩體')) {
+                    e.target.style.backgroundImage = 'repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.2) 4px,rgba(0,0,0,0.2) 8px)';
+                } else {
+                    e.target.style.backgroundImage = '';
+                }
+            } else {
+                // Floor / clear
+                e.target.style.backgroundColor = '';
+                e.target.style.backgroundImage = '';
+            }
+        } else {
+            renderAll();
+        }
     }
 }
-window.addEventListener('pointerup', () => { if(myRole==='st') sendState(); });
 
 /* --- 6. UNITS LOGIC --- */
 function renderUnitsList() {
@@ -1267,7 +1382,7 @@ function renderUnitsList() {
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
         const canControl = canControlUnit(u);
-        const isMyUnit = u.ownerId === myPeerId;
+        const isMyUnit = u.ownerId === myPlayerId;
         const hideDetails = isEnemy && !isSt && !isMyUnit;
 
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
@@ -1297,10 +1412,11 @@ function renderUnitsList() {
         if (canControl) {
             actions = `
                 <div class="unit-actions">
-                    <button class="action-btn dmg-b" onclick="modifyHP(${u.id},'b',1)">+B</button>
-                    <button class="action-btn dmg-l" onclick="modifyHP(${u.id},'l',1)">+L</button>
-                    <button class="action-btn dmg-a" onclick="modifyHP(${u.id},'a',1)">+A</button>
-                    <button class="action-btn heal" onclick="modifyHP(${u.id},'heal',1)">治</button>
+                    <button class="action-btn dmg-b" onclick="modifyHP(${u.id},'b',1)" title="按住Shift開啟數量輸入">+B</button>
+                    <button class="action-btn dmg-l" onclick="modifyHP(${u.id},'l',1)" title="按住Shift開啟數量輸入">+L</button>
+                    <button class="action-btn dmg-a" onclick="modifyHP(${u.id},'a',1)" title="按住Shift開啟數量輸入">+A</button>
+                    <button class="action-btn" onclick="openHpModal(${u.id},'damage')" title="開啟傷害面板">⚔</button>
+                    <button class="action-btn heal" onclick="openHpModal(${u.id},'heal')" title="開啟治療面板 (可選擇 B/L/A)">治療</button>
                     ${deployBtn}
                     <button class="action-btn" onclick="deleteUnit(${u.id})">✕</button>
                 </div>
@@ -1393,6 +1509,7 @@ function confirmAddUnit() {
         // Player sends request to ST
         sendToHost({
             type: 'addUnit',
+            playerId: myPlayerId,
             name: name,
             hp: hp,
             unitType: type,
@@ -1442,20 +1559,36 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null) {
 // Check if current user can control a unit
 function canControlUnit(unit) {
     if (myRole === 'st') return true;
-    return unit.ownerId === myPeerId;
+    return unit.ownerId === myPlayerId;
 }
 
 // Internal HP modification (used by both ST and message handler)
+// type can be: 'b', 'l', 'a' (damage), 'heal' (heal any), 'heal-b', 'heal-l', 'heal-a' (heal specific)
 function modifyHPInternal(unit, type, amount) {
     for(let i=0; i<amount; i++) {
         if (type === 'heal') {
+            // Heal any damage (prioritize A > L > B)
             const idx = unit.hpArr.findIndex(x => x > 0);
             if(idx !== -1) unit.hpArr[idx] = 0;
+        } else if (type === 'heal-a') {
+            // Only heal A damage
+            const idx = unit.hpArr.findIndex(x => x === 3);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else if (type === 'heal-l') {
+            // Only heal L damage
+            const idx = unit.hpArr.findIndex(x => x === 2);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else if (type === 'heal-b') {
+            // Only heal B damage
+            const idx = unit.hpArr.findIndex(x => x === 1);
+            if(idx !== -1) unit.hpArr[idx] = 0;
         } else {
+            // Apply damage
             const val = type==='b'?1:type==='l'?2:3;
             const eIdx = unit.hpArr.findIndex(x => x === 0);
             if(eIdx !== -1) unit.hpArr[eIdx] = val;
             else {
+                // Upgrade existing damage
                 const bIdx = unit.hpArr.findIndex(x => x === 1);
                 if(bIdx !== -1 && val >= 1) unit.hpArr[bIdx] = 2;
                 else {
@@ -1484,7 +1617,7 @@ function deleteUnit(id) {
         sendState();
         renderAll();
     } else {
-        sendToHost({ type: 'deleteUnit', unitId: id });
+        sendToHost({ type: 'deleteUnit', playerId: myPlayerId, unitId: id });
     }
 }
 
@@ -1499,16 +1632,59 @@ function modifyHP(id, type, amount) {
 
     if (myRole === 'st') {
         modifyHPInternal(u, type, amount);
-        sendState();
-        renderAll();
+        broadcastState();
     } else {
         sendToHost({
             type: 'modifyHP',
+            playerId: myPlayerId,
             unitId: id,
             dmgType: type,
             amount: amount
         });
     }
+}
+
+// Open HP modification modal
+function openHpModal(id, mode) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    document.getElementById('hp-target-id').value = id;
+    document.getElementById('hp-amount').value = 1;
+    document.getElementById('hp-action-type').value = mode === 'heal' ? 'heal-b' : 'b';
+
+    document.getElementById('hp-modal-title').innerText = mode === 'heal' ? `治療：${u.name}` : `傷害：${u.name}`;
+    document.getElementById('hp-modal-mode-damage').style.display = mode === 'damage' ? 'block' : 'none';
+    document.getElementById('hp-modal-mode-heal').style.display = mode === 'heal' ? 'block' : 'none';
+
+    // Reset button highlights
+    document.querySelectorAll('#modal-hp .action-btn').forEach(btn => btn.style.boxShadow = '');
+    // Highlight first option
+    const firstBtn = document.querySelector(mode === 'heal' ? '#hp-modal-mode-heal .action-btn' : '#hp-modal-mode-damage .action-btn');
+    if (firstBtn) firstBtn.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
+
+    document.getElementById('modal-hp').classList.add('show');
+}
+
+function setHpModalType(type) {
+    document.getElementById('hp-action-type').value = type;
+    // Update button highlights
+    document.querySelectorAll('#modal-hp .action-btn').forEach(btn => btn.style.boxShadow = '');
+    event.target.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
+}
+
+function confirmHpModify() {
+    const id = parseFloat(document.getElementById('hp-target-id').value);
+    const amount = parseInt(document.getElementById('hp-amount').value) || 1;
+    const type = document.getElementById('hp-action-type').value;
+
+    modifyHP(id, type, amount);
+    closeModal('modal-hp');
 }
 
 function updateInit(id, val) {
@@ -1527,19 +1703,29 @@ function updateInit(id, val) {
     } else {
         sendToHost({
             type: 'updateInit',
+            playerId: myPlayerId,
             unitId: id,
             init: parseInt(val)
         });
     }
 }
 function sortByInit() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以排序');
+        return;
+    }
     state.units.sort((a,b) => b.init - a.init);
-    state.turnIdx = 0; sendState(); renderAll();
+    state.turnIdx = 0;
+    broadcastState();
 }
 function nextTurn() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制回合');
+        return;
+    }
     if(state.units.length) {
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
-        sendState(); renderAll();
+        broadcastState();
         setTimeout(() => {
             const el = document.querySelector('.unit-card.active-turn');
             if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
@@ -1579,6 +1765,7 @@ function recallUnit(id) {
     } else {
         sendToHost({
             type: 'moveUnit',
+            playerId: myPlayerId,
             unitId: id,
             x: -1,
             y: -1
@@ -1598,18 +1785,43 @@ document.getElementById('file-upload').addEventListener('change', e => {
                 const cvs = document.createElement('canvas');
                 cvs.width = 64; cvs.height = 64;
                 cvs.getContext('2d').drawImage(img,0,0,64,64);
-                const u = state.units.find(u => u.id === uploadTargetId);
-                if(u) { u.avatar = cvs.toDataURL('image/jpeg',0.7); sendState(); renderAll(); }
+                const avatarData = cvs.toDataURL('image/jpeg',0.7);
+
+                if (myRole === 'st') {
+                    const u = state.units.find(u => u.id === uploadTargetId);
+                    if(u) {
+                        u.avatar = avatarData;
+                        broadcastState();
+                    }
+                } else {
+                    // Player sends avatar to ST
+                    sendToHost({
+                        type: 'uploadAvatar',
+                        playerId: myPlayerId,
+                        unitId: uploadTargetId,
+                        avatar: avatarData
+                    });
+                }
                 uploadTargetId = null;
             };
             img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
     }
+    // Reset input so same file can be selected again
+    e.target.value = '';
 });
 
 function uploadAvatar(id) {
-    if(myRole !== 'st') return;
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    // Allow ST to upload for any unit, players only for their own units
+    if (myRole !== 'st' && u.ownerId !== myPlayerId) {
+        showToast('你只能為自己的單位上傳頭像');
+        return;
+    }
+
     uploadTargetId = id;
     document.getElementById('file-upload').click();
 }
@@ -1786,9 +1998,13 @@ function resetCalc() {
         if(i.id!=='boss-tier') i.value=0;
     });
     document.getElementById('c-atk').value = 10; // default
-    document.querySelectorAll('.active').forEach(e=>e.classList.remove('active'));
+    // Only remove active from calculator tags, not navigation tabs
+    document.querySelectorAll('#page-calc .def-tag.active, #page-calc .atk-tag.active').forEach(e=>e.classList.remove('active'));
     document.querySelectorAll('.def-input-row').forEach(e=>e.classList.remove('show'));
+    document.querySelectorAll('#page-calc .calc-field.def-input-row').forEach(e=>e.classList.remove('show'));
     document.getElementById('result-main').innerText='---';
+    document.getElementById('result-main').style.color='var(--accent-green)';
+    document.getElementById('result-detail').innerText='一般計算結果顯示於此\n(BOSS模式請看上方預覽面板)';
 }
 
 /* --- UTILS --- */

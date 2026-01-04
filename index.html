@@ -6,9 +6,10 @@
     <title>Limbus Command v7.5</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="css/calculator.css">
+    <!-- CSS 檔案 - 同一層級 -->
+    <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="components.css">
+    <link rel="stylesheet" href="calculator.css">
 </head>
 <body>
 <input type="file" id="file-upload" accept="image/*" style="display:none;">
@@ -227,16 +228,16 @@
 <!-- Modals -->
 <div id="modals-container"></div>
 
-<!-- Scripts (順序很重要) -->
-<script src="js/config.js"></script>
-<script src="js/state.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/connection.js"></script>
-<script src="js/camera.js"></script>
-<script src="js/map.js"></script>
-<script src="js/units.js"></script>
-<script src="js/calculator.js"></script>
-<script src="js/modals.js"></script>
-<script src="js/main.js"></script>
+<!-- JS 檔案 - 同一層級，順序很重要！ -->
+<script src="config.js"></script>
+<script src="state.js"></script>
+<script src="utils.js"></script>
+<script src="connection.js"></script>
+<script src="camera.js"></script>
+<script src="map.js"></script>
+<script src="units.js"></script>
+<script src="calculator.js"></script>
+<script src="modals.js"></script>
+<script src="main.js"></script>
 </body>
 </html>

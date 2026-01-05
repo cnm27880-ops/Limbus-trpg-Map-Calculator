@@ -1,34 +1,56 @@
-// js/main.js
+/**
+ * Limbus Command - 主程式
+ * 應用程式進入點與初始化
+ */
 
 // ===== 頁面載入初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
-    initModals();
-    initCalculator();
-    initFileUpload();
-    checkExistingSession();
+    // 初始化 Modal
+    if (typeof initModals === 'function') initModals();
     
-    // ★★★ 新增：初始化鍵盤控制 ★★★
+    // 初始化計算器
+    if (typeof initCalculator === 'function') initCalculator();
+    
+    // 初始化檔案上傳
+    if (typeof initFileUpload === 'function') initFileUpload();
+    
+    // 檢查現有 Session
+    if (typeof checkExistingSession === 'function') checkExistingSession();
+    
+    // 初始化鍵盤控制 (新增功能)
     initKeyboardControls();
     
     console.log('Limbus Command v7.5 initialized');
 });
 
+// ===== 版本資訊 =====
 const APP_VERSION = '7.5';
 const APP_NAME = 'Limbus Command';
 
+/**
+ * 取得版本資訊
+ * @returns {Object}
+ */
 function getAppInfo() {
-    return { name: APP_NAME, version: APP_VERSION, buildDate: '2024' };
+    return {
+        name: APP_NAME,
+        version: APP_VERSION,
+        buildDate: '2024'
+    };
 }
 
-// ★★★ 新增：鍵盤控制函數 ★★★
+// ===== 鍵盤控制邏輯 (新增) =====
 function initKeyboardControls() {
     document.addEventListener('keydown', (e) => {
         // 如果正在輸入文字或沒有選取單位，則忽略
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || selectedUnitId === null) return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+        if (selectedUnitId === null) return;
 
         const u = state.units.find(u => u.id === selectedUnitId);
-        // 檢查是否存在、是否在地圖上(x!=-1)、是否有權限
-        if (!u || u.x === -1 || !canControlUnit(u)) return;
+        
+        // 檢查單位是否存在、是否在地圖上(x!=-1)、是否有權限控制
+        if (!u || u.x === -1) return;
+        if (typeof canControlUnit === 'function' && !canControlUnit(u)) return;
 
         let dx = 0;
         let dy = 0;
@@ -38,7 +60,9 @@ function initKeyboardControls() {
             case 'ArrowDown': dy = 1; break;
             case 'ArrowLeft': dx = -1; break;
             case 'ArrowRight': dx = 1; break;
-            case 'Escape': clearSelection(); return; // ESC 取消選取
+            case 'Escape': 
+                if (typeof clearSelection === 'function') clearSelection(); 
+                return; 
             default: return; // 其他按鍵不處理
         }
 
@@ -64,8 +88,10 @@ function initKeyboardControls() {
                 x: newX,
                 y: newY
             });
-            // 玩家端預先渲染以獲得即時回饋
-            // 注意：實際狀態會等 ST 確認後同步，這裡僅做視覺優化
+            // 玩家端預先渲染以獲得即時回饋 (實際以 ST 回傳為準)
+            // 這裡暫時修改本地數據以達到流暢效果
+            u.x = newX;
+            u.y = newY;
             renderAll(); 
         }
     });

@@ -250,8 +250,10 @@ function renderMap() {
                         }
                     }
 
-                    // 游標模式下沒有選中單位時，顯示該格的地形資訊
-                    updateTileInfo(x, y);
+                    // 游標模式下沒有選中單位時，ST 可查看該格的地形資訊
+                    if (myRole === 'st') {
+                        updateTileInfo(x, y);
+                    }
                     // 允許事件冒泡以觸發地圖拖曳
                 }
                 // 繪製工具模式 (ST Only)

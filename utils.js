@@ -60,6 +60,25 @@ function copyPlayerCode(code) {
     });
 }
 
+/**
+ * 複製自己的玩家識別碼
+ */
+function copyMyCode() {
+    if (!myPlayerCode) return;
+    copyPlayerCode(myPlayerCode);
+}
+
+/**
+ * 更新導覽列中的玩家識別碼顯示
+ */
+function updateCodeDisplay() {
+    const codeEl = document.getElementById('my-code');
+    if (codeEl && myPlayerCode) {
+        codeEl.innerText = myPlayerCode;
+        codeEl.style.display = 'inline-block';
+    }
+}
+
 // ===== ID 生成 =====
 /**
  * 產生唯一玩家 ID

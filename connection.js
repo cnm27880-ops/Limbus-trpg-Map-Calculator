@@ -292,6 +292,7 @@ function reconnectSession() {
 
 function showJoinStep() {
     document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
     document.getElementById('login-join').classList.remove('hidden');
 
     const session = loadSession();
@@ -300,7 +301,14 @@ function showJoinStep() {
     }
 }
 
+function showSTStep() {
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-st').classList.remove('hidden');
+}
+
 function showMainStep() {
+    document.getElementById('login-st').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
     document.getElementById('login-main').classList.remove('hidden');
 }

@@ -31,6 +31,7 @@ function updateToolbar() {
     const container = document.getElementById('dynamic-tools');
     if (!container) return;
 
+    // 保留固定工具
     const staticTools = container.querySelectorAll('[data-tool="cursor"], [data-tool="floor"]');
     container.innerHTML = '';
     staticTools.forEach(t => container.appendChild(t));
@@ -91,9 +92,12 @@ function resizeMap() {
     const w = parseInt(document.getElementById('map-w').value);
     const h = parseInt(document.getElementById('map-h').value);
     
-    if (w < MAP_DEFAULTS.MIN_SIZE || h < MAP_DEFAULTS.MIN_SIZE || 
-        w > MAP_DEFAULTS.MAX_SIZE || h > MAP_DEFAULTS.MAX_SIZE) {
-        return showToast(`尺寸 ${MAP_DEFAULTS.MIN_SIZE}~${MAP_DEFAULTS.MAX_SIZE}`);
+    const minSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.MIN_SIZE : 5;
+    const maxSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.MAX_SIZE : 50;
+    
+    if (w < minSize || h < minSize || w > maxSize || h > maxSize) {
+        showToast(`尺寸限制 ${minSize}~${maxSize}`);
+        return;
     }
     
     const newData = Array(h).fill().map(() => Array(w).fill(0));
@@ -118,7 +122,7 @@ function renderMap() {
     const grid = document.getElementById('battle-map');
     if (!grid) return;
 
-    const gridSize = MAP_DEFAULTS.GRID_SIZE;
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
     
     grid.style.gridTemplateColumns = `repeat(${state.mapW}, var(--grid-size))`;
     grid.innerHTML = '';
@@ -149,7 +153,9 @@ function renderMap() {
             // 部署高亮邏輯
             if (currentTool === 'cursor' && selectedUnitId !== null) {
                 const u = findUnitById(selectedUnitId);
-                if (u && u.x === -1 && canControlUnit(u)) {
+                // 檢查 canControlUnit，若無此函數則預設為 true (避免報錯)
+                const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+                if (u && u.x === -1 && controllable) {
                     div.classList.add('deploy-target');
                 }
             }
@@ -171,21 +177,51 @@ function renderMap() {
                 }
             }
 
-            // 互動事件
+            // --- 互動事件綁定 ---
+            
             div.onpointerdown = (e) => {
-                if (isDraggingMap || isDraggingToken) return;
-                if (currentTool === 'cursor' && selectedUnitId !== null) {
-                    const u = findUnitById(selectedUnitId);
-                    if (u && canControlUnit(u)) {
-                        e.stopPropagation();
+                // 如果正在拖曳 Token，不處理格子點擊
+                if (isDraggingToken) return;
+
+                // 游標模式：移動單位
+                if (currentTool === 'cursor') {
+                    if (selectedUnitId !== null) {
+                        const u = findUnitById(selectedUnitId);
+                        const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+                        
+                        if (u && controllable) {
+                            if (myRole === 'st') {
+                                u.x = x; u.y = y;
+                                selectedUnitId = null;
+                                sendState(); renderAll();
+                            } else {
+                                sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: x, y: y });
+                                selectedUnitId = null; renderAll();
+                            }
+                            // 點擊移動後阻止事件冒泡，不觸發地圖拖曳
+                            e.stopPropagation();
+                            return;
+                        }
                     }
+                } 
+                // 繪製工具模式 (ST Only)
+                else if (myRole === 'st') {
+                    // 標記為開始繪製
+                    isPaintingDrag = true;
+                    handleMapInput(x, y, e);
+                    // 阻止事件冒泡，避免觸發相機平移
+                    e.stopPropagation();
                 }
-                handleMapInput(x, y, e);
             };
             
+            // 實現拖曳繪製 (Mouse Drag Paint)
             div.onpointerenter = (e) => {
-                if (e.buttons === 1 && !isDraggingMap && !isDraggingToken) {
-                    handleMapInput(x, y, e);
+                // 條件：必須是 ST + 非游標工具 + (正在繪製中 OR 按住左鍵)
+                if (myRole === 'st' && currentTool !== 'cursor') {
+                    if (isPaintingDrag || e.buttons === 1) {
+                        isPaintingDrag = true; // 確保狀態正確
+                        handleMapInput(x, y, e);
+                    }
                 }
             };
             
@@ -199,6 +235,7 @@ function renderMap() {
         t.className = `token ${u.type} ${u.id === selectedUnitId ? 'selected' : ''}`;
         t.dataset.unitId = u.id;
 
+        // +2 是為了配合 CSS 的邊框內縮
         t.style.left = (u.x * gridSize + 2) + 'px';
         t.style.top = (u.y * gridSize + 2) + 'px';
 
@@ -210,12 +247,17 @@ function renderMap() {
 
         t.onpointerdown = (e) => {
             if (currentTool !== 'cursor') return;
+            
+            // 阻止格子接收點擊事件
             e.stopPropagation();
+            // 阻止圖片預設拖曳
             e.preventDefault();
 
             selectUnit(u.id);
 
-            if (canControlUnit(u)) {
+            const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+            if (controllable) {
+                // 呼叫 camera.js 中的啟動拖曳
                 startTokenDrag(e, u, t);
             }
         };
@@ -225,38 +267,13 @@ function renderMap() {
 }
 
 /**
- * 處理地圖輸入
+ * 處理地圖輸入 (繪製地形)
  * @param {number} x - X 座標
  * @param {number} y - Y 座標
  * @param {Event} e - 事件物件
  */
 function handleMapInput(x, y, e) {
-    if (currentTool === 'cursor') {
-        if (selectedUnitId !== null) {
-            const u = findUnitById(selectedUnitId);
-            if (u && canControlUnit(u)) {
-                if (myRole === 'st') {
-                    u.x = x;
-                    u.y = y;
-                    selectedUnitId = null;
-                    sendState();
-                    renderAll();
-                } else {
-                    sendToHost({
-                        type: 'moveUnit',
-                        playerId: myPlayerId,
-                        unitId: u.id,
-                        x: x,
-                        y: y
-                    });
-                    selectedUnitId = null;
-                    renderAll();
-                }
-            }
-        }
-        return;
-    }
-    
+    if (currentTool === 'cursor') return;
     if (myRole !== 'st') return;
 
     let newVal = (currentTool === 'floor') ? 0 : parseInt(currentTool);
@@ -264,8 +281,8 @@ function handleMapInput(x, y, e) {
     if (state.mapData[y][x] !== newVal) {
         state.mapData[y][x] = newVal;
 
-        // 繪製拖曳時只更新視覺，不完全重新渲染
-        if (isPaintingDrag && e && e.target && e.target.classList.contains('cell')) {
+        // 優化：直接修改 DOM 樣式，而不是重繪整個地圖 (效能提升)
+        if (e && e.target && e.target.classList.contains('cell')) {
             const theme = getCurrentTheme();
             const tileDef = theme.tiles.find(t => t.id === newVal);
             
@@ -281,6 +298,7 @@ function handleMapInput(x, y, e) {
                 e.target.style.backgroundImage = '';
             }
         } else {
+            // 如果無法直接操作 DOM，則回退到重繪
             renderAll();
         }
     }
@@ -313,7 +331,8 @@ function startDeploy(id) {
     const u = findUnitById(id);
     if (!u) return;
 
-    if (!canControlUnit(u)) {
+    const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+    if (!controllable) {
         showToast('你無法操控其他人的單位');
         return;
     }
@@ -332,7 +351,8 @@ function recallUnit(id) {
     const u = findUnitById(id);
     if (!u) return;
 
-    if (!canControlUnit(u)) {
+    const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+    if (!controllable) {
         showToast('你無法操控其他人的單位');
         return;
     }

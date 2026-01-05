@@ -460,7 +460,7 @@ function initSystem(role, savedPeerId = null) {
                         <div style="margin-top:15px;padding:12px;background:rgba(229,57,53,0.1);border:1px solid var(--accent-red);border-radius:8px;">
                             <div style="font-size:0.9rem;color:var(--accent-red);margin-bottom:8px;">⚠️ 房間已存在</div>
                             <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
-                                識別碼：<span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${inputCode}</span><br>
+                                識別碼：<span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${escapeHtml(inputCode)}</span><br>
                                 ST 名稱：${escapeHtml(existingRoom.stName || '未知')}<br>
                                 最後活動：${new Date(existingRoom.lastActive).toLocaleString('zh-TW')}<br>
                                 房間 ID：<span style="font-size:0.7rem;font-family:'JetBrains Mono';word-break:break-all;">${existingRoom.peerId}</span>

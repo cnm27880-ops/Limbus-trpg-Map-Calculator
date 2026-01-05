@@ -190,15 +190,18 @@ input[type="number"] {
 }
 
 .sidebar-toggle {
-    display: none;
+    display: flex;  /* 預設顯示，讓所有尺寸都能存取側邊欄 */
     background: var(--bg-card);
     color: var(--text-dim);
     padding: 8px 12px;
     border-radius: 6px;
+    align-items: center;
+    gap: 4px;
 }
 
 .sidebar-toggle.active {
     color: var(--accent-yellow);
+    background: var(--bg-input);
 }
 
 /* ===== Layout ===== */
@@ -481,11 +484,14 @@ input[type="number"] {
 
 /* ===== Responsive ===== */
 @media (max-width: 1023px) {
-    .sidebar-toggle {
-        display: flex !important;  /* 手機版顯示側欄切換按鈕 */
-    }
-    .sidebar.show {
-        display: flex;
+    /* 手機版：側邊欄預設隱藏，需要點擊按鈕開啟 */
+    .sidebar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 50;
+        box-shadow: 4px 0 20px rgba(0,0,0,0.5);
     }
     .map-controls-right {
         display: none;
@@ -497,10 +503,8 @@ input[type="number"] {
 }
 
 @media (min-width: 1024px) {
+    /* 電腦版：側邊欄預設顯示，但仍可收合 */
     .sidebar {
-        display: flex !important;  /* 電腦版直接顯示側欄 */
-    }
-    .sidebar-toggle {
-        display: none;  /* 電腦版隱藏切換按鈕 */
+        display: flex;  /* 預設顯示 */
     }
 }

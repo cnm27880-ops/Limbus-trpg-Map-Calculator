@@ -76,28 +76,28 @@ function renderUnitsList() {
 
         // 部署按鈕
         const deployBtn = u.x >= 0
-            ? `<button class="action-btn" onclick="recallUnit(${u.id})">📍收回</button>`
-            : `<button class="action-btn" onclick="startDeploy(${u.id})">📍部署</button>`;
+            ? `<button class="action-btn" onclick="recallUnit('${u.id}')">📍收回</button>`
+            : `<button class="action-btn" onclick="startDeploy('${u.id}')">📍部署</button>`;
 
         // 操作按鈕（只顯示給可控制的使用者）
         let actions = '';
         if (canControlUnit(u)) {
             actions = `
                 <div class="unit-actions">
-                    <button class="action-btn dmg-b" onclick="modifyHP(${u.id},'b',1)" title="按住Shift開啟數量輸入">+B</button>
-                    <button class="action-btn dmg-l" onclick="modifyHP(${u.id},'l',1)" title="按住Shift開啟數量輸入">+L</button>
-                    <button class="action-btn dmg-a" onclick="modifyHP(${u.id},'a',1)" title="按住Shift開啟數量輸入">+A</button>
-                    <button class="action-btn" onclick="openHpModal(${u.id},'damage')" title="開啟傷害面板">⚔</button>
-                    <button class="action-btn heal" onclick="openHpModal(${u.id},'heal')" title="開啟治療面板">治療</button>
+                    <button class="action-btn dmg-b" onclick="modifyHP('${u.id}','b',1)" title="按住Shift開啟數量輸入">+B</button>
+                    <button class="action-btn dmg-l" onclick="modifyHP('${u.id}','l',1)" title="按住Shift開啟數量輸入">+L</button>
+                    <button class="action-btn dmg-a" onclick="modifyHP('${u.id}','a',1)" title="按住Shift開啟數量輸入">+A</button>
+                    <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
+                    <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
                     ${deployBtn}
-                    <button class="action-btn" onclick="deleteUnit(${u.id})">✕</button>
+                    <button class="action-btn" onclick="deleteUnit('${u.id}')">✕</button>
                 </div>
             `;
         }
 
         const avaStyle = u.avatar ? `background-image:url(${u.avatar});color:transparent;` : '';
         const initReadonly = !canControlUnit(u) ? 'readonly' : '';
-        const initInput = `<input type="number" class="unit-init" value="${u.init}" onchange="updateInit(${u.id},this.value)" ${initReadonly} style="width:50px;text-align:center;">`;
+        const initInput = `<input type="number" class="unit-init" value="${u.init}" onchange="updateInit('${u.id}',this.value)" ${initReadonly} style="width:50px;text-align:center;">`;
 
         // 使用者自己的單位有特殊邊框
         const myUnitStyle = isMyUnit ? 'border-left-width:6px;' : '';
@@ -105,7 +105,7 @@ function renderUnitsList() {
         return `
             <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="${myUnitStyle}">
                 <div class="unit-header">
-                    <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar(${u.id})">${u.avatar ? '' : u.name[0]}</div>
+                    <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : u.name[0]}</div>
                     <div style="flex:1;">
                         <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>

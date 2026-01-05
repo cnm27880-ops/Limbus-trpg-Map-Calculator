@@ -164,7 +164,7 @@ function getVagueStatus(unit) {
  */
 function createUnit(name, hp, type, ownerId = null, ownerName = null) {
     return {
-        id: Date.now() + '_' + Math.random().toString().slice(2),  // Firebase-safe ID (無小數點)
+        id: Date.now().toString() + '_' + Math.floor(Math.random() * 1000000).toString(),  // Firebase-safe: 纯字符串 ID (无小数点)
         name: name,
         maxHp: hp,
         hpArr: Array(hp).fill(0),  // 0=完好, 1=B傷, 2=L傷, 3=A傷

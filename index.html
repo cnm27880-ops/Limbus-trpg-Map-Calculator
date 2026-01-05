@@ -29,6 +29,7 @@
         <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
         <input type="text" id="input-st-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
         <button class="login-btn btn-host" onclick="initSystem('st')">建立房間</button>
+        <button class="login-btn" style="background:var(--accent-blue);" onclick="showRoomManager()">📋 房間管理</button>
         <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
     </div>
     <div class="login-box hidden" id="login-join">
@@ -42,6 +43,11 @@
     <div class="login-box hidden" id="login-loading">
         <div style="color:var(--accent-green);margin-bottom:10px;">連線中...</div>
         <div id="loading-status" style="font-size:0.8rem;color:var(--text-dim);"></div>
+    </div>
+    <div class="login-box hidden" id="login-room-manager" style="max-width:600px;max-height:80vh;overflow-y:auto;">
+        <div class="login-title">房間管理</div>
+        <div id="room-list-container" style="margin:15px 0;"></div>
+        <button class="login-btn btn-back" onclick="showSTStep()">返回</button>
     </div>
 </div>
 
@@ -240,6 +246,7 @@
 <script src="config.js"></script>
 <script src="state.js"></script>
 <script src="utils.js"></script>
+<script src="storage.js"></script>
 <script src="connection.js"></script>
 <script src="camera.js"></script>
 <script src="map.js"></script>

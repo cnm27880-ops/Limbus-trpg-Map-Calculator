@@ -304,13 +304,121 @@ function showJoinStep() {
 function showSTStep() {
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-room-manager').classList.add('hidden');
     document.getElementById('login-st').classList.remove('hidden');
 }
 
 function showMainStep() {
     document.getElementById('login-st').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-room-manager').classList.add('hidden');
     document.getElementById('login-main').classList.remove('hidden');
+}
+
+// ===== 房間管理 =====
+/**
+ * 顯示房間管理界面
+ */
+function showRoomManager() {
+    document.getElementById('login-st').classList.add('hidden');
+    document.getElementById('login-room-manager').classList.remove('hidden');
+    renderRoomList();
+}
+
+/**
+ * 渲染房間列表
+ */
+function renderRoomList() {
+    const container = document.getElementById('room-list-container');
+    const rooms = getAllRooms();
+    const roomsArray = Object.values(rooms);
+
+    if (roomsArray.length === 0) {
+        container.innerHTML = `
+            <div style="text-align:center;padding:30px;color:var(--text-dim);">
+                <div style="font-size:2rem;margin-bottom:10px;">📭</div>
+                <div>尚無房間</div>
+            </div>
+        `;
+        return;
+    }
+
+    // 按最後活動時間排序
+    roomsArray.sort((a, b) => b.lastActive - a.lastActive);
+
+    let html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+
+    roomsArray.forEach(room => {
+        const lastActiveDate = new Date(room.lastActive);
+        const createdDate = new Date(room.createdAt);
+        const isRecent = Date.now() - room.lastActive < 24 * 60 * 60 * 1000; // 24小時內
+
+        html += `
+            <div style="background:var(--bg-input);padding:12px;border-radius:8px;border:1px solid ${isRecent ? 'var(--accent-green)' : 'var(--border)'};">
+                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+                    <div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:1.2rem;color:var(--accent-yellow);letter-spacing:2px;">
+                            ${room.code}
+                        </div>
+                        <div style="font-size:0.8rem;color:var(--text-dim);">ST: ${escapeHtml(room.stName || '未知')}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button onclick="loadRoom('${room.code}')" class="login-btn" style="padding:6px 12px;font-size:0.8rem;background:var(--accent-green);">
+                            🔓 進入
+                        </button>
+                        <button onclick="confirmDeleteRoom('${room.code}')" class="login-btn" style="padding:6px 12px;font-size:0.8rem;background:var(--accent-red);">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+                <div style="font-size:0.7rem;color:var(--text-dim);display:flex;gap:12px;">
+                    <span>建立: ${createdDate.toLocaleString('zh-TW')}</span>
+                    <span>活動: ${lastActiveDate.toLocaleString('zh-TW')}</span>
+                </div>
+                ${room.mapState ? `
+                    <div style="margin-top:6px;font-size:0.75rem;color:var(--accent-blue);">
+                        💾 有存檔 | ${room.mapState.units?.length || 0} 個單位
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+/**
+ * 載入指定房間
+ * @param {string} code - 房間識別碼
+ */
+function loadRoom(code) {
+    const room = getRoom(code);
+    if (!room) {
+        showToast('房間不存在');
+        return;
+    }
+
+    // 填入識別碼並返回 ST 登入頁面
+    document.getElementById('input-st-code').value = code;
+    document.getElementById('input-name').value = room.stName || '';
+    showSTStep();
+    showToast('識別碼已填入，請點擊「建立房間」以繼續');
+}
+
+/**
+ * 確認刪除房間
+ * @param {string} code - 房間識別碼
+ */
+function confirmDeleteRoom(code) {
+    if (confirm(`確定要刪除房間 ${code} 嗎？此操作無法復原。`)) {
+        if (deleteRoom(code)) {
+            showToast('房間已刪除');
+            renderRoomList();
+        } else {
+            showToast('刪除失敗');
+        }
+    }
 }
 
 // ===== 主要初始化 =====
@@ -326,23 +434,47 @@ function initSystem(role, savedPeerId = null) {
     myName = name;
     myRole = role;
 
-    // 初始化或恢復玩家 ID
-    const session = loadSession();
-    const inputPlayerCode = document.getElementById('input-player-code')?.value?.trim();
+    // 處理識別碼
+    let inputCode = null;
+    let existingRoom = null;
 
-    if (inputPlayerCode && inputPlayerCode.length === 4) {
-        myPlayerCode = inputPlayerCode;
-        myPlayerId = 'code_' + inputPlayerCode;
-    } else if (session && session.playerId) {
-        myPlayerId = session.playerId;
-        myPlayerCode = session.playerCode || generatePlayerCode();
+    if (role === 'st') {
+        inputCode = document.getElementById('input-st-code')?.value?.trim();
+
+        // ST 輸入識別碼時，嘗試恢復房間
+        if (inputCode && inputCode.length === 4) {
+            existingRoom = getRoom(inputCode);
+            if (existingRoom && existingRoom.peerId) {
+                savedPeerId = existingRoom.peerId;
+                myPlayerCode = inputCode;
+                myPlayerId = 'st_' + inputCode;
+                console.log('恢復 ST 房間:', inputCode, savedPeerId);
+            } else {
+                // 新建房間使用輸入的識別碼
+                myPlayerCode = inputCode;
+                myPlayerId = 'st_' + inputCode;
+            }
+        } else {
+            // 未輸入識別碼，生成新的
+            myPlayerCode = generatePlayerCode();
+            myPlayerId = 'st_' + myPlayerCode;
+        }
     } else {
-        myPlayerId = generatePlayerId();
-        myPlayerCode = generatePlayerCode();
+        // 玩家角色
+        inputCode = document.getElementById('input-player-code')?.value?.trim();
+
+        if (inputCode && inputCode.length === 4) {
+            myPlayerCode = inputCode;
+            myPlayerId = 'player_' + inputCode;
+        } else {
+            myPlayerCode = generatePlayerCode();
+            myPlayerId = 'player_' + myPlayerCode;
+        }
     }
 
     // 更新 UI
     document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
     document.getElementById('login-loading').classList.remove('hidden');
 
@@ -351,7 +483,9 @@ function initSystem(role, savedPeerId = null) {
 
     // 建立 Peer 連線
     const peerOptions = {};
+
     if (role === 'st' && savedPeerId) {
+        console.log('使用已保存的 Peer ID:', savedPeerId);
         peer = new Peer(savedPeerId, peerOptions);
     } else {
         peer = new Peer(peerOptions);
@@ -359,16 +493,37 @@ function initSystem(role, savedPeerId = null) {
 
     peer.on('open', id => {
         myPeerId = id;
+        console.log('Peer 連線已建立:', id);
 
         if (role === 'st') {
             hostId = id;
             setConnectionStatus('connected', 'ST 已就緒');
+
+            // 保存房間數據
+            saveRoom(myPlayerCode, {
+                peerId: id,
+                stName: myName,
+                createdAt: existingRoom ? existingRoom.createdAt : Date.now(),
+                mapState: existingRoom ? existingRoom.mapState : null
+            });
+
+            // 如果有保存的地圖狀態，恢復它
+            if (existingRoom && existingRoom.mapState) {
+                state.units = existingRoom.mapState.units || [];
+                state.turnIdx = existingRoom.mapState.turnIdx || 0;
+                state.mapW = existingRoom.mapState.mapW || 15;
+                state.mapH = existingRoom.mapState.mapH || 15;
+                state.mapData = existingRoom.mapState.mapData || [];
+                state.themeId = existingRoom.mapState.themeId || 0;
+            }
         }
 
         document.getElementById('my-id').innerText = id;
+        updateCodeDisplay();
         document.getElementById('login-layer').classList.add('hidden');
 
         saveSession();
+        setCurrentUser(myPlayerCode, myName, role);
         setupVisibilityHandler();
 
         if (role === 'st') {
@@ -382,7 +537,13 @@ function initSystem(role, savedPeerId = null) {
             updateToolbar();
             renderAll();
             startHeartbeat();
-            showToast(`房間已建立！你的識別碼：${myPlayerCode}`);
+            startAutoSave();
+
+            if (existingRoom) {
+                showToast(`已恢復房間！識別碼：${myPlayerCode}`);
+            } else {
+                showToast(`房間已建立！識別碼：${myPlayerCode}`);
+            }
         } else {
             document.getElementById('st-map-controls').style.display = 'none';
             document.getElementById('units-toolbar').style.display = 'flex';
@@ -392,9 +553,16 @@ function initSystem(role, savedPeerId = null) {
                 hostId = inputHostId;
                 saveSession();
                 connectToHost(inputHostId);
+            } else {
+                showToast('請輸入房間 ID');
+                document.getElementById('login-layer').classList.remove('hidden');
+                document.getElementById('login-loading').classList.add('hidden');
             }
         }
-        initCameraEvents();
+
+        if (typeof initCameraEvents === 'function') {
+            initCameraEvents();
+        }
     });
 
     peer.on('connection', c => {
@@ -409,13 +577,29 @@ function initSystem(role, savedPeerId = null) {
             peer.on('open', id => {
                 myPeerId = id;
                 hostId = id;
+
+                // 更新房間數據中的 peerId
+                if (role === 'st') {
+                    saveRoom(myPlayerCode, {
+                        peerId: id,
+                        stName: myName,
+                        createdAt: Date.now()
+                    });
+                }
+
                 document.getElementById('my-id').innerText = id;
                 document.getElementById('login-layer').classList.add('hidden');
                 saveSession();
-                initMapData();
-                updateToolbar();
-                renderAll();
-                initCameraEvents();
+
+                if (role === 'st') {
+                    initMapData();
+                    updateToolbar();
+                    renderAll();
+                }
+
+                if (typeof initCameraEvents === 'function') {
+                    initCameraEvents();
+                }
             });
             peer.on('connection', c => handleNewConnection(c));
         } else {
@@ -433,6 +617,38 @@ function initSystem(role, savedPeerId = null) {
             }
         }, 2000);
     });
+}
+
+// ===== 遊戲狀態自動保存 =====
+/**
+ * 保存當前遊戲狀態到房間
+ */
+function autoSaveGameState() {
+    if (myRole === 'st' && myPlayerCode) {
+        saveRoomGameState(myPlayerCode, state);
+        console.log('遊戲狀態已自動保存');
+    }
+}
+
+// 設置自動保存間隔（每30秒）
+let autoSaveInterval = null;
+
+/**
+ * 啟動自動保存
+ */
+function startAutoSave() {
+    stopAutoSave();
+    autoSaveInterval = setInterval(autoSaveGameState, 30000);
+}
+
+/**
+ * 停止自動保存
+ */
+function stopAutoSave() {
+    if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        autoSaveInterval = null;
+    }
 }
 
 // ===== 連線處理 =====

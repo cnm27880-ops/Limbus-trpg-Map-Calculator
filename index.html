@@ -21,13 +21,20 @@
         <div class="login-title">LIMBUS</div>
         <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.5</div>
         <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
-        <button class="login-btn btn-host" onclick="initSystem('st')">我是 ST（建房）</button>
+        <button class="login-btn btn-host" onclick="showSTStep()">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
+    </div>
+    <div class="login-box hidden" id="login-st">
+        <div class="login-title">建立房間</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
+        <input type="text" id="input-st-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
+        <button class="login-btn btn-host" onclick="initSystem('st')">建立房間</button>
+        <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
     </div>
     <div class="login-box hidden" id="login-join">
         <div class="login-title">加入房間</div>
         <input type="text" id="input-host-id" placeholder="貼上 ST 的房間 ID" style="width:100%;text-align:center;margin-bottom:10px;">
-        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">或輸入你的 4 位數識別碼來快速重連</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
         <input type="text" id="input-player-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
         <button class="login-btn btn-join" onclick="initSystem('player')">連線</button>
         <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
@@ -50,6 +57,7 @@
             <div class="conn-dot connecting" id="conn-dot"></div>
             <span id="conn-text">連線中</span>
         </div>
+        <span class="player-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼" style="font-size:0.9rem;padding:4px 8px;display:none;">----</span>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋</button>
         <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製ID">---</span>
     </div>
@@ -225,6 +233,2002 @@
     </div>
 </div>
 
+<script>
+/* --- 1. CONFIG & DATA --- */
+const MAP_PRESETS = [
+    { name: "一般訓練室", tiles: [
+        { id: 10, color: '#2a2a30', name: '牆壁', effect: '不可通行' },
+        { id: 11, color: 'rgba(67,160,71,0.15)', name: '掩體', effect: '提供掩蔽 (+4 DP)' },
+        { id: 12, color: 'rgba(229,57,53,0.15)', name: '險地', effect: '每回合 1 點傷害' },
+        { id: 13, color: '#111114', name: '地板', effect: '無特殊效果' }
+    ]},
+    { name: "後巷深處", tiles: [
+        { id: 20, color: '#4e342e', name: '生鏽掩體', effect: '硬掩體：不可通行。貼牆站立時，遠程防禦+4。' },
+        { id: 21, color: '#0d47a1', name: '油污積水', effect: '濕滑：防禦-4。受火焰傷害時額外+3灼燒。' },
+        { id: 22, color: '#fdd835', name: '路燈/霓虹', effect: '暴露：無法隱身。無視黑暗減值。' },
+        { id: 23, color: '#1b5e20', name: '垃圾堆', effect: '骯髒：移動困難。回合結束時受3點毒素(L)。' }
+    ]},
+    { name: "L公司廢墟", tiles: [
+        { id: 30, color: '#00e676', name: 'Cogito洩漏', effect: '精神腐蝕：回合結束扣3意志，若空則3A傷。' },
+        { id: 31, color: '#616161', name: '收容門', effect: '堅固掩體：防禦+6。受傷>10時粉碎。' },
+        { id: 32, color: '#b71c1c', name: '活性屍塊', effect: '抓撓：只能標準移動。進入受1L傷。' },
+        { id: 33, color: '#ffb300', name: '抑制力場', effect: '理智維護：精神傷害減半。' }
+    ]},
+    { name: "W公司列車", tiles: [
+        { id: 40, color: '#00bcd4', name: '空間裂隙', effect: '相位傳送：強制傳送到隨機裂隙，結束移動。' },
+        { id: 41, color: '#f06292', name: '血肉座椅', effect: '黏著：移動困難。近戰攻擊DP-6。' },
+        { id: 42, color: '#ffd700', name: '頭等艙屏障', effect: '隔離：阻擋視線。需車票或20+傷害破壞。' },
+        { id: 43, color: '#eeeeee', name: '時間停滯', effect: '凍結：狀態持續時間不減少。' }
+    ]},
+    { name: "K公司工廠", tiles: [
+        { id: 50, color: '#69f0ae', name: 'HP安瓿', effect: '過度再生：回合開始回4HP，溢出轉傷害。' },
+        { id: 51, color: '#81d4fa', name: '玻璃棧道', effect: '易碎：受爆炸/鈍擊時防禦-6。' },
+        { id: 52, color: '#fff176', name: '監控區域', effect: '鎖定：受到的所有傷害+3。' },
+        { id: 53, color: '#ffffff', name: '消毒噴嘴', effect: '淨化：進入時移除所有狀態(Buff/Debuff)。' }
+    ]},
+    { name: "U公司甲板", tiles: [
+        { id: 60, color: '#5d4037', name: '濕滑甲板', effect: '重心不穩：攻擊DP-6。擊退距離+5。' },
+        { id: 61, color: '#1a237e', name: '巨浪拍打', effect: '衝擊：回合結束受3L傷並後退1格。' },
+        { id: 62, color: '#455a64', name: '魚叉發射器', effect: '掩體+6防禦。相鄰可發射魚叉(直線8格, 15DP)。' },
+        { id: 63, color: '#7b1fa2', name: '共鳴音叉', effect: '共振：此格及相鄰友方近戰DP+6。' }
+    ]},
+    { name: "冰雪城堡", tiles: [
+        { id: 70, color: '#80deea', name: '萬年玄冰', effect: '脆化：受物理傷害時傷害+3。' },
+        { id: 71, color: '#ffffff', name: '巨大冰刺', effect: '刺穿：進入/經過受3L傷。' },
+        { id: 72, color: '#006064', name: '凍結供品', effect: '掩體+6。破壞時周圍1格麻痺3層。' },
+        { id: 73, color: '#0d47a1', name: '深淵邊緣', effect: '死亡邊界：擊退入此格視為墜落/死亡。' }
+    ]},
+    { name: "血肉山丘", tiles: [
+        { id: 80, color: '#b71c1c', name: '蠕動屍骸', effect: '泥沼：移動困難。回合結束流血4層。' },
+        { id: 81, color: '#bf360c', name: '獻祭之火', effect: '燃燒：進入獲4燃燒。N社成員攻擊DP+6。' },
+        { id: 82, color: '#3e2723', name: '穿刺樁', effect: '刑具：在此被擊中額外受4意志傷。' },
+        { id: 83, color: '#ffd600', name: '金枝光輝', effect: '扭曲：回合開始回2意志，全技能加骰+1。' }
+    ]}
+];
+
+let state = { units: [], turnIdx: 0, mapW: 15, mapH: 15, mapData: [], themeId: 0, players: {} };
+let myPeerId = null, myRole = 'player', myName = '';
+let peer = null;
+let connections = {}; // ST holds all player connections: {peerId: conn}
+let hostConn = null;  // Player holds connection to ST
+let hostId = null;    // Room ID (ST's peer ID)
+
+let currentTool = 'cursor';
+let selectedUnitId = null;
+let uploadTargetId = null;
+
+// Camera State
+let cam = { x: 0, y: 0, scale: 1.0 };
+let isDraggingMap = false;
+let lastPointer = { x: 0, y: 0 };
+let lastDist = 0; // For pinch zoom
+
+// Token Drag State
+let isDraggingToken = false;
+let draggedUnit = null;
+let draggedElement = null;
+let dragStartPos = { x: 0, y: 0 };
+let tokenStartPos = { x: 0, y: 0 };
+
+// Painting Drag State
+let isPaintingDrag = false;
+
+// Session Storage Keys
+const STORAGE_KEY = 'limbus_session';
+
+// Persistent player ID (survives reconnections)
+let myPlayerId = null;
+let myPlayerCode = null; // 4-digit player code
+
+// Connection state
+let connectionState = 'disconnected'; // 'disconnected', 'connecting', 'connected'
+let heartbeatInterval = null;
+let reconnectTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const HEARTBEAT_INTERVAL = 5000; // 5 seconds
+const RECONNECT_DELAY = 2000; // 2 seconds base delay
+
+/* --- 2. INIT & CONN --- */
+
+// Generate a unique player ID
+function generatePlayerId() {
+    return 'player_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// Generate a 4-digit player code
+function generatePlayerCode() {
+    return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+// Update connection status UI
+function setConnectionStatus(status, text = null) {
+    connectionState = status;
+    const dot = document.getElementById('conn-dot');
+    const txt = document.getElementById('conn-text');
+    if (!dot || !txt) return;
+
+    dot.className = 'conn-dot';
+    switch(status) {
+        case 'connected':
+            dot.classList.add('online');
+            txt.innerText = text || '已連線';
+            txt.style.color = 'var(--accent-green)';
+            break;
+        case 'connecting':
+            dot.classList.add('connecting');
+            txt.innerText = text || '連線中';
+            txt.style.color = 'var(--accent-yellow)';
+            break;
+        case 'disconnected':
+        default:
+            dot.classList.add('offline');
+            txt.innerText = text || '離線';
+            txt.style.color = 'var(--accent-red)';
+            break;
+    }
+}
+
+// Save session to localStorage
+function saveSession() {
+    const session = {
+        name: myName,
+        role: myRole,
+        hostId: hostId,
+        peerId: myPeerId,
+        playerId: myPlayerId,
+        playerCode: myPlayerCode,
+        timestamp: Date.now()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+}
+
+// Load session from localStorage
+function loadSession() {
+    try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        return data ? JSON.parse(data) : null;
+    } catch { return null; }
+}
+
+// Clear session
+function clearSession() {
+    localStorage.removeItem(STORAGE_KEY);
+}
+
+// Start heartbeat for connection health check
+function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatInterval = setInterval(() => {
+        if (myRole === 'st') {
+            // ST sends heartbeat to all players
+            for (const peerId in connections) {
+                const conn = connections[peerId];
+                if (conn && conn.open) {
+                    try {
+                        conn.send({ type: 'heartbeat', timestamp: Date.now() });
+                    } catch(e) {
+                        console.warn('Heartbeat failed for', peerId);
+                    }
+                }
+            }
+        } else if (hostConn && hostConn.open) {
+            // Player sends heartbeat to ST
+            try {
+                hostConn.send({ type: 'heartbeat', playerId: myPlayerId, timestamp: Date.now() });
+            } catch(e) {
+                console.warn('Heartbeat failed');
+                handleConnectionLost();
+            }
+        } else if (connectionState === 'connected') {
+            // Connection seems lost
+            handleConnectionLost();
+        }
+    }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Handle connection lost
+function handleConnectionLost() {
+    if (connectionState === 'disconnected') return;
+
+    setConnectionStatus('disconnected', '斷線');
+    showToast('連線中斷，嘗試重連...');
+
+    // Try to reconnect
+    attemptReconnect();
+}
+
+// Attempt to reconnect
+function attemptReconnect() {
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+    }
+
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        showToast('重連失敗，請手動重新連線');
+        setConnectionStatus('disconnected', '重連失敗');
+        return;
+    }
+
+    reconnectAttempts++;
+    const delay = RECONNECT_DELAY * Math.min(reconnectAttempts, 5);
+    setConnectionStatus('connecting', `重連中 (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+    reconnectTimeout = setTimeout(() => {
+        if (myRole === 'st') {
+            // ST just needs to reconnect the peer
+            if (peer && peer.disconnected && !peer.destroyed) {
+                peer.reconnect();
+            }
+        } else if (hostId) {
+            // Player needs to reconnect to ST
+            if (hostConn) {
+                try { hostConn.close(); } catch(e) {}
+            }
+            connectToHost(hostId);
+        }
+    }, delay);
+}
+
+// Reset reconnection state
+function resetReconnectState() {
+    reconnectAttempts = 0;
+    if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+    }
+}
+
+// Handle page visibility change (for mobile background/foreground)
+function setupVisibilityHandler() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // Page became visible - check connection and refresh
+            console.log('Page visible, checking connection...');
+
+            if (myRole === 'player' && hostConn) {
+                if (!hostConn.open) {
+                    // Connection seems closed, try to reconnect
+                    handleConnectionLost();
+                } else {
+                    // Connection seems ok, request state refresh
+                    hostConn.send({ type: 'requestState', playerId: myPlayerId });
+                }
+            }
+
+            // Force re-render to fix any visual glitches
+            setTimeout(() => {
+                renderAll();
+            }, 100);
+        } else {
+            // Page going to background
+            console.log('Page hidden');
+        }
+    });
+
+    // Also handle page focus/blur for additional reliability
+    window.addEventListener('focus', () => {
+        setTimeout(() => {
+            if (myRole === 'player' && hostConn && hostConn.open) {
+                hostConn.send({ type: 'requestState', playerId: myPlayerId });
+            }
+            renderAll();
+        }, 200);
+    });
+}
+
+// Check for existing session on page load
+function checkExistingSession() {
+    const session = loadSession();
+    if (session && session.name) {
+        document.getElementById('input-name').value = session.name;
+        if (session.hostId && session.role === 'player') {
+            document.getElementById('input-host-id').value = session.hostId;
+        }
+        if (session.playerCode) {
+            document.getElementById('input-player-code').value = session.playerCode;
+        }
+        // Show reconnect option
+        if (session.role === 'st' || session.hostId) {
+            showReconnectOption(session);
+        }
+    }
+}
+
+function showReconnectOption(session) {
+    const mainBox = document.getElementById('login-main');
+    let reconnectDiv = document.getElementById('reconnect-option');
+    if (!reconnectDiv) {
+        reconnectDiv = document.createElement('div');
+        reconnectDiv.id = 'reconnect-option';
+        reconnectDiv.style.cssText = 'margin-top:15px;padding:12px;background:rgba(67,160,71,0.1);border:1px solid var(--accent-green);border-radius:8px;';
+
+        const codeDisplay = session.playerCode
+            ? `<div style="margin:10px 0;"><div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">你的識別碼：</div><div class="player-code" onclick="copyPlayerCode('${session.playerCode}')">${session.playerCode}</div><div style="font-size:0.65rem;color:var(--text-dim);">點擊複製，用於跨裝置重連</div></div>`
+            : '';
+
+        reconnectDiv.innerHTML = `
+            <div style="color:var(--accent-green);font-size:0.9rem;margin-bottom:8px;">🔄 偵測到上次連線</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
+                ${session.role === 'st' ? '身份: ST (房主)' : '房間: ' + (session.hostId || '').substring(0,8) + '...'}
+            </div>
+            ${codeDisplay}
+            <button class="login-btn" style="background:var(--accent-green);padding:10px;" onclick="reconnectSession()">快速重連</button>
+            <button class="login-btn btn-back" style="padding:8px;margin-top:6px;" onclick="clearSessionAndRefresh()">清除並重新開始</button>
+        `;
+        mainBox.appendChild(reconnectDiv);
+    }
+}
+
+function copyPlayerCode(code) {
+    navigator.clipboard.writeText(code).then(() => {
+        showToast('識別碼已複製: ' + code);
+    });
+}
+
+function clearSessionAndRefresh() {
+    clearSession();
+    location.reload();
+}
+
+function reconnectSession() {
+    const session = loadSession();
+    if (!session) return showToast('無法讀取連線資料');
+
+    document.getElementById('input-name').value = session.name;
+    if (session.role === 'st') {
+        initSystem('st', session.peerId);
+    } else if (session.hostId) {
+        document.getElementById('input-host-id').value = session.hostId;
+        initSystem('player');
+    }
+}
+
+function initSystem(role, savedPeerId = null) {
+    const name = document.getElementById('input-name').value.trim();
+    if (!name) return showToast('請輸入代號');
+
+    myName = name;
+    myRole = role;
+
+    // Initialize or restore player ID and code
+    const session = loadSession();
+    let inputCode = null;
+
+    if (role === 'st') {
+        inputCode = document.getElementById('input-st-code')?.value?.trim();
+    } else {
+        inputCode = document.getElementById('input-player-code')?.value?.trim();
+    }
+
+    if (inputCode && inputCode.length === 4) {
+        // User entered a code - use it to restore identity
+        myPlayerCode = inputCode;
+        myPlayerId = 'code_' + inputCode;
+    } else if (session && session.playerId) {
+        myPlayerId = session.playerId;
+        myPlayerCode = session.playerCode || generatePlayerCode();
+    } else {
+        myPlayerId = generatePlayerId();
+        myPlayerCode = generatePlayerCode();
+    }
+
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
+    document.getElementById('login-loading').classList.remove('hidden');
+
+    setConnectionStatus('connecting', '建立連線中...');
+    document.getElementById('loading-status').innerText = '正在連接伺服器...';
+
+    // Create peer with optional saved ID for ST reconnection
+    const peerOptions = {};
+    if (role === 'st' && savedPeerId) {
+        // Try to use the same ID for ST reconnection
+        peer = new Peer(savedPeerId, peerOptions);
+    } else {
+        peer = new Peer(peerOptions);
+    }
+
+    peer.on('open', id => {
+        myPeerId = id;
+
+        if (role === 'st') {
+            hostId = id; // ST's own ID is the room ID
+            setConnectionStatus('connected', 'ST 已就緒');
+        }
+
+        document.getElementById('my-id').innerText = id;
+        document.getElementById('login-layer').classList.add('hidden');
+
+        // Save session
+        saveSession();
+
+        // Show player code in navbar
+        updateCodeDisplay();
+
+        // Setup visibility handler for mobile
+        setupVisibilityHandler();
+
+        if (role === 'st') {
+            document.getElementById('st-map-controls').style.display = 'flex';
+            document.getElementById('units-toolbar').style.display = 'flex';
+            document.getElementById('tile-info-panel').style.display = 'block';
+
+            // Initialize map if new session
+            if (!state.mapData || state.mapData.length === 0) {
+                initMapData();
+            }
+            updateToolbar();
+            renderAll();
+
+            // Start heartbeat for ST
+            startHeartbeat();
+
+            // Show player code for ST
+            showToast(`房間已建立！你的識別碼：${myPlayerCode}`);
+        } else {
+            // Show player toolbar (for adding their own units)
+            document.getElementById('st-map-controls').style.display = 'none';
+            document.getElementById('units-toolbar').style.display = 'flex';
+
+            const inputHostId = document.getElementById('input-host-id').value.trim();
+            if (inputHostId) {
+                hostId = inputHostId;
+                saveSession();
+                connectToHost(inputHostId);
+            }
+        }
+        initCameraEvents();
+    });
+
+    peer.on('connection', c => {
+        handleNewConnection(c);
+    });
+
+    peer.on('error', err => {
+        console.error('Peer error:', err);
+        if (err.type === 'unavailable-id') {
+            // ID already taken, generate new one for ST
+            showToast('房間ID已被佔用，產生新ID...');
+            peer = new Peer();
+            peer.on('open', id => {
+                myPeerId = id;
+                hostId = id;
+                document.getElementById('my-id').innerText = id;
+                document.getElementById('login-layer').classList.add('hidden');
+                saveSession();
+                initMapData();
+                updateToolbar();
+                renderAll();
+                initCameraEvents();
+            });
+            peer.on('connection', c => handleNewConnection(c));
+        } else {
+            showToast('連線錯誤: ' + err.type);
+            document.getElementById('login-layer').classList.remove('hidden');
+            document.getElementById('login-loading').classList.add('hidden');
+        }
+    });
+
+    peer.on('disconnected', () => {
+        showToast('與伺服器斷線，嘗試重連...');
+        setTimeout(() => {
+            if (peer && !peer.destroyed) {
+                peer.reconnect();
+            }
+        }, 2000);
+    });
+}
+
+function showSTStep() {
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-st').classList.remove('hidden');
+
+    // Pre-fill ST code if available
+    const session = loadSession();
+    if (session && session.playerCode && session.role === 'st') {
+        document.getElementById('input-st-code').value = session.playerCode;
+    }
+}
+
+function showJoinStep() {
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-join').classList.remove('hidden');
+
+    // Pre-fill host ID if available
+    const session = loadSession();
+    if (session && session.hostId) {
+        document.getElementById('input-host-id').value = session.hostId;
+    }
+    if (session && session.playerCode && session.role === 'player') {
+        document.getElementById('input-player-code').value = session.playerCode;
+    }
+}
+
+function showMainStep() {
+    document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
+    document.getElementById('login-main').classList.remove('hidden');
+}
+
+function connectToHost(targetHostId) {
+    if (!targetHostId) return;
+    hostId = targetHostId;
+
+    setConnectionStatus('connecting', '連接房間中...');
+    document.getElementById('loading-status').innerText = '正在連接房間...';
+
+    hostConn = peer.connect(targetHostId, { reliable: true });
+
+    hostConn.on('open', () => {
+        setConnectionStatus('connected');
+        resetReconnectState();
+        showToast(`已連接！你的識別碼：${myPlayerCode}`);
+
+        // Send join message with player info (use persistent playerId for ownership)
+        hostConn.send({
+            type: 'join',
+            peerId: myPeerId,
+            playerId: myPlayerId,
+            playerCode: myPlayerCode,
+            playerName: myName
+        });
+        saveSession();
+
+        // Start heartbeat for player
+        startHeartbeat();
+    });
+
+    hostConn.on('data', data => {
+        handlePlayerMessage(data);
+    });
+
+    hostConn.on('close', () => {
+        console.log('Connection to host closed');
+        hostConn = null;
+        handleConnectionLost();
+    });
+
+    hostConn.on('error', err => {
+        console.error('Connection error:', err);
+        setConnectionStatus('disconnected', '連線錯誤');
+        showToast('連線錯誤: ' + err.type);
+
+        // Try to reconnect
+        setTimeout(() => attemptReconnect(), RECONNECT_DELAY);
+    });
+}
+
+// ST handles new player connections
+function handleNewConnection(conn) {
+    const playerId = conn.peer;
+    connections[playerId] = conn;
+
+    conn.on('open', () => {
+        console.log('Player connected:', playerId);
+    });
+
+    conn.on('data', data => {
+        handleSTMessage(conn, data);
+    });
+
+    conn.on('close', () => {
+        console.log('Player disconnected:', playerId);
+        delete connections[playerId];
+        // Optionally mark player as offline in state
+        if (state.players[playerId]) {
+            state.players[playerId].online = false;
+            broadcastState();
+        }
+    });
+}
+
+// ST receives messages from players
+function handleSTMessage(conn, data) {
+    const peerId = conn.peer;
+    // Use persistent playerId for ownership (falls back to peerId for backwards compatibility)
+    const playerId = data.playerId || peerId;
+
+    switch (data.type) {
+        case 'heartbeat':
+            // Respond to heartbeat
+            if (conn.open) {
+                conn.send({ type: 'heartbeat-ack', timestamp: Date.now() });
+            }
+            // Update player's peerId in case it changed (reconnection)
+            if (state.players[playerId] && state.players[playerId].peerId !== peerId) {
+                state.players[playerId].peerId = peerId;
+                // Update connections map
+                delete connections[state.players[playerId].peerId];
+                connections[peerId] = conn;
+            }
+            break;
+
+        case 'requestState':
+            // Player requests fresh state (after visibility change)
+            if (conn.open) {
+                conn.send({ type: 'state', payload: state });
+            }
+            break;
+
+        case 'join':
+            // Register player with their persistent playerId
+            state.players[playerId] = {
+                id: playerId,
+                peerId: peerId,
+                code: data.playerCode,
+                name: data.playerName,
+                online: true
+            };
+            showToast(`${data.playerName} 加入了房間 (${data.playerCode || ''})`);
+            broadcastState();
+            break;
+
+        case 'addUnit':
+            // Player adds their own unit
+            const unit = createUnit(data.name, data.hp, data.unitType);
+            unit.ownerId = playerId;
+            unit.ownerName = state.players[playerId]?.name || data.playerName;
+            state.units.push(unit);
+            broadcastState();
+            break;
+
+        case 'moveUnit':
+            // Player moves their own unit
+            const u = state.units.find(u => u.id === data.unitId);
+            if (u && u.ownerId === playerId) {
+                u.x = data.x;
+                u.y = data.y;
+                broadcastState();
+            }
+            break;
+
+        case 'modifyHP':
+            // Player modifies their own unit's HP
+            const unit2 = state.units.find(u => u.id === data.unitId);
+            if (unit2 && unit2.ownerId === playerId) {
+                modifyHPInternal(unit2, data.dmgType, data.amount);
+                broadcastState();
+            }
+            break;
+
+        case 'deleteUnit':
+            // Player deletes their own unit
+            const idx = state.units.findIndex(u => u.id === data.unitId && u.ownerId === playerId);
+            if (idx !== -1) {
+                state.units.splice(idx, 1);
+                broadcastState();
+            }
+            break;
+
+        case 'updateInit':
+            // Player updates their unit's initiative
+            const unit3 = state.units.find(u => u.id === data.unitId);
+            if (unit3 && unit3.ownerId === playerId) {
+                unit3.init = data.init;
+                broadcastState();
+            }
+            break;
+
+        case 'uploadAvatar':
+            // Player uploads avatar for their own unit
+            const unit4 = state.units.find(u => u.id === data.unitId);
+            if (unit4 && unit4.ownerId === playerId) {
+                unit4.avatar = data.avatar;
+                broadcastState();
+            }
+            break;
+    }
+}
+
+// Player receives messages from ST
+function handlePlayerMessage(data) {
+    switch (data.type) {
+        case 'state':
+            state = data.payload;
+            setConnectionStatus('connected');
+            renderAll();
+            break;
+
+        case 'heartbeat':
+            // ST sent a heartbeat, respond with ack
+            if (hostConn && hostConn.open) {
+                hostConn.send({ type: 'heartbeat-ack', playerId: myPlayerId, timestamp: Date.now() });
+            }
+            setConnectionStatus('connected');
+            break;
+
+        case 'heartbeat-ack':
+            // ST acknowledged our heartbeat - connection is healthy
+            setConnectionStatus('connected');
+            resetReconnectState();
+            break;
+    }
+}
+
+// ST broadcasts state to all connected players
+function broadcastState() {
+    const message = { type: 'state', payload: state };
+    for (const playerId in connections) {
+        const conn = connections[playerId];
+        if (conn && conn.open) {
+            conn.send(message);
+        }
+    }
+    renderAll();
+}
+
+// Send action to ST (for players)
+function sendToHost(message) {
+    if (hostConn && hostConn.open) {
+        hostConn.send(message);
+    }
+}
+
+// Legacy function for compatibility
+function sendState() {
+    if (myRole === 'st') {
+        broadcastState();
+    }
+}
+
+/* --- 3. CAMERA LOGIC (PAN & ZOOM) --- */
+function initCameraEvents() {
+    const vp = document.getElementById('map-viewport');
+
+    // Wheel Zoom
+    vp.addEventListener('wheel', e => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        zoomCamera(delta);
+    }, { passive: false });
+
+    // Pointer Events (Mouse & Touch) - Map Panning
+    vp.addEventListener('pointerdown', e => {
+        // Don't start map drag if clicking on a token (handled separately)
+        if (isDraggingToken || e.target.classList.contains('token')) return;
+
+        // Don't start map drag if using a paint tool on a cell
+        if (currentTool !== 'cursor' && e.target.classList.contains('cell')) {
+            isPaintingDrag = true;
+            return;
+        }
+
+        isDraggingMap = true;
+        lastPointer = { x: e.clientX, y: e.clientY };
+        vp.setPointerCapture(e.pointerId);
+    });
+
+    vp.addEventListener('pointermove', e => {
+        // Handle token dragging
+        if (isDraggingToken && draggedElement) {
+            e.preventDefault();
+            handleTokenDragMove(e);
+            return;
+        }
+
+        // Handle painting drag - cell events handle the actual painting
+        if (isPaintingDrag) {
+            return;
+        }
+
+        // Handle map panning
+        if (!isDraggingMap) return;
+        e.preventDefault();
+        const dx = e.clientX - lastPointer.x;
+        const dy = e.clientY - lastPointer.y;
+
+        cam.x += dx;
+        cam.y += dy;
+        lastPointer = { x: e.clientX, y: e.clientY };
+        applyCamera();
+    });
+
+    vp.addEventListener('pointerup', e => {
+        // Handle token drop
+        if (isDraggingToken) {
+            endTokenDrag(e);
+            return;
+        }
+
+        // Handle painting drag end
+        if (isPaintingDrag) {
+            isPaintingDrag = false;
+            if (myRole === 'st') sendState();
+            return;
+        }
+
+        // Handle map pan end
+        if (isDraggingMap) {
+            isDraggingMap = false;
+            vp.releasePointerCapture(e.pointerId);
+        }
+    });
+
+    vp.addEventListener('pointercancel', e => {
+        if (isDraggingToken) {
+            cancelTokenDrag();
+        }
+        isDraggingMap = false;
+        isPaintingDrag = false;
+    });
+
+    // Touch Pinch (Simple)
+    vp.addEventListener('touchmove', e => {
+        if(e.touches.length === 2 && !isDraggingToken) {
+            e.preventDefault();
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            if(lastDist) {
+                const diff = dist - lastDist;
+                zoomCamera(diff * 0.005);
+            }
+            lastDist = dist;
+        }
+    }, { passive: false });
+
+    vp.addEventListener('touchend', () => { lastDist = 0; });
+}
+
+function zoomCamera(amount) {
+    cam.scale = Math.max(0.5, Math.min(3.0, cam.scale + amount));
+    applyCamera();
+}
+
+function applyCamera() {
+    const con = document.getElementById('map-container');
+    con.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})`;
+}
+
+function resetCamera() {
+    cam = { x: 0, y: 0, scale: 1.0 };
+    applyCamera();
+}
+
+/* --- 3.5 TOKEN DRAG LOGIC --- */
+function startTokenDrag(e, unit, element) {
+    isDraggingToken = true;
+    draggedUnit = unit;
+    draggedElement = element;
+    dragStartPos = { x: e.clientX, y: e.clientY };
+
+    const gridSize = 50;
+    tokenStartPos = {
+        x: unit.x * gridSize + 2,
+        y: unit.y * gridSize + 2
+    };
+
+    element.classList.add('dragging');
+    element.setPointerCapture(e.pointerId);
+    selectUnit(unit.id);
+}
+
+function handleTokenDragMove(e) {
+    if (!isDraggingToken || !draggedElement) return;
+
+    const dx = (e.clientX - dragStartPos.x) / cam.scale;
+    const dy = (e.clientY - dragStartPos.y) / cam.scale;
+
+    draggedElement.style.left = (tokenStartPos.x + dx) + 'px';
+    draggedElement.style.top = (tokenStartPos.y + dy) + 'px';
+}
+
+function endTokenDrag(e) {
+    if (!isDraggingToken || !draggedUnit) {
+        cancelTokenDrag();
+        return;
+    }
+
+    // Calculate which cell we dropped on
+    const gridSize = 50;
+    const dx = (e.clientX - dragStartPos.x) / cam.scale;
+    const dy = (e.clientY - dragStartPos.y) / cam.scale;
+
+    const newPixelX = tokenStartPos.x + dx;
+    const newPixelY = tokenStartPos.y + dy;
+
+    // Convert to grid coordinates
+    let newX = Math.round(newPixelX / gridSize);
+    let newY = Math.round(newPixelY / gridSize);
+
+    // Clamp to map bounds
+    newX = Math.max(0, Math.min(state.mapW - 1, newX));
+    newY = Math.max(0, Math.min(state.mapH - 1, newY));
+
+    // Update unit position based on role
+    if (myRole === 'st') {
+        draggedUnit.x = newX;
+        draggedUnit.y = newY;
+        sendState();
+    } else {
+        // Player sends move request to ST
+        sendToHost({
+            type: 'moveUnit',
+            playerId: myPlayerId,
+            unitId: draggedUnit.id,
+            x: newX,
+            y: newY
+        });
+    }
+
+    // Cleanup
+    if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+        try { draggedElement.releasePointerCapture(e.pointerId); } catch(err) {}
+    }
+
+    isDraggingToken = false;
+    draggedUnit = null;
+    draggedElement = null;
+
+    // Clear selection after drag move
+    selectedUnitId = null;
+
+    renderAll();
+}
+
+function cancelTokenDrag() {
+    if (draggedElement) {
+        draggedElement.classList.remove('dragging');
+        // Reset position
+        const gridSize = 50;
+        if (draggedUnit) {
+            draggedElement.style.left = (draggedUnit.x * gridSize + 2) + 'px';
+            draggedElement.style.top = (draggedUnit.y * gridSize + 2) + 'px';
+        }
+    }
+
+    isDraggingToken = false;
+    draggedUnit = null;
+    draggedElement = null;
+}
+
+/* --- 4. MAP LOGIC --- */
+function initMapData() {
+    state.mapData = Array(state.mapH).fill().map(() => Array(state.mapW).fill(0));
+}
+
+function changeMapTheme(id) {
+    if(myRole !== 'st') return;
+    state.themeId = parseInt(id);
+    updateToolbar();
+    sendState(); renderAll();
+}
+
+function updateToolbar() {
+    const container = document.getElementById('dynamic-tools');
+    const staticTools = container.querySelectorAll('[data-tool="cursor"], [data-tool="floor"]');
+    container.innerHTML = '';
+    staticTools.forEach(t => container.appendChild(t));
+
+    const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+    theme.tiles.forEach(tile => {
+        if(tile.name === '地板') return;
+        const btn = document.createElement('button');
+        btn.className = 'tool-btn';
+        btn.dataset.tool = tile.id;
+        btn.title = tile.name;
+        btn.onclick = () => setTool(tile.id);
+        
+        const dot = document.createElement('div');
+        dot.className = 'color-indicator';
+        dot.style.backgroundColor = tile.color;
+        
+        btn.innerText = tile.name.substring(0, 1);
+        btn.appendChild(dot);
+        container.appendChild(btn);
+    });
+}
+
+function setTool(tool) {
+    currentTool = tool;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
+    if(btn) btn.classList.add('active');
+
+    if(myRole === 'st') {
+        const info = document.getElementById('tile-effect-desc');
+        const theme = MAP_PRESETS[state.themeId];
+        let desc = "";
+        if (tool === 'floor') desc = "清除格子";
+        else if (tool === 'cursor') desc = "選擇單位 / 查看格子";
+        else {
+            const t = theme.tiles.find(x => x.id == tool);
+            if(t) desc = `${t.name}: ${t.effect}`;
+        }
+        info.innerText = desc;
+    }
+}
+
+function resizeMap() {
+    const w = parseInt(document.getElementById('map-w').value);
+    const h = parseInt(document.getElementById('map-h').value);
+    if(w < 5 || h < 5 || w > 50 || h > 50) return showToast('尺寸 5~50');
+    
+    const newData = Array(h).fill().map(() => Array(w).fill(0));
+    for(let y=0; y<Math.min(h, state.mapH); y++) {
+        for(let x=0; x<Math.min(w, state.mapW); x++) {
+            newData[y][x] = state.mapData[y][x];
+        }
+    }
+    state.mapW = w; state.mapH = h; state.mapData = newData;
+    sendState(); renderAll();
+}
+
+/* --- 5. RENDER SYSTEM --- */
+function renderAll() {
+    renderMap();
+    renderUnitsList();
+    renderSidebarUnits();
+    renderUnitsToolbar();
+}
+
+function renderUnitsToolbar() {
+    const toolbar = document.getElementById('units-toolbar');
+    if (!toolbar) return;
+
+    if (myRole === 'st') {
+        toolbar.innerHTML = `
+            <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
+            <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
+            <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
+            <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
+        `;
+    } else {
+        // Players can only add their own units
+        toolbar.innerHTML = `
+            <button class="units-btn" onclick="openAddUnitModal()">+ 新增我的單位</button>
+            <span style="color:var(--text-dim);font-size:0.8rem;padding:8px;">回合控制由 ST 操作</span>
+        `;
+    }
+}
+
+function renderMap() {
+    const grid = document.getElementById('battle-map');
+    grid.style.gridTemplateColumns = `repeat(${state.mapW}, var(--grid-size))`;
+    grid.innerHTML = '';
+    
+    // Set container size for centering
+    const pxW = state.mapW * 50; // 50 is grid size var
+    const pxH = state.mapH * 50;
+    grid.style.width = pxW + 'px';
+    grid.style.height = pxH + 'px';
+    // Center logic handled by map-container flex/pos usually, but here transform is used.
+    document.getElementById('map-container').style.width = pxW + 'px';
+    document.getElementById('map-container').style.height = pxH + 'px';
+    document.getElementById('map-container').style.marginLeft = `-${pxW/2}px`;
+    document.getElementById('map-container').style.marginTop = `-${pxH/2}px`;
+
+    const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+
+    for(let y=0; y<state.mapH; y++) {
+        for(let x=0; x<state.mapW; x++) {
+            const val = state.mapData[y][x];
+            const div = document.createElement('div');
+            div.className = 'cell';
+            
+            // Deployment Highlight Logic - show for units user can control
+            if (currentTool === 'cursor' && selectedUnitId !== null) {
+               const u = state.units.find(u => u.id === selectedUnitId);
+               if(u && u.x === -1 && canControlUnit(u)) {
+                   div.classList.add('deploy-target');
+               }
+            }
+
+            let tileDef = theme.tiles.find(t => t.id === val);
+            // Fallback for old saves
+            if (!tileDef && state.themeId === 0) {
+                 if(val === 1) tileDef = theme.tiles.find(t=>t.name==='牆壁');
+                 else if(val === 2) tileDef = theme.tiles.find(t=>t.name==='掩體');
+                 else if(val === 3) tileDef = theme.tiles.find(t=>t.name==='險地');
+            }
+
+            if (tileDef) {
+                div.style.backgroundColor = tileDef.color;
+                if(tileDef.name.includes('牆') || tileDef.name.includes('掩體')) {
+                    div.style.backgroundImage = 'repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.2) 4px,rgba(0,0,0,0.2) 8px)';
+                }
+            }
+
+            // Interactions
+            div.onpointerdown = (e) => {
+                if(isDraggingMap || isDraggingToken) return;
+                // Stop propagation for cursor tool when deploying (prevents camera pan)
+                if(currentTool === 'cursor' && selectedUnitId !== null) {
+                    const u = state.units.find(u => u.id === selectedUnitId);
+                    if(u && canControlUnit(u)) {
+                        e.stopPropagation();
+                    }
+                }
+                handleMapInput(x, y, e);
+            };
+            // Allow painting while dragging (when isPaintingDrag is true or buttons pressed)
+            div.onpointerenter = (e) => {
+                if(e.buttons === 1 && !isDraggingMap && !isDraggingToken) {
+                    handleMapInput(x, y, e);
+                }
+            };
+            
+            grid.appendChild(div);
+        }
+    }
+    
+    // Tokens
+    const gridSize = 50; // matches CSS --grid-size
+    state.units.filter(u => u.x >= 0).forEach(u => {
+        const t = document.createElement('div');
+        t.className = `token ${u.type} ${u.id === selectedUnitId ? 'selected' : ''}`;
+        t.dataset.unitId = u.id;
+
+        // Correct positioning within grid (2px offset to center the 46px token in 50px cell)
+        t.style.left = (u.x * gridSize + 2) + 'px';
+        t.style.top = (u.y * gridSize + 2) + 'px';
+
+        if(u.avatar) t.style.backgroundImage = `url(${u.avatar})`;
+        else t.innerText = u.name[0].toUpperCase();
+
+        // Token pointer events - click to select, drag to move
+        let pointerDownTime = 0;
+        let pointerDownPos = { x: 0, y: 0 };
+        const DRAG_THRESHOLD = 5; // pixels to consider as drag
+
+        t.onpointerdown = (e) => {
+            if(currentTool !== 'cursor') return;
+            e.stopPropagation();
+            e.preventDefault();
+
+            pointerDownTime = Date.now();
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+
+            // Always select the unit first
+            selectUnit(u.id);
+
+            // Set up for potential drag
+            if (canControlUnit(u)) {
+                t.setPointerCapture(e.pointerId);
+            }
+        };
+
+        t.onpointermove = (e) => {
+            if (!canControlUnit(u)) return;
+            if (pointerDownTime === 0) return;
+
+            const dx = Math.abs(e.clientX - pointerDownPos.x);
+            const dy = Math.abs(e.clientY - pointerDownPos.y);
+
+            // If moved beyond threshold, start dragging
+            if ((dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) && !isDraggingToken) {
+                startTokenDrag(e, u, t);
+                // Adjust drag start position to original pointer down position
+                dragStartPos = { x: pointerDownPos.x, y: pointerDownPos.y };
+            } else if (isDraggingToken) {
+                handleTokenDragMove(e);
+            }
+        };
+
+        t.onpointerup = (e) => {
+            if (isDraggingToken) {
+                endTokenDrag(e);
+            } else {
+                // Just a click - unit is already selected, clicking on cell will move it
+                try { t.releasePointerCapture(e.pointerId); } catch(err) {}
+            }
+            pointerDownTime = 0;
+        };
+
+        t.onpointercancel = (e) => {
+            if (isDraggingToken) {
+                cancelTokenDrag();
+            }
+            pointerDownTime = 0;
+            try { t.releasePointerCapture(e.pointerId); } catch(err) {}
+        };
+
+        grid.appendChild(t);
+    });
+}
+
+function handleMapInput(x, y, e) {
+    if (currentTool === 'cursor') {
+        if(selectedUnitId !== null) {
+            const u = state.units.find(u => u.id === selectedUnitId);
+            if(u && canControlUnit(u)) {
+                if (myRole === 'st') {
+                    u.x = x; u.y = y;
+                    selectedUnitId = null;
+                    sendState();
+                    renderAll();
+                } else {
+                    // Player sends move request to ST
+                    sendToHost({
+                        type: 'moveUnit',
+                        playerId: myPlayerId,
+                        unitId: u.id,
+                        x: x,
+                        y: y
+                    });
+                    selectedUnitId = null;
+                    renderAll();
+                }
+            }
+        }
+        return;
+    }
+    if (myRole !== 'st') return;
+
+    let newVal = (currentTool === 'floor') ? 0 : parseInt(currentTool);
+    if (state.mapData[y][x] !== newVal) {
+        state.mapData[y][x] = newVal;
+
+        // During painting drag, only update the cell visually without full re-render
+        if (isPaintingDrag && e && e.target && e.target.classList.contains('cell')) {
+            const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+            const tileDef = theme.tiles.find(t => t.id === newVal);
+            if (tileDef) {
+                e.target.style.backgroundColor = tileDef.color;
+                if(tileDef.name.includes('牆') || tileDef.name.includes('掩體')) {
+                    e.target.style.backgroundImage = 'repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.2) 4px,rgba(0,0,0,0.2) 8px)';
+                } else {
+                    e.target.style.backgroundImage = '';
+                }
+            } else {
+                // Floor / clear
+                e.target.style.backgroundColor = '';
+                e.target.style.backgroundImage = '';
+            }
+        } else {
+            renderAll();
+        }
+    }
+}
+
+/* --- 6. UNITS LOGIC --- */
+function renderUnitsList() {
+    const list = document.getElementById('units-list');
+    if (!list) return;
+
+    list.innerHTML = state.units.map((u, idx) => {
+        const isTurn = idx === state.turnIdx;
+        const a = u.hpArr.filter(x => x === 3).length;
+        const l = u.hpArr.filter(x => x === 2).length;
+        const b = u.hpArr.filter(x => x === 1).length;
+        const empty = u.maxHp - a - l - b;
+
+        const isEnemy = u.type === 'enemy';
+        const isSt = myRole === 'st';
+        const canControl = canControlUnit(u);
+        const isMyUnit = u.ownerId === myPlayerId;
+        const hideDetails = isEnemy && !isSt && !isMyUnit;
+
+        let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
+        if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
+
+        // Owner indicator
+        let ownerTag = '';
+        if (u.ownerName) {
+            const ownerColor = isMyUnit ? 'var(--accent-green)' : 'var(--text-dim)';
+            ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
+        }
+
+        const bar = u.hpArr.map(h => {
+            let cls = 'hp-empty';
+            if (h === 1) cls = 'hp-b';
+            if (h === 2) cls = 'hp-l';
+            if (h === 3) cls = 'hp-a';
+            return `<div class="hp-chunk ${cls}" style="width:${100/u.maxHp}%"></div>`;
+        }).join('');
+
+        const deployBtn = u.x >= 0
+            ? `<button class="action-btn" onclick="recallUnit(${u.id})">📍收回</button>`
+            : `<button class="action-btn" onclick="startDeploy(${u.id})">📍部署</button>`;
+
+        // Show actions for users who can control this unit
+        let actions = '';
+        if (canControl) {
+            actions = `
+                <div class="unit-actions">
+                    <button class="action-btn dmg-b" onclick="modifyHP(${u.id},'b',1)" title="按住Shift開啟數量輸入">+B</button>
+                    <button class="action-btn dmg-l" onclick="modifyHP(${u.id},'l',1)" title="按住Shift開啟數量輸入">+L</button>
+                    <button class="action-btn dmg-a" onclick="modifyHP(${u.id},'a',1)" title="按住Shift開啟數量輸入">+A</button>
+                    <button class="action-btn" onclick="openHpModal(${u.id},'damage')" title="開啟傷害面板">⚔</button>
+                    <button class="action-btn heal" onclick="openHpModal(${u.id},'heal')" title="開啟治療面板 (可選擇 B/L/A)">治療</button>
+                    ${deployBtn}
+                    <button class="action-btn" onclick="deleteUnit(${u.id})">✕</button>
+                </div>
+            `;
+        }
+
+        const avaStyle = u.avatar ? `background-image:url(${u.avatar});color:transparent;` : '';
+        const initInput = `<input type="number" class="unit-init" value="${u.init}" onchange="updateInit(${u.id},this.value)" ${!canControl?'readonly':''} style="width:50px;text-align:center;">`;
+
+        // Highlight user's own unit with a subtle border
+        const myUnitStyle = isMyUnit ? 'border-left-width:6px;' : '';
+
+        return `
+            <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="${myUnitStyle}">
+                <div class="unit-header">
+                    <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar(${u.id})">${u.avatar?'':u.name[0]}</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
+                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
+                    </div>
+                    ${initInput}
+                </div>
+                <div class="hp-bar-wrap">${bar}</div>
+                ${actions}
+            </div>
+        `;
+    }).join('');
+}
+
+function renderSidebarUnits() {
+    const c = document.getElementById('sidebar-units');
+    if(!c) return;
+    if(state.units.length === 0) { c.innerHTML = '<div style="padding:10px;text-align:center;color:#555;">無單位</div>'; return; }
+    
+    c.innerHTML = state.units.map((u, idx) => {
+        const isTurn = idx === state.turnIdx;
+        const isEnemy = u.type === 'enemy';
+        const isSt = myRole === 'st';
+        
+        const bar = `<div class="hp-bar-wrap" style="height:6px;margin-top:4px;">` + 
+            u.hpArr.map(h => `<div class="hp-chunk ${h===0?'hp-empty':h===1?'hp-b':h===2?'hp-l':'hp-a'}" style="width:${100/u.maxHp}%"></div>`).join('') + 
+            `</div>`;
+
+        let statusTxt = isEnemy && !isSt ? getVagueStatus(u) : 
+            `${u.hpArr.filter(x=>x===3).length}A ${u.hpArr.filter(x=>x===2).length}L`;
+
+        return `
+            <div class="unit-card ${u.type} ${isTurn?'active-turn':''}" style="padding:8px;margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;">
+                    <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(u.name)}</span>
+                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init}</span>
+                </div>
+                <div style="font-size:0.75rem;color:#777;">${statusTxt}</div>
+                ${bar}
+            </div>
+        `;
+    }).join('');
+}
+
+function getVagueStatus(u) {
+    const dmg = u.hpArr.filter(x => x > 0).length;
+    const ratio = dmg / u.maxHp;
+    if(ratio === 0) return "完好";
+    if(ratio < 0.3) return "輕傷";
+    if(ratio < 0.6) return "受傷";
+    if(ratio < 0.9) return "重傷";
+    return "瀕死";
+}
+
+/* --- 7. ACTIONS --- */
+function openAddUnitModal() { document.getElementById('modal-add-unit').classList.add('show'); }
+function openBatchModal() { document.getElementById('modal-batch').classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function confirmAddUnit() {
+    const name = document.getElementById('add-name').value || 'Unit';
+    const hp = parseInt(document.getElementById('add-hp').value) || 10;
+    const type = document.getElementById('add-type').value;
+    const useAvatar = document.getElementById('add-avatar').checked;
+
+    if (myRole === 'st') {
+        // ST creates unit directly
+        const u = createUnit(name, hp, type, myPeerId, myName);
+        if(useAvatar) { uploadTargetId = u.id; document.getElementById('file-upload').click(); }
+        state.units.push(u);
+        closeModal('modal-add-unit');
+        sendState();
+        renderAll();
+    } else {
+        // Player sends request to ST
+        sendToHost({
+            type: 'addUnit',
+            playerId: myPlayerId,
+            name: name,
+            hp: hp,
+            unitType: type,
+            playerName: myName
+        });
+        closeModal('modal-add-unit');
+        showToast('已請求新增單位');
+    }
+}
+
+function confirmBatchAdd() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以批量新增');
+        return;
+    }
+
+    const pre = document.getElementById('batch-prefix').value || 'Unit';
+    const start = parseInt(document.getElementById('batch-start').value) || 1;
+    const count = parseInt(document.getElementById('batch-count').value) || 5;
+    const hp = parseInt(document.getElementById('batch-hp').value) || 10;
+    const type = document.getElementById('batch-type').value;
+
+    for(let i=0; i<count; i++) {
+        state.units.push(createUnit(`${pre}${start+i}`, hp, type, myPeerId, myName));
+    }
+    closeModal('modal-batch');
+    sendState();
+    renderAll();
+}
+
+function createUnit(name, hp, type, ownerId = null, ownerName = null) {
+    return {
+        id: Date.now()+Math.random(),
+        name,
+        maxHp: hp,
+        hpArr: Array(hp).fill(0),
+        type,
+        init: 0,
+        x: -1,
+        y: -1,
+        avatar: null,
+        ownerId: ownerId,
+        ownerName: ownerName
+    };
+}
+
+// Check if current user can control a unit
+function canControlUnit(unit) {
+    if (myRole === 'st') return true;
+    return unit.ownerId === myPlayerId;
+}
+
+// Internal HP modification (used by both ST and message handler)
+// type can be: 'b', 'l', 'a' (damage), 'heal' (heal any), 'heal-b', 'heal-l', 'heal-a' (heal specific)
+function modifyHPInternal(unit, type, amount) {
+    for(let i=0; i<amount; i++) {
+        if (type === 'heal') {
+            // Heal any damage (prioritize A > L > B)
+            const idx = unit.hpArr.findIndex(x => x > 0);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else if (type === 'heal-a') {
+            // Only heal A damage
+            const idx = unit.hpArr.findIndex(x => x === 3);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else if (type === 'heal-l') {
+            // Only heal L damage
+            const idx = unit.hpArr.findIndex(x => x === 2);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else if (type === 'heal-b') {
+            // Only heal B damage
+            const idx = unit.hpArr.findIndex(x => x === 1);
+            if(idx !== -1) unit.hpArr[idx] = 0;
+        } else {
+            // Apply damage
+            const val = type==='b'?1:type==='l'?2:3;
+            const eIdx = unit.hpArr.findIndex(x => x === 0);
+            if(eIdx !== -1) unit.hpArr[eIdx] = val;
+            else {
+                // Upgrade existing damage
+                const bIdx = unit.hpArr.findIndex(x => x === 1);
+                if(bIdx !== -1 && val >= 1) unit.hpArr[bIdx] = 2;
+                else {
+                    const lIdx = unit.hpArr.findIndex(x => x === 2);
+                    if(lIdx !== -1 && val >= 1) unit.hpArr[lIdx] = 3;
+                }
+            }
+        }
+        unit.hpArr.sort((a,b) => b-a);
+    }
+}
+
+function deleteUnit(id) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法刪除其他人的單位');
+        return;
+    }
+
+    if(!confirm('刪除?')) return;
+
+    if (myRole === 'st') {
+        state.units = state.units.filter(u => u.id !== id);
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({ type: 'deleteUnit', playerId: myPlayerId, unitId: id });
+    }
+}
+
+function modifyHP(id, type, amount) {
+    const u = state.units.find(u => u.id === id);
+    if(!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        modifyHPInternal(u, type, amount);
+        broadcastState();
+    } else {
+        sendToHost({
+            type: 'modifyHP',
+            playerId: myPlayerId,
+            unitId: id,
+            dmgType: type,
+            amount: amount
+        });
+    }
+}
+
+// Open HP modification modal
+function openHpModal(id, mode) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    document.getElementById('hp-target-id').value = id;
+    document.getElementById('hp-amount').value = 1;
+    document.getElementById('hp-action-type').value = mode === 'heal' ? 'heal-b' : 'b';
+
+    document.getElementById('hp-modal-title').innerText = mode === 'heal' ? `治療：${u.name}` : `傷害：${u.name}`;
+    document.getElementById('hp-modal-mode-damage').style.display = mode === 'damage' ? 'block' : 'none';
+    document.getElementById('hp-modal-mode-heal').style.display = mode === 'heal' ? 'block' : 'none';
+
+    // Reset button highlights
+    document.querySelectorAll('#modal-hp .action-btn').forEach(btn => btn.style.boxShadow = '');
+    // Highlight first option
+    const firstBtn = document.querySelector(mode === 'heal' ? '#hp-modal-mode-heal .action-btn' : '#hp-modal-mode-damage .action-btn');
+    if (firstBtn) firstBtn.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
+
+    document.getElementById('modal-hp').classList.add('show');
+}
+
+function setHpModalType(type) {
+    document.getElementById('hp-action-type').value = type;
+    // Update button highlights
+    document.querySelectorAll('#modal-hp .action-btn').forEach(btn => btn.style.boxShadow = '');
+    event.target.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
+}
+
+function confirmHpModify() {
+    const id = parseFloat(document.getElementById('hp-target-id').value);
+    const amount = parseInt(document.getElementById('hp-amount').value) || 1;
+    const type = document.getElementById('hp-action-type').value;
+
+    modifyHP(id, type, amount);
+    closeModal('modal-hp');
+}
+
+function updateInit(id, val) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        u.init = parseInt(val);
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({
+            type: 'updateInit',
+            playerId: myPlayerId,
+            unitId: id,
+            init: parseInt(val)
+        });
+    }
+}
+function sortByInit() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以排序');
+        return;
+    }
+    state.units.sort((a,b) => b.init - a.init);
+    state.turnIdx = 0;
+    broadcastState();
+}
+function nextTurn() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制回合');
+        return;
+    }
+    if(state.units.length) {
+        state.turnIdx = (state.turnIdx + 1) % state.units.length;
+        broadcastState();
+        setTimeout(() => {
+            const el = document.querySelector('.unit-card.active-turn');
+            if(el) el.scrollIntoView({behavior:'smooth', block:'center'});
+        }, 100);
+    }
+}
+
+function selectUnit(id) { selectedUnitId = id; renderMap(); }
+
+// Keyboard controls for selected unit
+function setupKeyboardControls() {
+    document.addEventListener('keydown', (e) => {
+        // Only handle arrow keys when on map page and a unit is selected
+        if (!document.getElementById('page-map').classList.contains('active')) return;
+        if (selectedUnitId === null) return;
+        if (currentTool !== 'cursor') return;
+
+        const u = state.units.find(u => u.id === selectedUnitId);
+        if (!u || !canControlUnit(u)) return;
+        if (u.x < 0 || u.y < 0) return; // Unit not on map
+
+        let dx = 0, dy = 0;
+        switch(e.key) {
+            case 'ArrowUp':
+            case 'w':
+            case 'W':
+                dy = -1;
+                break;
+            case 'ArrowDown':
+            case 's':
+            case 'S':
+                dy = 1;
+                break;
+            case 'ArrowLeft':
+            case 'a':
+            case 'A':
+                dx = -1;
+                break;
+            case 'ArrowRight':
+            case 'd':
+            case 'D':
+                dx = 1;
+                break;
+            case 'Escape':
+                // Deselect unit
+                selectedUnitId = null;
+                renderMap();
+                return;
+            default:
+                return;
+        }
+
+        e.preventDefault();
+
+        // Calculate new position
+        const newX = Math.max(0, Math.min(state.mapW - 1, u.x + dx));
+        const newY = Math.max(0, Math.min(state.mapH - 1, u.y + dy));
+
+        // Don't move if position hasn't changed
+        if (newX === u.x && newY === u.y) return;
+
+        // Move the unit
+        if (myRole === 'st') {
+            u.x = newX;
+            u.y = newY;
+            broadcastState();
+        } else {
+            sendToHost({
+                type: 'moveUnit',
+                playerId: myPlayerId,
+                unitId: u.id,
+                x: newX,
+                y: newY
+            });
+        }
+    });
+}
+function startDeploy(id) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法操控其他人的單位');
+        return;
+    }
+
+    switchPage('map');
+    selectedUnitId = id;
+    renderMap();
+    showToast('請在地圖上點擊位置部署');
+}
+function recallUnit(id) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法操控其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        u.x = -1;
+        u.y = -1;
+        sendState();
+        renderAll();
+    } else {
+        sendToHost({
+            type: 'moveUnit',
+            playerId: myPlayerId,
+            unitId: id,
+            x: -1,
+            y: -1
+        });
+    }
+}
+function clearSelection() { selectedUnitId = null; currentTool = 'cursor'; renderAll(); }
+
+document.getElementById('file-upload').addEventListener('change', e => {
+    if(!uploadTargetId) return;
+    const file = e.target.files[0];
+    if(file) {
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => {
+                const cvs = document.createElement('canvas');
+                cvs.width = 64; cvs.height = 64;
+                cvs.getContext('2d').drawImage(img,0,0,64,64);
+                const avatarData = cvs.toDataURL('image/jpeg',0.7);
+
+                if (myRole === 'st') {
+                    const u = state.units.find(u => u.id === uploadTargetId);
+                    if(u) {
+                        u.avatar = avatarData;
+                        broadcastState();
+                    }
+                } else {
+                    // Player sends avatar to ST
+                    sendToHost({
+                        type: 'uploadAvatar',
+                        playerId: myPlayerId,
+                        unitId: uploadTargetId,
+                        avatar: avatarData
+                    });
+                }
+                uploadTargetId = null;
+            };
+            img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+});
+
+function uploadAvatar(id) {
+    const u = state.units.find(u => u.id === id);
+    if (!u) return;
+
+    // Allow ST to upload for any unit, players only for their own units
+    if (myRole !== 'st' && u.ownerId !== myPlayerId) {
+        showToast('你只能為自己的單位上傳頭像');
+        return;
+    }
+
+    uploadTargetId = id;
+    document.getElementById('file-upload').click();
+}
+
+/* --- 8. CALCULATOR LOGIC (FIXED) --- */
+const DEF_TYPES = [
+    {id:'armor',name:'盔甲',t:'physical'},{id:'shield',name:'盾牌',t:'physical'},{id:'natural',name:'天生',t:'physical'},
+    {id:'base',name:'基礎',t:'agility'},{id:'dodge',name:'閃避',t:'agility'},{id:'block',name:'格擋',t:'agility'},{id:'shieldBlock',name:'盾擋',t:'agility'},
+    {id:'force',name:'力場',t:'supernatural'},{id:'deflect',name:'偏斜',t:'supernatural'},{id:'magicArmor',name:'法甲',t:'supernatural'},
+    {id:'cover',name:'掩蔽',t:'other'},{id:'insight',name:'洞察',t:'other'},{id:'other',name:'其他',t:'other'}
+];
+
+document.getElementById('def-inputs').innerHTML = DEF_TYPES.map(d => 
+    `<div class="def-input-row" id="def-${d.id}"><span style="width:50px;font-size:0.8rem;">${d.name}</span><input type="number" data-def="${d.id}" value="0"></div>`
+).join('');
+
+function toggleDefTag(id) {
+    document.querySelector(`.def-tag[data-def="${id}"]`).classList.toggle('active');
+    const row = document.getElementById(`def-${id}`);
+    row.classList.toggle('show');
+    if(!row.classList.contains('show')) row.querySelector('input').value=0;
+}
+function toggleAtkTag(t) {
+    document.querySelector(`.atk-tag[data-type="${t}"]`).classList.toggle('active');
+    const row = document.getElementById(`row-${t}`);
+    row.classList.toggle('show');
+    if(!row.classList.contains('show')) row.querySelector('input').value=0;
+}
+
+function calculateDP() {
+    let atk = parseInt(document.getElementById('c-atk').value)||0;
+    let auto = parseInt(document.getElementById('c-atk-auto').value)||0;
+    let will = parseInt(document.getElementById('c-will').value)||0;
+    
+    let pen = parseInt(document.getElementById('c-pen').value)||0;
+    let spd = parseInt(document.getElementById('c-speed').value)||0;
+    let mag = parseInt(document.getElementById('c-magic').value)||0;
+    
+    let defs = {};
+    DEF_TYPES.forEach(t => defs[t.id] = parseInt(document.querySelector(`input[data-def="${t.id}"]`).value)||0);
+    
+    // Reductions
+    if(pen>0 && defs.shield>0) { let r=Math.min(pen,defs.shield); defs.shield-=r; pen-=r; }
+    if(pen>0 && defs.armor>0) { let r=Math.min(pen,defs.armor); defs.armor-=r; pen-=r; }
+    if(pen>0 && defs.natural>0) defs.natural-=Math.min(pen,defs.natural);
+    
+    if(spd>0 && defs.block>0) { let r=Math.min(spd,defs.block); defs.block-=r; spd-=r; }
+    if(spd>0 && defs.dodge>0) { let r=Math.min(spd,defs.dodge); defs.dodge-=r; spd-=r; }
+    if(spd>0 && defs.base>0) defs.base-=Math.min(spd,defs.base);
+    
+    if(mag>0 && defs.force>0) { let r=Math.min(mag,defs.force); defs.force-=r; mag-=r; }
+    if(mag>0 && defs.deflect>0) { let r=Math.min(mag,defs.deflect); defs.deflect-=r; mag-=r; }
+    if(mag>0 && defs.magicArmor>0) defs.magicArmor-=Math.min(mag,defs.magicArmor);
+    
+    let hits = parseInt(document.getElementById('c-hits').value)||0;
+    while(hits>0) {
+        if(defs.block>0) defs.block = Math.max(0, defs.block-2);
+        else if(defs.shieldBlock>0) defs.shieldBlock = Math.max(0, defs.shieldBlock-2);
+        else if(defs.dodge>0) defs.dodge = Math.max(0, defs.dodge-2);
+        hits--;
+    }
+    
+    let totalDef = Object.values(defs).reduce((a,b)=>a+b,0);
+    let defAuto = parseInt(document.getElementById('c-def-auto').value)||0;
+    
+    let final = atk + will + auto - (totalDef + defAuto);
+    const rm = document.getElementById('result-main');
+    const rd = document.getElementById('result-detail');
+    
+    if(final > 0) {
+        rm.innerText = `${final} D10`; rm.style.color='var(--accent-green)';
+        rd.innerText = `攻擊 ${atk+will+auto} - 防禦 ${totalDef+defAuto}`;
+    } else {
+        rm.innerText = `機運骰`; rm.style.color='var(--accent-red)';
+        rd.innerText = `DP ${final} (≤0)，轉為機運骰判定`;
+    }
+}
+
+/* --- BOSS LOGIC FIXED --- */
+let bossActions = [];
+function toggleBossMode() {
+    document.getElementById('boss-options').classList.toggle('show', document.getElementById('boss-mode').checked);
+}
+function addBossAction() {
+    bossActions.push({ id: Date.now(), winner: 'boss' }); // default boss wins init
+    renderBossActions(); updateBossSummary();
+}
+function removeBossAction(id) {
+    bossActions = bossActions.filter(a => a.id !== id);
+    renderBossActions(); updateBossSummary();
+}
+function setBossActionWinner(id, w) {
+    const a = bossActions.find(a => a.id === id);
+    if(a) { a.winner = w; updateBossSummary(); }
+}
+
+function renderBossActions() {
+    const d = document.getElementById('boss-actions-list');
+    d.innerHTML = bossActions.map((a, i) => `
+        <div class="boss-action-item">
+            <span class="boss-action-num">#${i+1}</span>
+            <label><input type="radio" name="ba-${a.id}" ${a.winner==='boss'?'checked':''} onchange="setBossActionWinner(${a.id},'boss')"> Boss快</label>
+            <label><input type="radio" name="ba-${a.id}" ${a.winner==='player'?'checked':''} onchange="setBossActionWinner(${a.id},'player')"> 玩家快</label>
+            <button onclick="removeBossAction(${a.id})" style="margin-left:auto;color:var(--text-dim);background:none;">✕</button>
+        </div>
+    `).join('');
+}
+
+function updateBossSummary() {
+    const tier = parseInt(document.getElementById('boss-tier').value) || 1;
+    const engage = document.getElementById('boss-engage').value;
+    const content = document.getElementById('boss-summary-content');
+    const baseVal = tier * 10;
+    
+    if(engage === 'no') {
+        content.innerHTML = `<div class="boss-summary-line"><span>本回合未對抗，玩家 DP</span><span class="val-pos">+${baseVal}</span></div>`;
+        return;
+    }
+
+    if(bossActions.length === 0) {
+        content.innerHTML = '<div style="color:gray;">請新增行動以計算</div>';
+        return;
+    }
+
+    // New Logic per user request
+    let html = '';
+    
+    // 1. Multi-action penalty calculation
+    // "若應對複數行動，每多一個，BOSS針對你的行動DP增加 Tier*10"
+    const extraCount = Math.max(0, bossActions.length - 1);
+    const multiPenalty = extraCount * baseVal;
+    
+    if(extraCount > 0) {
+        html += `<div class="boss-summary-line"><span>複數行動懲罰 (${extraCount}個額外)</span><span class="val-neg">Boss DP +${multiPenalty}</span></div>`;
+    } else {
+        html += `<div class="boss-summary-line"><span>單一行動</span><span class="val-neutral">無懲罰</span></div>`;
+    }
+
+    html += '<hr style="border:0;border-top:1px dashed #444;width:100%;margin:4px 0;">';
+
+    // 2. Per action calculation
+    bossActions.forEach((a, idx) => {
+        let speedMod = 0;
+        let speedText = "";
+        
+        if (a.winner === 'boss') {
+            speedMod = baseVal;
+            speedText = "Boss先攻快 (+10)";
+        } else {
+            speedMod = -baseVal;
+            speedText = "Boss先攻慢 (-10)";
+        }
+        
+        const total = speedMod + multiPenalty;
+        const colorClass = total > 0 ? 'val-neg' : (total < 0 ? 'val-pos' : 'val-neutral');
+        const sign = total > 0 ? '+' : '';
+        
+        html += `
+            <div class="boss-summary-line">
+                <span>行動 #${idx+1} (${a.winner==='boss'?'Boss快':'玩家快'})</span>
+                <span class="${colorClass}">Boss DP ${sign}${total}</span>
+            </div>
+            <div style="font-size:0.7rem;color:#666;text-align:right;margin-top:-2px;">
+                (速度${speedMod > 0 ? '+' : ''}${speedMod} + 懲罰+${multiPenalty})
+            </div>
+        `;
+    });
+
+    content.innerHTML = html;
+}
+
+function resetCalc() {
+    document.querySelectorAll('#page-calc input[type="number"]').forEach(i => {
+        if(i.id!=='boss-tier') i.value=0;
+    });
+    document.getElementById('c-atk').value = 10; // default
+    // Only remove active from calculator tags, not navigation tabs
+    document.querySelectorAll('#page-calc .def-tag.active, #page-calc .atk-tag.active').forEach(e=>e.classList.remove('active'));
+    document.querySelectorAll('.def-input-row').forEach(e=>e.classList.remove('show'));
+    document.querySelectorAll('#page-calc .calc-field.def-input-row').forEach(e=>e.classList.remove('show'));
+    document.getElementById('result-main').innerText='---';
+    document.getElementById('result-main').style.color='var(--accent-green)';
+    document.getElementById('result-detail').innerText='一般計算結果顯示於此\n(BOSS模式請看上方預覽面板)';
+}
+
+/* --- UTILS --- */
+function escapeHtml(t) { return t?t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"):t; }
+function copyId() { navigator.clipboard.writeText(myPeerId).then(()=>showToast('房間 ID 已複製')); }
+function copyMyCode() { navigator.clipboard.writeText(myPlayerCode).then(()=>showToast('識別碼已複製: ' + myPlayerCode)); }
+
+// Update player code display in navbar
+function updateCodeDisplay() {
+    const codeEl = document.getElementById('my-code');
+    if (codeEl && myPlayerCode) {
+        codeEl.innerText = myPlayerCode;
+        codeEl.style.display = 'inline-block';
+    }
+}
+function showToast(m) { const t=document.getElementById('toast'); t.innerText=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2000); }
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('show'); document.getElementById('sidebar-toggle').classList.toggle('active'); }
+function switchPage(p) {
+    document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+    document.getElementById('page-'+p).classList.add('active');
+    document.querySelectorAll('.nav-tab').forEach(e=>e.classList.remove('active'));
+    document.querySelector(`.nav-tab[data-page="${p}"]`).classList.add('active');
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    checkExistingSession();
+    setupKeyboardControls();
+});
+</script>
 <!-- Modals -->
 <div id="modals-container"></div>
 

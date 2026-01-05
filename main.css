@@ -1,6 +1,6 @@
 /* ===== CSS Variables ===== */
 :root {
-    --bg-main: #252526;  /* 深鐵灰色（網頁背景） */
+    --bg-main: #383b40;  /* 深灰色（網頁背景） */
     --bg-map: #000000;   /* 純黑色（地圖畫布） */
     --bg-panel: #131316;
     --bg-card: #1a1a1f;
@@ -378,7 +378,7 @@ input[type="number"] {
 .cell {
     width: var(--grid-size);
     height: var(--grid-size);
-    border: 1px solid rgba(255, 255, 255, 0.2);  /* 提高格線透明度至 20% */
+    border: 1px solid rgba(255, 255, 255, 0.25);  /* 提高格線透明度至 25% 與背景區分 */
     position: relative;
     touch-action: none;
 }

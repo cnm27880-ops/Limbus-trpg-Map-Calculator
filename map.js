@@ -31,25 +31,39 @@ function updateToolbar() {
     const container = document.getElementById('dynamic-tools');
     if (!container) return;
 
-    // 保留固定工具
-    const staticTools = container.querySelectorAll('[data-tool="cursor"], [data-tool="floor"]');
+    // 清空容器並重建所有工具
     container.innerHTML = '';
-    staticTools.forEach(t => container.appendChild(t));
 
+    // 添加固定工具
+    const cursorBtn = document.createElement('button');
+    cursorBtn.className = 'tool-btn active';
+    cursorBtn.dataset.tool = 'cursor';
+    cursorBtn.innerText = '👆';
+    cursorBtn.onclick = () => setTool('cursor');
+    container.appendChild(cursorBtn);
+
+    const floorBtn = document.createElement('button');
+    floorBtn.className = 'tool-btn';
+    floorBtn.dataset.tool = 'floor';
+    floorBtn.innerText = '🧹';
+    floorBtn.onclick = () => setTool('floor');
+    container.appendChild(floorBtn);
+
+    // 添加主題工具
     const theme = getCurrentTheme();
     theme.tiles.forEach(tile => {
         if (tile.name === '地板') return;
-        
+
         const btn = document.createElement('button');
         btn.className = 'tool-btn';
         btn.dataset.tool = tile.id;
         btn.title = tile.name;
         btn.onclick = () => setTool(tile.id);
-        
+
         const dot = document.createElement('div');
         dot.className = 'color-indicator';
         dot.style.backgroundColor = tile.color;
-        
+
         btn.innerText = tile.name.substring(0, 1);
         btn.appendChild(dot);
         container.appendChild(btn);

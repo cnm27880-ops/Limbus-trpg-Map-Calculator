@@ -147,21 +147,48 @@ function calculateDP() {
     // 計算總防禦
     let totalDef = Object.values(defs).reduce((a, b) => a + b, 0);
     let defAuto = parseInt(document.getElementById('c-def-auto').value) || 0;
-    
-    // 最終計算
-    let final = atk + will + auto - (totalDef + defAuto);
-    
+
+    // ===== 分離計算：DP 和附加成功分開處理 =====
+    // 攻擊方：DP 部分（破甲/破魔/高速只扣抵這部分）
+    let atkDP = atk + will;
+    // 攻擊方：附加成功
+    let atkAutoSuccess = auto;
+
+    // 防禦方：DP 部分
+    let defDP = totalDef;
+    // 防禦方：附加成功
+    let defAutoSuccess = defAuto;
+
+    // DP 扣抵
+    let finalDP = atkDP - defDP;
+    // 附加成功扣抵（獨立計算，不受破甲等影響）
+    let finalAutoSuccess = atkAutoSuccess - defAutoSuccess;
+
     const rm = document.getElementById('result-main');
     const rd = document.getElementById('result-detail');
-    
-    if (final > 0) {
-        rm.innerText = `${final} D10`;
+
+    // 結果顯示
+    if (finalDP > 0) {
+        // 成功，顯示 XXdp+Y 格式
+        if (finalAutoSuccess > 0) {
+            rm.innerText = `${finalDP}dp+${finalAutoSuccess}`;
+        } else if (finalAutoSuccess === 0) {
+            rm.innerText = `${finalDP}dp`;
+        } else {
+            rm.innerText = `${finalDP}dp${finalAutoSuccess}`;  // 負數會自動帶負號
+        }
         rm.style.color = 'var(--accent-green)';
-        rd.innerText = `攻擊 ${atk + will + auto} - 防禦 ${totalDef + defAuto}`;
+        rd.innerText = `攻擊 ${atkDP}dp+${atkAutoSuccess} - 防禦 ${defDP}dp+${defAutoSuccess}`;
+    } else if (finalDP === 0 && finalAutoSuccess > 0) {
+        // DP 為 0 但有附加成功
+        rm.innerText = `${finalAutoSuccess} 附加成功`;
+        rm.style.color = 'var(--accent-yellow)';
+        rd.innerText = `DP 抵銷，剩餘附加成功 ${finalAutoSuccess}`;
     } else {
+        // 機運骰
         rm.innerText = `機運骰`;
         rm.style.color = 'var(--accent-red)';
-        rd.innerText = `DP ${final} (≤0)，轉為機運骰判定`;
+        rd.innerText = `DP ${finalDP} (≤0)，轉為機運骰判定`;
     }
 }
 

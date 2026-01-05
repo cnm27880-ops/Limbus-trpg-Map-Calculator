@@ -1,6 +1,7 @@
 /* ===== CSS Variables ===== */
 :root {
-    --bg-main: #0a0a0b;
+    --bg-main: #252526;  /* 深鐵灰色（網頁背景） */
+    --bg-map: #000000;   /* 純黑色（地圖畫布） */
     --bg-panel: #131316;
     --bg-card: #1a1a1f;
     --bg-input: #0d0d0f;
@@ -335,6 +336,14 @@ input[type="number"] {
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+.apply-btn.has-changes {
+    background: #e0e0e0;  /* 亮灰色/白色背景 */
+    color: #1a1a1f;       /* 深色文字 */
+    font-weight: 500;
+    box-shadow: 0 0 0 2px var(--accent-yellow);  /* 黃色邊框提示 */
 }
 
 /* ===== Map Viewport ===== */
@@ -362,14 +371,14 @@ input[type="number"] {
 #battle-map {
     display: grid;
     border: 2px solid #444;
-    background: var(--bg-main);
+    background: var(--bg-map);  /* 使用純黑色地圖背景 */
     box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
 }
 
 .cell {
     width: var(--grid-size);
     height: var(--grid-size);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);  /* 提高格線透明度至 20% */
     position: relative;
     touch-action: none;
 }

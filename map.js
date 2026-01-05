@@ -91,27 +91,31 @@ function setTool(tool) {
 function resizeMap() {
     const w = parseInt(document.getElementById('map-w').value);
     const h = parseInt(document.getElementById('map-h').value);
-    
+
     const minSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.MIN_SIZE : 5;
     const maxSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.MAX_SIZE : 50;
-    
+
     if (w < minSize || h < minSize || w > maxSize || h > maxSize) {
         showToast(`尺寸限制 ${minSize}~${maxSize}`);
         return;
     }
-    
+
     const newData = Array(h).fill().map(() => Array(w).fill(0));
     for (let y = 0; y < Math.min(h, state.mapH); y++) {
         for (let x = 0; x < Math.min(w, state.mapW); x++) {
             newData[y][x] = state.mapData[y][x];
         }
     }
-    
+
     state.mapW = w;
     state.mapH = h;
     state.mapData = newData;
     sendState();
     renderAll();
+
+    // 移除「套用」按鈕的變更狀態
+    const applyBtn = document.querySelector('.apply-btn');
+    if (applyBtn) applyBtn.classList.remove('has-changes');
 }
 
 // ===== 地圖渲染 =====
@@ -410,5 +414,57 @@ function recallUnit(id) {
             x: -1,
             y: -1
         });
+    }
+}
+
+// ===== 地圖大小監聽器 =====
+/**
+ * 初始化地圖大小輸入框的監聽器
+ * 當輸入框變更時，標記「套用」按鈕為待儲存狀態
+ */
+function initMapSizeListeners() {
+    const mapWInput = document.getElementById('map-w');
+    const mapHInput = document.getElementById('map-h');
+    const applyBtn = document.querySelector('.apply-btn');
+
+    if (!mapWInput || !mapHInput || !applyBtn) return;
+
+    // 儲存初始值
+    let lastW = mapWInput.value;
+    let lastH = mapHInput.value;
+
+    // 監聽變更事件
+    const handleChange = () => {
+        const currentW = mapWInput.value;
+        const currentH = mapHInput.value;
+
+        // 如果值有變更，標記按鈕
+        if (currentW !== lastW || currentH !== lastH) {
+            applyBtn.classList.add('has-changes');
+        } else {
+            applyBtn.classList.remove('has-changes');
+        }
+    };
+
+    mapWInput.addEventListener('input', handleChange);
+    mapHInput.addEventListener('input', handleChange);
+
+    // 當套用按鈕被點擊後，更新基準值
+    const originalResizeMap = window.resizeMap;
+    window.resizeMap = function() {
+        originalResizeMap();
+        lastW = mapWInput.value;
+        lastH = mapHInput.value;
+    };
+}
+
+// 當頁面載入時自動初始化
+if (typeof window !== 'undefined') {
+    // 延遲執行，確保 DOM 已載入
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMapSizeListeners);
+    } else {
+        // 如果已經載入完成，直接執行
+        setTimeout(initMapSizeListeners, 100);
     }
 }

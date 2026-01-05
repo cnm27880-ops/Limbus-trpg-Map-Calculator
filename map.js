@@ -183,12 +183,12 @@ function renderMap() {
                 // 如果正在拖曳 Token，不處理格子點擊
                 if (isDraggingToken) return;
 
-                // 游標模式：移動單位
+                // 游標模式：移動單位（僅當有選中單位時）
                 if (currentTool === 'cursor') {
                     if (selectedUnitId !== null) {
                         const u = findUnitById(selectedUnitId);
                         const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
-                        
+
                         if (u && controllable) {
                             if (myRole === 'st') {
                                 u.x = x; u.y = y;
@@ -203,7 +203,9 @@ function renderMap() {
                             return;
                         }
                     }
-                } 
+                    // 游標模式下沒有選中單位時，允許事件冒泡以觸發地圖拖曳
+                    // 不執行 stopPropagation，讓事件傳遞到 viewport
+                }
                 // 繪製工具模式 (ST Only)
                 else if (myRole === 'st') {
                     // 標記為開始繪製
@@ -216,12 +218,9 @@ function renderMap() {
             
             // 實現拖曳繪製 (Mouse Drag Paint)
             div.onpointerenter = (e) => {
-                // 條件：必須是 ST + 非游標工具 + (正在繪製中 OR 按住左鍵)
-                if (myRole === 'st' && currentTool !== 'cursor') {
-                    if (isPaintingDrag || e.buttons === 1) {
-                        isPaintingDrag = true; // 確保狀態正確
-                        handleMapInput(x, y, e);
-                    }
+                // 條件：必須是 ST + 非游標工具 + 正在繪製中（已按下 pointerdown）
+                if (myRole === 'st' && currentTool !== 'cursor' && isPaintingDrag) {
+                    handleMapInput(x, y, e);
                 }
             };
             

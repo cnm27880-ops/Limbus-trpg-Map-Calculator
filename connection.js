@@ -441,10 +441,55 @@ function initSystem(role, savedPeerId = null) {
     if (role === 'st') {
         inputCode = document.getElementById('input-st-code')?.value?.trim();
 
-        // ST 輸入識別碼時，嘗試恢復房間
+        // ST 輸入識別碼時，檢查房間是否已存在
         if (inputCode && inputCode.length === 4) {
             existingRoom = getRoom(inputCode);
             if (existingRoom && existingRoom.peerId) {
+                // 檢查房間是否在最近 5 分鐘內活動（可能還在線）
+                const fiveMinutes = 5 * 60 * 1000;
+                const isRecentlyActive = existingRoom.lastActive && (Date.now() - existingRoom.lastActive < fiveMinutes);
+
+                if (isRecentlyActive) {
+                    // 房間可能還在活動，警告用戶
+                    showToast('此識別碼對應的房間可能還在其他設備上運行');
+                    document.getElementById('login-loading').classList.add('hidden');
+                    document.getElementById('login-st').classList.remove('hidden');
+
+                    // 顯示房間信息
+                    const roomInfo = `
+                        <div style="margin-top:15px;padding:12px;background:rgba(229,57,53,0.1);border:1px solid var(--accent-red);border-radius:8px;">
+                            <div style="font-size:0.9rem;color:var(--accent-red);margin-bottom:8px;">⚠️ 房間已存在</div>
+                            <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px;">
+                                識別碼：<span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${inputCode}</span><br>
+                                ST 名稱：${escapeHtml(existingRoom.stName || '未知')}<br>
+                                最後活動：${new Date(existingRoom.lastActive).toLocaleString('zh-TW')}<br>
+                                房間 ID：<span style="font-size:0.7rem;font-family:'JetBrains Mono';word-break:break-all;">${existingRoom.peerId}</span>
+                            </div>
+                            <div style="font-size:0.75rem;color:var(--text-dim);">
+                                如果您是在新設備上，建議：<br>
+                                1. 使用新的識別碼建立房間<br>
+                                2. 或從房間管理中載入此房間
+                            </div>
+                        </div>
+                    `;
+
+                    const stCodeInput = document.getElementById('input-st-code');
+                    if (stCodeInput && stCodeInput.parentElement) {
+                        // 移除舊的提示（如果存在）
+                        const oldInfo = stCodeInput.parentElement.querySelector('.room-exists-info');
+                        if (oldInfo) oldInfo.remove();
+
+                        // 插入新提示
+                        const infoDiv = document.createElement('div');
+                        infoDiv.className = 'room-exists-info';
+                        infoDiv.innerHTML = roomInfo;
+                        stCodeInput.parentElement.insertBefore(infoDiv, stCodeInput.nextSibling);
+                    }
+
+                    return; // 停止初始化
+                }
+
+                // 房間不活躍，可以安全恢復
                 savedPeerId = existingRoom.peerId;
                 myPlayerCode = inputCode;
                 myPlayerId = 'st_' + inputCode;
@@ -760,6 +805,12 @@ function handleSTMessage(conn, data) {
                 name: data.playerName,
                 online: true
             };
+
+            // 確保地圖數據已初始化
+            if (!state.mapData || state.mapData.length === 0) {
+                initMapData();
+            }
+
             showToast(`${data.playerName} 加入了房間 (${data.playerCode || ''})`);
             broadcastState();
             break;

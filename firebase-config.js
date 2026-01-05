@@ -1,11 +1,9 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+/**
+ * Limbus Command - Firebase 配置檔
+ * 使用 Firebase Compat 版本（全域變數模式，不使用 ES6 modules）
+ */
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Firebase 配置
 const firebaseConfig = {
   apiKey: "AIzaSyAwACDkdakqOAT9I2bwbN0btMnGI9v_njU",
   authDomain: "limbus-map.firebaseapp.com",
@@ -17,6 +15,13 @@ const firebaseConfig = {
   measurementId: "G-LB2J0DC2SB"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+// 初始化 Firebase（使用 Compat 版本）
+const app = firebase.initializeApp(firebaseConfig);
+
+// 初始化 Realtime Database
+const database = firebase.database();
+
+// 將 database 掛載到 window，讓其他檔案可以存取
+window.database = database;
+
+console.log('✅ Firebase 已初始化（Compat 版本）');

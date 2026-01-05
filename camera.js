@@ -5,13 +5,8 @@
 
 // ===== 全域互動狀態變數 =====
 // 注意：isDraggingMap, isDraggingToken, isPaintingDrag 已在 state.js 中定義
+// 注意：draggedUnit, draggedElement, dragStartPos, tokenStartPos 已在 state.js 中定義
 // 此處不需要重複宣告
-
-// Token 拖曳相關變數
-var draggedUnit = null;
-var draggedElement = null;
-var dragStartPos = { x: 0, y: 0 };
-var tokenStartPos = { x: 0, y: 0 };
 
 // ===== 相機事件初始化 =====
 /**

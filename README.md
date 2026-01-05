@@ -1,56 +1,89 @@
-# Limbus Command v7.5
+# Limbus Command
 
 TRPG 戰術指揮系統，支援即時多人連線、地圖編輯、單位管理與 DP 計算。
 
-## 📁 專案結構
+## 功能總覽
+
+### 多人連線系統
+- **Firebase 即時同步**：所有玩家即時同步遊戲狀態
+- **房間系統**：ST 建立房間，玩家透過房間 ID 加入
+- **玩家識別碼**：4 位數識別碼，可用於重新連線恢復身份
+- **房間管理**：ST 可查看和管理所有已建立的房間
+
+### 地圖系統
+- **可調整大小**：5x5 至 50x50 格子
+- **8 種主題場景**：
+  1. 一般訓練室 - 牆壁、掩體、險地
+  2. 後巷深處 - 生鏽掩體、油污積水、路燈、垃圾堆
+  3. L公司廢墟 - Cogito洩漏、收容門、活性屍塊、抑制力場
+  4. W公司列車 - 空間裂隙、血肉座椅、頭等艙屏障、時間停滯
+  5. K公司工廠 - HP安瓿、玻璃棧道、監控區域、消毒噴嘴
+  6. U公司甲板 - 濕滑甲板、巨浪拍打、魚叉發射器、共鳴音叉
+  7. 冰雪城堡 - 萬年玄冰、巨大冰刺、凍結供品、深淵邊緣
+  8. 血肉山丘 - 蠕動屍骸、獻祭之火、穿刺樁、金枝光輝
+- **地形效果顯示**：ST 點擊格子可查看地形效果（僅 ST 可見）
+- **繪製工具**：ST 可繪製各種地形，支援拖曳連續繪製
+
+### 單位管理
+- **新增單位**：支援單個新增或批量新增
+- **HP 系統**：
+  - 3 種傷害類型：B傷(鈍擊)、L傷(穿刺)、A傷(惡化)
+  - 傷害升級機制：滿格時 B→L→A
+  - 治療優先順序：A > L > B
+- **頭像上傳**：可為單位上傳自訂頭像
+- **先攻管理**：可設定先攻值並排序
+- **回合控制**：ST 控制回合切換，自動高亮當前行動單位
+- **部署系統**：選擇單位後點擊地圖部署，可收回至待命區
+
+### 地圖操控
+- **滑鼠拖曳**：平移地圖視角
+- **滾輪縮放**：0.5x ~ 3.0x 縮放範圍
+- **觸控支援**：支援手機觸控平移與捏合縮放
+- **鍵盤控制**：方向鍵移動選中的單位
+- **視角重置**：一鍵歸位視角
+
+### DP 計算器
+- **攻擊方設定**：
+  - 攻擊 DP、附加成功、意志加值
+  - 特殊標籤：破甲、高速、破魔
+- **防禦方設定**：
+  - 12 種防禦類型（盔甲、盾牌、天生、基礎、閃避、格擋、盾擋、力場、偏斜、法甲、掩蔽、洞察、其他）
+  - 受擊次數衰減計算
+  - 防禦附加成功
+- **BOSS 模式**：
+  - 複數行動懲罰計算
+  - 先攻快慢判定
+  - 即時結果預覽
+
+### 響應式設計
+- **電腦版**：側邊欄預設顯示，可收合
+- **手機版**：側邊欄預設隱藏，點擊按鈕展開
+- **自適應佈局**：各元件自動調整大小
+
+## 專案結構
 
 ```
 limbus-command/
 ├── index.html              # 主要 HTML 檔案
 ├── README.md               # 說明文件
-├── css/
-│   ├── main.css            # 主要樣式（版面、變數）
-│   ├── components.css      # 元件樣式（Token、單位卡片、Modal）
-│   └── calculator.css      # 計算器專用樣式
-└── js/
-    ├── config.js           # 配置（地圖預設、防禦類型）
-    ├── state.js            # 狀態管理
-    ├── utils.js            # 工具函數
-    ├── connection.js       # PeerJS 連線管理
-    ├── camera.js           # 相機控制（平移、縮放、Token拖曳）
-    ├── map.js              # 地圖模組
-    ├── units.js            # 單位模組
-    ├── calculator.js       # DP 計算器
-    ├── modals.js           # Modal 彈窗
-    └── main.js             # 主程式進入點
+├── main.css                # 主要樣式（版面、變數、RWD）
+├── components.css          # 元件樣式（Token、單位卡片、Modal）
+├── calculator.css          # 計算器專用樣式
+├── config.js               # 配置（地圖預設、防禦類型）
+├── state.js                # 狀態管理
+├── utils.js                # 工具函數
+├── firebase-config.js      # Firebase 配置
+├── firebase-connection.js  # Firebase 連線管理
+├── storage.js              # 本地儲存
+├── camera.js               # 相機控制（平移、縮放）
+├── map.js                  # 地圖模組
+├── units.js                # 單位模組
+├── calculator.js           # DP 計算器
+├── modals.js               # Modal 彈窗
+└── main.js                 # 主程式進入點
 ```
 
-## 🔧 模組說明
-
-### CSS 模組
-
-| 檔案 | 說明 |
-|------|------|
-| `main.css` | CSS 變數、基礎樣式、版面配置、RWD |
-| `components.css` | Token、單位卡片、HP 條、Modal 樣式 |
-| `calculator.css` | 計算器頁面、BOSS 模式、防禦標籤 |
-
-### JS 模組
-
-| 檔案 | 說明 | 主要函數 |
-|------|------|----------|
-| `config.js` | 常數定義 | `MAP_PRESETS`, `DEF_TYPES`, `CONNECTION_CONFIG` |
-| `state.js` | 全域狀態 | `state`, `cam`, 各種 flag 變數 |
-| `utils.js` | 工具函數 | `showToast()`, `escapeHtml()`, `createUnit()` |
-| `connection.js` | 連線管理 | `initSystem()`, `broadcastState()`, `handleSTMessage()` |
-| `camera.js` | 相機控制 | `initCameraEvents()`, `startTokenDrag()`, `resetCamera()` |
-| `map.js` | 地圖功能 | `renderMap()`, `setTool()`, `handleMapInput()` |
-| `units.js` | 單位功能 | `renderAll()`, `modifyHP()`, `nextTurn()` |
-| `calculator.js` | 計算器 | `calculateDP()`, `updateBossSummary()` |
-| `modals.js` | 彈窗 | `openAddUnitModal()`, `confirmAddUnit()` |
-| `main.js` | 進入點 | DOMContentLoaded 初始化 |
-
-## 🚀 使用方式
+## 使用方式
 
 ### 本地開發
 直接用瀏覽器開啟 `index.html`，或使用本地伺服器：
@@ -69,53 +102,31 @@ npx serve .
 3. 選擇分支（通常是 `main`）並儲存
 4. 等待部署完成
 
-## 📝 修改指南
+## 角色說明
 
-### 新增地圖主題
-編輯 `js/config.js` 中的 `MAP_PRESETS` 陣列：
+### ST（Story Teller）
+- 建立房間並分享房間 ID
+- 完整的地圖編輯權限
+- 控制回合與先攻排序
+- 可查看所有地形效果
+- 可操作所有單位
 
-```javascript
-{
-    name: "新主題名稱",
-    tiles: [
-        { id: 90, color: '#ff0000', name: '地形名', effect: '效果說明' },
-        // ...
-    ]
-}
-```
+### 玩家
+- 透過房間 ID 加入遊戲
+- 可新增並操作自己的單位
+- 可移動自己的單位
+- 查看地圖但無法編輯
+- 使用 DP 計算器
 
-### 新增防禦類型
-編輯 `js/config.js` 中的 `DEF_TYPES` 陣列：
+## 技術說明
 
-```javascript
-{ id: 'newDef', name: '新防禦', type: 'physical' }
-```
+- **前端**：原生 JavaScript、CSS3、HTML5
+- **後端**：Firebase Realtime Database
+- **字型**：Noto Sans TC、JetBrains Mono
+- **即時同步**：Firebase 監聽器自動同步狀態
 
-### 調整樣式
-- 全域顏色變數在 `css/main.css` 的 `:root` 區塊
-- Token 樣式在 `css/components.css`
-- 計算器樣式在 `css/calculator.css`
-
-### 修改連線邏輯
-主要在 `js/connection.js`：
-- `initSystem()` - 初始化連線
-- `handleSTMessage()` - ST 處理玩家訊息
-- `handlePlayerMessage()` - 玩家處理 ST 訊息
-
-## ⚠️ 注意事項
+## 注意事項
 
 1. **JS 載入順序很重要**，必須依照 `index.html` 中的順序載入
-2. 使用 PeerJS 進行 P2P 連線，需要網路連線
-3. 狀態透過 `localStorage` 保存 Session 資訊
-
-## 📋 更新日誌
-
-### v7.5
-- 模組化重構
-- 分離 CSS 與 JS
-- 改善程式碼組織
-
-### v7.4
-- 多人連線支援
-- BOSS 模式計算
-- 8 種地圖主題
+2. 需要網路連線才能使用多人功能
+3. 狀態透過 Firebase 即時同步，本地 localStorage 作為備份

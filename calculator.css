@@ -48,10 +48,27 @@
     gap: 10px;
 }
 
-.calc-field {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+.calc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+/* 手機版輸入欄位寬度限制 */
+@media (max-width: 480px) {
+    .calc-grid input[type="number"],
+    .calc-grid select {
+        max-width: 100%;
+        min-width: 0;
+    }
+    
+    .calc-section {
+        padding: 10px;
+    }
+    
+    .calc-grid {
+        gap: 8px;
+    }
 }
 
 .calc-label {
@@ -232,11 +249,29 @@
     display: none;
     align-items: center;
     gap: 8px;
-    padding: 6px;
+    padding: 8px 10px;
     background: var(--bg-input);
     border-radius: 6px;
 }
 
 .def-input-row.show {
     display: flex;
+}
+
+.def-input-row span {
+    min-width: 50px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.def-input-row input {
+    flex: 1;
+    max-width: 120px;
+}
+
+/* 攻擊輸入欄 (破甲/高速/破魔) 跨越整行 */
+#row-pen,
+#row-speed,
+#row-magic {
+    grid-column: 1 / -1;
 }

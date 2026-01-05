@@ -30,7 +30,7 @@
 body {
     margin: 0;
     padding: 0;
-    background: var(--bg-main);
+    background: #383b40 !important;  /* 强制深灰色背景 */
     color: var(--text-main);
     font-family: 'Noto Sans TC', sans-serif;
     height: 100vh;
@@ -480,21 +480,27 @@ input[type="number"] {
 }
 
 /* ===== Responsive ===== */
-@media (min-width: 1024px) {
+@media (max-width: 1023px) {
     .sidebar-toggle {
-        display: flex;
+        display: flex !important;  /* 手機版顯示側欄切換按鈕 */
     }
     .sidebar.show {
         display: flex;
     }
-}
-
-@media (max-width: 1023px) {
     .map-controls-right {
         display: none;
     }
     .nav-tab {
         padding: 8px 10px;
         font-size: 0.8rem;
+    }
+}
+
+@media (min-width: 1024px) {
+    .sidebar {
+        display: flex !important;  /* 電腦版直接顯示側欄 */
+    }
+    .sidebar-toggle {
+        display: none;  /* 電腦版隱藏切換按鈕 */
     }
 }

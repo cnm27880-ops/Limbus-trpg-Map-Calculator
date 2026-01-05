@@ -126,13 +126,27 @@ function switchPage(pageId) {
 // ===== 側邊欄 =====
 /**
  * 切換側邊欄顯示狀態
+ * 手機版：使用 show class 來顯示
+ * 電腦版：使用 collapsed class 來隱藏
  */
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const toggle = document.getElementById('sidebar-toggle');
-    
-    if (sidebar) sidebar.classList.toggle('show');
-    if (toggle) toggle.classList.toggle('active');
+
+    if (!sidebar) return;
+
+    // 檢查是否為電腦版 (1024px+)
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+
+    if (isDesktop) {
+        // 電腦版：切換 collapsed class
+        sidebar.classList.toggle('collapsed');
+        if (toggle) toggle.classList.toggle('active', !sidebar.classList.contains('collapsed'));
+    } else {
+        // 手機版：切換 show class
+        sidebar.classList.toggle('show');
+        if (toggle) toggle.classList.toggle('active', sidebar.classList.contains('show'));
+    }
 }
 
 // ===== HP 狀態描述 =====

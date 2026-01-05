@@ -82,10 +82,11 @@ function setTool(tool) {
     if (btn) btn.classList.add('active');
 
     if (myRole === 'st') {
+        const panel = document.getElementById('tile-info-panel');
         const info = document.getElementById('tile-effect-desc');
         const theme = getCurrentTheme();
         let desc = "";
-        
+
         if (tool === 'floor') {
             desc = "清除格子";
         } else if (tool === 'cursor') {
@@ -94,8 +95,9 @@ function setTool(tool) {
             const t = theme.tiles.find(x => x.id == tool);
             if (t) desc = `${t.name}: ${t.effect}`;
         }
-        
+
         if (info) info.innerText = desc;
+        if (panel) panel.style.display = 'block';  // 顯示面板
     }
 }
 
@@ -436,6 +438,7 @@ function recallUnit(id) {
  * @param {number} y - Y 座標
  */
 function updateTileInfo(x, y) {
+    const panel = document.getElementById('tile-info-panel');
     const info = document.getElementById('tile-effect-desc');
     if (!info) return;
 
@@ -444,11 +447,13 @@ function updateTileInfo(x, y) {
 
     if (val === undefined) {
         info.innerText = '無法讀取地形資訊';
+        if (panel) panel.style.display = 'block';
         return;
     }
 
     if (val === 0) {
         info.innerText = `座標 (${x}, ${y}): 地板 - 無特殊效果`;
+        if (panel) panel.style.display = 'block';
         return;
     }
 
@@ -458,6 +463,9 @@ function updateTileInfo(x, y) {
     } else {
         info.innerText = `座標 (${x}, ${y}): 未知地形`;
     }
+
+    // 顯示地形效果面板
+    if (panel) panel.style.display = 'block';
 }
 
 // ===== 地圖大小監聽器 =====

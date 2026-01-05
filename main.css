@@ -504,7 +504,11 @@ input[type="number"] {
 
 @media (min-width: 1024px) {
     /* 電腦版：側邊欄預設顯示，但仍可收合 */
-    .sidebar {
-        display: flex;  /* 預設顯示 */
+    .sidebar:not(.collapsed) {
+        display: flex;  /* 預設顯示，除非有 collapsed class */
+    }
+
+    .sidebar.collapsed {
+        display: none;  /* 收合時隱藏 */
     }
 }

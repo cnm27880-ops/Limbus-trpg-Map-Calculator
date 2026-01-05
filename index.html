@@ -205,13 +205,20 @@
         <div class="login-title">LIMBUS</div>
         <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.4</div>
         <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
-        <button class="login-btn btn-host" onclick="initSystem('st')">我是 ST（建房）</button>
+        <button class="login-btn btn-host" onclick="showSTStep()">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
+    </div>
+    <div class="login-box hidden" id="login-st">
+        <div class="login-title">建立房間</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
+        <input type="text" id="input-st-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
+        <button class="login-btn btn-host" onclick="initSystem('st')">建立房間</button>
+        <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
     </div>
     <div class="login-box hidden" id="login-join">
         <div class="login-title">加入房間</div>
         <input type="text" id="input-host-id" placeholder="貼上 ST 的房間 ID" style="width:100%;text-align:center;margin-bottom:10px;">
-        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">或輸入你的 4 位數識別碼來快速重連</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
         <input type="text" id="input-player-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
         <button class="login-btn btn-join" onclick="initSystem('player')">連線</button>
         <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
@@ -234,6 +241,7 @@
             <div class="conn-dot connecting" id="conn-dot"></div>
             <span id="conn-text">連線中</span>
         </div>
+        <span class="player-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼" style="font-size:0.9rem;padding:4px 8px;display:none;">----</span>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋</button>
         <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製ID">---</span>
     </div>
@@ -827,12 +835,18 @@ function initSystem(role, savedPeerId = null) {
 
     // Initialize or restore player ID and code
     const session = loadSession();
-    const inputPlayerCode = document.getElementById('input-player-code')?.value?.trim();
+    let inputCode = null;
 
-    if (inputPlayerCode && inputPlayerCode.length === 4) {
-        // User entered a player code - use it to restore identity
-        myPlayerCode = inputPlayerCode;
-        myPlayerId = 'code_' + inputPlayerCode;
+    if (role === 'st') {
+        inputCode = document.getElementById('input-st-code')?.value?.trim();
+    } else {
+        inputCode = document.getElementById('input-player-code')?.value?.trim();
+    }
+
+    if (inputCode && inputCode.length === 4) {
+        // User entered a code - use it to restore identity
+        myPlayerCode = inputCode;
+        myPlayerId = 'code_' + inputCode;
     } else if (session && session.playerId) {
         myPlayerId = session.playerId;
         myPlayerCode = session.playerCode || generatePlayerCode();
@@ -843,6 +857,7 @@ function initSystem(role, savedPeerId = null) {
 
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
     document.getElementById('login-loading').classList.remove('hidden');
 
     setConnectionStatus('connecting', '建立連線中...');
@@ -870,6 +885,9 @@ function initSystem(role, savedPeerId = null) {
 
         // Save session
         saveSession();
+
+        // Show player code in navbar
+        updateCodeDisplay();
 
         // Setup visibility handler for mobile
         setupVisibilityHandler();
@@ -945,6 +963,17 @@ function initSystem(role, savedPeerId = null) {
     });
 }
 
+function showSTStep() {
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-st').classList.remove('hidden');
+
+    // Pre-fill ST code if available
+    const session = loadSession();
+    if (session && session.playerCode && session.role === 'st') {
+        document.getElementById('input-st-code').value = session.playerCode;
+    }
+}
+
 function showJoinStep() {
     document.getElementById('login-main').classList.add('hidden');
     document.getElementById('login-join').classList.remove('hidden');
@@ -954,10 +983,14 @@ function showJoinStep() {
     if (session && session.hostId) {
         document.getElementById('input-host-id').value = session.hostId;
     }
+    if (session && session.playerCode && session.role === 'player') {
+        document.getElementById('input-player-code').value = session.playerCode;
+    }
 }
 
 function showMainStep() {
     document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
     document.getElementById('login-main').classList.remove('hidden');
 }
 
@@ -1579,19 +1612,63 @@ function renderMap() {
         if(u.avatar) t.style.backgroundImage = `url(${u.avatar})`;
         else t.innerText = u.name[0].toUpperCase();
 
-        // Token pointer events - supports both click select and drag move
+        // Token pointer events - click to select, drag to move
+        let pointerDownTime = 0;
+        let pointerDownPos = { x: 0, y: 0 };
+        const DRAG_THRESHOLD = 5; // pixels to consider as drag
+
         t.onpointerdown = (e) => {
             if(currentTool !== 'cursor') return;
             e.stopPropagation();
             e.preventDefault();
 
+            pointerDownTime = Date.now();
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+
+            // Always select the unit first
             selectUnit(u.id);
 
-            // Check if user can control this unit (ST can control all, players only their own)
+            // Set up for potential drag
             if (canControlUnit(u)) {
-                startTokenDrag(e, u, t);
+                t.setPointerCapture(e.pointerId);
             }
         };
+
+        t.onpointermove = (e) => {
+            if (!canControlUnit(u)) return;
+            if (pointerDownTime === 0) return;
+
+            const dx = Math.abs(e.clientX - pointerDownPos.x);
+            const dy = Math.abs(e.clientY - pointerDownPos.y);
+
+            // If moved beyond threshold, start dragging
+            if ((dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) && !isDraggingToken) {
+                startTokenDrag(e, u, t);
+                // Adjust drag start position to original pointer down position
+                dragStartPos = { x: pointerDownPos.x, y: pointerDownPos.y };
+            } else if (isDraggingToken) {
+                handleTokenDragMove(e);
+            }
+        };
+
+        t.onpointerup = (e) => {
+            if (isDraggingToken) {
+                endTokenDrag(e);
+            } else {
+                // Just a click - unit is already selected, clicking on cell will move it
+                try { t.releasePointerCapture(e.pointerId); } catch(err) {}
+            }
+            pointerDownTime = 0;
+        };
+
+        t.onpointercancel = (e) => {
+            if (isDraggingToken) {
+                cancelTokenDrag();
+            }
+            pointerDownTime = 0;
+            try { t.releasePointerCapture(e.pointerId); } catch(err) {}
+        };
+
         grid.appendChild(t);
     });
 }
@@ -2017,6 +2094,75 @@ function nextTurn() {
 }
 
 function selectUnit(id) { selectedUnitId = id; renderMap(); }
+
+// Keyboard controls for selected unit
+function setupKeyboardControls() {
+    document.addEventListener('keydown', (e) => {
+        // Only handle arrow keys when on map page and a unit is selected
+        if (!document.getElementById('page-map').classList.contains('active')) return;
+        if (selectedUnitId === null) return;
+        if (currentTool !== 'cursor') return;
+
+        const u = state.units.find(u => u.id === selectedUnitId);
+        if (!u || !canControlUnit(u)) return;
+        if (u.x < 0 || u.y < 0) return; // Unit not on map
+
+        let dx = 0, dy = 0;
+        switch(e.key) {
+            case 'ArrowUp':
+            case 'w':
+            case 'W':
+                dy = -1;
+                break;
+            case 'ArrowDown':
+            case 's':
+            case 'S':
+                dy = 1;
+                break;
+            case 'ArrowLeft':
+            case 'a':
+            case 'A':
+                dx = -1;
+                break;
+            case 'ArrowRight':
+            case 'd':
+            case 'D':
+                dx = 1;
+                break;
+            case 'Escape':
+                // Deselect unit
+                selectedUnitId = null;
+                renderMap();
+                return;
+            default:
+                return;
+        }
+
+        e.preventDefault();
+
+        // Calculate new position
+        const newX = Math.max(0, Math.min(state.mapW - 1, u.x + dx));
+        const newY = Math.max(0, Math.min(state.mapH - 1, u.y + dy));
+
+        // Don't move if position hasn't changed
+        if (newX === u.x && newY === u.y) return;
+
+        // Move the unit
+        if (myRole === 'st') {
+            u.x = newX;
+            u.y = newY;
+            broadcastState();
+        } else {
+            sendToHost({
+                type: 'moveUnit',
+                playerId: myPlayerId,
+                unitId: u.id,
+                x: newX,
+                y: newY
+            });
+        }
+    });
+}
 function startDeploy(id) {
     const u = state.units.find(u => u.id === id);
     if (!u) return;
@@ -2292,7 +2438,17 @@ function resetCalc() {
 
 /* --- UTILS --- */
 function escapeHtml(t) { return t?t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"):t; }
-function copyId() { navigator.clipboard.writeText(myPeerId).then(()=>showToast('已複製')); }
+function copyId() { navigator.clipboard.writeText(myPeerId).then(()=>showToast('房間 ID 已複製')); }
+function copyMyCode() { navigator.clipboard.writeText(myPlayerCode).then(()=>showToast('識別碼已複製: ' + myPlayerCode)); }
+
+// Update player code display in navbar
+function updateCodeDisplay() {
+    const codeEl = document.getElementById('my-code');
+    if (codeEl && myPlayerCode) {
+        codeEl.innerText = myPlayerCode;
+        codeEl.style.display = 'inline-block';
+    }
+}
 function showToast(m) { const t=document.getElementById('toast'); t.innerText=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2000); }
 function toggleSidebar() { document.getElementById('sidebar').classList.toggle('show'); document.getElementById('sidebar-toggle').classList.toggle('active'); }
 function switchPage(p) {
@@ -2305,6 +2461,7 @@ function switchPage(p) {
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     checkExistingSession();
+    setupKeyboardControls();
 });
 </script>
 </body>

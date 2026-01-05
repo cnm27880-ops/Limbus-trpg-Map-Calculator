@@ -1,11 +1,11 @@
 /**
  * Limbus Command - 相機控制
- * 處理地圖平移、縮放、Token 拖曳
+ * 處理地圖平移、縮放
+ * 注意：Token 拖曳功能已移除，改用「點選後點擊目標格移動」的操作模式
  */
 
 // ===== 全域互動狀態變數 =====
-// 注意：isDraggingMap, isDraggingToken, isPaintingDrag 已在 state.js 中定義
-// 注意：draggedUnit, draggedElement, dragStartPos, tokenStartPos 已在 state.js 中定義
+// 注意：isDraggingMap, isPaintingDrag 已在 state.js 中定義
 // 此處不需要重複宣告
 
 // ===== 相機事件初始化 =====
@@ -38,26 +38,19 @@ function initCameraEvents() {
         // 3. 否則視為地圖平移
         isDraggingMap = true;
         lastPointer = { x: e.clientX, y: e.clientY };
-        
+
         // 鎖定指針到視口，優化平移體驗
         vp.setPointerCapture(e.pointerId);
     });
 
     // 指標移動 (pointermove) - 綁定到 window 以防止滑鼠移出視口失效
     window.addEventListener('pointermove', e => {
-        // A. 處理 Token 拖曳
-        if (isDraggingToken && draggedElement) {
-            e.preventDefault();
-            handleTokenDragMove(e);
-            return;
-        }
-
-        // B. 處理繪製拖曳 (邏輯主要由 map.js 的 cell:pointerenter 處理，這裡只需阻擋相機)
+        // A. 處理繪製拖曳 (邏輯主要由 map.js 的 cell:pointerenter 處理，這裡只需阻擋相機)
         if (isPaintingDrag) {
             return;
         }
 
-        // C. 處理地圖平移
+        // B. 處理地圖平移
         if (isDraggingMap) {
             e.preventDefault();
             const dx = e.clientX - lastPointer.x;
@@ -71,13 +64,7 @@ function initCameraEvents() {
 
     // 指標放開 (pointerup) - 綁定到 window 確保能夠捕捉到釋放
     window.addEventListener('pointerup', e => {
-        // A. 結束 Token 拖曳
-        if (isDraggingToken) {
-            endTokenDrag(e);
-            return;
-        }
-
-        // B. 結束繪製
+        // A. 結束繪製
         if (isPaintingDrag) {
             isPaintingDrag = false;
             // 繪製結束後，如果是 ST，發送狀態更新
@@ -85,7 +72,7 @@ function initCameraEvents() {
             return;
         }
 
-        // C. 結束地圖平移
+        // B. 結束地圖平移
         if (isDraggingMap) {
             isDraggingMap = false;
             try { vp.releasePointerCapture(e.pointerId); } catch(err){}
@@ -94,7 +81,7 @@ function initCameraEvents() {
 
     // 觸控捏合縮放 (Touch Pinch)
     vp.addEventListener('touchmove', e => {
-        if (e.touches.length === 2 && !isDraggingToken) {
+        if (e.touches.length === 2) {
             e.preventDefault();
             const dist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
@@ -108,8 +95,8 @@ function initCameraEvents() {
         }
     }, { passive: false });
 
-    vp.addEventListener('touchend', () => { 
-        lastDist = 0; 
+    vp.addEventListener('touchend', () => {
+        lastDist = 0;
     });
 }
 
@@ -141,109 +128,6 @@ function resetCamera() {
     applyCamera();
 }
 
-// ===== Token 拖曳邏輯 =====
-/**
- * 開始拖曳 Token (由 map.js 呼叫)
- */
-function startTokenDrag(e, unit, element) {
-    isDraggingToken = true;
-    draggedUnit = unit;
-    draggedElement = element;
-    dragStartPos = { x: e.clientX, y: e.clientY };
-
-    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
-    
-    // 記錄初始位置
-    tokenStartPos = {
-        x: unit.x * gridSize + 2,
-        y: unit.y * gridSize + 2
-    };
-
-    element.classList.add('dragging');
-    
-    // 選取該單位
-    if (typeof selectUnit === 'function') selectUnit(unit.id);
-}
-
-/**
- * 處理 Token 拖曳移動
- */
-function handleTokenDragMove(e) {
-    if (!isDraggingToken || !draggedElement) return;
-
-    // 計算滑鼠位移 (除以縮放比例以獲得正確距離)
-    const dx = (e.clientX - dragStartPos.x) / cam.scale;
-    const dy = (e.clientY - dragStartPos.y) / cam.scale;
-
-    draggedElement.style.left = (tokenStartPos.x + dx) + 'px';
-    draggedElement.style.top = (tokenStartPos.y + dy) + 'px';
-}
-
-/**
- * 結束 Token 拖曳
- */
-function endTokenDrag(e) {
-    if (!isDraggingToken || !draggedUnit) {
-        cancelTokenDrag();
-        return;
-    }
-
-    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
-    const dx = (e.clientX - dragStartPos.x) / cam.scale;
-    const dy = (e.clientY - dragStartPos.y) / cam.scale;
-
-    const newPixelX = tokenStartPos.x + dx;
-    const newPixelY = tokenStartPos.y + dy;
-
-    // 轉換為格子座標 (四捨五入)
-    let newX = Math.round(newPixelX / gridSize);
-    let newY = Math.round(newPixelY / gridSize);
-
-    // 限制在地圖範圍內
-    newX = Math.max(0, Math.min(state.mapW - 1, newX));
-    newY = Math.max(0, Math.min(state.mapH - 1, newY));
-
-    // 更新位置
-    if (myRole === 'st') {
-        draggedUnit.x = newX;
-        draggedUnit.y = newY;
-        selectedUnitId = null;  // 清除選取框
-        sendState();
-        renderAll();
-    } else {
-        sendToHost({
-            type: 'moveUnit',
-            playerId: myPlayerId,
-            unitId: draggedUnit.id,
-            x: newX,
-            y: newY
-        });
-        // 預先更新本地顯示
-        draggedUnit.x = newX;
-        draggedUnit.y = newY;
-        selectedUnitId = null;  // 清除選取框
-        renderAll();
-    }
-
-    if (draggedElement) {
-        draggedElement.classList.remove('dragging');
-    }
-
-    isDraggingToken = false;
-    draggedUnit = null;
-    draggedElement = null;
-}
-
-/**
- * 取消 Token 拖曳
- */
-function cancelTokenDrag() {
-    if (draggedElement) {
-        draggedElement.classList.remove('dragging');
-        renderAll(); // 重繪以歸位
-    }
-
-    isDraggingToken = false;
-    draggedUnit = null;
-    draggedElement = null;
-}
+// Token 拖曳功能已移除
+// 改用「點選單位 -> 點擊目標格」的操作模式
+// 詳見 map.js 中的 cell.onpointerdown 和 token.onpointerdown 處理邏輯

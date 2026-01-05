@@ -15,21 +15,15 @@ let state = {
 };
 
 // ===== 連線狀態 =====
-let myPeerId = null;
+// 注意：系統現在使用 Firebase Realtime Database 而非 PeerJS P2P
 let myRole = 'player';  // 'st' 或 'player'
 let myName = '';
 let myPlayerId = null;
 let myPlayerCode = null;
 
-let peer = null;
-let connections = {};  // ST 儲存所有玩家連線: {peerId: conn}
-let hostConn = null;   // 玩家儲存到 ST 的連線
-let hostId = null;     // 房間 ID (ST 的 peer ID)
-
-let connectionState = 'disconnected';  // 'disconnected', 'connecting', 'connected'
-let heartbeatInterval = null;
-let reconnectTimeout = null;
-let reconnectAttempts = 0;
+// 保留給相容性 (部分舊函數可能引用)
+let myPeerId = null;
+let hostId = null;
 
 // ===== UI 狀態 =====
 let currentTool = 'cursor';
@@ -42,15 +36,11 @@ let isDraggingMap = false;
 let lastPointer = { x: 0, y: 0 };
 let lastDist = 0;  // 用於捏合縮放
 
-// ===== Token 拖曳狀態 =====
-let isDraggingToken = false;
-let draggedUnit = null;
-let draggedElement = null;
-let dragStartPos = { x: 0, y: 0 };
-let tokenStartPos = { x: 0, y: 0 };
-
 // ===== 繪製拖曳狀態 =====
 let isPaintingDrag = false;
+
+// 注意：Token 拖曳功能已移除 (isDraggingToken, draggedUnit 等)
+// 現在使用「點選單位 -> 點擊目標格」的操作模式
 
 // ===== BOSS 計算器狀態 =====
 let bossActions = [];

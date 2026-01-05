@@ -224,11 +224,9 @@ function renderMap() {
             // --- 互動事件綁定 ---
             
             div.onpointerdown = (e) => {
-                // 如果正在拖曳 Token，不處理格子點擊
-                if (isDraggingToken) return;
-
-                // 游標模式：移動單位（僅當有選中單位時）
+                // 游標模式
                 if (currentTool === 'cursor') {
+                    // 如果有選中單位，點擊格子移動該單位
                     if (selectedUnitId !== null) {
                         const u = findUnitById(selectedUnitId);
                         const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
@@ -240,6 +238,8 @@ function renderMap() {
                                 sendState(); renderAll();
                             } else {
                                 sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: x, y: y });
+                                // 玩家端預先更新本地顯示
+                                u.x = x; u.y = y;
                                 selectedUnitId = null; renderAll();
                             }
                             // 點擊移動後阻止事件冒泡，不觸發地圖拖曳
@@ -247,8 +247,10 @@ function renderMap() {
                             return;
                         }
                     }
-                    // 游標模式下沒有選中單位時，允許事件冒泡以觸發地圖拖曳
-                    // 不執行 stopPropagation，讓事件傳遞到 viewport
+
+                    // 游標模式下沒有選中單位時，顯示該格的地形資訊
+                    updateTileInfo(x, y);
+                    // 允許事件冒泡以觸發地圖拖曳
                 }
                 // 繪製工具模式 (ST Only)
                 else if (myRole === 'st') {
@@ -290,19 +292,15 @@ function renderMap() {
 
         t.onpointerdown = (e) => {
             if (currentTool !== 'cursor') return;
-            
+
             // 阻止格子接收點擊事件
             e.stopPropagation();
             // 阻止圖片預設拖曳
             e.preventDefault();
 
+            // 點擊 Token 時選取該單位
+            // 移動邏輯：選取後點擊地圖格子來移動（見 cell.onpointerdown）
             selectUnit(u.id);
-
-            const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
-            if (controllable) {
-                // 呼叫 camera.js 中的啟動拖曳
-                startTokenDrag(e, u, t);
-            }
         };
         
         grid.appendChild(t);
@@ -428,6 +426,37 @@ function recallUnit(id) {
             x: -1,
             y: -1
         });
+    }
+}
+
+// ===== 地形資訊更新 =====
+/**
+ * 更新側邊欄的地形資訊
+ * @param {number} x - X 座標
+ * @param {number} y - Y 座標
+ */
+function updateTileInfo(x, y) {
+    const info = document.getElementById('tile-effect-desc');
+    if (!info) return;
+
+    const theme = getCurrentTheme();
+    const val = state.mapData[y]?.[x];
+
+    if (val === undefined) {
+        info.innerText = '無法讀取地形資訊';
+        return;
+    }
+
+    if (val === 0) {
+        info.innerText = `座標 (${x}, ${y}): 地板 - 無特殊效果`;
+        return;
+    }
+
+    const tileDef = theme.tiles.find(t => t.id === val);
+    if (tileDef) {
+        info.innerText = `座標 (${x}, ${y}): ${tileDef.name} - ${tileDef.effect}`;
+    } else {
+        info.innerText = `座標 (${x}, ${y}): 未知地形`;
     }
 }
 

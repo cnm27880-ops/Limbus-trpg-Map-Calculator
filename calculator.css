@@ -3,6 +3,7 @@
     flex-direction: column;
     background: var(--bg-main);
     overflow-y: auto;
+    overflow-x: hidden;  /* 防止水平滾動 */
     padding: 16px;
 }
 
@@ -46,6 +47,15 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+}
+
+/* 確保所有計算器輸入框不會溢出 */
+.calc-grid input,
+.calc-grid select,
+.calc-section input,
+.calc-section select {
+    box-sizing: border-box;
+    max-width: 100%;
 }
 
 /* 手機版輸入欄位寬度限制 */

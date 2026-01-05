@@ -62,10 +62,158 @@ function showMainStep() {
     document.getElementById('login-main').classList.remove('hidden');
 }
 
-// ===== 房間管理（舊版兼容，未來可移除） =====
+// ===== 房間管理 =====
+/**
+ * 顯示房間管理器並載入所有房間
+ */
 function showRoomManager() {
-    showToast('房間管理功能即將推出');
-    // Firebase 版本可以從資料庫直接查詢所有房間
+    // 隱藏其他登入畫面，顯示房間管理器
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-st').classList.add('hidden');
+    document.getElementById('login-join').classList.add('hidden');
+    document.getElementById('login-room-manager').classList.remove('hidden');
+
+    const container = document.getElementById('room-list-container');
+    if (!container) return;
+
+    // 顯示載入中
+    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;">載入中...</div>';
+
+    // 從 Firebase 取得所有房間
+    database.ref('rooms').once('value')
+        .then(snapshot => {
+            if (!snapshot.exists()) {
+                container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;">目前沒有任何房間</div>';
+                return;
+            }
+
+            const rooms = snapshot.val();
+            const roomList = [];
+
+            // 將房間轉換為陣列並排序
+            Object.keys(rooms).forEach(code => {
+                const room = rooms[code];
+                roomList.push({
+                    code: code,
+                    stName: room.info?.stName || '未知',
+                    createdAt: room.info?.createdAt || 0,
+                    lastActive: room.info?.lastActive || 0,
+                    unitCount: room.units ? Object.keys(room.units).length : 0,
+                    playerCount: room.players ? Object.keys(room.players).length : 0
+                });
+            });
+
+            // 按最後活動時間排序（最新在前）
+            roomList.sort((a, b) => b.lastActive - a.lastActive);
+
+            // 渲染房間列表
+            if (roomList.length === 0) {
+                container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;">目前沒有任何房間</div>';
+                return;
+            }
+
+            container.innerHTML = roomList.map(room => {
+                const now = Date.now();
+                const timeDiff = now - room.lastActive;
+                const isActive = timeDiff < 24 * 60 * 60 * 1000; // 24 小時內
+                const isRecent = timeDiff < 5 * 60 * 1000; // 5 分鐘內
+
+                // 格式化時間
+                let timeStr = '';
+                if (timeDiff < 60 * 1000) {
+                    timeStr = '剛才';
+                } else if (timeDiff < 60 * 60 * 1000) {
+                    timeStr = Math.floor(timeDiff / 60000) + ' 分鐘前';
+                } else if (timeDiff < 24 * 60 * 60 * 1000) {
+                    timeStr = Math.floor(timeDiff / 3600000) + ' 小時前';
+                } else {
+                    timeStr = Math.floor(timeDiff / 86400000) + ' 天前';
+                }
+
+                const borderColor = isRecent ? 'var(--accent-green)' : (isActive ? 'var(--accent-yellow)' : 'var(--border)');
+
+                return `
+                    <div style="
+                        background: var(--bg-card);
+                        border: 2px solid ${borderColor};
+                        border-radius: 8px;
+                        padding: 12px;
+                        margin-bottom: 10px;
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        flex-wrap: wrap;
+                        gap: 10px;
+                    ">
+                        <div style="flex: 1; min-width: 150px;">
+                            <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; color: var(--accent-yellow); margin-bottom: 4px;">
+                                ${escapeHtml(room.code)}
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-main);">
+                                ST: ${escapeHtml(room.stName)}
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--text-dim);">
+                                ${room.unitCount} 單位 · ${room.playerCount} 玩家 · ${timeStr}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="enterRoomFromManager('${room.code}')" style="
+                                background: var(--accent-green);
+                                color: #000;
+                                border: none;
+                                padding: 8px 16px;
+                                border-radius: 6px;
+                                font-weight: bold;
+                                cursor: pointer;
+                            ">進入</button>
+                            <button onclick="deleteRoomFromManager('${room.code}')" style="
+                                background: var(--accent-red);
+                                color: #000;
+                                border: none;
+                                padding: 8px 12px;
+                                border-radius: 6px;
+                                cursor: pointer;
+                            ">🗑️</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(error => {
+            console.error('載入房間列表失敗:', error);
+            container.innerHTML = `<div style="text-align:center;color:var(--accent-red);padding:20px;">載入失敗: ${error.message}</div>`;
+        });
+}
+
+/**
+ * 從房間管理器進入房間
+ * @param {string} code - 房間號碼
+ */
+function enterRoomFromManager(code) {
+    // 填入房間號碼並返回 ST 登入畫面
+    document.getElementById('input-st-code').value = code;
+    showSTStep();
+    showToast('已填入房間號碼，點擊「建立房間」以 ST 身份進入');
+}
+
+/**
+ * 從房間管理器刪除房間
+ * @param {string} code - 房間號碼
+ */
+function deleteRoomFromManager(code) {
+    if (!confirm(`確定要刪除房間 ${code} 嗎？此操作無法復原！`)) {
+        return;
+    }
+
+    database.ref('rooms/' + code).remove()
+        .then(() => {
+            showToast('房間已刪除');
+            showRoomManager(); // 重新載入列表
+        })
+        .catch(error => {
+            console.error('刪除房間失敗:', error);
+            showToast('刪除失敗: ' + error.message);
+        });
 }
 
 // ===== 初始化系統 =====

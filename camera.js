@@ -207,6 +207,7 @@ function endTokenDrag(e) {
     if (myRole === 'st') {
         draggedUnit.x = newX;
         draggedUnit.y = newY;
+        selectedUnitId = null;  // 清除選取框
         sendState();
         renderAll();
     } else {
@@ -220,6 +221,7 @@ function endTokenDrag(e) {
         // 預先更新本地顯示
         draggedUnit.x = newX;
         draggedUnit.y = newY;
+        selectedUnitId = null;  // 清除選取框
         renderAll();
     }
 

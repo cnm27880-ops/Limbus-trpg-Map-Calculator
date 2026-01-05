@@ -261,7 +261,7 @@ function setHpModalType(type) {
  * 確認 HP 修改
  */
 function confirmHpModify() {
-    const id = parseFloat(document.getElementById('hp-target-id').value);
+    const id = document.getElementById('hp-target-id').value;  // 直接获取字符串 ID
     const amount = parseInt(document.getElementById('hp-amount').value) || 1;
     const type = document.getElementById('hp-action-type').value;
 

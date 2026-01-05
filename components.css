@@ -1,0 +1,275 @@
+/* ===== Tokens ===== */
+.token {
+    position: absolute;
+    width: calc(var(--grid-size) - 4px);
+    height: calc(var(--grid-size) - 4px);
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background-size: cover;
+    background-position: center;
+    background-color: #333;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    color: #fff;
+    text-shadow: 0 1px 3px #000;
+    pointer-events: auto;
+    cursor: grab;
+    transition: transform 0.1s, left 0.15s, top 0.15s;
+    touch-action: none;
+}
+
+.token:active {
+    cursor: grabbing;
+}
+
+.token.selected {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 3px var(--accent-yellow);
+    z-index: 20;
+}
+
+.token.dragging {
+    z-index: 100;
+    transition: none;
+    opacity: 0.9;
+    transform: scale(1.1);
+}
+
+.token.enemy {
+    border-color: var(--accent-red);
+}
+
+.token.player {
+    border-color: var(--accent-green);
+}
+
+/* ===== Units Page ===== */
+#page-units {
+    flex-direction: column;
+    background: var(--bg-main);
+}
+
+.units-toolbar {
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.units-btn {
+    background: var(--bg-card);
+    color: var(--text-main);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.units-btn.primary {
+    background: var(--accent-yellow);
+    color: #000;
+    font-weight: 600;
+}
+
+.units-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* ===== Unit Card ===== */
+.unit-card {
+    background: var(--bg-card);
+    border-radius: 8px;
+    padding: 10px;
+    border-left: 4px solid var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.unit-card.enemy {
+    border-left-color: var(--accent-red);
+}
+
+.unit-card.player {
+    border-left-color: var(--accent-green);
+}
+
+.unit-card.active-turn {
+    box-shadow: 0 0 0 2px var(--accent-yellow);
+    background: #1f1f24;
+}
+
+.unit-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.unit-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 6px;
+    background: var(--bg-input);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    background-size: cover;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.unit-avatar.enemy {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}
+
+.unit-avatar.player {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+/* ===== HP Bar ===== */
+.hp-bar-wrap {
+    height: 10px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    display: flex;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    width: 100%;
+}
+
+.hp-chunk {
+    height: 100%;
+}
+
+.hp-empty {
+    background: #1a1a1f;
+}
+
+.hp-b {
+    background: var(--accent-blue);
+}
+
+.hp-l {
+    background: var(--accent-orange);
+}
+
+.hp-a {
+    background: var(--accent-red);
+}
+
+/* ===== Unit Actions ===== */
+.unit-actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.action-btn {
+    flex: 1;
+    min-width: 40px;
+    padding: 6px;
+    background: var(--bg-input);
+    color: var(--text-dim);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    border: 1px solid transparent;
+}
+
+.action-btn:hover {
+    color: var(--text-main);
+    border-color: var(--border);
+}
+
+.action-btn.dmg-b {
+    color: var(--accent-blue);
+}
+
+.action-btn.dmg-l {
+    color: var(--accent-orange);
+}
+
+.action-btn.dmg-a {
+    color: var(--accent-red);
+}
+
+.action-btn.heal {
+    color: var(--accent-green);
+}
+
+/* ===== Modals ===== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 2000;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    padding: 15px;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg-panel);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    width: 100%;
+    max-width: 400px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.modal-footer {
+    padding: 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.modal-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+}
+
+/* ===== Unit Init Input ===== */
+.unit-init {
+    width: 50px;
+    text-align: center;
+}

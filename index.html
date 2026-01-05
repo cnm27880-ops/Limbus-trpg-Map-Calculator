@@ -3,207 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Limbus Command v7.4</title>
+    <title>Limbus Command v7.5</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-main: #0a0a0b; --bg-panel: #131316; --bg-card: #1a1a1f; --bg-input: #0d0d0f;
-            --border: #2a2a30; --border-focus: #404048;
-            --accent-red: #e53935; --accent-green: #43a047; --accent-blue: #1e88e5;
-            --accent-orange: #fb8c00; --accent-yellow: #fdd835; --accent-purple: #8e24aa;
-            --text-main: #e8e8ec; --text-dim: #6e6e78; --text-muted: #48484f;
-            --grid-size: 50px; --sidebar-width: 340px; --nav-height: 56px;
-        }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { margin:0; padding:0; background:var(--bg-main); color:var(--text-main); font-family:'Noto Sans TC',sans-serif; height:100vh; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
-        ::-webkit-scrollbar { width:6px; height:6px; } ::-webkit-scrollbar-track { background:var(--bg-main); } ::-webkit-scrollbar-thumb { background:#333; border-radius:3px; }
-        button { cursor:pointer; border:none; font-family:inherit; transition:all 0.1s ease; user-select: none; } button:active { transform:scale(0.96); }
-        input, select { background:var(--bg-input); border:1px solid var(--border); color:var(--text-main); padding:8px 10px; border-radius:6px; font-size:0.9rem; }
-        input:focus, select:focus { outline:none; border-color:var(--border-focus); }
-        input[type="number"] { font-family:'JetBrains Mono',monospace; }
-        .hidden { display:none !important; }
-
-        /* Login */
-        #login-layer { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:9999; display:flex; justify-content:center; align-items:center; padding:20px; }
-        .login-box { background:var(--bg-panel); padding:32px; border-radius:12px; border:1px solid var(--border); width:100%; max-width:380px; text-align:center; }
-        .login-title { font-size:1.8rem; font-weight:700; color:var(--accent-red); margin-bottom:4px; }
-        .login-btn { width:100%; padding:14px; font-weight:600; font-size:1rem; color:#000; border-radius:8px; margin-top:8px; }
-        .btn-host { background:linear-gradient(135deg,var(--accent-red),#c62828); }
-        .btn-join { background:linear-gradient(135deg,var(--accent-blue),#1565c0); }
-        .btn-back { background:var(--bg-card); color:var(--text-dim); margin-top:16px; }
-
-        /* Navbar */
-        .navbar { height:var(--nav-height); background:var(--bg-panel); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:8px; z-index:100; flex-shrink:0; }
-        .nav-tabs { display:flex; gap:4px; flex:1; }
-        .nav-tab { background:transparent; color:var(--text-dim); padding:8px 16px; font-size:0.9rem; border-radius:8px; display:flex; align-items:center; gap:6px; }
-        .nav-tab.active { background:var(--bg-card); color:var(--text-main); }
-        .id-badge { background:var(--bg-card); color:var(--accent-green); padding:6px 10px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:0.75rem; cursor:pointer; border:1px dashed var(--border); }
-        .sidebar-toggle { display:none; background:var(--bg-card); color:var(--text-dim); padding:8px 12px; border-radius:6px; }
-        .sidebar-toggle.active { color:var(--accent-yellow); }
-
-        /* Layout */
-        .main-wrapper { flex:1; display:flex; overflow:hidden; position:relative; }
-        .page { position:absolute; inset:0; display:none; overflow:hidden; }
-        .page.active { display:flex; }
-
-        /* Map Page */
-        #page-map { flex-direction:row; }
-        .sidebar { width:var(--sidebar-width); background:var(--bg-panel); border-right:1px solid var(--border); display:none; flex-direction:column; overflow:hidden; flex-shrink:0; }
-        .sidebar.show { display:flex; }
-        .sidebar-header { padding:12px; background:var(--bg-card); border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
-        .sidebar-content { flex:1; overflow-y:auto; padding:12px; }
-
-        .map-toolbar { background:var(--bg-panel); border-bottom:1px solid var(--border); padding:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; z-index:10; }
-        .map-tools-scroll { display:flex; gap:6px; overflow-x:auto; max-width:100%; padding-bottom:2px; }
-        .tool-btn { width:36px; height:36px; flex-shrink:0; background:var(--bg-card); color:var(--text-dim); border-radius:6px; font-size:1rem; display:flex; align-items:center; justify-content:center; position:relative; }
-        .tool-btn.active { box-shadow:0 0 0 2px var(--accent-yellow); color:#fff; }
-        .tool-btn .color-indicator { width:8px; height:8px; border-radius:50%; position:absolute; bottom:4px; right:4px; border:1px solid rgba(255,255,255,0.5); }
-        .tool-separator { width:1px; height:24px; background:var(--border); margin:0 4px; flex-shrink:0; }
-        
-        /* Map Controls */
-        .map-controls-right { display:flex; gap:8px; align-items:center; margin-left:auto; }
-        .map-select { width:130px; padding:6px; font-size:0.8rem; }
-        .size-input { width:45px; text-align:center; padding:6px; }
-        .apply-btn { background:var(--bg-card); padding:6px 12px; border-radius:6px; font-size:0.8rem; }
-
-        /* Map Viewport & Container */
-        .map-viewport { flex:1; background:#050506; position:relative; overflow:hidden; cursor: grab; }
-        .map-viewport:active { cursor: grabbing; }
-        .map-container { position:absolute; left:50%; top:50%; transform-origin: center center; will-change:transform; user-select: none; }
-        
-        #battle-map { display:grid; border:2px solid #444; background:var(--bg-main); box-shadow: 0 0 50px rgba(0,0,0,0.5); }
-        .cell { width:var(--grid-size); height:var(--grid-size); border:1px solid rgba(255,255,255,0.05); position:relative; touch-action: none; }
-        
-        /* Tile Vis */
-        .cell.deploy-target { background:rgba(253,216,53,0.3) !important; box-shadow:inset 0 0 0 2px var(--accent-yellow); cursor: crosshair; }
-
-        /* Tokens */
-        .token {
-            position:absolute;
-            width: calc(var(--grid-size) - 4px);
-            height: calc(var(--grid-size) - 4px);
-            border-radius:50%; border:2px solid #fff;
-            background-size:cover; background-position:center; background-color:#333;
-            z-index:10; display:flex; align-items:center; justify-content:center;
-            font-weight:700; font-size:16px; color:#fff; text-shadow:0 1px 3px #000;
-            pointer-events: auto; cursor: grab; transition: transform 0.1s, left 0.15s, top 0.15s;
-            touch-action: none;
-        }
-        .token:active { cursor: grabbing; }
-        .token.selected { transform:scale(1.15); box-shadow:0 0 0 3px var(--accent-yellow); z-index:20; }
-        .token.dragging { z-index: 100; transition: none; opacity: 0.9; transform: scale(1.1); }
-        .token.enemy { border-color:var(--accent-red); } 
-        .token.player { border-color:var(--accent-green); }
-
-        /* Units Page */
-        #page-units { flex-direction:column; background:var(--bg-main); }
-        .units-toolbar { background:var(--bg-panel); border-bottom:1px solid var(--border); padding:12px; display:flex; gap:8px; flex-wrap:wrap; }
-        .units-btn { background:var(--bg-card); color:var(--text-main); padding:8px 14px; border-radius:8px; font-size:0.85rem; display:flex; align-items:center; gap:6px; }
-        .units-btn.primary { background:var(--accent-yellow); color:#000; font-weight:600; }
-        .units-list { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
-
-        .unit-card { background:var(--bg-card); border-radius:8px; padding:10px; border-left:4px solid var(--text-muted); display:flex; flex-direction:column; gap:8px; }
-        .unit-card.enemy { border-left-color:var(--accent-red); } .unit-card.player { border-left-color:var(--accent-green); }
-        .unit-card.active-turn { box-shadow:0 0 0 2px var(--accent-yellow); background:#1f1f24; }
-        .unit-header { display:flex; align-items:center; gap:10px; }
-        .unit-avatar { width:42px; height:42px; border-radius:6px; background:var(--bg-input); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-weight:600; background-size:cover; flex-shrink:0; cursor: pointer; }
-        .unit-avatar.enemy { border-color:var(--accent-red); color:var(--accent-red); } .unit-avatar.player { border-color:var(--accent-green); color:var(--accent-green); }
-        
-        .hp-bar-wrap { height:10px; background:var(--bg-input); border-radius:3px; display:flex; overflow:hidden; border:1px solid var(--border); width:100%; }
-        .hp-chunk { height:100%; }
-        .hp-empty { background:#1a1a1f; } .hp-b { background:var(--accent-blue); } .hp-l { background:var(--accent-orange); } .hp-a { background:var(--accent-red); }
-        
-        .unit-actions { display:flex; gap:4px; flex-wrap:wrap; margin-top:4px; }
-        .action-btn { flex:1; min-width:40px; padding:6px; background:var(--bg-input); color:var(--text-dim); border-radius:4px; font-size:0.75rem; border:1px solid transparent; }
-        .action-btn:hover { color:var(--text-main); border-color:var(--border); }
-        .action-btn.dmg-b { color:var(--accent-blue); } .action-btn.dmg-l { color:var(--accent-orange); } .action-btn.dmg-a { color:var(--accent-red); } .action-btn.heal { color:var(--accent-green); }
-
-        /* Calculator */
-        #page-calc { flex-direction:column; background:var(--bg-main); overflow-y:auto; padding:16px; }
-        .calc-container { max-width:650px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
-        .calc-section { background:var(--bg-card); border-radius:10px; padding:14px; border:1px solid var(--border); }
-        .calc-section-title { font-size:0.8rem; font-weight:700; color:var(--text-dim); margin-bottom:10px; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:8px; }
-        .calc-section-title.atk { color:var(--accent-green); } .calc-section-title.def { color:var(--accent-red); }
-        .calc-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .calc-field { display:flex; flex-direction:column; gap:4px; }
-        .calc-label { font-size:0.75rem; color:var(--text-dim); }
-
-        /* Boss Mode Styles */
-        .boss-toggle { display:flex; align-items:center; gap:12px; padding:10px; background:var(--bg-input); border-radius:6px; cursor:pointer; }
-        .boss-toggle input[type="checkbox"] { width:18px; height:18px; accent-color:var(--accent-purple); }
-        .boss-options { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:none; }
-        .boss-options.show { display:block; }
-        
-        .boss-action-item { display:flex; align-items:center; gap:8px; padding:8px; background:var(--bg-input); border-radius:6px; border-left:3px solid var(--accent-purple); margin-bottom:6px; flex-wrap:wrap; }
-        .boss-action-num { font-weight:bold; color:var(--accent-purple); min-width:20px; }
-        .boss-add-action { width:100%; padding:8px; background:var(--bg-card); border:1px dashed var(--border); border-radius:6px; color:var(--text-dim); margin-top:8px; }
-        
-        .boss-summary { margin-top:12px; padding:12px; background:rgba(142,36,170,0.08); border-radius:6px; border:1px solid var(--accent-purple); }
-        .boss-summary-line { font-size:0.85rem; margin-bottom:4px; display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px; }
-        .boss-summary-line:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
-        .val-pos { color:var(--accent-green); font-weight:bold; }
-        .val-neg { color:var(--accent-red); font-weight:bold; }
-        .val-neutral { color:var(--text-dim); }
-
-        .calc-buttons { display:grid; grid-template-columns:1fr 2fr; gap:10px; margin-top:10px; }
-        .calc-btn { padding:14px; border-radius:8px; font-weight:600; font-size:1rem; }
-        .calc-btn-reset { background:var(--bg-card); color:var(--text-dim); }
-        .calc-btn-calc { background:linear-gradient(135deg,var(--accent-green),#2e7d32); color:#000; }
-        
-        .def-tags, .atk-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
-        .def-tag, .atk-tag { padding:4px 10px; background:var(--bg-input); border:1px solid var(--border); border-radius:15px; font-size:0.75rem; color:var(--text-dim); cursor:pointer; }
-        .def-tag.active { color:#000; border-color:transparent; }
-        .def-tag.physical.active { background:var(--accent-orange); } .def-tag.agility.active { background:var(--accent-green); } .def-tag.supernatural.active { background:var(--accent-purple); } .def-tag.other.active { background:var(--accent-blue); }
-        .atk-tag.active { background:var(--accent-red); color:#000; }
-        .def-inputs { display:flex; flex-direction:column; gap:8px; }
-        .def-input-row { display:none; align-items:center; gap:8px; padding:6px; background:var(--bg-input); border-radius:6px; }
-        .def-input-row.show { display:flex; }
-
-        /* Modals */
-        .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:2000; display:none; justify-content:center; align-items:center; padding:15px; }
-        .modal-overlay.show { display:flex; }
-        .modal { background:var(--bg-panel); border-radius:10px; border:1px solid var(--border); width:100%; max-width:400px; max-height:90vh; overflow-y:auto; }
-        .modal-header { padding:14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
-        .modal-body { padding:16px; display:flex; flex-direction:column; gap:14px; }
-        .modal-footer { padding:14px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
-        .modal-btn { padding:8px 16px; border-radius:6px; }
-        
-        /* Helper */
-        .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:#222; border:1px solid var(--accent-green); color:#fff; padding:10px 20px; border-radius:30px; z-index:3000; opacity:0; transition:all 0.3s; pointer-events:none; font-size:0.9rem; }
-        .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
-
-        /* Connection Status */
-        .conn-status { display:flex; align-items:center; gap:6px; padding:4px 10px; border-radius:20px; font-size:0.75rem; background:var(--bg-card); }
-        .conn-dot { width:8px; height:8px; border-radius:50%; animation: pulse 2s infinite; }
-        .conn-dot.online { background:var(--accent-green); }
-        .conn-dot.offline { background:var(--accent-red); animation:none; }
-        .conn-dot.connecting { background:var(--accent-yellow); }
-        @keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.5; } }
-
-        /* Player Code Display */
-        .player-code { font-family:'JetBrains Mono',monospace; font-size:1.5rem; font-weight:bold; letter-spacing:4px; color:var(--accent-yellow); background:var(--bg-input); padding:8px 16px; border-radius:8px; border:2px dashed var(--accent-yellow); margin:10px 0; cursor:pointer; }
-        .player-code:hover { background:var(--bg-card); }
-        
-        #tile-info-panel {
-            background: rgba(0,0,0,0.6); border: 1px solid var(--border);
-            border-radius: 6px; padding: 10px; margin-bottom: 10px;
-            font-size: 0.8rem; color: var(--text-dim); display: none;
-        }
-
-        @media (min-width:1024px) { .sidebar-toggle { display:flex; } .sidebar.show { display:flex; } }
-        @media (max-width:1023px) { .map-controls-right { display:none; } .nav-tab { padding:8px 10px; font-size:0.8rem; } }
-    </style>
+    <!-- CSS 檔案 - 同一層級 -->
+    <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="components.css">
+    <link rel="stylesheet" href="calculator.css">
 </head>
 <body>
 <input type="file" id="file-upload" accept="image/*" style="display:none;">
 <div class="toast" id="toast"></div>
 
-<!-- Login -->
+<!-- Login Layer -->
 <div id="login-layer">
     <div class="login-box" id="login-main">
         <div class="login-title">LIMBUS</div>
-        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.4</div>
+        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統 v7.5</div>
         <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
         <button class="login-btn btn-host" onclick="showSTStep()">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
@@ -229,7 +45,7 @@
     </div>
 </div>
 
-<!-- Nav -->
+<!-- Navbar -->
 <nav class="navbar">
     <div class="nav-tabs">
         <button class="nav-tab active" data-page="map" onclick="switchPage('map')">🗺️ 地圖</button>
@@ -247,12 +63,15 @@
     </div>
 </nav>
 
-<!-- Content -->
+<!-- Main Content -->
 <div class="main-wrapper">
-    <!-- Map -->
+    <!-- Map Page -->
     <div id="page-map" class="page active">
         <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header"><span style="font-weight:bold;color:var(--accent-yellow);">戰鬥序列</span><button style="background:none;color:var(--text-dim);font-size:1.2rem;" onclick="toggleSidebar()">×</button></div>
+            <div class="sidebar-header">
+                <span style="font-weight:bold;color:var(--accent-yellow);">戰鬥序列</span>
+                <button style="background:none;color:var(--text-dim);font-size:1.2rem;" onclick="toggleSidebar()">×</button>
+            </div>
             <div class="sidebar-content">
                 <div id="tile-info-panel">
                     <div style="color:var(--accent-yellow);font-weight:bold;margin-bottom:4px;">地形效果</div>
@@ -288,7 +107,6 @@
                     <button class="apply-btn" onclick="resizeMap()">套用</button>
                 </div>
             </div>
-            <!-- Map Viewport with Pan/Zoom logic -->
             <div class="map-viewport" id="map-viewport">
                 <div class="map-container" id="map-container">
                     <div id="battle-map"></div>
@@ -297,7 +115,7 @@
         </div>
     </div>
 
-    <!-- Units -->
+    <!-- Units Page -->
     <div id="page-units" class="page">
         <div class="units-toolbar" id="units-toolbar">
             <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
@@ -308,7 +126,7 @@
         <div class="units-list" id="units-list"></div>
     </div>
 
-    <!-- Calculator -->
+    <!-- Calculator Page -->
     <div id="page-calc" class="page">
         <div class="calc-container">
             <!-- Boss Mode Section -->
@@ -322,13 +140,20 @@
                 </label>
                 <div class="boss-options" id="boss-options">
                     <div class="calc-grid">
-                        <div class="calc-field"><span class="calc-label">主線/支線等級</span><input type="number" id="boss-tier" value="1" min="1" max="10" onchange="updateBossSummary()"></div>
-                        <div class="calc-field"><span class="calc-label">本回合狀況</span><select id="boss-engage" onchange="updateBossSummary()"><option value="yes">有對抗行動</option><option value="no">完全未對抗 (我方DP+)</option></select></div>
+                        <div class="calc-field">
+                            <span class="calc-label">主線/支線等級</span>
+                            <input type="number" id="boss-tier" value="1" min="1" max="10" onchange="updateBossSummary()">
+                        </div>
+                        <div class="calc-field">
+                            <span class="calc-label">本回合狀況</span>
+                            <select id="boss-engage" onchange="updateBossSummary()">
+                                <option value="yes">有對抗行動</option>
+                                <option value="no">完全未對抗 (我方DP+)</option>
+                            </select>
+                        </div>
                     </div>
-                    
                     <div id="boss-actions-list" style="margin-top:10px;"></div>
                     <button class="boss-add-action" onclick="addBossAction()">+ 新增對抗行動</button>
-
                     <div class="boss-summary">
                         <div style="font-weight:bold;color:var(--accent-purple);margin-bottom:6px;">📊 結果預覽</div>
                         <div id="boss-summary-content" style="display:flex;flex-direction:column;gap:4px;"></div>
@@ -336,7 +161,7 @@
                 </div>
             </div>
 
-            <!-- Standard Calc -->
+            <!-- Attacker Section -->
             <div class="calc-section">
                 <div class="calc-section-title atk">🗡️ 攻擊方 (我方)</div>
                 <div class="atk-tags">
@@ -345,37 +170,51 @@
                     <span class="atk-tag" data-type="magic" onclick="toggleAtkTag('magic')">破魔</span>
                 </div>
                 <div class="calc-grid">
-                    <div class="calc-field"><span class="calc-label">攻擊 DP</span><input type="number" id="c-atk" value="10" min="0"></div>
-                    <div class="calc-field"><span class="calc-label">攻擊附加成功</span><input type="number" id="c-atk-auto" value="0" min="0"></div>
-                    <div class="calc-field def-input-row" id="row-pen"><span style="font-size:0.75rem;">破甲值</span><input type="number" style="width:60px;" id="c-pen" value="0"></div>
-                    <div class="calc-field def-input-row" id="row-speed"><span style="font-size:0.75rem;">高速值</span><input type="number" style="width:60px;" id="c-speed" value="0"></div>
-                    <div class="calc-field def-input-row" id="row-magic"><span style="font-size:0.75rem;">破魔值</span><input type="number" style="width:60px;" id="c-magic" value="0"></div>
-                    <div class="calc-field"><span class="calc-label">意志加值</span><select id="c-will"><option value="0">不使用</option><option value="3">+3 (完美)</option></select></div>
+                    <div class="calc-field">
+                        <span class="calc-label">攻擊 DP</span>
+                        <input type="number" id="c-atk" value="10" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">攻擊附加成功</span>
+                        <input type="number" id="c-atk-auto" value="0" min="0">
+                    </div>
+                    <div class="calc-field def-input-row" id="row-pen">
+                        <span style="font-size:0.75rem;">破甲值</span>
+                        <input type="number" style="width:60px;" id="c-pen" value="0">
+                    </div>
+                    <div class="calc-field def-input-row" id="row-speed">
+                        <span style="font-size:0.75rem;">高速值</span>
+                        <input type="number" style="width:60px;" id="c-speed" value="0">
+                    </div>
+                    <div class="calc-field def-input-row" id="row-magic">
+                        <span style="font-size:0.75rem;">破魔值</span>
+                        <input type="number" style="width:60px;" id="c-magic" value="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">意志加值</span>
+                        <select id="c-will">
+                            <option value="0">不使用</option>
+                            <option value="3">+3 (完美)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
+            <!-- Defender Section -->
             <div class="calc-section">
                 <div class="calc-section-title def">🛡️ 防禦方 (敵方)</div>
-                <div class="def-tags">
-                    <span class="def-tag physical" data-def="armor" onclick="toggleDefTag('armor')">盔甲</span>
-                    <span class="def-tag physical" data-def="shield" onclick="toggleDefTag('shield')">盾牌</span>
-                    <span class="def-tag physical" data-def="natural" onclick="toggleDefTag('natural')">天生</span>
-                    <span class="def-tag agility" data-def="base" onclick="toggleDefTag('base')">基礎</span>
-                    <span class="def-tag agility" data-def="dodge" onclick="toggleDefTag('dodge')">閃避</span>
-                    <span class="def-tag agility" data-def="block" onclick="toggleDefTag('block')">格擋</span>
-                    <span class="def-tag agility" data-def="shieldBlock" onclick="toggleDefTag('shieldBlock')">盾擋</span>
-                    <span class="def-tag supernatural" data-def="force" onclick="toggleDefTag('force')">力場</span>
-                    <span class="def-tag supernatural" data-def="deflect" onclick="toggleDefTag('deflect')">偏斜</span>
-                    <span class="def-tag supernatural" data-def="magicArmor" onclick="toggleDefTag('magicArmor')">法甲</span>
-                    <span class="def-tag other" data-def="cover" onclick="toggleDefTag('cover')">掩蔽</span>
-                    <span class="def-tag other" data-def="insight" onclick="toggleDefTag('insight')">洞察</span>
-                    <span class="def-tag other" data-def="other" onclick="toggleDefTag('other')">其他</span>
-                </div>
+                <div class="def-tags" id="def-tags"></div>
                 <div class="def-inputs" id="def-inputs"></div>
                 <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
                     <div class="calc-grid">
-                        <div class="calc-field"><span class="calc-label">本回合已受擊次數</span><input type="number" id="c-hits" value="0" min="0"></div>
-                        <div class="calc-field"><span class="calc-label" style="color:var(--accent-orange)">防禦附加成功</span><input type="number" id="c-def-auto" value="0" min="0"></div>
+                        <div class="calc-field">
+                            <span class="calc-label">本回合已受擊次數</span>
+                            <input type="number" id="c-hits" value="0" min="0">
+                        </div>
+                        <div class="calc-field">
+                            <span class="calc-label" style="color:var(--accent-orange)">防禦附加成功</span>
+                            <input type="number" id="c-def-auto" value="0" min="0">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -386,84 +225,10 @@
             </div>
             <div style="text-align:center;padding:15px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
                 <div id="result-main" style="font-size:2rem;font-weight:bold;color:var(--accent-green);">---</div>
-                <div id="result-detail" style="font-size:0.8rem;color:var(--text-dim);margin-top:5px;">一般計算結果顯示於此<br>(BOSS模式請看上方預覽面板)</div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Add Unit Modal -->
-<div class="modal-overlay" id="modal-add-unit">
-    <div class="modal">
-        <div class="modal-header"><span>新增單位</span><button onclick="closeModal('modal-add-unit')">×</button></div>
-        <div class="modal-body">
-            <input type="text" id="add-name" placeholder="名稱">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <input type="number" id="add-hp" value="10" placeholder="HP">
-                <select id="add-type"><option value="enemy">敵方</option><option value="player">我方</option></select>
-            </div>
-            <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
-        </div>
-        <div class="modal-footer">
-            <button class="modal-btn" onclick="closeModal('modal-add-unit')" style="background:var(--bg-card);">取消</button>
-            <button class="modal-btn" onclick="confirmAddUnit()" style="background:var(--accent-green);color:#000;">確認</button>
-        </div>
-    </div>
-</div>
-
-<!-- Batch Modal -->
-<div class="modal-overlay" id="modal-batch">
-    <div class="modal">
-        <div class="modal-header"><span>批量新增</span><button onclick="closeModal('modal-batch')">×</button></div>
-        <div class="modal-body">
-            <input type="text" id="batch-prefix" placeholder="前綴 (例: 雜兵)">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="calc-field"><span class="calc-label">起始編號</span><input type="number" id="batch-start" value="1"></div>
-                <div class="calc-field"><span class="calc-label">數量</span><input type="number" id="batch-count" value="5"></div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="calc-field"><span class="calc-label">HP</span><input type="number" id="batch-hp" value="10"></div>
-                <div class="calc-field"><span class="calc-label">類型</span><select id="batch-type"><option value="enemy">敵方</option><option value="player">我方</option></select></div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button class="modal-btn" onclick="closeModal('modal-batch')" style="background:var(--bg-card);">取消</button>
-            <button class="modal-btn" onclick="confirmBatchAdd()" style="background:var(--accent-green);color:#000;">確認</button>
-        </div>
-    </div>
-</div>
-
-<!-- HP Modify Modal -->
-<div class="modal-overlay" id="modal-hp">
-    <div class="modal">
-        <div class="modal-header"><span id="hp-modal-title">修改 HP</span><button onclick="closeModal('modal-hp')">×</button></div>
-        <div class="modal-body">
-            <div id="hp-modal-mode-damage" style="display:none;">
-                <div style="margin-bottom:10px;color:var(--text-dim);">選擇傷害類型：</div>
-                <div style="display:flex;gap:8px;margin-bottom:15px;">
-                    <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('b')">B 傷 (鈍擊)</button>
-                    <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('l')">L 傷 (穿刺)</button>
-                    <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('a')">A 傷 (惡化)</button>
+                <div id="result-detail" style="font-size:0.8rem;color:var(--text-dim);margin-top:5px;">
+                    一般計算結果顯示於此<br>(BOSS模式請看上方預覽面板)
                 </div>
             </div>
-            <div id="hp-modal-mode-heal" style="display:none;">
-                <div style="margin-bottom:10px;color:var(--text-dim);">選擇要治療的傷勢類型：</div>
-                <div style="display:flex;gap:8px;margin-bottom:15px;">
-                    <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('heal-b')">治療 B 傷</button>
-                    <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('heal-l')">治療 L 傷</button>
-                    <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('heal-a')">治療 A 傷</button>
-                </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span class="calc-label" style="white-space:nowrap;">數量：</span>
-                <input type="number" id="hp-amount" value="1" min="1" style="flex:1;text-align:center;font-size:1.2rem;">
-            </div>
-            <input type="hidden" id="hp-target-id">
-            <input type="hidden" id="hp-action-type" value="b">
-        </div>
-        <div class="modal-footer">
-            <button class="modal-btn" onclick="closeModal('modal-hp')" style="background:var(--bg-card);">取消</button>
-            <button class="modal-btn" onclick="confirmHpModify()" style="background:var(--accent-green);color:#000;">確認</button>
         </div>
     </div>
 </div>
@@ -2464,5 +2229,19 @@ document.addEventListener('DOMContentLoaded', () => {
     setupKeyboardControls();
 });
 </script>
+<!-- Modals -->
+<div id="modals-container"></div>
+
+<!-- JS 檔案 - 同一層級，順序很重要！ -->
+<script src="config.js"></script>
+<script src="state.js"></script>
+<script src="utils.js"></script>
+<script src="connection.js"></script>
+<script src="camera.js"></script>
+<script src="map.js"></script>
+<script src="units.js"></script>
+<script src="calculator.js"></script>
+<script src="modals.js"></script>
+<script src="main.js"></script>
 </body>
 </html>

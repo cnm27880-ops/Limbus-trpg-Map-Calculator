@@ -122,8 +122,34 @@ function renderMap() {
     const grid = document.getElementById('battle-map');
     if (!grid) return;
 
+    // ===== 防呆機制：檢查地圖資料是否已載入 =====
+    if (!state.mapData || state.mapData.length === 0 || !Array.isArray(state.mapData)) {
+        grid.innerHTML = `
+            <div style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                text-align: center;
+                color: var(--text-dim);
+                padding: 30px;
+                background: var(--bg-card);
+                border: 1px dashed var(--border);
+                border-radius: 12px;
+                max-width: 300px;
+            ">
+                <div style="font-size: 2rem; margin-bottom: 10px;">⏳</div>
+                <div style="font-size: 1.1rem; margin-bottom: 8px; color: var(--accent-yellow);">正在讀取房間資料...</div>
+                <div style="font-size: 0.8rem; line-height: 1.5;">
+                    如果持續顯示此訊息，<br>請檢查連線狀態或重新整理頁面
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
-    
+
     grid.style.gridTemplateColumns = `repeat(${state.mapW}, var(--grid-size))`;
     grid.innerHTML = '';
     
@@ -271,12 +297,15 @@ function renderMap() {
  * @param {number} y - Y 座標
  * @param {Event} e - 事件物件
  */
+// 地圖同步節流器
+let mapSyncTimeout = null;
+
 function handleMapInput(x, y, e) {
     if (currentTool === 'cursor') return;
     if (myRole !== 'st') return;
 
     let newVal = (currentTool === 'floor') ? 0 : parseInt(currentTool);
-    
+
     if (state.mapData[y][x] !== newVal) {
         state.mapData[y][x] = newVal;
 
@@ -284,7 +313,7 @@ function handleMapInput(x, y, e) {
         if (e && e.target && e.target.classList.contains('cell')) {
             const theme = getCurrentTheme();
             const tileDef = theme.tiles.find(t => t.id === newVal);
-            
+
             if (tileDef) {
                 e.target.style.backgroundColor = tileDef.color;
                 if (tileDef.name.includes('牆') || tileDef.name.includes('掩體')) {
@@ -299,6 +328,18 @@ function handleMapInput(x, y, e) {
         } else {
             // 如果無法直接操作 DOM，則回退到重繪
             renderAll();
+        }
+
+        // Firebase 同步：使用節流機制，避免過於頻繁的更新
+        if (typeof syncMapData === 'function') {
+            // 清除舊的計時器
+            if (mapSyncTimeout) clearTimeout(mapSyncTimeout);
+
+            // 延遲 500ms 後同步（等待用戶完成連續繪製）
+            mapSyncTimeout = setTimeout(() => {
+                syncMapData();
+                mapSyncTimeout = null;
+            }, 500);
         }
     }
 }

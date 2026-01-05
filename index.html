@@ -3,8 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Limbus Command v7.5</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <title>Limbus Command v7.5 (Firebase)</title>
+
+    <!-- Firebase SDK (使用 Compat 版本以支援舊版語法) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <!-- CSS 檔案 - 同一層級 -->
     <link rel="stylesheet" href="main.css">
@@ -244,10 +248,17 @@
 
 <!-- JS 檔案 - 同一層級，順序很重要！ -->
 <script src="config.js"></script>
+
+<!-- Firebase 配置 - 必須在其他模組之前載入 -->
+<script src="firebase-config.js"></script>
+
 <script src="state.js"></script>
 <script src="utils.js"></script>
 <script src="storage.js"></script>
-<script src="connection.js"></script>
+
+<!-- Firebase 連線模組 - 替代原本的 P2P 連線 -->
+<script src="firebase-connection.js"></script>
+
 <script src="camera.js"></script>
 <script src="map.js"></script>
 <script src="units.js"></script>

@@ -4,16 +4,14 @@
  */
 
 // ===== 全域互動狀態變數 =====
-var isDraggingMap = false;
-var isDraggingToken = false;
-var isPaintingDrag = false; // 用於地圖繪製拖曳
+// 注意：isDraggingMap, isDraggingToken, isPaintingDrag 已在 state.js 中定義
+// 此處不需要重複宣告
 
+// Token 拖曳相關變數
 var draggedUnit = null;
 var draggedElement = null;
 var dragStartPos = { x: 0, y: 0 };
 var tokenStartPos = { x: 0, y: 0 };
-var lastPointer = { x: 0, y: 0 };
-var lastDist = 0; // 用於縮放
 
 // ===== 相機事件初始化 =====
 /**

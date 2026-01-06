@@ -49,43 +49,62 @@
 
 /* ===== BOSS Token ===== */
 .token.boss {
-    border: none !important; /* 移除原本的白/紅/綠邊框 */
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7); /* 立體陰影 */
-    position: relative;
+    /* 1. 修正錯位問題：強制使用絕對定位，讓它回到地圖座標上 */
+    position: absolute !important;
     
-    /* 關鍵修正 1：強制加上黑色背景 */
-    /* 這樣就算圖片讀不到，你也看得到一顆黑球，不會變成空氣 */
-    background-color: #000; 
+    /* 2. 移除衝突的樣式 */
+    border: none !important;
     
-    /* 關鍵修正 2：提高層級 */
-    /* 確保 BOSS 永遠蓋在其他棋子上面，不會被蓋住導致點不到 */
-    z-index: 50; 
+    /* 3. 允許金框突出：這是讓金框能超出圓形的關鍵 */
+    overflow: visible; 
+    
+    /* 4. 設定圓形 */
+    border-radius: 50%;
+    
+    /* 5. 修正方形露餡問題：使用內縮陰影來製作「黑色底色」 */
+    /* 因為 overflow: visible 會讓 background-color 變成方形，但 box-shadow 會保持圓形 */
+    background-color: transparent; 
+    box-shadow: 
+        inset 0 0 0 500px #000,           /* 偽裝成黑色背景的內陰影 */
+        0 4px 15px rgba(0, 0, 0, 0.8);    /* 外部的立體陰影 */
+        
+    /* 6. 層級設定：確保 BOSS 永遠壓在其他棋子上面 */
+    z-index: 50;
 }
 
+/* 金框圖層 */
 .token.boss::after {
     content: '';
     position: absolute;
+    
+    /* 7. 金框大小與定位：稍微大一點點以包覆棋子 */
     width: 115%;
     height: 115%;
-    top: -7.5%;
+    top: -7.5%;   /* (115 - 100) / 2 = 7.5，讓它置中 */
     left: -7.5%;
     
-    /* 關鍵修正 3：改用 Raw 網址 */
-    /* 這才是圖片的真實路徑，讀取成功率最高 */
+    /* 8. 圖片來源：使用 GitHub Raw 連結 (最穩定) */
     background-image: url('https://raw.githubusercontent.com/cnm27880-ops/Limbus-trpg-Map-Calculator/main/boss_frame.png');
     
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
+    
+    /* 9. 穿透點擊：確保點到框框也能選取到底下的棋子 */
+    pointer-events: none;
     z-index: 51;
-    pointer-events: none; /* 讓滑鼠點擊可以穿透圖片，點到下面的棋子 */
 }
 
-/* BOSS 被選取時的特效 */
+/* BOSS 被選取時的狀態 */
 .token.boss.selected {
-    transform: scale(1.15);
-    /* 除了陰影外，加一個明顯的黃色光圈，讓你知道選到了 */
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7), 0 0 0 3px var(--accent-yellow);
+    /* 放大一點點 */
+    transform: scale(1.05);
+    
+    /* 加上黃色光暈，不影響原本的黑色內陰影 */
+    box-shadow: 
+        inset 0 0 0 500px #000,           /* 保持黑色背景 */
+        0 0 0 3px var(--accent-yellow),   /* 選取外框 */
+        0 0 20px var(--accent-yellow);    /* 選取光暈 */
 }
 
 /* ===== Units Page ===== */

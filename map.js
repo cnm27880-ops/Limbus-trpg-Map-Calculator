@@ -288,8 +288,16 @@ function renderMap() {
     sortedUnits.forEach((u, idx) => {
         const t = document.createElement('div');
         const unitSize = u.size || 1;  // 預設為 1x1
+        const isBoss = u.isBoss || u.type === 'boss';
 
-        t.className = `token ${u.type} ${u.id === selectedUnitId ? 'selected' : ''}`;
+        // 組合 class 名稱
+        let tokenClasses = ['token', u.type];
+        if (u.id === selectedUnitId) tokenClasses.push('selected');
+        if (isBoss) tokenClasses.push('boss');
+        if (unitSize === 2) tokenClasses.push('size-2x2');
+        if (unitSize === 3) tokenClasses.push('size-3x3');
+        
+        t.className = tokenClasses.join(' ');
         t.dataset.unitId = u.id;
 
         // 根據單位大小計算 Token 尺寸
@@ -302,18 +310,46 @@ function renderMap() {
         t.style.top = (u.y * gridSize + 2) + 'px';
 
         // 大型單位 z-index 較低，小型單位較高
-        t.style.zIndex = 10 + (3 - unitSize);
+        // BOSS 有更高的 z-index
+        if (isBoss) {
+            t.style.zIndex = 50 + (3 - unitSize);
+        } else {
+            t.style.zIndex = 10 + (3 - unitSize);
+        }
 
         // 大型單位調整字體大小
         if (unitSize > 1) {
             t.style.fontSize = (16 * unitSize * 0.8) + 'px';
-            t.style.borderRadius = '12px';  // 大型單位邊角更圓潤
+            // 非 BOSS 的大型單位邊角更圓潤
+            if (!isBoss) {
+                t.style.borderRadius = '12px';
+            }
         }
 
+        // ===== 頭像處理 =====
         if (u.avatar) {
-            t.style.backgroundImage = `url(${u.avatar})`;
+            if (isBoss) {
+                // BOSS 使用 CSS 變數，讓 ::before 偽元素顯示頭像
+                // 這樣頭像會被 ::before 的 overflow:hidden 裁切成圓形
+                // 而 ::after 的金框不受影響
+                t.style.setProperty('--avatar-url', `url(${u.avatar})`);
+            } else {
+                // 一般單位直接設定背景圖片
+                t.style.backgroundImage = `url(${u.avatar})`;
+            }
         } else {
-            t.innerText = (u.name && u.name.length > 0) ? u.name[0].toUpperCase() : '?';
+            // 沒有頭像時顯示名字首字
+            const initial = (u.name && u.name.length > 0) ? u.name[0].toUpperCase() : '?';
+            if (isBoss) {
+                // BOSS 需要特殊處理，因為 ::before 佔據了整個空間
+                // 創建一個內層 span 來顯示文字
+                const textSpan = document.createElement('span');
+                textSpan.style.cssText = 'position:relative;z-index:50;';
+                textSpan.innerText = initial;
+                t.appendChild(textSpan);
+            } else {
+                t.innerText = initial;
+            }
         }
 
         t.onpointerdown = (e) => {
@@ -389,7 +425,7 @@ function handleMapInput(x, y, e) {
 // ===== 選擇與部署 =====
 /**
  * 選擇單位
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  */
 function selectUnit(id) {
     selectedUnitId = id;
@@ -407,7 +443,7 @@ function clearSelection() {
 
 /**
  * 開始部署單位
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  */
 function startDeploy(id) {
     const u = findUnitById(id);
@@ -427,7 +463,7 @@ function startDeploy(id) {
 
 /**
  * 收回單位
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  */
 function recallUnit(id) {
     const u = findUnitById(id);
@@ -494,7 +530,7 @@ function updateTileInfo(x, y) {
 
 // ===== 地圖大小監聽器 =====
 /**
- * 初始化地圖大小輸入框的監聽器
+ * 初始化地圖大小輸入框的監聯器
  * 當輸入框變更時，標記「套用」按鈕為待儲存狀態
  */
 function initMapSizeListeners() {

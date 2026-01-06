@@ -20,6 +20,8 @@
     cursor: grab;
     transition: transform 0.1s, left 0.15s, top 0.15s;
     touch-action: none;
+    /* 確保圖片被裁切成圓形 */
+    overflow: hidden;
 }
 
 .token:active {
@@ -47,13 +49,60 @@
     border-color: var(--accent-green);
 }
 
-/* ===== BOSS Token ===== */
-.token.boss {
-    border: none !important;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
-    position: relative;
+/* ===== 大型 Token (2x2, 3x3 等) ===== */
+.token.size-2x2 {
+    width: calc(var(--grid-size) * 2 - 4px);
+    height: calc(var(--grid-size) * 2 - 4px);
+    font-size: 24px;
 }
 
+.token.size-3x3 {
+    width: calc(var(--grid-size) * 3 - 4px);
+    height: calc(var(--grid-size) * 3 - 4px);
+    font-size: 32px;
+}
+
+/* ===== BOSS Token - 重新設計結構 ===== */
+/* 
+ * 解決方案：使用偽元素 ::before 來裝頭像並裁切
+ * ::before = 圓形頭像（裁切）
+ * ::after = 金色外框（不裁切）
+ */
+.token.boss {
+    position: absolute !important;
+    z-index: 50;
+    
+    /* 關鍵：讓容器本身透明且不裁切 */
+    border-radius: 50%;
+    overflow: visible !important;  /* 讓金框能顯示 */
+    border: none !important;
+    background: none !important;   /* 移除直接的背景圖 */
+    background-color: transparent !important;
+    
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
+}
+
+/* 頭像層 - 使用 ::before，會被裁切成圓形 */
+.token.boss::before {
+    content: '';
+    position: absolute;
+    width: 88%;
+    height: 88%;
+    top: 6%;
+    left: 6%;
+    border-radius: 50%;
+    overflow: hidden;
+    
+    /* 頭像將通過 JS 設定 --avatar-url 變數 */
+    background-image: var(--avatar-url, none);
+    background-size: cover;
+    background-position: center;
+    background-color: #000;
+    
+    z-index: 49;  /* 在金框下面 */
+}
+
+/* 金框層 - 使用 ::after，不會被裁切 */
 .token.boss::after {
     content: '';
     position: absolute;
@@ -61,17 +110,40 @@
     height: 115%;
     top: -7.5%;
     left: -7.5%;
-    background-image: url('https://github.com/cnm27880-ops/Limbus-trpg-Map-Calculator/blob/main/boss_frame.png?raw=true');
+    background-image: url('https://raw.githubusercontent.com/cnm27880-ops/Limbus-trpg-Map-Calculator/main/boss_frame.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    z-index: 50;
     pointer-events: none;
+    z-index: 51;  /* 在頭像上面 */
 }
 
+/* BOSS 選取效果 */
 .token.boss.selected {
-    transform: scale(1.15);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7), 0 0 0 3px var(--accent-yellow);
+    transform: scale(1.05);
+    box-shadow: 
+        0 4px 15px rgba(0, 0, 0, 0.8),
+        0 0 0 3px var(--accent-yellow),
+        0 0 20px var(--accent-yellow);
+}
+
+/* BOSS 拖曳效果 */
+.token.boss.dragging {
+    z-index: 100;
+    transition: none;
+    opacity: 0.9;
+    transform: scale(1.05);
+}
+
+/* ===== 大型 BOSS Token ===== */
+.token.boss.size-2x2::before,
+.token.boss.size-2x2::after {
+    /* 保持相同比例 */
+}
+
+.token.boss.size-3x3::before,
+.token.boss.size-3x3::after {
+    /* 保持相同比例 */
 }
 
 /* ===== Units Page ===== */
@@ -161,8 +233,10 @@
     justify-content: center;
     font-weight: 600;
     background-size: cover;
+    background-position: center;
     flex-shrink: 0;
     cursor: pointer;
+    overflow: hidden;  /* 確保頭像被裁切 */
 }
 
 .unit-avatar.enemy {

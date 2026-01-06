@@ -3,6 +3,11 @@
  * 處理單位渲染、HP 修改、回合等
  */
 
+// ===== 頭像解析度設定 =====
+// 根據 token 最大尺寸決定（3x3 = 150px，加上 Retina 螢幕需求）
+const AVATAR_SIZE = 256;  // 從 64 提升到 256，確保 3x3 token 在高解析度螢幕也清晰
+const AVATAR_QUALITY = 0.85;  // 較高品質，但仍保持合理檔案大小
+
 // ===== 渲染函數 =====
 /**
  * 渲染所有內容
@@ -56,6 +61,7 @@ function renderUnitsList() {
         const isSt = myRole === 'st';
         const isMyUnit = u.ownerId === myPlayerId;
         const hideDetails = isEnemy && !isSt && !isMyUnit;
+        const isBoss = u.isBoss || u.type === 'boss';
 
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
         if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
@@ -104,11 +110,26 @@ function renderUnitsList() {
 
         // 使用者自己的單位有特殊邊框
         const myUnitStyle = isMyUnit ? 'border-left-width:6px;' : '';
+        
+        // 單位卡片類別
+        const cardClasses = [
+            'unit-card',
+            u.type,
+            isTurn ? 'active-turn' : '',
+            isBoss ? 'boss' : ''
+        ].filter(Boolean).join(' ');
+        
+        // 頭像類別
+        const avatarClasses = [
+            'unit-avatar',
+            u.type,
+            isBoss ? 'boss' : ''
+        ].filter(Boolean).join(' ');
 
         return `
-            <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="${myUnitStyle}">
+            <div class="${cardClasses}" style="${myUnitStyle}">
                 <div class="unit-header">
-                    <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
+                    <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
                         <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
@@ -138,6 +159,7 @@ function renderSidebarUnits() {
         const isTurn = idx === state.turnIdx;
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
+        const isBoss = u.isBoss || u.type === 'boss';
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
 
@@ -153,9 +175,17 @@ function renderSidebarUnits() {
             : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L`;
 
         const unitName = u.name || 'Unknown';
+        
+        // 單位卡片類別
+        const cardClasses = [
+            'unit-card',
+            u.type,
+            isTurn ? 'active-turn' : '',
+            isBoss ? 'boss' : ''
+        ].filter(Boolean).join(' ');
 
         return `
-            <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="padding:8px;margin-bottom:6px;">
+            <div class="${cardClasses}" style="padding:8px;margin-bottom:6px;">
                 <div style="display:flex;justify-content:space-between;">
                     <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(unitName)}</span>
                     <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init || 0}</span>
@@ -170,7 +200,7 @@ function renderSidebarUnits() {
 // ===== 單位操作 =====
 /**
  * 修改單位 HP
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  * @param {string} type - 傷害類型
  * @param {number} amount - 數量
  */
@@ -199,7 +229,7 @@ function modifyHP(id, type, amount) {
 
 /**
  * 刪除單位
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  */
 function deleteUnit(id) {
     const u = findUnitById(id);
@@ -227,7 +257,7 @@ function deleteUnit(id) {
 
 /**
  * 更新先攻值
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  * @param {string|number} val - 新的先攻值
  */
 function updateInit(id, val) {
@@ -288,7 +318,7 @@ function nextTurn() {
 // ===== 頭像上傳 =====
 /**
  * 上傳頭像
- * @param {number} id - 單位 ID
+ * @param {string} id - 單位 ID
  */
 function uploadAvatar(id) {
     const u = findUnitById(id);
@@ -304,6 +334,39 @@ function uploadAvatar(id) {
 }
 
 /**
+ * 處理頭像圖片，保持高品質
+ * @param {HTMLImageElement} img - 原始圖片
+ * @returns {string} Base64 圖片資料
+ */
+function processAvatarImage(img) {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // 設定輸出尺寸
+    canvas.width = AVATAR_SIZE;
+    canvas.height = AVATAR_SIZE;
+    
+    // 計算裁切區域（正方形置中裁切）
+    const size = Math.min(img.width, img.height);
+    const sx = (img.width - size) / 2;
+    const sy = (img.height - size) / 2;
+    
+    // 啟用圖片平滑化
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    // 繪製裁切後的圖片
+    ctx.drawImage(
+        img,
+        sx, sy, size, size,  // 來源區域（正方形裁切）
+        0, 0, AVATAR_SIZE, AVATAR_SIZE  // 目標區域
+    );
+    
+    // 輸出為 JPEG（較小檔案）或 PNG（透明背景）
+    return canvas.toDataURL('image/jpeg', AVATAR_QUALITY);
+}
+
+/**
  * 初始化檔案上傳處理器
  */
 function initFileUpload() {
@@ -314,37 +377,58 @@ function initFileUpload() {
         if (!uploadTargetId) return;
         
         const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = ev => {
-                const img = new Image();
-                img.onload = () => {
-                    const cvs = document.createElement('canvas');
-                    cvs.width = 64;
-                    cvs.height = 64;
-                    cvs.getContext('2d').drawImage(img, 0, 0, 64, 64);
-                    const avatarData = cvs.toDataURL('image/jpeg', 0.7);
-
-                    if (myRole === 'st') {
-                        const u = findUnitById(uploadTargetId);
-                        if (u) {
-                            u.avatar = avatarData;
-                            broadcastState();
-                        }
-                    } else {
-                        sendToHost({
-                            type: 'uploadAvatar',
-                            playerId: myPlayerId,
-                            unitId: uploadTargetId,
-                            avatar: avatarData
-                        });
-                    }
-                    uploadTargetId = null;
-                };
-                img.src = ev.target.result;
-            };
-            reader.readAsDataURL(file);
+        if (!file) return;
+        
+        // 檢查檔案類型
+        if (!file.type.startsWith('image/')) {
+            showToast('請選擇圖片檔案');
+            return;
         }
+        
+        // 檢查檔案大小（最大 5MB）
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('圖片過大（最大 5MB）');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => {
+                // 使用新的高品質處理函數
+                const avatarData = processAvatarImage(img);
+
+                if (myRole === 'st') {
+                    const u = findUnitById(uploadTargetId);
+                    if (u) {
+                        u.avatar = avatarData;
+                        broadcastState();
+                    }
+                } else {
+                    sendToHost({
+                        type: 'uploadAvatar',
+                        playerId: myPlayerId,
+                        unitId: uploadTargetId,
+                        avatar: avatarData
+                    });
+                }
+                
+                showToast('頭像已上傳');
+                uploadTargetId = null;
+            };
+            img.onerror = () => {
+                showToast('圖片載入失敗');
+                uploadTargetId = null;
+            };
+            img.src = ev.target.result;
+        };
+        reader.onerror = () => {
+            showToast('檔案讀取失敗');
+            uploadTargetId = null;
+        };
+        reader.readAsDataURL(file);
+        
+        // 清除 input 以便再次選擇相同檔案
         e.target.value = '';
     });
 }

@@ -26,6 +26,7 @@ function initModals() {
                         <select id="add-type">
                             <option value="enemy">敵方</option>
                             <option value="player">我方</option>
+                            <option value="boss">BOSS (首領)</option>
                         </select>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
@@ -78,6 +79,7 @@ function initModals() {
                             <select id="batch-type">
                                 <option value="enemy">敵方</option>
                                 <option value="player">我方</option>
+                                <option value="boss">BOSS (首領)</option>
                             </select>
                         </div>
                     </div>

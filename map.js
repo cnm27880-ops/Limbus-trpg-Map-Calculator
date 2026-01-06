@@ -313,7 +313,7 @@ function renderMap() {
         if (u.avatar) {
             t.style.backgroundImage = `url(${u.avatar})`;
         } else {
-            t.innerText = u.name[0].toUpperCase();
+            t.innerText = (u.name && u.name.length > 0) ? u.name[0].toUpperCase() : '?';
         }
 
         t.onpointerdown = (e) => {

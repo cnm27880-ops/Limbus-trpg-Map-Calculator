@@ -47,6 +47,33 @@
     border-color: var(--accent-green);
 }
 
+/* ===== BOSS Token ===== */
+.token.boss {
+    border: none !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+    position: relative;
+}
+
+.token.boss::after {
+    content: '';
+    position: absolute;
+    width: 115%;
+    height: 115%;
+    top: -7.5%;
+    left: -7.5%;
+    background-image: url('./boss_frame.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    z-index: 50;
+    pointer-events: none;
+}
+
+.token.boss.selected {
+    transform: scale(1.15);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7), 0 0 0 3px var(--accent-yellow);
+}
+
 /* ===== Units Page ===== */
 #page-units {
     flex-direction: column;
@@ -112,6 +139,11 @@
     background: #1f1f24;
 }
 
+.unit-card.boss {
+    border-left-color: var(--accent-purple);
+    background: linear-gradient(135deg, var(--bg-card) 0%, rgba(142, 36, 170, 0.1) 100%);
+}
+
 .unit-header {
     display: flex;
     align-items: center;
@@ -141,6 +173,12 @@
 .unit-avatar.player {
     border-color: var(--accent-green);
     color: var(--accent-green);
+}
+
+.unit-avatar.boss {
+    border-color: var(--accent-purple);
+    color: var(--accent-purple);
+    box-shadow: 0 0 8px rgba(142, 36, 170, 0.5);
 }
 
 /* ===== HP Bar ===== */

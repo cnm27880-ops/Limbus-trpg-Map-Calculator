@@ -45,10 +45,12 @@ function renderUnitsList() {
 
     list.innerHTML = state.units.map((u, idx) => {
         const isTurn = idx === state.turnIdx;
-        const a = u.hpArr.filter(x => x === 3).length;
-        const l = u.hpArr.filter(x => x === 2).length;
-        const b = u.hpArr.filter(x => x === 1).length;
-        const empty = u.maxHp - a - l - b;
+        const hpArr = u.hpArr || [];
+        const maxHp = u.maxHp || hpArr.length || 1;
+        const a = hpArr.filter(x => x === 3).length;
+        const l = hpArr.filter(x => x === 2).length;
+        const b = hpArr.filter(x => x === 1).length;
+        const empty = maxHp - a - l - b;
 
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
@@ -66,12 +68,12 @@ function renderUnitsList() {
         }
 
         // HP 條
-        const bar = u.hpArr.map(h => {
+        const bar = hpArr.map(h => {
             let cls = 'hp-empty';
             if (h === 1) cls = 'hp-b';
             if (h === 2) cls = 'hp-l';
             if (h === 3) cls = 'hp-a';
-            return `<div class="hp-chunk ${cls}" style="width:${100 / u.maxHp}%"></div>`;
+            return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
         }).join('');
 
         // 部署按鈕
@@ -97,7 +99,8 @@ function renderUnitsList() {
 
         const avaStyle = u.avatar ? `background-image:url(${u.avatar});color:transparent;` : '';
         const initReadonly = !canControlUnit(u) ? 'readonly' : '';
-        const initInput = `<input type="number" class="unit-init" value="${u.init}" onchange="updateInit('${u.id}',this.value)" ${initReadonly} style="width:50px;text-align:center;">`;
+        const initInput = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${initReadonly} style="width:50px;text-align:center;">`;
+        const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
         // 使用者自己的單位有特殊邊框
         const myUnitStyle = isMyUnit ? 'border-left-width:6px;' : '';
@@ -105,7 +108,7 @@ function renderUnitsList() {
         return `
             <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="${myUnitStyle}">
                 <div class="unit-header">
-                    <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : u.name[0]}</div>
+                    <div class="unit-avatar ${u.type}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
                         <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
@@ -135,23 +138,27 @@ function renderSidebarUnits() {
         const isTurn = idx === state.turnIdx;
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
-        
-        const bar = `<div class="hp-bar-wrap" style="height:6px;margin-top:4px;">` + 
-            u.hpArr.map(h => {
+        const hpArr = u.hpArr || [];
+        const maxHp = u.maxHp || hpArr.length || 1;
+
+        const bar = `<div class="hp-bar-wrap" style="height:6px;margin-top:4px;">` +
+            hpArr.map(h => {
                 const cls = h === 0 ? 'hp-empty' : h === 1 ? 'hp-b' : h === 2 ? 'hp-l' : 'hp-a';
-                return `<div class="hp-chunk ${cls}" style="width:${100 / u.maxHp}%"></div>`;
-            }).join('') + 
+                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
+            }).join('') +
             `</div>`;
 
-        let statusTxt = isEnemy && !isSt 
-            ? getVagueStatus(u) 
-            : `${u.hpArr.filter(x => x === 3).length}A ${u.hpArr.filter(x => x === 2).length}L`;
+        let statusTxt = isEnemy && !isSt
+            ? getVagueStatus(u)
+            : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L`;
+
+        const unitName = u.name || 'Unknown';
 
         return `
             <div class="unit-card ${u.type} ${isTurn ? 'active-turn' : ''}" style="padding:8px;margin-bottom:6px;">
                 <div style="display:flex;justify-content:space-between;">
-                    <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(u.name)}</span>
-                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init}</span>
+                    <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(unitName)}</span>
+                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init || 0}</span>
                 </div>
                 <div style="font-size:0.75rem;color:#777;">${statusTxt}</div>
                 ${bar}

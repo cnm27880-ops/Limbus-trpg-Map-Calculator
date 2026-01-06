@@ -278,15 +278,37 @@ function renderMap() {
         }
     }
     
-    // 渲染 Tokens
-    state.units.filter(u => u.x >= 0).forEach(u => {
+    // 渲染 Tokens（先渲染大型單位，再渲染小型單位，確保小單位不被遮蓋）
+    const sortedUnits = state.units.filter(u => u.x >= 0).sort((a, b) => {
+        const sizeA = a.size || 1;
+        const sizeB = b.size || 1;
+        return sizeB - sizeA;  // 大型單位先渲染（z-index 較低）
+    });
+
+    sortedUnits.forEach((u, idx) => {
         const t = document.createElement('div');
+        const unitSize = u.size || 1;  // 預設為 1x1
+
         t.className = `token ${u.type} ${u.id === selectedUnitId ? 'selected' : ''}`;
         t.dataset.unitId = u.id;
+
+        // 根據單位大小計算 Token 尺寸
+        const tokenSize = gridSize * unitSize - 4;  // -4 是邊框空間
+        t.style.width = tokenSize + 'px';
+        t.style.height = tokenSize + 'px';
 
         // +2 是為了配合 CSS 的邊框內縮
         t.style.left = (u.x * gridSize + 2) + 'px';
         t.style.top = (u.y * gridSize + 2) + 'px';
+
+        // 大型單位 z-index 較低，小型單位較高
+        t.style.zIndex = 10 + (3 - unitSize);
+
+        // 大型單位調整字體大小
+        if (unitSize > 1) {
+            t.style.fontSize = (16 * unitSize * 0.8) + 'px';
+            t.style.borderRadius = '12px';  // 大型單位邊角更圓潤
+        }
 
         if (u.avatar) {
             t.style.backgroundImage = `url(${u.avatar})`;
@@ -306,7 +328,7 @@ function renderMap() {
             // 移動邏輯：選取後點擊地圖格子來移動（見 cell.onpointerdown）
             selectUnit(u.id);
         };
-        
+
         grid.appendChild(t);
     });
 }

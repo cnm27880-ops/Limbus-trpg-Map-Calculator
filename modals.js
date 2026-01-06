@@ -28,7 +28,19 @@ function initModals() {
                             <option value="player">我方</option>
                         </select>
                     </div>
-                    <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+                        <div class="calc-field">
+                            <span class="calc-label">單位大小</span>
+                            <select id="add-size">
+                                <option value="1">1x1 (普通)</option>
+                                <option value="2">2x2 (大型)</option>
+                                <option value="3">3x3 (巨型)</option>
+                            </select>
+                        </div>
+                        <div class="calc-field" style="display:flex;align-items:flex-end;">
+                            <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="modal-btn" onclick="closeModal('modal-add-unit')" style="background:var(--bg-card);">取消</button>
@@ -68,6 +80,14 @@ function initModals() {
                                 <option value="player">我方</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="calc-field" style="margin-top:10px;">
+                        <span class="calc-label">單位大小</span>
+                        <select id="batch-size" style="width:100%;">
+                            <option value="1">1x1 (普通)</option>
+                            <option value="2">2x2 (大型)</option>
+                            <option value="3">3x3 (巨型)</option>
+                        </select>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -158,10 +178,11 @@ function confirmAddUnit() {
     const name = document.getElementById('add-name').value || 'Unit';
     const hp = parseInt(document.getElementById('add-hp').value) || 10;
     const type = document.getElementById('add-type').value;
+    const size = parseInt(document.getElementById('add-size').value) || 1;
     const useAvatar = document.getElementById('add-avatar').checked;
 
     if (myRole === 'st') {
-        const u = createUnit(name, hp, type, myPeerId, myName);
+        const u = createUnit(name, hp, type, myPeerId, myName, size);
         if (useAvatar) {
             uploadTargetId = u.id;
             document.getElementById('file-upload').click();
@@ -177,7 +198,8 @@ function confirmAddUnit() {
             name: name,
             hp: hp,
             unitType: type,
-            playerName: myName
+            playerName: myName,
+            size: size
         });
         closeModal('modal-add-unit');
         showToast('已請求新增單位');
@@ -198,11 +220,12 @@ function confirmBatchAdd() {
     const count = parseInt(document.getElementById('batch-count').value) || 5;
     const hp = parseInt(document.getElementById('batch-hp').value) || 10;
     const type = document.getElementById('batch-type').value;
+    const size = parseInt(document.getElementById('batch-size').value) || 1;
 
     for (let i = 0; i < count; i++) {
-        state.units.push(createUnit(`${prefix}${start + i}`, hp, type, myPeerId, myName));
+        state.units.push(createUnit(`${prefix}${start + i}`, hp, type, myPeerId, myName, size));
     }
-    
+
     closeModal('modal-batch');
     sendState();
     renderAll();

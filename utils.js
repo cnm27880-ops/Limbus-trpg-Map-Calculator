@@ -174,9 +174,10 @@ function getVagueStatus(unit) {
  * @param {string} type - 類型 ('enemy' 或 'player')
  * @param {string} ownerId - 擁有者 ID
  * @param {string} ownerName - 擁有者名稱
+ * @param {number} size - 單位大小 (1=1x1, 2=2x2, 3=3x3)
  * @returns {Object} 新單位物件
  */
-function createUnit(name, hp, type, ownerId = null, ownerName = null) {
+function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1) {
     return {
         id: Date.now().toString() + '_' + Math.floor(Math.random() * 1000000).toString(),  // Firebase-safe: 纯字符串 ID (无小数点)
         name: name,
@@ -188,7 +189,8 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null) {
         y: -1,
         avatar: null,
         ownerId: ownerId,
-        ownerName: ownerName
+        ownerName: ownerName,
+        size: size  // 單位大小：1=普通, 2=大型, 3=巨型
     };
 }
 

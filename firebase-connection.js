@@ -625,7 +625,7 @@ function sendToHost(message) {
             break;
 
         case 'addUnit':
-            const newUnit = createUnit(message.name, message.hp, message.unitType, myPlayerId, myName);
+            const newUnit = createUnit(message.name, message.hp, message.unitType, message.playerId, message.playerName, message.size || 1);
             roomRef.child(`units/${newUnit.id}`).set(newUnit);
             break;
 

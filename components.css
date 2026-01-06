@@ -20,6 +20,8 @@
     cursor: grab;
     transition: transform 0.1s, left 0.15s, top 0.15s;
     touch-action: none;
+    /* 確保圖片被裁切成圓形 */
+    overflow: hidden;
 }
 
 .token:active {
@@ -47,29 +49,60 @@
     border-color: var(--accent-green);
 }
 
-/* ===== BOSS Token ===== */
+/* ===== 大型 Token (2x2, 3x3 等) ===== */
+.token.size-2x2 {
+    width: calc(var(--grid-size) * 2 - 4px);
+    height: calc(var(--grid-size) * 2 - 4px);
+    font-size: 24px;
+}
+
+.token.size-3x3 {
+    width: calc(var(--grid-size) * 3 - 4px);
+    height: calc(var(--grid-size) * 3 - 4px);
+    font-size: 32px;
+}
+
+/* ===== BOSS Token - 重新設計結構 ===== */
+/* 
+ * 解決方案：使用偽元素 ::before 來裝頭像並裁切
+ * ::before = 圓形頭像（裁切）
+ * ::after = 金色外框（不裁切）
+ */
 .token.boss {
-    /* 1. 定位與層級 */
     position: absolute !important;
     z-index: 50;
     
-    /* 2. 形狀設定：關鍵！ */
-    border-radius: 50%;     /* 設定本體為圓形 */
-    overflow: visible;      /* 允許金框 (::after) 突出去，不被切掉 */
+    /* 關鍵：讓容器本身透明且不裁切 */
+    border-radius: 50%;
+    overflow: visible !important;  /* 讓金框能顯示 */
     border: none !important;
-
-    /* 3. 背景設定 */
-    /* 這邊設定黑色，因為有 border-radius: 50%，所以這個黑底會是圓形的！ */
-    /* 這樣就不會擋到九宮格的角落 */
-    background-color: #000; 
-
-    /* 4. 陰影設定 */
-    /* 移除之前的 inset 陰影，只保留外部的立體陰影 */
-    /* 這樣圖片就不會被蓋住了 */
+    background: none !important;   /* 移除直接的背景圖 */
+    background-color: transparent !important;
+    
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
 }
 
-/* 金框設定 (這段不用動，維持原樣，但我貼出來確保完整) */
+/* 頭像層 - 使用 ::before，會被裁切成圓形 */
+.token.boss::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    
+    /* 頭像將通過 JS 設定 --avatar-url 變數 */
+    background-image: var(--avatar-url, none);
+    background-size: cover;
+    background-position: center;
+    background-color: #000;
+    
+    z-index: 49;  /* 在金框下面 */
+}
+
+/* 金框層 - 使用 ::after，不會被裁切 */
 .token.boss::after {
     content: '';
     position: absolute;
@@ -82,17 +115,35 @@
     background-repeat: no-repeat;
     background-position: center;
     pointer-events: none;
-    z-index: 51;
+    z-index: 51;  /* 在頭像上面 */
 }
 
-/* 選取特效 */
+/* BOSS 選取效果 */
 .token.boss.selected {
     transform: scale(1.05);
-    /* 移除 inset，只保留外部黃色光暈 */
     box-shadow: 
-        0 4px 15px rgba(0, 0, 0, 0.8),    /* 原本的陰影 */
-        0 0 0 3px var(--accent-yellow),   /* 選取外框 */
-        0 0 20px var(--accent-yellow);    /* 選取光暈 */
+        0 4px 15px rgba(0, 0, 0, 0.8),
+        0 0 0 3px var(--accent-yellow),
+        0 0 20px var(--accent-yellow);
+}
+
+/* BOSS 拖曳效果 */
+.token.boss.dragging {
+    z-index: 100;
+    transition: none;
+    opacity: 0.9;
+    transform: scale(1.05);
+}
+
+/* ===== 大型 BOSS Token ===== */
+.token.boss.size-2x2::before,
+.token.boss.size-2x2::after {
+    /* 保持相同比例 */
+}
+
+.token.boss.size-3x3::before,
+.token.boss.size-3x3::after {
+    /* 保持相同比例 */
 }
 
 /* ===== Units Page ===== */
@@ -182,8 +233,10 @@
     justify-content: center;
     font-weight: 600;
     background-size: cover;
+    background-position: center;
     flex-shrink: 0;
     cursor: pointer;
+    overflow: hidden;  /* 確保頭像被裁切 */
 }
 
 .unit-avatar.enemy {

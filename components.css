@@ -49,60 +49,48 @@
 
 /* ===== BOSS Token ===== */
 .token.boss {
-    /* 1. 修正錯位問題：強制使用絕對定位，讓它回到地圖座標上 */
+    /* 1. 定位與層級 */
     position: absolute !important;
-    
-    /* 2. 移除衝突的樣式 */
-    border: none !important;
-    
-    /* 3. 允許金框突出：這是讓金框能超出圓形的關鍵 */
-    overflow: visible; 
-    
-    /* 4. 設定圓形 */
-    border-radius: 50%;
-    
-    /* 5. 修正方形露餡問題：使用內縮陰影來製作「黑色底色」 */
-    /* 因為 overflow: visible 會讓 background-color 變成方形，但 box-shadow 會保持圓形 */
-    background-color: transparent; 
-    box-shadow: 
-        inset 0 0 0 500px #000,           /* 偽裝成黑色背景的內陰影 */
-        0 4px 15px rgba(0, 0, 0, 0.8);    /* 外部的立體陰影 */
-        
-    /* 6. 層級設定：確保 BOSS 永遠壓在其他棋子上面 */
     z-index: 50;
+    
+    /* 2. 形狀設定：關鍵！ */
+    border-radius: 50%;     /* 設定本體為圓形 */
+    overflow: visible;      /* 允許金框 (::after) 突出去，不被切掉 */
+    border: none !important;
+
+    /* 3. 背景設定 */
+    /* 這邊設定黑色，因為有 border-radius: 50%，所以這個黑底會是圓形的！ */
+    /* 這樣就不會擋到九宮格的角落 */
+    background-color: #000; 
+
+    /* 4. 陰影設定 */
+    /* 移除之前的 inset 陰影，只保留外部的立體陰影 */
+    /* 這樣圖片就不會被蓋住了 */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
 }
 
-/* 金框圖層 */
+/* 金框設定 (這段不用動，維持原樣，但我貼出來確保完整) */
 .token.boss::after {
     content: '';
     position: absolute;
-    
-    /* 7. 金框大小與定位：稍微大一點點以包覆棋子 */
     width: 115%;
     height: 115%;
-    top: -7.5%;   /* (115 - 100) / 2 = 7.5，讓它置中 */
+    top: -7.5%;
     left: -7.5%;
-    
-    /* 8. 圖片來源：使用 GitHub Raw 連結 (最穩定) */
     background-image: url('https://raw.githubusercontent.com/cnm27880-ops/Limbus-trpg-Map-Calculator/main/boss_frame.png');
-    
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    
-    /* 9. 穿透點擊：確保點到框框也能選取到底下的棋子 */
     pointer-events: none;
     z-index: 51;
 }
 
-/* BOSS 被選取時的狀態 */
+/* 選取特效 */
 .token.boss.selected {
-    /* 放大一點點 */
     transform: scale(1.05);
-    
-    /* 加上黃色光暈，不影響原本的黑色內陰影 */
+    /* 移除 inset，只保留外部黃色光暈 */
     box-shadow: 
-        inset 0 0 0 500px #000,           /* 保持黑色背景 */
+        0 4px 15px rgba(0, 0, 0, 0.8),    /* 原本的陰影 */
         0 0 0 3px var(--accent-yellow),   /* 選取外框 */
         0 0 20px var(--accent-yellow);    /* 選取光暈 */
 }

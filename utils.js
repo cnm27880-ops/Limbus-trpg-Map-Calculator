@@ -37,15 +37,17 @@ function showToast(message, duration = 2000) {
 
 // ===== 剪貼簿 =====
 /**
- * 複製自己的 Peer ID 到剪貼簿
+ * 複製房間號碼到剪貼簿
  */
 function copyId() {
-    if (!myPeerId) return;
-    navigator.clipboard.writeText(myPeerId).then(() => {
-        showToast('已複製 ID');
-    }).catch(() => {
-        showToast('複製失敗');
-    });
+    // 注意：currentRoomCode 由 firebase-connection.js 提供
+    if (typeof currentRoomCode !== 'undefined' && currentRoomCode) {
+        navigator.clipboard.writeText(currentRoomCode).then(() => {
+            showToast('已複製房間號碼');
+        }).catch(() => {
+            showToast('複製失敗');
+        });
+    }
 }
 
 /**
@@ -156,9 +158,11 @@ function toggleSidebar() {
  * @returns {string} 狀態描述
  */
 function getVagueStatus(unit) {
+    if (!unit || !unit.hpArr || !unit.maxHp) return "未知";
+
     const damaged = unit.hpArr.filter(x => x > 0).length;
     const ratio = damaged / unit.maxHp;
-    
+
     if (ratio === 0) return "完好";
     if (ratio < 0.3) return "輕傷";
     if (ratio < 0.6) return "受傷";

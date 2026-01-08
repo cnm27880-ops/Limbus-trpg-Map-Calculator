@@ -648,6 +648,32 @@ function sendToHost(message) {
         case 'uploadAvatar':
             roomRef.child(`units/${message.unitId}/avatar`).set(message.avatar);
             break;
+
+        case 'updateStatus':
+            const statusUnit = state.units.find(u => u.id === message.unitId);
+            if (statusUnit) {
+                // 初始化 status 物件
+                if (!statusUnit.status) statusUnit.status = {};
+
+                // 刪除舊狀態（如果名稱改變）
+                if (message.oldName && message.oldName !== message.statusName && statusUnit.status[message.oldName] !== undefined) {
+                    delete statusUnit.status[message.oldName];
+                }
+
+                // 更新或刪除狀態
+                if (message.statusValue === '' || message.statusValue === null) {
+                    delete statusUnit.status[message.statusName];
+                    if (message.oldName && message.oldName !== message.statusName) {
+                        delete statusUnit.status[message.oldName];
+                    }
+                } else {
+                    statusUnit.status[message.statusName] = message.statusValue;
+                }
+
+                // 同步到 Firebase
+                roomRef.child(`units/${message.unitId}/status`).set(statusUnit.status);
+            }
+            break;
     }
 }
 

@@ -863,6 +863,31 @@ function handleSTMessage(conn, data) {
                 broadcastState();
             }
             break;
+
+        case 'updateStatus':
+            const unit5 = state.units.find(u => u.id === data.unitId);
+            if (unit5 && unit5.ownerId === playerId) {
+                // 初始化 status 物件
+                if (!unit5.status) unit5.status = {};
+
+                // 刪除舊狀態（如果名稱改變）
+                if (data.oldName && data.oldName !== data.statusName && unit5.status[data.oldName] !== undefined) {
+                    delete unit5.status[data.oldName];
+                }
+
+                // 更新或刪除狀態
+                if (data.statusValue === '' || data.statusValue === null) {
+                    delete unit5.status[data.statusName];
+                    if (data.oldName && data.oldName !== data.statusName) {
+                        delete unit5.status[data.oldName];
+                    }
+                } else {
+                    unit5.status[data.statusName] = data.statusValue;
+                }
+
+                broadcastState();
+            }
+            break;
     }
 }
 

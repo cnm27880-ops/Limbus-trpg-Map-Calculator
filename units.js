@@ -87,6 +87,32 @@ function renderUnitsList() {
             ? `<button class="action-btn" onclick="recallUnit('${u.id}')">📍收回</button>`
             : `<button class="action-btn" onclick="startDeploy('${u.id}')">📍部署</button>`;
 
+        // 狀態標籤
+        let statusBadges = '';
+        if (u.status && Object.keys(u.status).length > 0) {
+            const badges = Object.entries(u.status).map(([statusName, statusValue]) => {
+                const config = STATUS_PRESETS[statusName] || STATUS_PRESETS['default'];
+                const escapedName = escapeHtml(statusName);
+                const escapedValue = escapeHtml(statusValue);
+                return `<span class="status-badge"
+                             data-tooltip="${escapedName}"
+                             style="--badge-color: ${config.color}"
+                             onclick="openStatusModal('${u.id}', '${escapedName}', '${escapedValue}')">
+                    ${config.icon} ${escapedValue}
+                </span>`;
+            }).join('');
+
+            // 顯示 [+] 按鈕（只給可控制的使用者）
+            const addBtn = canControlUnit(u)
+                ? `<span class="status-badge status-add" onclick="openStatusModal('${u.id}')">+</span>`
+                : '';
+
+            statusBadges = `<div class="status-container">${badges}${addBtn}</div>`;
+        } else if (canControlUnit(u)) {
+            // 沒有狀態但可控制：只顯示 [+] 按鈕
+            statusBadges = `<div class="status-container"><span class="status-badge status-add" onclick="openStatusModal('${u.id}')">+</span></div>`;
+        }
+
         // 操作按鈕（只顯示給可控制的使用者）
         let actions = '';
         if (canControlUnit(u)) {
@@ -137,6 +163,7 @@ function renderUnitsList() {
                     ${initInput}
                 </div>
                 <div class="hp-bar-wrap">${bar}</div>
+                ${statusBadges}
                 ${actions}
             </div>
         `;
@@ -247,10 +274,64 @@ function deleteUnit(id) {
         sendState();
         renderAll();
     } else {
-        sendToHost({ 
-            type: 'deleteUnit', 
-            playerId: myPlayerId, 
-            unitId: id 
+        sendToHost({
+            type: 'deleteUnit',
+            playerId: myPlayerId,
+            unitId: id
+        });
+    }
+}
+
+/**
+ * 更新單位狀態
+ * @param {string} unitId - 單位 ID
+ * @param {string} name - 狀態名稱
+ * @param {string} value - 狀態數值（空字串表示刪除）
+ * @param {string} oldName - 舊狀態名稱（用於重新命名或刪除）
+ */
+function updateStatus(unitId, name, value, oldName = null) {
+    const u = findUnitById(unitId);
+    if (!u) return;
+
+    // 權限檢查
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        // 初始化 status 物件（如果不存在）
+        if (!u.status) u.status = {};
+
+        // 如果正在編輯現有狀態且名稱改變，刪除舊狀態
+        if (oldName && oldName !== name && u.status[oldName] !== undefined) {
+            delete u.status[oldName];
+        }
+
+        // 更新或刪除狀態
+        if (value === '' || value === null) {
+            // 刪除狀態
+            delete u.status[name];
+            if (oldName && oldName !== name) {
+                delete u.status[oldName];
+            }
+            showToast('狀態已刪除');
+        } else {
+            // 更新或新增狀態
+            u.status[name] = value;
+            showToast('狀態已更新');
+        }
+
+        broadcastState();
+    } else {
+        // 玩家請求修改
+        sendToHost({
+            type: 'updateStatus',
+            playerId: myPlayerId,
+            unitId: unitId,
+            statusName: name,
+            statusValue: value,
+            oldName: oldName
         });
     }
 }

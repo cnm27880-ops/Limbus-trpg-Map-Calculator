@@ -194,7 +194,8 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1) 
         avatar: null,
         ownerId: ownerId,
         ownerName: ownerName,
-        size: size  // 單位大小：1=普通, 2=大型, 3=巨型
+        size: size,  // 單位大小：1=普通, 2=大型, 3=巨型
+        status: {}   // 單位狀態標籤 (例如: {"燃燒": "3", "流血": "2"})
     };
 }
 

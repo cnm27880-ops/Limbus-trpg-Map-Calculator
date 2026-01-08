@@ -136,6 +136,22 @@ const DEF_TYPES = [
     { id: 'other', name: '其他', type: 'other' }
 ];
 
+// ===== 單位狀態預設 =====
+const STATUS_PRESETS = {
+    "燃燒": { icon: "🔥", color: "#ff5722" },
+    "流血": { icon: "🩸", color: "#b71c1c" },
+    "震顫": { icon: "🔔", color: "#ffb300" },
+    "破裂": { icon: "💠", color: "#00bcd4" },
+    "沉淪": { icon: "💧", color: "#2196f3" },
+    "呼吸": { icon: "💨", color: "#81d4fa" },
+    "充能": { icon: "⚡", color: "#00e676" },
+    "強壯": { icon: "💪", color: "#d32f2f" },
+    "迅捷": { icon: "👟", color: "#0288d1" },
+    "忍耐": { icon: "🛡️", color: "#757575" },
+    "糾纏": { icon: "⛓️", color: "#5d4037" },
+    "default": { icon: "🔸", color: "#9e9e9e" } // Fallback for custom tags
+};
+
 // ===== 連線配置 =====
 const CONNECTION_CONFIG = {
     STORAGE_KEY: 'limbus_session',

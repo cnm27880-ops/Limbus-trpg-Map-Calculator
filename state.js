@@ -15,15 +15,11 @@ let state = {
 };
 
 // ===== 連線狀態 =====
-// 注意：系統現在使用 Firebase Realtime Database 而非 PeerJS P2P
+// 注意：系統使用 Firebase Realtime Database 進行多人同步
 let myRole = 'player';  // 'st' 或 'player'
 let myName = '';
 let myPlayerId = null;
 let myPlayerCode = null;
-
-// 保留給相容性 (部分舊函數可能引用)
-let myPeerId = null;
-let hostId = null;
 
 // ===== UI 狀態 =====
 let currentTool = 'cursor';

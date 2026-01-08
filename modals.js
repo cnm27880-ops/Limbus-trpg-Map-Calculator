@@ -184,7 +184,7 @@ function confirmAddUnit() {
     const useAvatar = document.getElementById('add-avatar').checked;
 
     if (myRole === 'st') {
-        const u = createUnit(name, hp, type, myPeerId, myName, size);
+        const u = createUnit(name, hp, type, myPlayerId, myName, size);
         if (useAvatar) {
             uploadTargetId = u.id;
             document.getElementById('file-upload').click();
@@ -225,7 +225,7 @@ function confirmBatchAdd() {
     const size = parseInt(document.getElementById('batch-size').value) || 1;
 
     for (let i = 0; i < count; i++) {
-        state.units.push(createUnit(`${prefix}${start + i}`, hp, type, myPeerId, myName, size));
+        state.units.push(createUnit(`${prefix}${start + i}`, hp, type, myPlayerId, myName, size));
     }
 
     closeModal('modal-batch');

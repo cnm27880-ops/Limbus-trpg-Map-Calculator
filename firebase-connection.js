@@ -652,32 +652,8 @@ function sendToHost(message) {
 }
 
 // ===== 剪貼簿與 UI =====
-
-function copyId() {
-    if (!currentRoomCode) return;
-    navigator.clipboard.writeText(currentRoomCode).then(() => {
-        showToast('已複製房間號碼');
-    }).catch(() => {
-        showToast('複製失敗');
-    });
-}
-
-function copyMyCode() {
-    if (!myPlayerCode) return;
-    navigator.clipboard.writeText(myPlayerCode).then(() => {
-        showToast('識別碼已複製: ' + myPlayerCode);
-    }).catch(() => {
-        showToast('複製失敗');
-    });
-}
-
-function updateCodeDisplay() {
-    const codeEl = document.getElementById('my-code');
-    if (codeEl && myPlayerCode) {
-        codeEl.innerText = myPlayerCode;
-        codeEl.style.display = 'inline-block';
-    }
-}
+// 注意：copyId(), copyMyCode(), updateCodeDisplay() 已在 utils.js 中定義
+// 此處不再重複定義以保持程式碼簡潔
 
 // ===== 頁面離開時清理 =====
 window.addEventListener('beforeunload', () => {

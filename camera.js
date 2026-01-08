@@ -82,6 +82,7 @@ function initCameraEvents() {
     // 觸控捏合縮放 (Touch Pinch)
     vp.addEventListener('touchmove', e => {
         if (e.touches.length === 2) {
+            isDraggingMap = false;
             e.preventDefault();
             const dist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,

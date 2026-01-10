@@ -70,6 +70,7 @@
         <span class="player-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼" style="font-size:0.9rem;padding:4px 8px;display:none;">----</span>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋</button>
         <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製ID">---</span>
+        <button class="logout-btn" id="logout-btn" onclick="logoutAndReset()" title="登出/切換帳號" style="display:none;">🚪</button>
     </div>
 </nav>
 
@@ -259,6 +260,40 @@
     <!-- 內容由 JS 動態生成 -->
 </div>
 
+<!-- 音樂播放器 -->
+<div id="music-player">
+    <button id="music-player-toggle" class="music-toggle-btn" onclick="toggleMusicPlayer()" title="音樂播放器">
+        <span class="music-icon">🎵</span>
+    </button>
+    <div id="music-player-panel" class="music-panel">
+        <div class="music-header">
+            <span class="music-title">背景音樂</span>
+            <button class="music-close-btn" onclick="toggleMusicPlayer()">×</button>
+        </div>
+        <div class="music-now-playing">
+            <span class="music-label">正在播放</span>
+            <span id="bgm-now-playing" class="music-track-name">無音樂</span>
+        </div>
+        <div class="music-controls">
+            <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
+            <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="stStopMusic()" title="停止">⏹</button>
+            <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
+            <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
+        </div>
+        <div id="bgm-st-controls" class="music-st-section" style="display:none;">
+            <div class="music-section-title">播放清單 (ST)</div>
+            <div class="music-add-form">
+                <input type="text" id="bgm-input-name" placeholder="音樂名稱" class="music-input">
+                <input type="text" id="bgm-input-url" placeholder="音樂 URL" class="music-input">
+                <button class="music-add-btn" onclick="addToPlaylist(document.getElementById('bgm-input-name').value, document.getElementById('bgm-input-url').value)">+ 新增</button>
+            </div>
+            <div id="bgm-playlist" class="music-playlist">
+                <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- JS 檔案 - 同一層級，順序很重要！ -->
 <script src="config.js"></script>
 
@@ -283,6 +318,7 @@
 <script src="calculator.js"></script>
 <script src="hotkeys.js"></script>
 <script src="modals.js"></script>
+<script src="audio.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

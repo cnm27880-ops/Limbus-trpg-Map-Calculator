@@ -329,6 +329,26 @@ function createRoom(roomCode) {
             document.getElementById('my-id').innerText = roomCode;
             updateCodeDisplay();
 
+            // 顯示登出按鈕
+            const logoutBtn = document.getElementById('logout-btn');
+            if (logoutBtn) logoutBtn.style.display = 'flex';
+
+            // 顯示 ST 音樂控制區塊
+            const musicStControls = document.getElementById('bgm-st-controls');
+            if (musicStControls) musicStControls.style.display = 'block';
+
+            // 初始化音樂播放器
+            if (typeof initAudio === 'function') initAudio();
+
+            // 儲存 Session
+            saveSession({
+                playerCode: myPlayerCode,
+                playerId: myPlayerId,
+                name: myName,
+                roomCode: roomCode,
+                role: 'st'
+            });
+
             // 初始化地圖
             updateToolbar();
             renderAll();
@@ -429,10 +449,30 @@ function joinRoom(roomCode, isST) {
             // 顯示 UI
             if (!isST) {
                 document.getElementById('st-map-controls').style.display = 'none';
+            } else {
+                // ST 的音樂控制區塊
+                const musicStControls = document.getElementById('bgm-st-controls');
+                if (musicStControls) musicStControls.style.display = 'block';
             }
             document.getElementById('units-toolbar').style.display = 'flex';
             document.getElementById('my-id').innerText = roomCode;
             updateCodeDisplay();
+
+            // 顯示登出按鈕
+            const logoutBtn = document.getElementById('logout-btn');
+            if (logoutBtn) logoutBtn.style.display = 'flex';
+
+            // 初始化音樂播放器
+            if (typeof initAudio === 'function') initAudio();
+
+            // 儲存 Session
+            saveSession({
+                playerCode: myPlayerCode,
+                playerId: myPlayerId,
+                name: myName,
+                roomCode: roomCode,
+                role: isST ? 'st' : 'player'
+            });
 
             renderAll();
 
@@ -490,7 +530,7 @@ function loadRoomData(data) {
 }
 
 /**
- * 設置 Firebase 監聽器
+ * 設置 Firebase 監聯器
  */
 function setupRoomListeners() {
     // 監聽地圖資料變更
@@ -551,6 +591,14 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('players').off('value', playersListener));
+
+    // 監聽音樂狀態變更
+    const musicListener = roomRef.child('music').on('value', snapshot => {
+        if (typeof handleMusicUpdate === 'function') {
+            handleMusicUpdate(snapshot.val());
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('music').off('value', musicListener));
 
     // 定期更新活動時間（每 30 秒）
     const activityInterval = setInterval(() => {
@@ -814,5 +862,149 @@ window.addEventListener('beforeunload', () => {
     }
     cleanupListeners();
 });
+
+// ===== Session 管理 =====
+const SESSION_KEY = 'limbus_session';
+
+/**
+ * 儲存 Session 到 localStorage
+ * @param {Object} sessionData - Session 資料
+ */
+function saveSession(sessionData) {
+    try {
+        const session = {
+            playerCode: sessionData.playerCode,
+            playerId: sessionData.playerId,
+            name: sessionData.name,
+            roomCode: sessionData.roomCode,
+            role: sessionData.role,
+            savedAt: Date.now()
+        };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        console.log('Session 已儲存:', session);
+    } catch (e) {
+        console.error('儲存 Session 失敗:', e);
+    }
+}
+
+/**
+ * 讀取 Session
+ * @returns {Object|null} Session 資料
+ */
+function getSession() {
+    try {
+        const data = localStorage.getItem(SESSION_KEY);
+        return data ? JSON.parse(data) : null;
+    } catch (e) {
+        console.error('讀取 Session 失敗:', e);
+        return null;
+    }
+}
+
+/**
+ * 清除 Session
+ */
+function clearSession() {
+    localStorage.removeItem(SESSION_KEY);
+}
+
+/**
+ * 登出並重置
+ * 清除 Session 並重新載入頁面
+ */
+function logoutAndReset() {
+    if (confirm('確定要登出嗎？這將清除已儲存的登入資訊。')) {
+        // 清除 Session
+        clearSession();
+
+        // 如果是玩家，標記離線
+        if (roomRef && myPlayerId && myRole === 'player') {
+            roomRef.child(`players/${myPlayerId}/online`).set(false);
+        }
+
+        // 清理監聽器
+        cleanupListeners();
+
+        // 停止音樂
+        if (typeof stopBGM === 'function') {
+            stopBGM();
+        }
+
+        // 重新載入頁面
+        showToast('正在登出...');
+        setTimeout(() => {
+            location.reload();
+        }, 500);
+    }
+}
+
+/**
+ * 檢查並嘗試自動登入
+ * 在頁面載入時呼叫
+ */
+function checkExistingSession() {
+    const session = getSession();
+
+    if (!session) {
+        // 沒有 Session，顯示登入畫面
+        prefillInputsFromStorage();
+        return;
+    }
+
+    // 檢查 Session 是否過期（超過 7 天）
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - session.savedAt > sevenDays) {
+        clearSession();
+        prefillInputsFromStorage();
+        return;
+    }
+
+    // 嘗試自動登入
+    showToast(`歡迎回來，${session.name}！正在自動連線...`);
+
+    // 恢復身份
+    myName = session.name;
+    myPlayerCode = session.playerCode;
+    myPlayerId = session.playerId;
+    myRole = session.role;
+
+    // 顯示載入畫面
+    document.getElementById('login-main').classList.add('hidden');
+    document.getElementById('login-loading').classList.remove('hidden');
+    document.getElementById('loading-status').innerText = `正在連線到房間 ${session.roomCode}...`;
+
+    // 連線到房間
+    if (session.role === 'st') {
+        joinRoom(session.roomCode, true);
+    } else {
+        joinRoom(session.roomCode, false);
+    }
+}
+
+/**
+ * 預填輸入框
+ * 從 localStorage 或上次的 Session 讀取
+ */
+function prefillInputsFromStorage() {
+    const session = getSession();
+
+    // 嘗試預填名稱
+    const nameInput = document.getElementById('input-name');
+    if (nameInput && session && session.name) {
+        nameInput.value = session.name;
+    }
+
+    // 嘗試預填玩家識別碼
+    const playerCodeInput = document.getElementById('input-player-code');
+    if (playerCodeInput && session && session.playerCode) {
+        playerCodeInput.value = session.playerCode;
+    }
+
+    // 嘗試預填 ST 識別碼
+    const stCodeInput = document.getElementById('input-st-code');
+    if (stCodeInput && session && session.role === 'st' && session.playerCode) {
+        stCodeInput.value = session.playerCode;
+    }
+}
 
 console.log('✅ Firebase 連線模組已載入');

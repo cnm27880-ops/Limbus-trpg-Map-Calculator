@@ -6,7 +6,9 @@
 // ===== 全域變數 =====
 let currentRoomCode = null;  // 當前房間號碼
 let roomRef = null;           // Firebase 房間參考
-let unsubscribeListeners = [];  // 用於儲存監聽器，方便清理
+let unsubscribeListeners = [];  // 用於儲存監聯器，方便清理
+let heartbeatInterval = null;  // 心跳計時器
+let isConnected = false;       // Firebase 連線狀態
 
 // ===== 連線狀態 UI =====
 /**
@@ -468,8 +470,14 @@ function loadRoomData(data) {
     }
 
     if (data.units) {
-        // 將 Firebase 物件轉換為陣列
-        state.units = Object.values(data.units);
+        // 將 Firebase 物件轉換為陣列，並根據 sortOrder 排序
+        const unitsArray = Object.values(data.units);
+        unitsArray.sort((a, b) => {
+            const orderA = a.sortOrder !== undefined ? a.sortOrder : Infinity;
+            const orderB = b.sortOrder !== undefined ? b.sortOrder : Infinity;
+            return orderA - orderB;
+        });
+        state.units = unitsArray;
     } else {
         state.units = [];
     }
@@ -497,7 +505,16 @@ function setupRoomListeners() {
     // 監聽單位變更
     const unitsListener = roomRef.child('units').on('value', snapshot => {
         if (snapshot.exists()) {
-            state.units = Object.values(snapshot.val());
+            // 將物件轉換為陣列，並根據 sortOrder 排序以維持順序
+            const unitsArray = Object.values(snapshot.val());
+            unitsArray.sort((a, b) => {
+                // 如果有 sortOrder 就按照 sortOrder 排序
+                // 否則按照 id 排序（向後相容）
+                const orderA = a.sortOrder !== undefined ? a.sortOrder : Infinity;
+                const orderB = b.sortOrder !== undefined ? b.sortOrder : Infinity;
+                return orderA - orderB;
+            });
+            state.units = unitsArray;
         } else {
             state.units = [];
         }
@@ -540,12 +557,109 @@ function setupRoomListeners() {
         roomRef.child('info/lastActive').set(firebase.database.ServerValue.TIMESTAMP);
     }, 30000);
     unsubscribeListeners.push(() => clearInterval(activityInterval));
+
+    // 設置連線監控和心跳機制
+    setupConnectionMonitor();
+}
+
+/**
+ * 設置 Firebase 連線監控和心跳機制
+ * 確保長時間閒置不會導致斷線
+ */
+function setupConnectionMonitor() {
+    // 監聽 Firebase 連線狀態
+    const connectedRef = database.ref('.info/connected');
+    const connectionListener = connectedRef.on('value', (snapshot) => {
+        const wasConnected = isConnected;
+        isConnected = snapshot.val() === true;
+
+        if (isConnected) {
+            // 連線成功
+            setConnectionStatus('connected');
+            console.log('✅ Firebase 連線已建立');
+
+            // 啟動心跳機制
+            startHeartbeat();
+
+            // 如果是重新連線，顯示提示
+            if (wasConnected === false && roomRef) {
+                showToast('連線已恢復');
+            }
+        } else {
+            // 連線中斷
+            setConnectionStatus('disconnected', '連線中斷');
+            console.log('⚠️ Firebase 連線已中斷');
+
+            // 停止心跳
+            stopHeartbeat();
+        }
+    });
+    unsubscribeListeners.push(() => connectedRef.off('value', connectionListener));
+
+    // 設置玩家 presence（在線狀態）
+    if (roomRef && myPlayerId) {
+        const presenceRef = roomRef.child(`presence/${myPlayerId}`);
+
+        // 連線時設為在線
+        presenceRef.set(true);
+
+        // 斷線時自動設為離線
+        presenceRef.onDisconnect().set(false);
+
+        unsubscribeListeners.push(() => {
+            presenceRef.onDisconnect().cancel();
+        });
+    }
+}
+
+/**
+ * 啟動心跳機制
+ * 每 45 秒發送一次心跳，維持 Firebase 連線活躍
+ */
+function startHeartbeat() {
+    // 先停止現有的心跳
+    stopHeartbeat();
+
+    // 心跳間隔設為 45 秒（Firebase 預設超時約 60 秒）
+    const HEARTBEAT_INTERVAL = 45000;
+
+    heartbeatInterval = setInterval(() => {
+        if (roomRef && isConnected) {
+            // 使用當前用戶的 presence 路徑發送心跳
+            // 這會保持 WebSocket 連線活躍
+            const heartbeatPath = myPlayerId
+                ? `presence/${myPlayerId}/lastSeen`
+                : 'info/lastActive';
+
+            roomRef.child(heartbeatPath).set(firebase.database.ServerValue.TIMESTAMP)
+                .catch(err => {
+                    console.warn('心跳發送失敗:', err);
+                });
+        }
+    }, HEARTBEAT_INTERVAL);
+
+    console.log('💓 心跳機制已啟動（間隔 45 秒）');
+}
+
+/**
+ * 停止心跳機制
+ */
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+        console.log('💔 心跳機制已停止');
+    }
 }
 
 /**
  * 清理監聽器
  */
 function cleanupListeners() {
+    // 停止心跳機制
+    stopHeartbeat();
+
+    // 清理所有 Firebase 監聽器
     unsubscribeListeners.forEach(unsubscribe => unsubscribe());
     unsubscribeListeners = [];
 }
@@ -562,13 +676,17 @@ function syncMapData() {
 
 /**
  * 更新單位到 Firebase
+ * 注意：會自動為每個單位設定 sortOrder 以保持排序順序
  */
 function syncUnits() {
     if (!roomRef) return;
 
     // 將陣列轉換為物件（使用單位 ID 作為 key）
+    // 同時保存 sortOrder 以維持排序順序
     const unitsObj = {};
-    state.units.forEach(unit => {
+    state.units.forEach((unit, index) => {
+        // 設定 sortOrder 以保持陣列順序
+        unit.sortOrder = index;
         unitsObj[unit.id] = unit;
     });
 

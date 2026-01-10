@@ -124,6 +124,13 @@ const HOTKEYS = {
         action: () => toggleHotkeyHelp(),
         description: '顯示快捷鍵說明',
         category: 'panels'
+    },
+    'h': {
+        action: () => {
+            if (typeof toggleCombatHUD === 'function') toggleCombatHUD();
+        },
+        description: '切換戰鬥儀表板',
+        category: 'panels'
     }
 };
 

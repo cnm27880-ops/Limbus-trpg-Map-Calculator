@@ -69,7 +69,12 @@ function openStatusModal(unitId) {
         </div>
     `;
 
-    document.getElementById('modals-container').innerHTML = modalHtml;
+    // 使用 insertAdjacentHTML 避免覆蓋其他 modal
+    const container = document.getElementById('modals-container');
+    // 移除之前可能存在的狀態 modal
+    const existingModal = document.getElementById('status-modal');
+    if (existingModal) existingModal.remove();
+    container.insertAdjacentHTML('beforeend', modalHtml);
 }
 
 /**

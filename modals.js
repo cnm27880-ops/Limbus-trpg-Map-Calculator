@@ -110,17 +110,17 @@ function initModals() {
                     <div id="hp-modal-mode-damage" style="display:none;">
                         <div style="margin-bottom:10px;color:var(--text-dim);">選擇傷害類型：</div>
                         <div style="display:flex;gap:8px;margin-bottom:15px;">
-                            <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('b')">B 傷 (鈍擊)</button>
-                            <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('l')">L 傷 (穿刺)</button>
-                            <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('a')">A 傷 (惡化)</button>
+                            <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('b', this)">B 傷 (鈍擊)</button>
+                            <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('l', this)">L 傷 (穿刺)</button>
+                            <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('a', this)">A 傷 (惡化)</button>
                         </div>
                     </div>
                     <div id="hp-modal-mode-heal" style="display:none;">
                         <div style="margin-bottom:10px;color:var(--text-dim);">選擇要治療的傷勢類型：</div>
                         <div style="display:flex;gap:8px;margin-bottom:15px;">
-                            <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('heal-b')">治療 B 傷</button>
-                            <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('heal-l')">治療 L 傷</button>
-                            <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('heal-a')">治療 A 傷</button>
+                            <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setHpModalType('heal-b', this)">治療 B 傷</button>
+                            <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setHpModalType('heal-l', this)">治療 L 傷</button>
+                            <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setHpModalType('heal-a', this)">治療 A 傷</button>
                         </div>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">
@@ -273,15 +273,18 @@ function openHpModal(id, mode) {
 /**
  * 設定 HP Modal 類型
  * @param {string} type - 類型
+ * @param {HTMLElement} btnElement - 被點擊的按鈕元素
  */
-function setHpModalType(type) {
+function setHpModalType(type, btnElement) {
     document.getElementById('hp-action-type').value = type;
-    
+
     // 更新按鈕高亮
     document.querySelectorAll('#modal-hp .action-btn').forEach(btn => {
         btn.style.boxShadow = '';
     });
-    event.target.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
+    if (btnElement) {
+        btnElement.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
+    }
 }
 
 /**

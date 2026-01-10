@@ -62,24 +62,34 @@ const HOTKEYS = {
         description: '重置視角',
         category: 'camera'
     },
+    // 注意：方向鍵由 main.js 的 initKeyboardControls 處理
+    // 當有選取單位時用於移動單位，否則用於移動視角
     'ArrowUp': {
-        action: () => moveCamera(0, -80),
-        description: '向上移動視角',
+        action: () => {
+            if (!isUnitSelectedAndDeployed()) moveCamera(0, -80);
+        },
+        description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowDown': {
-        action: () => moveCamera(0, 80),
-        description: '向下移動視角',
+        action: () => {
+            if (!isUnitSelectedAndDeployed()) moveCamera(0, 80);
+        },
+        description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowLeft': {
-        action: () => moveCamera(-80, 0),
-        description: '向左移動視角',
+        action: () => {
+            if (!isUnitSelectedAndDeployed()) moveCamera(-80, 0);
+        },
+        description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowRight': {
-        action: () => moveCamera(80, 0),
-        description: '向右移動視角',
+        action: () => {
+            if (!isUnitSelectedAndDeployed()) moveCamera(80, 0);
+        },
+        description: '移動單位/視角',
         category: 'camera'
     },
     '+': {
@@ -177,6 +187,24 @@ function handleKeydown(e) {
             console.warn('快捷鍵執行錯誤:', err);
         }
     }
+}
+
+/**
+ * 檢查是否有選取並部署在地圖上的單位
+ * 用於判斷方向鍵應該移動單位還是視角
+ * @returns {boolean}
+ */
+function isUnitSelectedAndDeployed() {
+    if (typeof selectedUnitId === 'undefined' || !selectedUnitId) return false;
+    if (typeof state === 'undefined' || !state.units) return false;
+
+    const unit = state.units.find(u => u.id === selectedUnitId);
+    if (!unit || unit.x < 0 || unit.y < 0) return false;
+
+    // 檢查是否有權限控制此單位
+    if (typeof canControlUnit === 'function' && !canControlUnit(unit)) return false;
+
+    return true;
 }
 
 /**

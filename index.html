@@ -101,6 +101,7 @@
                 <button class="tool-btn" onclick="clearSelection()" title="取消選取">✕</button>
                 
                 <div class="map-controls-right" id="st-map-controls">
+                    <button class="map-manager-btn" onclick="openMapManagerModal()" title="儲存/載入地圖">📂 地圖</button>
                     <select id="map-theme-select" class="map-select" onchange="changeMapTheme(this.value)">
                         <option value="0">一般訓練室</option>
                         <option value="1">後巷深處</option>
@@ -277,6 +278,7 @@
 
 <script src="camera.js"></script>
 <script src="map.js"></script>
+<script src="map-manager.js"></script>
 <script src="units.js"></script>
 <script src="calculator.js"></script>
 <script src="hotkeys.js"></script>

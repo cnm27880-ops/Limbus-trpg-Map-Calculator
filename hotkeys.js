@@ -109,11 +109,7 @@ const HOTKEYS = {
         category: 'panels',
         preventDefault: true
     },
-    'l': {
-        action: () => toggleLogPanel(),
-        description: '切換戰鬥日誌',
-        category: 'panels'
-    },
+    // 'l' 快捷鍵保留給未來功能使用
     '?': {
         action: () => toggleHotkeyHelp(),
         description: '顯示快捷鍵說明',
@@ -189,24 +185,17 @@ function handleKeydown(e) {
  * @param {number} dy - Y 軸移動量
  */
 function moveCamera(dx, dy) {
-    if (typeof camera !== 'undefined') {
-        camera.x += dx;
-        camera.y += dy;
-        applyCamera();
+    if (typeof cam !== 'undefined') {
+        cam.x += dx;
+        cam.y += dy;
+        if (typeof applyCamera === 'function') {
+            applyCamera();
+        }
     }
 }
 
-/**
- * 縮放相機視角
- * @param {number} delta - 縮放變化量
- */
-function zoomCamera(delta) {
-    if (typeof camera !== 'undefined') {
-        const newZoom = Math.max(0.3, Math.min(3, camera.zoom + delta));
-        camera.zoom = newZoom;
-        applyCamera();
-    }
-}
+// 注意：zoomCamera 已在 camera.js 中定義，不需要重複定義
+// 快捷鍵直接調用 camera.js 中的 zoomCamera(delta) 函數
 
 /**
  * 刪除選取的單位

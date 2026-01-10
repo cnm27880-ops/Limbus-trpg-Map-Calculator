@@ -250,8 +250,20 @@
 <!-- Modals -->
 <div id="modals-container"></div>
 
+<!-- 快捷鍵提示按鈕 -->
+<button class="hotkey-help-btn" onclick="toggleHotkeyHelp()" title="快捷鍵說明">&#9000;</button>
+
+<!-- 快捷鍵說明面板 -->
+<div class="hotkey-help-panel hidden" id="hotkey-help">
+    <!-- 內容由 JS 動態生成 -->
+</div>
+
 <!-- JS 檔案 - 同一層級，順序很重要！ -->
 <script src="config.js"></script>
+
+<!-- 狀態效果系統 - 需在 units.js 之前載入 -->
+<script src="status-config.js"></script>
+<script src="status-manager.js"></script>
 
 <!-- Firebase 配置 - 必須在其他模組之前載入 -->
 <script src="firebase-config.js"></script>
@@ -267,6 +279,7 @@
 <script src="map.js"></script>
 <script src="units.js"></script>
 <script src="calculator.js"></script>
+<script src="hotkeys.js"></script>
 <script src="modals.js"></script>
 <script src="main.js"></script>
 </body>

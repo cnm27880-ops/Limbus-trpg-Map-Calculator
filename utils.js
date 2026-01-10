@@ -225,7 +225,7 @@ function modifyHPInternal(unit, type, amount) {
             // 造成傷害
             const val = type === 'b' ? 1 : type === 'l' ? 2 : 3;
             const emptyIdx = unit.hpArr.findIndex(x => x === 0);
-            
+
             if (emptyIdx !== -1) {
                 unit.hpArr[emptyIdx] = val;
             } else {

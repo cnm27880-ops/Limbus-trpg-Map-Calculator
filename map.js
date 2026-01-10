@@ -234,6 +234,13 @@ function renderMap() {
                         const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
 
                         if (u && controllable) {
+                            // 記錄移動到戰鬥日誌
+                            const oldPos = { x: u.x, y: u.y };
+                            const newPos = { x: x, y: y };
+                            if (typeof logUnitMove === 'function') {
+                                logUnitMove(u, oldPos, newPos);
+                            }
+
                             if (myRole === 'st') {
                                 u.x = x; u.y = y;
                                 selectedUnitId = null;

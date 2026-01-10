@@ -374,6 +374,12 @@ function sortByInit() {
     }
     state.units.sort((a, b) => b.init - a.init);
     state.turnIdx = 0;
+
+    // 記錄排序到戰鬥日誌
+    if (typeof logSort === 'function') {
+        logSort();
+    }
+
     broadcastState();
 }
 
@@ -387,8 +393,15 @@ function nextTurn() {
     }
     if (state.units.length) {
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
+
+        // 記錄回合切換到戰鬥日誌
+        const currentUnit = state.units[state.turnIdx];
+        if (typeof logTurnChange === 'function') {
+            logTurnChange(currentUnit, state.turnIdx + 1);
+        }
+
         broadcastState();
-        
+
         setTimeout(() => {
             const el = document.querySelector('.unit-card.active-turn');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });

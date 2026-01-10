@@ -126,6 +126,19 @@
                     <div id="battle-map"></div>
                 </div>
             </div>
+
+            <!-- 戰鬥日誌面板 -->
+            <div class="combat-log" id="combat-log">
+                <div class="log-header">
+                    <span class="log-title">&#9876; 戰鬥日誌</span>
+                    <div class="log-actions">
+                        <button onclick="clearLog()" title="清除日誌">&#128465;</button>
+                        <button onclick="exportLog()" title="匯出日誌">&#128190;</button>
+                        <button class="log-toggle-btn" onclick="toggleLog()">折疊</button>
+                    </div>
+                </div>
+                <div class="log-content" id="log-content"></div>
+            </div>
         </div>
     </div>
 
@@ -250,6 +263,14 @@
 <!-- Modals -->
 <div id="modals-container"></div>
 
+<!-- 快捷鍵提示按鈕 -->
+<button class="hotkey-help-btn" onclick="toggleHotkeyHelp()" title="快捷鍵說明">&#9000;</button>
+
+<!-- 快捷鍵說明面板 -->
+<div class="hotkey-help-panel hidden" id="hotkey-help">
+    <!-- 內容由 JS 動態生成 -->
+</div>
+
 <!-- JS 檔案 - 同一層級，順序很重要！ -->
 <script src="config.js"></script>
 
@@ -267,6 +288,8 @@
 <script src="map.js"></script>
 <script src="units.js"></script>
 <script src="calculator.js"></script>
+<script src="combat-log.js"></script>
+<script src="hotkeys.js"></script>
 <script src="modals.js"></script>
 <script src="main.js"></script>
 </body>

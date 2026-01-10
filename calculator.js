@@ -190,6 +190,15 @@ function calculateDP() {
         rm.style.color = 'var(--accent-red)';
         rd.innerText = `DP ${finalDP} (≤0)，轉為機運骰判定`;
     }
+
+    // 記錄到戰鬥日誌
+    if (typeof logDPCalculation === 'function') {
+        logDPCalculation(finalDP, {
+            attack: `${atkDP}dp+${atkAutoSuccess}`,
+            defense: `${defDP}dp+${defAutoSuccess}`,
+            result: finalDP > 0 ? `${finalDP}dp` : '機運骰'
+        });
+    }
 }
 
 /**

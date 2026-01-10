@@ -91,14 +91,30 @@ function renderUnitsList() {
         let statusBadges = '';
         if (u.status && Object.keys(u.status).length > 0) {
             const badges = Object.entries(u.status).map(([statusName, statusValue]) => {
-                const config = STATUS_PRESETS[statusName] || STATUS_PRESETS['default'];
+                // 使用新的狀態庫查詢圖示和顏色
+                const statusDef = typeof getStatusByName === 'function' ? getStatusByName(statusName) : null;
+                let icon, color;
+
+                if (statusDef) {
+                    icon = statusDef.icon;
+                    const categoryId = typeof getStatusCategory === 'function' ? getStatusCategory(statusDef.id) : null;
+                    color = categoryId && STATUS_CATEGORIES ? (STATUS_CATEGORIES[categoryId]?.color || '#9e9e9e') : '#9e9e9e';
+                } else {
+                    // 回退到舊的 STATUS_PRESETS（相容自訂狀態）
+                    const config = (typeof STATUS_PRESETS !== 'undefined' && STATUS_PRESETS[statusName])
+                        ? STATUS_PRESETS[statusName]
+                        : { icon: '🔸', color: '#9e9e9e' };
+                    icon = config.icon;
+                    color = config.color;
+                }
+
                 const escapedName = escapeHtml(statusName);
-                const escapedValue = escapeHtml(statusValue);
+                const displayValue = statusValue ? ` ${escapeHtml(statusValue)}` : '';
                 return `<span class="status-badge"
                              data-tooltip="${escapedName}"
-                             style="--badge-color: ${config.color}"
-                             onclick="openStatusModal('${u.id}', '${escapedName}', '${escapedValue}')">
-                    ${config.icon} ${escapedValue}
+                             style="--badge-color: ${color}"
+                             onclick="onStatusTagClick('${u.id}', '${escapedName}')">
+                    ${icon}${displayValue}
                 </span>`;
             }).join('');
 
@@ -374,12 +390,6 @@ function sortByInit() {
     }
     state.units.sort((a, b) => b.init - a.init);
     state.turnIdx = 0;
-
-    // 記錄排序到戰鬥日誌
-    if (typeof logSort === 'function') {
-        logSort();
-    }
-
     broadcastState();
 }
 
@@ -393,13 +403,6 @@ function nextTurn() {
     }
     if (state.units.length) {
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
-
-        // 記錄回合切換到戰鬥日誌
-        const currentUnit = state.units[state.turnIdx];
-        if (typeof logTurnChange === 'function') {
-            logTurnChange(currentUnit, state.turnIdx + 1);
-        }
-
         broadcastState();
 
         setTimeout(() => {

@@ -446,119 +446,427 @@
     background: rgba(0, 230, 118, 0.1);
 }
 
-/* ===== Combat Log ===== */
-.combat-log {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 180px;
-    background: rgba(19, 19, 22, 0.95);
-    border-top: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    z-index: 30;
-    transition: height 0.3s ease;
+/* ===== Status Manager Modal ===== */
+.status-modal {
+    max-width: 700px;
+    width: 95vw;
+    max-height: 85vh;
 }
 
-.combat-log.collapsed {
-    height: 36px;
-}
-
-.combat-log.collapsed .log-content {
-    display: none;
-}
-
-.combat-log.hidden {
-    display: none;
-}
-
-.log-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: var(--bg-card);
+.status-search-bar {
+    padding: 12px;
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
 }
 
-.log-title {
-    font-weight: bold;
-    color: var(--accent-yellow);
-    font-size: 0.85rem;
+.status-search-bar input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-main);
+    font-size: 0.9rem;
 }
 
-.log-actions {
+.status-search-bar input:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+}
+
+.current-statuses-section {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+}
+
+.current-statuses-section .section-title {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+}
+
+.current-statuses {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
 }
 
-.log-actions button {
-    background: var(--bg-input);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
+.no-current-status {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.current-status-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--status-color, #666);
     border-radius: 4px;
+    color: var(--status-color, var(--text-main));
+    font-size: 0.8rem;
+}
+
+.remove-status-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.remove-status-btn:hover {
+    color: var(--accent-red);
+}
+
+.status-category-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+}
+
+.category-tab {
+    padding: 6px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
     font-size: 0.75rem;
     cursor: pointer;
+    transition: all 0.15s;
 }
 
-.log-actions button:hover {
+.category-tab:hover {
     color: var(--text-main);
-    border-color: var(--border-focus);
+    border-color: var(--text-dim);
 }
 
-.log-content {
-    flex: 1;
+.category-tab.active {
+    background: var(--accent-yellow);
+    color: #000;
+    border-color: var(--accent-yellow);
+}
+
+.category-tab .count {
+    opacity: 0.7;
+    margin-left: 2px;
+}
+
+.status-grid-container {
+    max-height: 300px;
     overflow-y: auto;
-    padding: 8px;
-    font-size: 0.8rem;
-    font-family: 'JetBrains Mono', monospace;
+    padding: 10px;
 }
 
-.log-entry {
-    display: flex;
-    align-items: flex-start;
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 8px;
-    padding: 4px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.log-entry:last-child {
-    border-bottom: none;
-}
-
-.log-entry.has-details {
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 6px;
     cursor: pointer;
+    transition: all 0.15s;
 }
 
-.log-entry.has-details:hover {
-    background: rgba(255, 255, 255, 0.05);
+.status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border-color: var(--text-dim);
 }
 
-.log-time {
-    color: var(--text-muted);
-    font-size: 0.7rem;
-    min-width: 55px;
+.status-card-icon {
+    font-size: 1.5rem;
     flex-shrink: 0;
 }
 
-.log-icon {
-    font-size: 0.9rem;
-    flex-shrink: 0;
-}
-
-.log-message {
-    color: var(--text-main);
+.status-card-info {
     flex: 1;
-    word-break: break-word;
+    min-width: 0;
+}
+
+.status-card-name {
+    font-weight: bold;
+    color: var(--text-main);
+    font-size: 0.85rem;
+}
+
+.status-card-desc {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-card-type {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-input);
+    color: var(--text-dim);
+}
+
+.status-card-type.stack {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+}
+
+.status-card-type.binary {
+    background: rgba(155, 89, 182, 0.2);
+    color: #9b59b6;
+}
+
+.no-statuses {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 30px;
+    font-style: italic;
+}
+
+/* Status Detail Overlay */
+.status-detail-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2100;
+}
+
+.status-detail-panel {
+    background: var(--bg-panel);
+    border-radius: 10px;
+    width: 90%;
+    max-width: 400px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+}
+
+.detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px;
+    border-bottom: 3px solid;
+    background: var(--bg-card);
+}
+
+.detail-icon {
+    font-size: 2rem;
+}
+
+.detail-name {
+    font-size: 1.2rem;
+    font-weight: bold;
+    flex: 1;
+}
+
+.detail-type {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.detail-type.stack {
+    background: rgba(52, 152, 219, 0.2);
+    color: #3498db;
+}
+
+.detail-type.binary {
+    background: rgba(155, 89, 182, 0.2);
+    color: #9b59b6;
+}
+
+.detail-body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.detail-desc {
+    color: var(--text-main);
+    line-height: 1.5;
+}
+
+.detail-resist {
+    padding: 8px 10px;
+    background: rgba(52, 152, 219, 0.1);
+    border-radius: 6px;
+    color: #3498db;
+    font-size: 0.85rem;
+}
+
+.detail-counter {
+    padding: 8px 10px;
+    background: rgba(241, 196, 15, 0.1);
+    border-radius: 6px;
+    color: #f1c40f;
+    font-size: 0.85rem;
+}
+
+.detail-effects {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.effect-item {
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.effect-item.light {
+    background: rgba(46, 204, 113, 0.1);
+    color: #2ecc71;
+}
+
+.effect-item.heavy {
+    background: rgba(230, 126, 34, 0.1);
+    color: #e67e22;
+}
+
+.effect-item.destruction {
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.detail-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.detail-input label {
+    color: var(--text-dim);
+}
+
+.detail-input input {
+    width: 80px;
+    padding: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    text-align: center;
+    font-size: 1rem;
+}
+
+.detail-footer {
+    padding: 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Custom Status Form */
+.form-group {
+    margin-bottom: 12px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+.form-group textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.emoji-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.emoji-option {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.15s;
+}
+
+.emoji-option:hover,
+.emoji-option.selected {
+    background: var(--accent-purple);
+    border-color: var(--accent-purple);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .status-modal {
+        max-height: 90vh;
+    }
+
+    .status-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .status-card {
+        padding: 8px;
+    }
+
+    .status-card-icon {
+        font-size: 1.2rem;
+    }
+
+    .status-card-name {
+        font-size: 0.8rem;
+    }
+
+    .category-tab {
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
 }
 
 /* ===== Hotkey Help ===== */
 .hotkey-help-btn {
     position: fixed;
-    bottom: 200px;
+    bottom: 20px;
     right: 15px;
     width: 40px;
     height: 40px;
@@ -583,7 +891,7 @@
 
 .hotkey-help-panel {
     position: fixed;
-    bottom: 250px;
+    bottom: 70px;
     right: 15px;
     width: 280px;
     max-height: 400px;
@@ -647,21 +955,17 @@
     flex: 1;
 }
 
-/* ===== Responsive adjustments for combat log ===== */
+/* ===== Responsive adjustments ===== */
 @media (max-width: 768px) {
-    .combat-log {
-        height: 140px;
-    }
-
     .hotkey-help-btn {
-        bottom: 160px;
+        bottom: 15px;
         width: 36px;
         height: 36px;
         font-size: 1rem;
     }
 
     .hotkey-help-panel {
-        bottom: 200px;
+        bottom: 60px;
         right: 10px;
         width: 250px;
     }

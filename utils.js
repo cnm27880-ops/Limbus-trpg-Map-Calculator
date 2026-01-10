@@ -207,16 +207,6 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1) 
  * @param {number} amount - 數量
  */
 function modifyHPInternal(unit, type, amount) {
-    // 記錄到戰鬥日誌
-    const isHealing = type.startsWith('heal');
-    if (typeof logDamage === 'function' && typeof logHeal === 'function') {
-        if (isHealing) {
-            logHeal(unit, amount);
-        } else {
-            logDamage(unit, type, amount);
-        }
-    }
-
     for (let i = 0; i < amount; i++) {
         if (type === 'heal') {
             // 治療任意傷害（優先 A > L > B）

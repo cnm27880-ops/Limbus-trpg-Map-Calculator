@@ -19,7 +19,7 @@
     --hud-warning: #fb8c00;
 }
 
-/* ===== Combat HUD Container - Flexbox Layout ===== */
+/* ===== Combat HUD Container - Glassmorphism Floating ===== */
 .combat-hud {
     position: absolute; /* Changed from fixed for better map integration */
     z-index: 1000; /* High but not blocking modals */
@@ -35,11 +35,11 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.08);
     min-width: 320px;
     max-width: 500px;
-    /* Flexbox Layout */
+    height: auto;
+    max-height: 80vh;
+    overflow: hidden; /* Clip content, scrolling handled by hud-body */
     display: none; /* Hidden until a character is selected */
     flex-direction: column;
-    max-height: 80vh; /* 最大高度佔螢幕 80% */
-    overflow: hidden; /* Clip content, scrolling handled by hud-body */
     transition: opacity 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
     resize: both; /* Allow user to resize both directions */
 }
@@ -64,7 +64,7 @@
     display: none !important;
 }
 
-/* ===== HUD Header - Fixed at Top ===== */
+/* ===== HUD Header - Draggable ===== */
 .hud-header {
     display: flex;
     align-items: center;
@@ -76,8 +76,6 @@
     user-select: none;
     border-radius: 14px 14px 0 0;
     transition: background 0.2s ease;
-    /* 固定在頂部，不隨內容滾動 */
-    flex-shrink: 0;
 }
 
 .hud-header:hover {
@@ -148,17 +146,12 @@
     cursor: not-allowed;
 }
 
-/* ===== HUD Body - Scrollable Content Area ===== */
+/* ===== HUD Body ===== */
 .hud-body {
-    /* 自動填滿剩餘空間 */
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0; /* Critical for flex scrolling */
-    /* 啟用垂直滾動 */
     overflow-y: auto;
     overflow-x: hidden;
-    /* 手機觸控滾動優化 */
-    -webkit-overflow-scrolling: touch;
-    /* Layout */
     padding: 12px;
     display: flex;
     flex-direction: column;

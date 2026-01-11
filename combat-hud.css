@@ -33,11 +33,13 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
     min-width: 380px;
     max-width: 420px;
+    height: auto;
     max-height: 85vh;
-    overflow: hidden;
+    overflow: hidden; /* Clip content, scrolling handled by hud-body */
     display: flex;
     flex-direction: column;
-    transition: all 0.3s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    resize: vertical; /* Allow user to resize vertically */
 }
 
 .combat-hud.collapsed {
@@ -45,6 +47,11 @@
     max-width: none;
     max-height: none;
     border-radius: 12px;
+}
+
+.combat-hud.dragging {
+    transition: none !important;
+    user-select: none;
 }
 
 .combat-hud.hidden {
@@ -126,8 +133,10 @@
 
 /* ===== HUD Body ===== */
 .hud-body {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0; /* Critical for flex scrolling */
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -756,12 +765,44 @@
     background: var(--hud-gold);
 }
 
+/* ===== Resize Handle ===== */
+.combat-hud::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: var(--hud-gold-dim);
+    border-radius: 2px;
+    margin-bottom: 6px;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.combat-hud:hover::after {
+    opacity: 1;
+    background: var(--hud-gold);
+}
+
+.combat-hud.collapsed::after {
+    display: none;
+}
+
 /* ===== Mobile Responsive ===== */
 @media (max-width: 480px) {
     .combat-hud {
         min-width: 320px;
         max-width: calc(100vw - 20px);
         max-height: 70vh;
+        left: 10px !important;
+        right: 10px;
+        resize: none; /* Disable resize on mobile */
+    }
+
+    .combat-hud::after {
+        display: none;
     }
 
     .attack-presets {
@@ -779,5 +820,17 @@
 
     .defense-card-small {
         flex: 1;
+    }
+
+    .hud-header {
+        padding: 10px 12px;
+    }
+
+    .hud-title-text {
+        font-size: 0.9rem;
+    }
+
+    .hud-character-name {
+        font-size: 0.75rem;
     }
 }

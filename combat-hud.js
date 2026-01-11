@@ -879,6 +879,9 @@ function setupHUDDrag() {
 
         isDragging = true;
 
+        // Add dragging class to prevent transitions during drag
+        hud.classList.add('dragging');
+
         if (e.type === 'touchstart') {
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
@@ -887,8 +890,11 @@ function setupHUDDrag() {
             startY = e.clientY;
         }
 
-        startPosX = hudState.position.x;
-        startPosY = hudState.position.y;
+        // Get the actual current position from the DOM, not from state
+        // This ensures accuracy even if state got out of sync
+        const rect = hud.getBoundingClientRect();
+        startPosX = rect.left;
+        startPosY = rect.top;
 
         document.addEventListener('mousemove', onDrag);
         document.addEventListener('mouseup', stopDrag);
@@ -913,8 +919,17 @@ function setupHUDDrag() {
         const deltaX = clientX - startX;
         const deltaY = clientY - startY;
 
-        hudState.position.x = Math.max(0, Math.min(window.innerWidth - 100, startPosX + deltaX));
-        hudState.position.y = Math.max(0, Math.min(window.innerHeight - 50, startPosY + deltaY));
+        // Calculate new position with bounds checking
+        const newX = startPosX + deltaX;
+        const newY = startPosY + deltaY;
+
+        // Get HUD dimensions for boundary calculation
+        const hudWidth = hud.offsetWidth || 380;
+        const hudHeight = hud.offsetHeight || 200;
+
+        // Keep at least 50px of the HUD visible on screen
+        hudState.position.x = Math.max(-hudWidth + 100, Math.min(window.innerWidth - 100, newX));
+        hudState.position.y = Math.max(0, Math.min(window.innerHeight - 50, newY));
 
         updateHUDPosition();
         e.preventDefault();
@@ -923,6 +938,7 @@ function setupHUDDrag() {
     function stopDrag() {
         if (isDragging) {
             isDragging = false;
+            hud.classList.remove('dragging');
             saveHUDSettings();
         }
 

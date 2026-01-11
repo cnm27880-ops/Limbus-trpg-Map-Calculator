@@ -1,41 +1,67 @@
-/* ===== CSS Variables ===== */
+/* ===== CSS Variables - Limbus Company Aesthetic ===== */
 :root {
+    /* Limbus Color Palette - Dark Industrial */
+    --bg-dark: #0f0f12;
     --bg-main: #676A6B;  /* 灰色（網頁背景） */
     --bg-map: #000000;   /* 純黑色（地圖畫布） */
     --bg-panel: #131316;
     --bg-card: #1a1a1f;
     --bg-input: #0d0d0f;
+
+    /* Glassmorphism */
+    --glass-bg: rgba(20, 20, 30, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-highlight: rgba(255, 255, 255, 0.05);
+
+    /* Borders */
     --border: #2a2a30;
     --border-focus: #404048;
+
+    /* Accent Colors */
     --accent-red: #e53935;
     --accent-green: #43a047;
     --accent-blue: #1e88e5;
     --accent-orange: #fb8c00;
     --accent-yellow: #fdd835;
+    --accent-gold: #D4AF37;
     --accent-purple: #8e24aa;
+    --accent-cyan: #00E5FF;
+
+    /* Text Colors */
     --text-main: #e8e8ec;
+    --text-primary: #e0e0e0;
+    --text-secondary: #aaaaaa;
     --text-dim: #6e6e78;
     --text-muted: #48484f;
+
+    /* Layout Dimensions */
     --grid-size: 50px;
-    --sidebar-width: 340px;
+    --sidebar-width: 350px;
     --nav-height: 56px;
+    --header-height: 56px;
 }
 
 /* ===== Reset & Base ===== */
 * {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     -webkit-tap-highlight-color: transparent;
 }
 
+html, body {
+    height: 100%;
+    width: 100%;
+}
+
 body {
-    margin: 0;
-    padding: 0;
-    background: #676A6B !important;  /* 灰色背景 */
-    color: var(--text-main);
+    background: var(--bg-dark);
+    color: var(--text-primary);
     font-family: 'Noto Sans TC', sans-serif;
     height: 100vh;
     height: 100dvh;
-    overflow: hidden;
+    width: 100vw;
+    overflow: hidden; /* CRITICAL: Disables global scroll to prevent "locked" page */
     display: flex;
     flex-direction: column;
 }
@@ -204,12 +230,15 @@ input[type="number"] {
     background: var(--bg-input);
 }
 
-/* ===== Layout ===== */
+/* ===== App Shell Layout (CSS Grid) ===== */
 .main-wrapper {
     flex: 1;
-    display: flex;
+    display: grid;
+    grid-template-rows: 1fr;
+    grid-template-columns: 1fr;
     overflow: hidden;
     position: relative;
+    background: var(--bg-dark);
 }
 
 .page {
@@ -220,22 +249,36 @@ input[type="number"] {
 }
 
 .page.active {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: 1fr;
 }
 
-/* ===== Map Page ===== */
+/* ===== Map Page - CSS Grid Layout ===== */
 #page-map {
-    flex-direction: row;
+    display: grid !important;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: 1fr;
+    grid-template-areas: "sidebar main";
 }
 
+#page-map.active {
+    display: grid !important;
+}
+
+/* ===== Sidebar - Glassmorphism Style ===== */
 .sidebar {
+    grid-area: sidebar;
     width: var(--sidebar-width);
-    background: var(--bg-panel);
-    border-right: 1px solid var(--border);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid var(--glass-border);
     display: none;
     flex-direction: column;
     overflow: hidden;
     flex-shrink: 0;
+    z-index: 50;
 }
 
 .sidebar.show {
@@ -243,30 +286,47 @@ input[type="number"] {
 }
 
 .sidebar-header {
-    padding: 12px;
-    background: var(--bg-card);
-    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    background: linear-gradient(180deg, rgba(212, 175, 55, 0.1) 0%, transparent 100%);
+    border-bottom: 1px solid var(--glass-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .sidebar-content {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: auto; /* CRITICAL: Enables scrolling ONLY for the sidebar content */
+    overflow-x: hidden;
     padding: 12px;
+    min-height: 0; /* Important for flex scroll containers */
+}
+
+/* ===== Game Stage (Map Main Content Area) ===== */
+.game-stage {
+    grid-area: main;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-width: 0; /* Important for grid items */
+    min-height: 0;
 }
 
 /* ===== Map Toolbar ===== */
 .map-toolbar {
-    background: var(--bg-panel);
-    border-bottom: 1px solid var(--border);
-    padding: 8px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 8px 12px;
     display: flex;
     gap: 6px;
     align-items: center;
     flex-wrap: wrap;
     z-index: 10;
+    flex-shrink: 0;
 }
 
 .map-tools-scroll {
@@ -352,10 +412,11 @@ input[type="number"] {
 /* ===== Map Viewport ===== */
 .map-viewport {
     flex: 1;
-    background: #050506;
+    background: var(--bg-dark);
     position: relative;
-    overflow: hidden;
+    overflow: auto; /* Enables map panning */
     cursor: grab;
+    min-height: 0; /* Important for flex scroll containers */
 }
 
 .map-viewport:active {
@@ -484,31 +545,55 @@ input[type="number"] {
 
 /* ===== Responsive ===== */
 @media (max-width: 1023px) {
-    /* 手機版：側邊欄預設隱藏，需要點擊按鈕開啟 */
+    /* 手機版：Grid 改為單欄，側邊欄覆蓋顯示 */
+    #page-map {
+        grid-template-columns: 1fr !important;
+        grid-template-areas: "main" !important;
+    }
+
     .sidebar {
         position: absolute;
         left: 0;
         top: 0;
         bottom: 0;
-        z-index: 50;
-        box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+        width: min(var(--sidebar-width), 85vw);
+        z-index: 100;
+        box-shadow: 4px 0 30px rgba(0,0,0,0.6);
+        background: var(--glass-bg);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
     }
+
+    .sidebar.show {
+        display: flex;
+    }
+
     .map-controls-right {
         display: none;
     }
+
     .nav-tab {
         padding: 8px 10px;
         font-size: 0.8rem;
     }
+
+    .game-stage {
+        grid-column: 1;
+    }
 }
 
 @media (min-width: 1024px) {
-    /* 電腦版：側邊欄預設顯示，但仍可收合 */
+    /* 電腦版：Grid 雙欄布局，側邊欄預設顯示 */
+    #page-map {
+        grid-template-columns: auto 1fr;
+        grid-template-areas: "sidebar main";
+    }
+
     .sidebar:not(.collapsed) {
-        display: flex;  /* 預設顯示，除非有 collapsed class */
+        display: flex;
     }
 
     .sidebar.collapsed {
-        display: none;  /* 收合時隱藏 */
+        display: none;
     }
 }

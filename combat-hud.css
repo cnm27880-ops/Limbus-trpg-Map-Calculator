@@ -608,6 +608,88 @@
     transform: scale(0.96);
 }
 
+/* ===== HUD Settings Form ===== */
+.hud-settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.hud-settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hud-settings-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--hud-text);
+}
+
+.hud-settings-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--hud-text);
+    font-size: 0.9rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.hud-settings-input:focus {
+    outline: none;
+    border-color: var(--hud-gold);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+}
+
+.hud-settings-hint {
+    font-size: 0.75rem;
+    color: var(--hud-text-dim);
+    line-height: 1.4;
+}
+
+.hud-settings-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-settings-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.hud-settings-btn.primary {
+    background: linear-gradient(135deg, var(--hud-gold), #b8960f);
+    color: #000;
+}
+
+.hud-settings-btn.primary:hover {
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
+    transform: translateY(-1px);
+}
+
+.hud-settings-btn.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--hud-text-dim);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-settings-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--hud-text);
+}
+
 /* ===== Import Button on Units Page ===== */
 .sheet-import-btn {
     background: linear-gradient(135deg, var(--hud-gold) 0%, #b8960f 100%);

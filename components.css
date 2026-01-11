@@ -962,6 +962,12 @@
     white-space: nowrap;
 }
 
+.qab-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
 /* QAB Panels */
 .qab-panel {
     position: absolute;

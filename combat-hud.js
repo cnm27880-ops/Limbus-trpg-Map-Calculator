@@ -12,11 +12,21 @@
 
 // ===== Configuration =====
 const HUD_CONFIG = {
-    SPREADSHEET_ID: '1kW0xdl7J7khTgl6cLTn05xjVa6xktMgct-KdwAiitwc',
-    API_KEY: 'AIzaSyBvZLJUrmFzLfpLHbmKFGgVph2zS6LuiME', // Public API key for read-only access
+    DEFAULT_SPREADSHEET_ID: '1kW0xdl7J7khTgl6cLTn05xjVa6xktMgct-KdwAiitwc',
+    DEFAULT_API_KEY: '', // 需要用戶自行設定
     REFRESH_COOLDOWN: 10000, // 10 seconds
     DEFAULT_POSITION: { x: 20, y: 80 }
 };
+
+// 取得用戶設定的 API 資訊
+function getHUDAPIConfig() {
+    const savedApiKey = localStorage.getItem('limbus_hud_api_key') || '';
+    const savedSheetId = localStorage.getItem('limbus_hud_sheet_id') || HUD_CONFIG.DEFAULT_SPREADSHEET_ID;
+    return {
+        apiKey: savedApiKey,
+        sheetId: savedSheetId
+    };
+}
 
 // ===== Cell Coordinate Map =====
 const CELL_RANGES = {
@@ -85,6 +95,7 @@ function initCombatHUD() {
     loadHUDSettings();
     createHUDElement();
     createImportModal();
+    createSettingsModal();
 
     // Restore HUD if previously bound
     if (hudState.boundTab) {
@@ -93,6 +104,99 @@ function initCombatHUD() {
     }
 
     console.log('Combat HUD: 模組已初始化');
+}
+
+// ===== Settings Modal =====
+function createSettingsModal() {
+    const modal = document.createElement('div');
+    modal.id = 'hud-settings-modal';
+    modal.className = 'sheet-import-modal hidden';
+
+    const config = getHUDAPIConfig();
+
+    modal.innerHTML = `
+        <div class="sheet-import-content" style="max-width:450px;">
+            <div class="sheet-import-header">
+                <h3>HUD 設定</h3>
+                <button class="close-btn" onclick="closeHUDSettings()">×</button>
+            </div>
+            <div class="sheet-import-body">
+                <div class="hud-settings-form">
+                    <div class="hud-settings-group">
+                        <label class="hud-settings-label">Google Sheets API Key <span style="color:var(--accent-red);">*必填</span></label>
+                        <input type="text" id="hud-api-key-input" class="hud-settings-input"
+                            placeholder="輸入您的 Google API Key"
+                            value="${escapeHtml(config.apiKey)}">
+                        <div class="hud-settings-hint">
+                            請前往 <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--hud-highlight);">Google Cloud Console</a> 建立 API Key
+                        </div>
+                    </div>
+                    <div class="hud-settings-group">
+                        <label class="hud-settings-label">Google Spreadsheet ID</label>
+                        <input type="text" id="hud-sheet-id-input" class="hud-settings-input"
+                            placeholder="輸入 Spreadsheet ID"
+                            value="${escapeHtml(config.sheetId)}">
+                        <div class="hud-settings-hint">
+                            Spreadsheet URL 中的 ID，例如：<br>
+                            https://docs.google.com/spreadsheets/d/<strong style="color:var(--accent-yellow);">[這段就是ID]</strong>/edit
+                        </div>
+                    </div>
+                    <div class="hud-settings-actions">
+                        <button class="hud-settings-btn secondary" onclick="closeHUDSettings()">取消</button>
+                        <button class="hud-settings-btn primary" onclick="saveHUDAPISettings()">儲存設定</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeHUDSettings();
+    });
+}
+
+function openHUDSettings() {
+    const modal = document.getElementById('hud-settings-modal');
+    if (modal) {
+        // 更新輸入框的值
+        const config = getHUDAPIConfig();
+        const apiKeyInput = document.getElementById('hud-api-key-input');
+        const sheetIdInput = document.getElementById('hud-sheet-id-input');
+        if (apiKeyInput) apiKeyInput.value = config.apiKey;
+        if (sheetIdInput) sheetIdInput.value = config.sheetId;
+        modal.classList.remove('hidden');
+    }
+}
+
+function closeHUDSettings() {
+    const modal = document.getElementById('hud-settings-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function saveHUDAPISettings() {
+    const apiKeyInput = document.getElementById('hud-api-key-input');
+    const sheetIdInput = document.getElementById('hud-sheet-id-input');
+
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+    const sheetId = sheetIdInput ? sheetIdInput.value.trim() : HUD_CONFIG.DEFAULT_SPREADSHEET_ID;
+
+    if (!apiKey) {
+        if (typeof showToast === 'function') {
+            showToast('請輸入 Google API Key');
+        }
+        return;
+    }
+
+    localStorage.setItem('limbus_hud_api_key', apiKey);
+    localStorage.setItem('limbus_hud_sheet_id', sheetId);
+
+    if (typeof showToast === 'function') {
+        showToast('設定已儲存');
+    }
+
+    closeHUDSettings();
 }
 
 // ===== Storage Functions =====
@@ -210,6 +314,19 @@ function closeImportModal() {
 // ===== Google Sheets API Functions =====
 async function fetchSheetTabs() {
     const body = document.getElementById('sheet-import-body');
+    const config = getHUDAPIConfig();
+
+    // 檢查是否已設定 API Key
+    if (!config.apiKey) {
+        body.innerHTML = `
+            <div class="sheet-import-error">
+                請先設定 Google API Key<br>
+                <button class="hud-settings-btn primary" style="margin-top:10px;" onclick="closeImportModal(); openHUDSettings();">前往設定</button>
+            </div>
+        `;
+        return;
+    }
+
     body.innerHTML = `
         <div class="sheet-import-loading">
             <div class="spinner"></div>
@@ -218,7 +335,7 @@ async function fetchSheetTabs() {
     `;
 
     try {
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${HUD_CONFIG.SPREADSHEET_ID}?key=${HUD_CONFIG.API_KEY}`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.sheetId}?key=${config.apiKey}`;
         const response = await fetch(url);
 
         if (!response.ok) {
@@ -297,10 +414,18 @@ async function refreshHUDData() {
 
     // Build ranges array
     const ranges = buildRangesArray(hudState.boundTab);
+    const config = getHUDAPIConfig();
+
+    if (!config.apiKey) {
+        if (typeof showToast === 'function') {
+            showToast('請先設定 Google API Key');
+        }
+        return;
+    }
 
     try {
         const rangesParam = ranges.map(r => encodeURIComponent(r)).join('&ranges=');
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${HUD_CONFIG.SPREADSHEET_ID}/values:batchGet?ranges=${rangesParam}&key=${HUD_CONFIG.API_KEY}`;
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${config.sheetId}/values:batchGet?ranges=${rangesParam}&key=${config.apiKey}`;
 
         const response = await fetch(url);
 

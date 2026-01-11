@@ -20,6 +20,25 @@ function toggleQABMenu() {
     if (mainBtn) {
         mainBtn.classList.toggle('active', qabMenuOpen);
     }
+
+    // 如果開啟選單，添加點擊外部關閉的監聽器
+    if (qabMenuOpen) {
+        setTimeout(() => {
+            document.addEventListener('click', handleQABOutsideClick);
+        }, 10);
+    } else {
+        document.removeEventListener('click', handleQABOutsideClick);
+    }
+}
+
+/**
+ * 處理點擊選單外部關閉
+ */
+function handleQABOutsideClick(e) {
+    const qabContainer = document.getElementById('quick-action-ball');
+    if (qabContainer && !qabContainer.contains(e.target)) {
+        closeQABMenu();
+    }
 }
 
 /**
@@ -32,6 +51,7 @@ function closeQABMenu() {
 
     if (menu) menu.classList.remove('show');
     if (mainBtn) mainBtn.classList.remove('active');
+    document.removeEventListener('click', handleQABOutsideClick);
 }
 
 /**

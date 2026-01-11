@@ -3,6 +3,38 @@
  * 應用程式進入點與初始化
  */
 
+// ===== 快速操作球狀態 =====
+let qabExpanded = false;
+
+/**
+ * 切換快速操作球展開/收合
+ */
+function toggleQuickActions() {
+    qabExpanded = !qabExpanded;
+    const container = document.getElementById('quick-action-ball');
+    const mainBtn = document.getElementById('qab-main');
+
+    if (container) {
+        container.classList.toggle('expanded', qabExpanded);
+    }
+    if (mainBtn) {
+        mainBtn.classList.toggle('active', qabExpanded);
+    }
+
+    // 收合時關閉所有面板
+    if (!qabExpanded) {
+        const musicPanel = document.getElementById('music-player-panel');
+        const hotkeyPanel = document.getElementById('hotkey-help');
+
+        if (musicPanel) musicPanel.classList.remove('expanded');
+        if (hotkeyPanel) hotkeyPanel.classList.add('hidden');
+
+        // 重置按鈕狀態
+        const musicBtn = document.getElementById('qab-music-btn');
+        if (musicBtn) musicBtn.classList.remove('active');
+    }
+}
+
 // ===== 頁面載入初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化 Modal

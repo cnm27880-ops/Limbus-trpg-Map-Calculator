@@ -416,15 +416,30 @@ let musicPlayerExpanded = false;
  * 切換音樂播放器面板展開/收合
  */
 function toggleMusicPlayer() {
+    toggleMusicPanel();
+}
+
+/**
+ * 切換音樂面板（用於快速操作球）
+ */
+function toggleMusicPanel() {
     musicPlayerExpanded = !musicPlayerExpanded;
     const panel = document.getElementById('music-player-panel');
-    const toggleBtn = document.getElementById('music-player-toggle');
+    const musicBtn = document.getElementById('qab-music-btn');
 
     if (panel) {
         panel.classList.toggle('expanded', musicPlayerExpanded);
     }
-    if (toggleBtn) {
-        toggleBtn.classList.toggle('active', musicPlayerExpanded);
+    if (musicBtn) {
+        musicBtn.classList.toggle('active', musicPlayerExpanded);
+    }
+
+    // 關閉其他面板
+    if (musicPlayerExpanded) {
+        const hotkeyPanel = document.getElementById('hotkey-help');
+        if (hotkeyPanel && !hotkeyPanel.classList.contains('hidden')) {
+            hotkeyPanel.classList.add('hidden');
+        }
     }
 }
 

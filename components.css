@@ -863,43 +863,110 @@
     }
 }
 
-/* ===== Hotkey Help ===== */
-.hotkey-help-btn {
+/* ===== Quick Action Ball ===== */
+.qab-container {
     position: fixed;
     bottom: 20px;
     right: 15px;
-    width: 40px;
-    height: 40px;
-    background: var(--bg-card);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
+    z-index: 150;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 10px;
+}
+
+.qab-main-btn {
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
-    font-size: 1.2rem;
+    background: linear-gradient(135deg, var(--accent-yellow), #e6b800);
+    border: none;
+    color: #000;
+    font-size: 1.5rem;
     cursor: pointer;
-    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 4px 15px rgba(253, 216, 53, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 160;
+}
+
+.qab-main-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(253, 216, 53, 0.5);
+}
+
+.qab-main-btn.active {
+    transform: rotate(45deg);
+    background: linear-gradient(135deg, var(--accent-red), #c62828);
+    box-shadow: 0 4px 15px rgba(229, 57, 53, 0.4);
+}
+
+.qab-icon {
+    transition: transform 0.3s;
+}
+
+.qab-actions {
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(20px);
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.qab-container.expanded .qab-actions {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.qab-action-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--bg-panel);
+    border: 2px solid var(--border);
+    color: var(--text-main);
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
     transition: all 0.2s;
 }
 
-.hotkey-help-btn:hover {
-    color: var(--accent-yellow);
+.qab-action-btn:hover {
+    transform: scale(1.15);
     border-color: var(--accent-yellow);
-    transform: scale(1.1);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 }
 
+.qab-action-btn.active {
+    background: var(--accent-yellow);
+    color: #000;
+    border-color: var(--accent-yellow);
+}
+
+/* QAB Panels */
+.qab-panel {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    z-index: 155;
+}
+
+/* ===== Hotkey Help ===== */
 .hotkey-help-panel {
-    position: fixed;
-    bottom: 70px;
-    right: 15px;
     width: 280px;
     max-height: 400px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 10px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    z-index: 200;
     overflow: hidden;
 }
 
@@ -955,21 +1022,7 @@
     flex: 1;
 }
 
-/* ===== Responsive adjustments ===== */
-@media (max-width: 768px) {
-    .hotkey-help-btn {
-        bottom: 15px;
-        width: 36px;
-        height: 36px;
-        font-size: 1rem;
-    }
-
-    .hotkey-help-panel {
-        bottom: 60px;
-        right: 10px;
-        width: 250px;
-    }
-}
+/* Hotkey panel responsive - handled by QAB responsive rules */
 
 /* ===== Map Manager Modal ===== */
 .map-manager-modal {
@@ -1136,52 +1189,7 @@
 }
 
 /* ===== Music Player ===== */
-#music-player {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    z-index: 150;
-}
-
-.music-toggle-btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--bg-panel), var(--bg-card));
-    border: 2px solid var(--accent-yellow);
-    color: var(--accent-yellow);
-    font-size: 1.3rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    transition: all 0.2s;
-}
-
-.music-toggle-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 20px rgba(253, 216, 53, 0.3);
-}
-
-.music-toggle-btn.active {
-    background: var(--accent-yellow);
-    color: #000;
-}
-
-.music-icon {
-    animation: pulse-music 2s ease-in-out infinite;
-}
-
-@keyframes pulse-music {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-}
-
 .music-panel {
-    position: absolute;
-    bottom: 60px;
-    left: 0;
     width: 300px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -1442,20 +1450,34 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
-/* Mobile adjustments for music player */
+/* Mobile adjustments for quick action ball & music player */
 @media (max-width: 768px) {
-    #music-player {
+    .qab-container {
         bottom: 15px;
-        left: 15px;
+        right: 10px;
     }
 
-    .music-toggle-btn {
-        width: 42px;
-        height: 42px;
+    .qab-main-btn {
+        width: 46px;
+        height: 46px;
+        font-size: 1.3rem;
+    }
+
+    .qab-action-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+
+    .qab-panel {
+        right: -5px;
     }
 
     .music-panel {
         width: 280px;
-        bottom: 55px;
+    }
+
+    .hotkey-help-panel {
+        width: 260px;
     }
 }

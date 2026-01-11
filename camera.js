@@ -79,25 +79,47 @@ function initCameraEvents() {
         }
     });
 
-    // 觸控捏合縮放 (Touch Pinch)
+    // 觸控捏合縮放 (Touch Pinch) - 以雙指中心點為縮放中心
+    let lastPinchCenter = null;
+
     vp.addEventListener('touchmove', e => {
         if (e.touches.length === 2) {
             isDraggingMap = false;
             e.preventDefault();
+
+            // 計算雙指中心點
+            const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+            // 計算雙指距離
             const dist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-            if (lastDist) {
+
+            if (lastDist && lastPinchCenter) {
                 const diff = dist - lastDist;
-                zoomCamera(diff * 0.005);
+                const zoomDelta = diff * 0.005;
+
+                // 取得視口位置
+                const vpRect = vp.getBoundingClientRect();
+
+                // 計算中心點相對於視口的位置
+                const relX = centerX - vpRect.left;
+                const relY = centerY - vpRect.top;
+
+                // 以中心點為準進行縮放
+                zoomCameraAt(zoomDelta, relX, relY);
             }
+
             lastDist = dist;
+            lastPinchCenter = { x: centerX, y: centerY };
         }
     }, { passive: false });
 
     vp.addEventListener('touchend', () => {
         lastDist = 0;
+        lastPinchCenter = null;
     });
 }
 
@@ -108,6 +130,41 @@ function initCameraEvents() {
  */
 function zoomCamera(amount) {
     cam.scale = Math.max(0.5, Math.min(3.0, cam.scale + amount));
+    applyCamera();
+}
+
+/**
+ * 以指定點為中心縮放相機
+ * @param {number} amount - 縮放量
+ * @param {number} focusX - 縮放中心點 X (相對於視口)
+ * @param {number} focusY - 縮放中心點 Y (相對於視口)
+ */
+function zoomCameraAt(amount, focusX, focusY) {
+    const oldScale = cam.scale;
+    const newScale = Math.max(0.5, Math.min(3.0, cam.scale + amount));
+
+    if (oldScale === newScale) return;
+
+    // 取得視口中心
+    const vp = document.getElementById('map-viewport');
+    if (!vp) return;
+
+    const vpRect = vp.getBoundingClientRect();
+    const vpCenterX = vpRect.width / 2;
+    const vpCenterY = vpRect.height / 2;
+
+    // 計算縮放中心點相對於視口中心的偏移
+    const offsetX = focusX - vpCenterX;
+    const offsetY = focusY - vpCenterY;
+
+    // 計算縮放前後的位置差異
+    const scaleRatio = newScale / oldScale;
+
+    // 調整相機位置以保持縮放中心點不變
+    cam.x = cam.x - offsetX * (scaleRatio - 1);
+    cam.y = cam.y - offsetY * (scaleRatio - 1);
+    cam.scale = newScale;
+
     applyCamera();
 }
 

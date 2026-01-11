@@ -66,28 +66,28 @@ const HOTKEYS = {
     // 當有選取單位時用於移動單位，否則用於移動視角
     'ArrowUp': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(0, -80);
+            if (!isUnitSelectedAndDeployed()) moveCamera(0, 80);
         },
         description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowDown': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(0, 80);
+            if (!isUnitSelectedAndDeployed()) moveCamera(0, -80);
         },
         description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowLeft': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(-80, 0);
+            if (!isUnitSelectedAndDeployed()) moveCamera(80, 0);
         },
         description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowRight': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(80, 0);
+            if (!isUnitSelectedAndDeployed()) moveCamera(-80, 0);
         },
         description: '移動單位/視角',
         category: 'camera'
@@ -265,6 +265,14 @@ function toggleHotkeyHelp() {
 
         if (hotkeyHelpVisible) {
             renderHotkeyHelp();
+
+            // 關閉其他面板（音樂面板）
+            const musicPanel = document.getElementById('music-player-panel');
+            if (musicPanel) {
+                musicPanel.classList.remove('expanded');
+                const musicBtn = document.getElementById('qab-music-btn');
+                if (musicBtn) musicBtn.classList.remove('active');
+            }
         }
     }
 }

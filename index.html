@@ -253,23 +253,31 @@
 <!-- Modals -->
 <div id="modals-container"></div>
 
-<!-- 快捷鍵提示按鈕 -->
-<button class="hotkey-help-btn" onclick="toggleHotkeyHelp()" title="快捷鍵說明">&#9000;</button>
-
-<!-- 快捷鍵說明面板 -->
-<div class="hotkey-help-panel hidden" id="hotkey-help">
-    <!-- 內容由 JS 動態生成 -->
-</div>
-
-<!-- 音樂播放器 -->
-<div id="music-player">
-    <button id="music-player-toggle" class="music-toggle-btn" onclick="toggleMusicPlayer()" title="音樂播放器">
-        <span class="music-icon">🎵</span>
+<!-- 快速操作球 (Quick Action Ball) -->
+<div id="quick-action-ball" class="qab-container">
+    <!-- 主按鈕 -->
+    <button class="qab-main-btn" id="qab-main" onclick="toggleQuickActions()" title="快速操作">
+        <span class="qab-icon">⚡</span>
     </button>
-    <div id="music-player-panel" class="music-panel">
+
+    <!-- 展開的操作按鈕 -->
+    <div class="qab-actions" id="qab-actions">
+        <button class="qab-action-btn" onclick="toggleMusicPanel()" title="音樂播放器" id="qab-music-btn">
+            <span>🎵</span>
+        </button>
+        <button class="qab-action-btn" onclick="toggleHotkeyHelp()" title="快捷鍵說明">
+            <span>⌨</span>
+        </button>
+        <button class="qab-action-btn" onclick="toggleCombatHUD()" title="戰鬥儀表板" id="qab-hud-btn">
+            <span>📊</span>
+        </button>
+    </div>
+
+    <!-- 音樂播放器面板 -->
+    <div id="music-player-panel" class="qab-panel music-panel">
         <div class="music-header">
             <span class="music-title">背景音樂</span>
-            <button class="music-close-btn" onclick="toggleMusicPlayer()">×</button>
+            <button class="music-close-btn" onclick="toggleMusicPanel()">×</button>
         </div>
         <div class="music-now-playing">
             <span class="music-label">正在播放</span>
@@ -292,6 +300,11 @@
                 <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
             </div>
         </div>
+    </div>
+
+    <!-- 快捷鍵說明面板 -->
+    <div class="qab-panel hotkey-help-panel hidden" id="hotkey-help">
+        <!-- 內容由 JS 動態生成 -->
     </div>
 </div>
 

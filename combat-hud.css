@@ -1,0 +1,928 @@
+/**
+ * Limbus Command - 戰鬥 HUD 樣式
+ * Cyber Gold 主題設計
+ */
+
+/* ===== CSS Variables for Combat HUD ===== */
+:root {
+    --hud-bg: rgba(15, 15, 20, 0.95);
+    --hud-border: #D4AF37;
+    --hud-highlight: #00E5FF;
+    --hud-gold: #D4AF37;
+    --hud-gold-dim: rgba(212, 175, 55, 0.3);
+    --hud-text: #e8e8ec;
+    --hud-text-dim: #8e8e98;
+    --hud-card-bg: rgba(25, 25, 35, 0.9);
+    --hud-card-hover: rgba(35, 35, 50, 0.95);
+    --hud-success: #43a047;
+    --hud-danger: #e53935;
+    --hud-warning: #fb8c00;
+}
+
+/* ===== Combat HUD Container ===== */
+.combat-hud {
+    position: fixed;
+    z-index: 9999;
+    font-family: 'Noto Sans TC', sans-serif;
+    border-radius: 16px;
+    border: 2px solid var(--hud-border);
+    background: var(--hud-bg);
+    box-shadow:
+        0 0 30px rgba(212, 175, 55, 0.2),
+        0 10px 40px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    min-width: 320px;
+    max-width: 500px;
+    height: auto;
+    max-height: 85vh;
+    overflow: hidden; /* Clip content, scrolling handled by hud-body */
+    display: flex;
+    flex-direction: column;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    resize: both; /* Allow user to resize both directions */
+}
+
+.combat-hud.collapsed {
+    min-width: auto;
+    max-width: none;
+    max-height: none;
+    border-radius: 12px;
+}
+
+.combat-hud.dragging {
+    transition: none !important;
+    user-select: none;
+}
+
+.combat-hud.hidden {
+    display: none !important;
+}
+
+/* ===== HUD Header ===== */
+.hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(15, 15, 20, 0.95) 100%);
+    border-bottom: 1px solid var(--hud-gold-dim);
+    cursor: move;
+    user-select: none;
+    border-radius: 14px 14px 0 0;
+}
+
+.combat-hud.collapsed .hud-header {
+    border-radius: 10px;
+    border-bottom: none;
+}
+
+.hud-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.hud-title-text {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--hud-gold);
+    text-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+}
+
+.hud-character-name {
+    font-size: 0.85rem;
+    color: var(--hud-highlight);
+    font-weight: 500;
+}
+
+.hud-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.hud-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--hud-gold-dim);
+    color: var(--hud-text-dim);
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.hud-btn:hover {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--hud-gold);
+    border-color: var(--hud-gold);
+}
+
+.hud-btn:active {
+    transform: scale(0.92);
+}
+
+.hud-btn.refresh-btn.cooldown {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ===== HUD Body ===== */
+.hud-body {
+    flex: 1 1 auto;
+    min-height: 0; /* Critical for flex scrolling */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.combat-hud.collapsed .hud-body {
+    display: none;
+}
+
+/* ===== Resource Bars Section ===== */
+.hud-section {
+    background: var(--hud-card-bg);
+    border-radius: 12px;
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    overflow: hidden;
+}
+
+.hud-section-header {
+    padding: 8px 12px;
+    background: rgba(212, 175, 55, 0.1);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--hud-gold);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.hud-section-body {
+    padding: 10px 12px;
+}
+
+/* ===== Resource Bars ===== */
+.resource-bar {
+    margin-bottom: 8px;
+}
+
+.resource-bar:last-child {
+    margin-bottom: 0;
+}
+
+.resource-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.resource-name {
+    font-size: 0.8rem;
+    color: var(--hud-text-dim);
+}
+
+.resource-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--hud-text);
+}
+
+.resource-track {
+    height: 8px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.resource-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.resource-fill.willpower {
+    background: linear-gradient(90deg, #8e24aa, #ba68c8);
+    box-shadow: 0 0 8px rgba(142, 36, 170, 0.5);
+}
+
+.resource-fill.energy {
+    background: linear-gradient(90deg, var(--hud-highlight), #00bcd4);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.5);
+}
+
+/* ===== Energy Pools Grid ===== */
+.energy-pools {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.energy-pool-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+}
+
+.energy-pool-name {
+    flex: 0 0 80px;
+    font-size: 0.75rem;
+    color: var(--hud-text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.energy-pool-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.energy-pool-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--hud-highlight), #00bcd4);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.energy-pool-value {
+    flex: 0 0 50px;
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--hud-text);
+}
+
+/* ===== Combat Stats ===== */
+.combat-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    color: var(--hud-text-dim);
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--hud-text);
+}
+
+.stat-value.highlight {
+    color: var(--hud-highlight);
+}
+
+/* ===== Compact Combat Stats (New Layout) ===== */
+.combat-stats-compact {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.stat-compact {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ===== Compact Defense Display ===== */
+.defense-compact {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(0, 229, 255, 0.05) 100%);
+    border: 1px solid var(--hud-gold-dim);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.defense-compact-header {
+    margin-bottom: 2px;
+}
+
+.defense-compact-type {
+    font-size: 0.7rem;
+    color: var(--hud-gold);
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.defense-compact-type:hover {
+    color: var(--hud-highlight);
+}
+
+.defense-compact-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--hud-text);
+    line-height: 1.2;
+}
+
+.defense-compact-others {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.defense-mini {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--hud-text-dim);
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.defense-mini:hover {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--hud-gold);
+}
+
+/* ===== Saves Section ===== */
+.saves-section {
+    margin-top: 10px;
+}
+
+.saves-label {
+    font-size: 0.7rem;
+    color: var(--hud-text-dim);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+/* ===== Saves Display ===== */
+.saves-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.save-item {
+    text-align: center;
+    padding: 8px 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.save-label {
+    font-size: 0.65rem;
+    color: var(--hud-text-dim);
+    margin-bottom: 4px;
+}
+
+.save-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--hud-text);
+}
+
+/* ===== Defense Section ===== */
+.defense-layout {
+    display: flex;
+    gap: 10px;
+}
+
+.defense-main {
+    flex: 1;
+}
+
+.defense-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 80px;
+}
+
+/* Big Defense Card (Active) */
+.defense-card-big {
+    padding: 12px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(0, 229, 255, 0.1) 100%);
+    border: 2px solid var(--hud-gold);
+    border-radius: 10px;
+    text-align: center;
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.2);
+}
+
+.defense-card-big .defense-type {
+    font-size: 0.8rem;
+    color: var(--hud-gold);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.defense-card-big .defense-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--hud-text);
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.defense-card-big .defense-breakdown {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--hud-text-dim);
+    margin-top: 4px;
+}
+
+/* Small Defense Cards (Inactive) */
+.defense-card-small {
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.defense-card-small:hover {
+    background: rgba(212, 175, 55, 0.1);
+    border-color: var(--hud-gold-dim);
+}
+
+.defense-card-small .defense-type {
+    font-size: 0.6rem;
+    color: var(--hud-text-dim);
+    margin-bottom: 2px;
+}
+
+.defense-card-small .defense-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--hud-text);
+}
+
+/* ===== Attack Presets ===== */
+.attack-presets {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.attack-card {
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    transition: all 0.2s ease;
+}
+
+.attack-card:hover {
+    background: rgba(212, 175, 55, 0.08);
+    border-color: var(--hud-gold-dim);
+}
+
+.attack-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--hud-text);
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attack-dp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--hud-highlight);
+    margin-bottom: 4px;
+}
+
+.attack-limit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--hud-text-dim);
+    margin-bottom: 6px;
+}
+
+.attack-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.attack-tag {
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.attack-tag.pen {
+    background: rgba(233, 30, 99, 0.2);
+    color: #f48fb1;
+    border: 1px solid rgba(233, 30, 99, 0.3);
+}
+
+.attack-tag.magic {
+    background: rgba(156, 39, 176, 0.2);
+    color: #ce93d8;
+    border: 1px solid rgba(156, 39, 176, 0.3);
+}
+
+.attack-tag.speed {
+    background: rgba(33, 150, 243, 0.2);
+    color: #90caf9;
+    border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+/* ===== Minimized Bar ===== */
+.hud-minimized-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 12px;
+}
+
+.hud-mini-resources {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.hud-mini-resource {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+}
+
+.hud-mini-resource .label {
+    color: var(--hud-text-dim);
+    font-size: 0.7rem;
+}
+
+.hud-mini-resource .value {
+    color: var(--hud-text);
+    font-weight: 600;
+}
+
+/* ===== Sheet Import Modal ===== */
+.sheet-import-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.sheet-import-modal.hidden {
+    display: none;
+}
+
+.sheet-import-content {
+    background: var(--hud-bg);
+    border: 2px solid var(--hud-border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 400px;
+    overflow: hidden;
+}
+
+.sheet-import-header {
+    padding: 16px 20px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(15, 15, 20, 0.95) 100%);
+    border-bottom: 1px solid var(--hud-gold-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.sheet-import-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--hud-gold);
+}
+
+.sheet-import-body {
+    padding: 20px;
+}
+
+.sheet-import-loading {
+    text-align: center;
+    padding: 30px;
+    color: var(--hud-text-dim);
+}
+
+.sheet-import-loading .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--hud-gold-dim);
+    border-top-color: var(--hud-gold);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.sheet-import-error {
+    text-align: center;
+    padding: 20px;
+    color: var(--hud-danger);
+}
+
+.sheet-tabs-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.sheet-tab-btn {
+    padding: 14px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    color: var(--hud-text);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.sheet-tab-btn:hover {
+    background: rgba(212, 175, 55, 0.15);
+    border-color: var(--hud-gold);
+    color: var(--hud-gold);
+}
+
+.sheet-tab-btn:active {
+    transform: scale(0.96);
+}
+
+/* ===== HUD Settings Form ===== */
+.hud-settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.hud-settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hud-settings-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--hud-text);
+}
+
+.hud-settings-input {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--hud-text);
+    font-size: 0.9rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.hud-settings-input:focus {
+    outline: none;
+    border-color: var(--hud-gold);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
+}
+
+.hud-settings-hint {
+    font-size: 0.75rem;
+    color: var(--hud-text-dim);
+    line-height: 1.4;
+}
+
+.hud-settings-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 10px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-settings-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.hud-settings-btn.primary {
+    background: linear-gradient(135deg, var(--hud-gold), #b8960f);
+    color: #000;
+}
+
+.hud-settings-btn.primary:hover {
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.4);
+    transform: translateY(-1px);
+}
+
+.hud-settings-btn.secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--hud-text-dim);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-settings-btn.secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--hud-text);
+}
+
+/* ===== Import Button on Units Page ===== */
+.sheet-import-btn {
+    background: linear-gradient(135deg, var(--hud-gold) 0%, #b8960f 100%);
+    color: #000;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sheet-import-btn:hover {
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.5);
+    transform: translateY(-1px);
+}
+
+.sheet-import-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* ===== Close Button Styling ===== */
+.close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--hud-text-dim);
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background: rgba(229, 57, 53, 0.2);
+    color: var(--hud-danger);
+    border-color: var(--hud-danger);
+}
+
+/* ===== Scrollbar for HUD ===== */
+.hud-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.hud-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.hud-body::-webkit-scrollbar-thumb {
+    background: var(--hud-gold-dim);
+    border-radius: 2px;
+}
+
+.hud-body::-webkit-scrollbar-thumb:hover {
+    background: var(--hud-gold);
+}
+
+/* ===== Resize Handle ===== */
+.combat-hud::after {
+    content: '⋮⋮';
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--hud-gold-dim);
+    cursor: se-resize;
+    opacity: 0.6;
+    pointer-events: none;
+    transform: rotate(-45deg);
+    letter-spacing: -2px;
+}
+
+.combat-hud:hover::after {
+    opacity: 1;
+    color: var(--hud-gold);
+}
+
+.combat-hud.collapsed::after {
+    display: none;
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 480px) {
+    .combat-hud {
+        min-width: 320px;
+        max-width: calc(100vw - 20px);
+        max-height: 70vh;
+        left: 10px !important;
+        right: 10px;
+        resize: none; /* Disable resize on mobile */
+    }
+
+    .combat-hud::after {
+        display: none;
+    }
+
+    .attack-presets {
+        grid-template-columns: 1fr;
+    }
+
+    .defense-layout {
+        flex-direction: column;
+    }
+
+    .defense-sidebar {
+        flex-direction: row;
+        width: 100%;
+    }
+
+    .defense-card-small {
+        flex: 1;
+    }
+
+    .hud-header {
+        padding: 10px 12px;
+    }
+
+    .hud-title-text {
+        font-size: 0.9rem;
+    }
+
+    .hud-character-name {
+        font-size: 0.75rem;
+    }
+}

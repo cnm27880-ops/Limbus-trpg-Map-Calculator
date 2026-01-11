@@ -66,28 +66,28 @@ const HOTKEYS = {
     // 當有選取單位時用於移動單位，否則用於移動視角
     'ArrowUp': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(0, -80);
+            if (!isUnitSelectedAndDeployed()) moveCamera(0, 80);
         },
         description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowDown': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(0, 80);
+            if (!isUnitSelectedAndDeployed()) moveCamera(0, -80);
         },
         description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowLeft': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(-80, 0);
+            if (!isUnitSelectedAndDeployed()) moveCamera(80, 0);
         },
         description: '移動單位/視角',
         category: 'camera'
     },
     'ArrowRight': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(80, 0);
+            if (!isUnitSelectedAndDeployed()) moveCamera(-80, 0);
         },
         description: '移動單位/視角',
         category: 'camera'
@@ -123,6 +123,13 @@ const HOTKEYS = {
     '?': {
         action: () => toggleHotkeyHelp(),
         description: '顯示快捷鍵說明',
+        category: 'panels'
+    },
+    'h': {
+        action: () => {
+            if (typeof toggleCombatHUD === 'function') toggleCombatHUD();
+        },
+        description: '切換戰鬥儀表板',
         category: 'panels'
     }
 };
@@ -258,6 +265,14 @@ function toggleHotkeyHelp() {
 
         if (hotkeyHelpVisible) {
             renderHotkeyHelp();
+
+            // 關閉其他面板（音樂面板）
+            const musicPanel = document.getElementById('music-player-panel');
+            if (musicPanel) {
+                musicPanel.classList.remove('expanded');
+                const musicBtn = document.getElementById('qab-music-btn');
+                if (musicBtn) musicBtn.classList.remove('active');
+            }
         }
     }
 }
@@ -281,8 +296,14 @@ function renderHotkeyHelp() {
         grouped[category].push({ key, ...config });
     });
 
-    // 建立 HTML
-    let html = '<div class="hotkey-help-content">';
+    // 建立 HTML (包含標題列和關閉按鈕)
+    let html = `
+        <div class="hotkey-help-header">
+            <span class="hotkey-help-title">快捷鍵說明</span>
+            <button class="hotkey-help-close" onclick="toggleHotkeyHelp()" title="關閉">×</button>
+        </div>
+    `;
+    html += '<div class="hotkey-help-content">';
 
     Object.entries(grouped).forEach(([category, hotkeys]) => {
         const label = CATEGORY_LABELS[category] || category;

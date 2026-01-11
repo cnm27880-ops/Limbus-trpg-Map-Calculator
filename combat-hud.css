@@ -31,15 +31,15 @@
         0 0 30px rgba(212, 175, 55, 0.2),
         0 10px 40px rgba(0, 0, 0, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    min-width: 380px;
-    max-width: 420px;
+    min-width: 320px;
+    max-width: 500px;
     height: auto;
     max-height: 85vh;
     overflow: hidden; /* Clip content, scrolling handled by hud-body */
     display: flex;
     flex-direction: column;
     transition: opacity 0.3s ease, transform 0.3s ease;
-    resize: vertical; /* Allow user to resize vertically */
+    resize: both; /* Allow user to resize both directions */
 }
 
 .combat-hud.collapsed {
@@ -302,6 +302,95 @@
 
 .stat-value.highlight {
     color: var(--hud-highlight);
+}
+
+/* ===== Compact Combat Stats (New Layout) ===== */
+.combat-stats-compact {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.stat-compact {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ===== Compact Defense Display ===== */
+.defense-compact {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(0, 229, 255, 0.05) 100%);
+    border: 1px solid var(--hud-gold-dim);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.defense-compact-header {
+    margin-bottom: 2px;
+}
+
+.defense-compact-type {
+    font-size: 0.7rem;
+    color: var(--hud-gold);
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.defense-compact-type:hover {
+    color: var(--hud-highlight);
+}
+
+.defense-compact-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--hud-text);
+    line-height: 1.2;
+}
+
+.defense-compact-others {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.defense-mini {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--hud-text-dim);
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.defense-mini:hover {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--hud-gold);
+}
+
+/* ===== Saves Section ===== */
+.saves-section {
+    margin-top: 10px;
+}
+
+.saves-label {
+    font-size: 0.7rem;
+    color: var(--hud-text-dim);
+    margin-bottom: 6px;
+    text-transform: uppercase;
 }
 
 /* ===== Saves Display ===== */
@@ -767,23 +856,26 @@
 
 /* ===== Resize Handle ===== */
 .combat-hud::after {
-    content: '';
+    content: '⋮⋮';
     position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 4px;
-    background: var(--hud-gold-dim);
-    border-radius: 2px;
-    margin-bottom: 6px;
+    bottom: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    color: var(--hud-gold-dim);
+    cursor: se-resize;
     opacity: 0.6;
     pointer-events: none;
+    transform: rotate(-45deg);
+    letter-spacing: -2px;
 }
 
 .combat-hud:hover::after {
     opacity: 1;
-    background: var(--hud-gold);
+    color: var(--hud-gold);
 }
 
 .combat-hud.collapsed::after {

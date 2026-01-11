@@ -296,8 +296,14 @@ function renderHotkeyHelp() {
         grouped[category].push({ key, ...config });
     });
 
-    // 建立 HTML
-    let html = '<div class="hotkey-help-content">';
+    // 建立 HTML (包含標題列和關閉按鈕)
+    let html = `
+        <div class="hotkey-help-header">
+            <span class="hotkey-help-title">快捷鍵說明</span>
+            <button class="hotkey-help-close" onclick="toggleHotkeyHelp()" title="關閉">×</button>
+        </div>
+    `;
+    html += '<div class="hotkey-help-content">';
 
     Object.entries(grouped).forEach(([category, hotkeys]) => {
         const label = CATEGORY_LABELS[category] || category;

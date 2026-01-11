@@ -639,31 +639,22 @@ function renderHUDContent() {
         </div>
     `;
 
-    // Combat Stats Section
+    // Combat Stats + Defense Combined Section
     html += `
         <div class="hud-section">
             <div class="hud-section-header">戰鬥數值</div>
             <div class="hud-section-body">
-                <div class="combat-stats">
-                    <div class="stat-item">
+                <div class="combat-stats-compact">
+                    <div class="stat-compact">
                         <div class="stat-label">先攻加值</div>
                         <div class="stat-value highlight">+${data.initiative}</div>
                     </div>
+                    ${renderDefenseCompact(data.defenses)}
                 </div>
-                <div style="margin-top:10px;">
-                    <div style="font-size:0.75rem;color:var(--hud-text-dim);margin-bottom:6px;">豁免</div>
+                <div class="saves-section">
+                    <div class="saves-label">豁免</div>
                     ${renderSaves(data.saves)}
                 </div>
-            </div>
-        </div>
-    `;
-
-    // Defense Section
-    html += `
-        <div class="hud-section">
-            <div class="hud-section-header">防禦</div>
-            <div class="hud-section-body">
-                ${renderDefenses(data.defenses)}
             </div>
         </div>
     `;
@@ -734,6 +725,35 @@ function renderSaves(saves) {
             </div>
         </div>
     `;
+}
+
+function renderDefenseCompact(defenses) {
+    const activeIdx = hudState.activeDefenseIndex;
+    const activeDef = defenses[activeIdx];
+    const totalDef = activeDef.single ? activeDef.base : (activeDef.base + activeDef.extra);
+
+    return `
+        <div class="defense-compact">
+            <div class="defense-compact-header">
+                <span class="defense-compact-type" onclick="cycleDefense()" title="點擊切換防禦類型">${activeDef.type}</span>
+            </div>
+            <div class="defense-compact-value">${totalDef}</div>
+            <div class="defense-compact-others">
+                ${defenses.map((def, idx) => {
+                    if (idx === activeIdx) return '';
+                    const val = def.single ? def.base : (def.base + def.extra);
+                    return `<span class="defense-mini" onclick="switchDefense(${idx})" title="${def.type}">${val}</span>`;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function cycleDefense() {
+    const maxIdx = hudState.data && hudState.data.defenses ? hudState.data.defenses.length - 1 : 3;
+    hudState.activeDefenseIndex = (hudState.activeDefenseIndex + 1) % (maxIdx + 1);
+    saveHUDSettings();
+    renderHUDContent();
 }
 
 function renderDefenses(defenses) {

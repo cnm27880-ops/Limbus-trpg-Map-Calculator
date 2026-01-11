@@ -85,13 +85,14 @@ function initCombatHUD() {
     loadHUDSettings();
     createHUDElement();
     createImportModal();
-    addImportButton();
 
     // Restore HUD if previously bound
     if (hudState.boundTab) {
         showCombatHUD();
         refreshHUDData();
     }
+
+    console.log('Combat HUD: 模組已初始化');
 }
 
 // ===== Storage Functions =====
@@ -192,33 +193,6 @@ function createImportModal() {
     modal.addEventListener('click', (e) => {
         if (e.target === modal) closeImportModal();
     });
-}
-
-// ===== Add Import Button to Units Page =====
-function addImportButton() {
-    // Retry mechanism - wait for toolbar to exist
-    const tryAddButton = () => {
-        const toolbar = document.getElementById('units-toolbar');
-        if (!toolbar) {
-            // Retry after a short delay
-            setTimeout(tryAddButton, 500);
-            return;
-        }
-
-        // Check if button already exists
-        if (document.getElementById('sheet-import-trigger')) return;
-
-        const btn = document.createElement('button');
-        btn.id = 'sheet-import-trigger';
-        btn.className = 'units-btn sheet-import-btn';
-        btn.innerHTML = '📊 從 Sheet 匯入';
-        btn.onclick = openImportModal;
-
-        toolbar.appendChild(btn);
-        console.log('Combat HUD: 匯入按鈕已添加');
-    };
-
-    tryAddButton();
 }
 
 // ===== Import Modal Functions =====

@@ -4,35 +4,41 @@
  */
 
 // ===== 快速操作球狀態 =====
-let qabExpanded = false;
+let qabMenuOpen = false;
 
 /**
- * 切換快速操作球展開/收合
+ * 切換快速操作球選單
  */
-function toggleQuickActions() {
-    qabExpanded = !qabExpanded;
-    const container = document.getElementById('quick-action-ball');
+function toggleQABMenu() {
+    qabMenuOpen = !qabMenuOpen;
+    const menu = document.getElementById('qab-menu');
     const mainBtn = document.getElementById('qab-main');
 
-    if (container) {
-        container.classList.toggle('expanded', qabExpanded);
+    if (menu) {
+        menu.classList.toggle('show', qabMenuOpen);
     }
     if (mainBtn) {
-        mainBtn.classList.toggle('active', qabExpanded);
+        mainBtn.classList.toggle('active', qabMenuOpen);
     }
+}
 
-    // 收合時關閉所有面板
-    if (!qabExpanded) {
-        const musicPanel = document.getElementById('music-player-panel');
-        const hotkeyPanel = document.getElementById('hotkey-help');
+/**
+ * 關閉快速操作球選單
+ */
+function closeQABMenu() {
+    qabMenuOpen = false;
+    const menu = document.getElementById('qab-menu');
+    const mainBtn = document.getElementById('qab-main');
 
-        if (musicPanel) musicPanel.classList.remove('expanded');
-        if (hotkeyPanel) hotkeyPanel.classList.add('hidden');
+    if (menu) menu.classList.remove('show');
+    if (mainBtn) mainBtn.classList.remove('active');
+}
 
-        // 重置按鈕狀態
-        const musicBtn = document.getElementById('qab-music-btn');
-        if (musicBtn) musicBtn.classList.remove('active');
-    }
+/**
+ * 舊版相容函數
+ */
+function toggleQuickActions() {
+    toggleQABMenu();
 }
 
 // ===== 頁面載入初始化 =====

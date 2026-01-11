@@ -255,23 +255,30 @@
 
 <!-- 快速操作球 (Quick Action Ball) -->
 <div id="quick-action-ball" class="qab-container">
+    <!-- 彈出選單 -->
+    <div class="qab-menu" id="qab-menu">
+        <div class="qab-menu-item" onclick="toggleMusicPanel(); closeQABMenu();">
+            <span class="qab-menu-icon">🎵</span>
+            <span class="qab-menu-text">音樂播放器</span>
+        </div>
+        <div class="qab-menu-item" onclick="toggleHotkeyHelp(); closeQABMenu();">
+            <span class="qab-menu-icon">⌨</span>
+            <span class="qab-menu-text">快捷鍵說明</span>
+        </div>
+        <div class="qab-menu-item" onclick="openImportModal(); closeQABMenu();">
+            <span class="qab-menu-icon">📊</span>
+            <span class="qab-menu-text">匯入角色數據</span>
+        </div>
+        <div class="qab-menu-item" onclick="toggleCombatHUD(); closeQABMenu();">
+            <span class="qab-menu-icon">🎯</span>
+            <span class="qab-menu-text">戰鬥儀表板</span>
+        </div>
+    </div>
+
     <!-- 主按鈕 -->
-    <button class="qab-main-btn" id="qab-main" onclick="toggleQuickActions()" title="快速操作">
+    <button class="qab-main-btn" id="qab-main" onclick="toggleQABMenu()" title="快速操作">
         <span class="qab-icon">⚡</span>
     </button>
-
-    <!-- 展開的操作按鈕 -->
-    <div class="qab-actions" id="qab-actions">
-        <button class="qab-action-btn" onclick="toggleMusicPanel()" title="音樂播放器" id="qab-music-btn">
-            <span>🎵</span>
-        </button>
-        <button class="qab-action-btn" onclick="toggleHotkeyHelp()" title="快捷鍵說明">
-            <span>⌨</span>
-        </button>
-        <button class="qab-action-btn" onclick="toggleCombatHUD()" title="戰鬥儀表板" id="qab-hud-btn">
-            <span>📊</span>
-        </button>
-    </div>
 
     <!-- 音樂播放器面板 -->
     <div id="music-player-panel" class="qab-panel music-panel">

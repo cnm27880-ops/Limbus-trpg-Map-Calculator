@@ -3,6 +3,64 @@
  * 應用程式進入點與初始化
  */
 
+// ===== 快速操作球狀態 =====
+let qabMenuOpen = false;
+
+/**
+ * 切換快速操作球選單
+ */
+function toggleQABMenu() {
+    qabMenuOpen = !qabMenuOpen;
+    const menu = document.getElementById('qab-menu');
+    const mainBtn = document.getElementById('qab-main');
+
+    if (menu) {
+        menu.classList.toggle('show', qabMenuOpen);
+    }
+    if (mainBtn) {
+        mainBtn.classList.toggle('active', qabMenuOpen);
+    }
+
+    // 如果開啟選單，添加點擊外部關閉的監聽器
+    if (qabMenuOpen) {
+        setTimeout(() => {
+            document.addEventListener('click', handleQABOutsideClick);
+        }, 10);
+    } else {
+        document.removeEventListener('click', handleQABOutsideClick);
+    }
+}
+
+/**
+ * 處理點擊選單外部關閉
+ */
+function handleQABOutsideClick(e) {
+    const qabContainer = document.getElementById('quick-action-ball');
+    if (qabContainer && !qabContainer.contains(e.target)) {
+        closeQABMenu();
+    }
+}
+
+/**
+ * 關閉快速操作球選單
+ */
+function closeQABMenu() {
+    qabMenuOpen = false;
+    const menu = document.getElementById('qab-menu');
+    const mainBtn = document.getElementById('qab-main');
+
+    if (menu) menu.classList.remove('show');
+    if (mainBtn) mainBtn.classList.remove('active');
+    document.removeEventListener('click', handleQABOutsideClick);
+}
+
+/**
+ * 舊版相容函數
+ */
+function toggleQuickActions() {
+    toggleQABMenu();
+}
+
 // ===== 頁面載入初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化 Modal

@@ -863,43 +863,127 @@
     }
 }
 
-/* ===== Hotkey Help ===== */
-.hotkey-help-btn {
+/* ===== Quick Action Ball ===== */
+.qab-container {
     position: fixed;
     bottom: 20px;
     right: 15px;
-    width: 40px;
-    height: 40px;
-    background: var(--bg-card);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
+    z-index: 150;
+}
+
+.qab-main-btn {
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
-    font-size: 1.2rem;
+    background: linear-gradient(135deg, var(--accent-yellow), #e6b800);
+    border: none;
+    color: #000;
+    font-size: 1.5rem;
     cursor: pointer;
-    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(253, 216, 53, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 160;
 }
 
-.hotkey-help-btn:hover {
-    color: var(--accent-yellow);
-    border-color: var(--accent-yellow);
+.qab-main-btn:hover {
     transform: scale(1.1);
+    box-shadow: 0 6px 25px rgba(253, 216, 53, 0.5);
 }
 
+.qab-main-btn.active {
+    transform: rotate(45deg);
+    background: linear-gradient(135deg, var(--accent-red), #c62828);
+    box-shadow: 0 4px 15px rgba(229, 57, 53, 0.4);
+}
+
+.qab-icon {
+    transition: transform 0.3s;
+}
+
+/* QAB Menu (Popup List) */
+.qab-menu {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    pointer-events: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 160px;
+}
+
+.qab-menu.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.qab-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-main);
+    font-size: 0.9rem;
+}
+
+.qab-menu-item:last-child {
+    border-bottom: none;
+}
+
+.qab-menu-item:hover {
+    background: rgba(253, 216, 53, 0.1);
+    color: var(--accent-yellow);
+}
+
+.qab-menu-item:active {
+    background: rgba(253, 216, 53, 0.2);
+}
+
+.qab-menu-icon {
+    font-size: 1.1rem;
+    width: 24px;
+    text-align: center;
+}
+
+.qab-menu-text {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.qab-menu-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
+/* QAB Panels */
+.qab-panel {
+    position: absolute;
+    bottom: 60px;
+    right: 0;
+    z-index: 155;
+}
+
+/* ===== Hotkey Help ===== */
 .hotkey-help-panel {
-    position: fixed;
-    bottom: 70px;
-    right: 15px;
     width: 280px;
     max-height: 400px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 10px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    z-index: 200;
     overflow: hidden;
 }
 
@@ -907,9 +991,44 @@
     display: none;
 }
 
+.hotkey-help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, var(--bg-card), rgba(253, 216, 53, 0.1));
+    border-bottom: 1px solid var(--border);
+}
+
+.hotkey-help-title {
+    font-weight: bold;
+    color: var(--accent-yellow);
+    font-size: 0.95rem;
+}
+
+.hotkey-help-close {
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.hotkey-help-close:hover {
+    color: var(--accent-red);
+    background: rgba(229, 57, 53, 0.1);
+}
+
 .hotkey-help-content {
     padding: 12px;
-    max-height: 380px;
+    max-height: 340px;
     overflow-y: auto;
 }
 
@@ -955,21 +1074,7 @@
     flex: 1;
 }
 
-/* ===== Responsive adjustments ===== */
-@media (max-width: 768px) {
-    .hotkey-help-btn {
-        bottom: 15px;
-        width: 36px;
-        height: 36px;
-        font-size: 1rem;
-    }
-
-    .hotkey-help-panel {
-        bottom: 60px;
-        right: 10px;
-        width: 250px;
-    }
-}
+/* Hotkey panel responsive - handled by QAB responsive rules */
 
 /* ===== Map Manager Modal ===== */
 .map-manager-modal {
@@ -1136,52 +1241,7 @@
 }
 
 /* ===== Music Player ===== */
-#music-player {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    z-index: 150;
-}
-
-.music-toggle-btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--bg-panel), var(--bg-card));
-    border: 2px solid var(--accent-yellow);
-    color: var(--accent-yellow);
-    font-size: 1.3rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    transition: all 0.2s;
-}
-
-.music-toggle-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 20px rgba(253, 216, 53, 0.3);
-}
-
-.music-toggle-btn.active {
-    background: var(--accent-yellow);
-    color: #000;
-}
-
-.music-icon {
-    animation: pulse-music 2s ease-in-out infinite;
-}
-
-@keyframes pulse-music {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-}
-
 .music-panel {
-    position: absolute;
-    bottom: 60px;
-    left: 0;
     width: 300px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -1442,20 +1502,38 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
-/* Mobile adjustments for music player */
+/* Mobile adjustments for quick action ball & music player */
 @media (max-width: 768px) {
-    #music-player {
+    .qab-container {
         bottom: 15px;
-        left: 15px;
+        right: 10px;
     }
 
-    .music-toggle-btn {
-        width: 42px;
-        height: 42px;
+    .qab-main-btn {
+        width: 46px;
+        height: 46px;
+        font-size: 1.3rem;
+    }
+
+    .qab-menu {
+        min-width: 150px;
+        bottom: 55px;
+    }
+
+    .qab-menu-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+    }
+
+    .qab-panel {
+        right: -5px;
     }
 
     .music-panel {
         width: 280px;
-        bottom: 55px;
+    }
+
+    .hotkey-help-panel {
+        width: 260px;
     }
 }

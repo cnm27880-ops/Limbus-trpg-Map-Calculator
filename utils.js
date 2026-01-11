@@ -108,13 +108,13 @@ function switchPage(pageId) {
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
     });
-    
+
     // 顯示目標頁面
     const targetPage = document.getElementById('page-' + pageId);
     if (targetPage) {
         targetPage.classList.add('active');
     }
-    
+
     // 更新導覽標籤
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.remove('active');
@@ -122,6 +122,20 @@ function switchPage(pageId) {
     const targetTab = document.querySelector(`.nav-tab[data-page="${pageId}"]`);
     if (targetTab) {
         targetTab.classList.add('active');
+    }
+
+    // 當切換到地圖頁面時，重新渲染地圖以修復手機版黑屏問題
+    if (pageId === 'map') {
+        // 使用 requestAnimationFrame 確保 DOM 已更新後再渲染
+        requestAnimationFrame(() => {
+            if (typeof renderMap === 'function') {
+                renderMap();
+            }
+            // 重新應用相機設定
+            if (typeof applyCamera === 'function') {
+                applyCamera();
+            }
+        });
     }
 }
 

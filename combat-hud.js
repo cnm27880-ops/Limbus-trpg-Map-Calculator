@@ -253,7 +253,9 @@ function createHUDElement() {
         </div>
     `;
 
-    document.body.appendChild(hud);
+    // Append to game-stage if available, otherwise to body
+    const gameStage = document.querySelector('.game-stage') || document.querySelector('.main-wrapper') || document.body;
+    gameStage.appendChild(hud);
 
     // Apply saved position
     updateHUDPosition();
@@ -879,7 +881,7 @@ function renderMinimizedBar() {
     `;
 }
 
-// ===== Drag Functionality =====
+// ===== Drag Functionality - Improved for Absolute Positioning =====
 function setupHUDDrag() {
     const hud = document.getElementById('combat-hud');
     const header = document.getElementById('hud-header');
@@ -910,11 +912,13 @@ function setupHUDDrag() {
             startY = e.clientY;
         }
 
-        // Get the actual current position from the DOM, not from state
-        // This ensures accuracy even if state got out of sync
-        const rect = hud.getBoundingClientRect();
-        startPosX = rect.left;
-        startPosY = rect.top;
+        // Get the actual current position relative to parent container
+        const parentRect = hud.parentElement ? hud.parentElement.getBoundingClientRect() : { left: 0, top: 0 };
+        const hudRect = hud.getBoundingClientRect();
+
+        // Calculate position relative to parent
+        startPosX = hudRect.left - parentRect.left;
+        startPosY = hudRect.top - parentRect.top;
 
         document.addEventListener('mousemove', onDrag);
         document.addEventListener('mouseup', stopDrag);
@@ -939,17 +943,25 @@ function setupHUDDrag() {
         const deltaX = clientX - startX;
         const deltaY = clientY - startY;
 
-        // Calculate new position with bounds checking
-        const newX = startPosX + deltaX;
-        const newY = startPosY + deltaY;
+        // Calculate new position
+        let newX = startPosX + deltaX;
+        let newY = startPosY + deltaY;
+
+        // Get parent container bounds for boundary calculation
+        const parent = hud.parentElement;
+        const parentWidth = parent ? parent.clientWidth : window.innerWidth;
+        const parentHeight = parent ? parent.clientHeight : window.innerHeight;
 
         // Get HUD dimensions for boundary calculation
         const hudWidth = hud.offsetWidth || 380;
         const hudHeight = hud.offsetHeight || 200;
 
-        // Keep at least 50px of the HUD visible on screen
-        hudState.position.x = Math.max(-hudWidth + 100, Math.min(window.innerWidth - 100, newX));
-        hudState.position.y = Math.max(0, Math.min(window.innerHeight - 50, newY));
+        // Keep at least 100px of the HUD visible within parent bounds
+        newX = Math.max(-hudWidth + 100, Math.min(parentWidth - 100, newX));
+        newY = Math.max(0, Math.min(parentHeight - 50, newY));
+
+        hudState.position.x = newX;
+        hudState.position.y = newY;
 
         updateHUDPosition();
         e.preventDefault();

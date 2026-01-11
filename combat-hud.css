@@ -19,27 +19,33 @@
     --hud-warning: #fb8c00;
 }
 
-/* ===== Combat HUD Container ===== */
+/* ===== Combat HUD Container - Glassmorphism Floating ===== */
 .combat-hud {
-    position: fixed;
-    z-index: 9999;
+    position: absolute; /* Changed from fixed for better map integration */
+    z-index: 1000; /* High but not blocking modals */
     font-family: 'Noto Sans TC', sans-serif;
     border-radius: 16px;
-    border: 2px solid var(--hud-border);
-    background: var(--hud-bg);
+    border: 1px solid var(--hud-gold);
+    background: rgba(15, 15, 20, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     box-shadow:
-        0 0 30px rgba(212, 175, 55, 0.2),
-        0 10px 40px rgba(0, 0, 0, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        0 0 40px rgba(212, 175, 55, 0.15),
+        0 12px 48px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
     min-width: 320px;
     max-width: 500px;
     height: auto;
-    max-height: 85vh;
+    max-height: 80vh;
     overflow: hidden; /* Clip content, scrolling handled by hud-body */
-    display: flex;
+    display: none; /* Hidden until a character is selected */
     flex-direction: column;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
     resize: both; /* Allow user to resize both directions */
+}
+
+.combat-hud:not(.hidden) {
+    display: flex;
 }
 
 .combat-hud.collapsed {
@@ -58,7 +64,7 @@
     display: none !important;
 }
 
-/* ===== HUD Header ===== */
+/* ===== HUD Header - Draggable ===== */
 .hud-header {
     display: flex;
     align-items: center;
@@ -66,9 +72,18 @@
     padding: 12px 16px;
     background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(15, 15, 20, 0.95) 100%);
     border-bottom: 1px solid var(--hud-gold-dim);
-    cursor: move;
+    cursor: move; /* Indicates draggability */
     user-select: none;
     border-radius: 14px 14px 0 0;
+    transition: background 0.2s ease;
+}
+
+.hud-header:hover {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(15, 15, 20, 0.95) 100%);
+}
+
+.hud-header:active {
+    cursor: grabbing;
 }
 
 .combat-hud.collapsed .hud-header {
@@ -885,11 +900,14 @@
 /* ===== Mobile Responsive ===== */
 @media (max-width: 480px) {
     .combat-hud {
-        min-width: 320px;
+        position: fixed; /* Fixed on mobile for better UX */
+        min-width: 280px;
         max-width: calc(100vw - 20px);
-        max-height: 70vh;
+        max-height: 65vh;
         left: 10px !important;
-        right: 10px;
+        right: 10px !important;
+        bottom: 80px !important;
+        top: auto !important;
         resize: none; /* Disable resize on mobile */
     }
 
@@ -924,5 +942,13 @@
 
     .hud-character-name {
         font-size: 0.75rem;
+    }
+}
+
+/* Medium screens */
+@media (min-width: 481px) and (max-width: 768px) {
+    .combat-hud {
+        max-width: 400px;
+        max-height: 75vh;
     }
 }

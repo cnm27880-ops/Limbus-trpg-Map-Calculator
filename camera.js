@@ -145,24 +145,15 @@ function zoomCameraAt(amount, focusX, focusY) {
 
     if (oldScale === newScale) return;
 
-    // 取得視口中心
-    const vp = document.getElementById('map-viewport');
-    if (!vp) return;
+    // 計算縮放點在世界坐標系中的位置（縮放前）
+    // 公式：世界坐標 = (螢幕坐標 - 相機位移) / 縮放比例
+    const worldX = (focusX - cam.x) / oldScale;
+    const worldY = (focusY - cam.y) / oldScale;
 
-    const vpRect = vp.getBoundingClientRect();
-    const vpCenterX = vpRect.width / 2;
-    const vpCenterY = vpRect.height / 2;
-
-    // 計算縮放中心點相對於視口中心的偏移
-    const offsetX = focusX - vpCenterX;
-    const offsetY = focusY - vpCenterY;
-
-    // 計算縮放前後的位置差異
-    const scaleRatio = newScale / oldScale;
-
-    // 調整相機位置以保持縮放中心點不變
-    cam.x = cam.x - offsetX * (scaleRatio - 1);
-    cam.y = cam.y - offsetY * (scaleRatio - 1);
+    // 縮放後，調整相機位置，使該世界坐標點在螢幕上的位置保持不變
+    // 公式：相機位移 = 螢幕坐標 - 世界坐標 * 新縮放比例
+    cam.x = focusX - worldX * newScale;
+    cam.y = focusY - worldY * newScale;
     cam.scale = newScale;
 
     applyCamera();

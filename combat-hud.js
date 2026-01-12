@@ -572,9 +572,9 @@ function parseSheetData(valueRanges) {
         const dp = getNumber(idx++);
         const extra = getNumber(idx++);
         const limit = getNumber(idx++);
-        const pen = getValue(idx++);
-        const magic = getValue(idx++);
-        const speed = getValue(idx++);
+        const penVal = parseInt(getValue(idx++)) || 0;
+        const magicVal = parseInt(getValue(idx++)) || 0;
+        const speedVal = parseInt(getValue(idx++)) || 0;
 
         if (name && name.trim()) {
             attacks.push({
@@ -582,9 +582,9 @@ function parseSheetData(valueRanges) {
                 dp: dp,
                 extra: extra,
                 limit: limit,
-                hasPen: pen && (pen.toLowerCase() === 'true' || pen === '1' || pen === 'v' || pen === 'V' || pen === '是' || pen === 'TRUE'),
-                hasMagic: magic && (magic.toLowerCase() === 'true' || magic === '1' || magic === 'v' || magic === 'V' || magic === '是' || magic === 'TRUE'),
-                hasSpeed: speed && (speed.toLowerCase() === 'true' || speed === '1' || speed === 'v' || speed === 'V' || speed === '是' || speed === 'TRUE')
+                penVal: penVal,
+                magicVal: magicVal,
+                speedVal: speedVal
             });
         }
     }
@@ -794,9 +794,9 @@ function renderAttacks(attacks) {
                     <div class="attack-dp">${atk.dp} + ${atk.extra}</div>
                     <div class="attack-limit">上限: ${atk.limit}</div>
                     <div class="attack-tags">
-                        ${atk.hasPen ? '<span class="attack-tag pen">破甲</span>' : ''}
-                        ${atk.hasMagic ? '<span class="attack-tag magic">破魔</span>' : ''}
-                        ${atk.hasSpeed ? '<span class="attack-tag speed">高速</span>' : ''}
+                        ${atk.penVal > 0 ? `<span class="attack-tag pen">破甲 ${atk.penVal}</span>` : ''}
+                        ${atk.magicVal > 0 ? `<span class="attack-tag magic">破魔 ${atk.magicVal}</span>` : ''}
+                        ${atk.speedVal > 0 ? `<span class="attack-tag speed">高速 ${atk.speedVal}</span>` : ''}
                     </div>
                 </div>
             `).join('')}

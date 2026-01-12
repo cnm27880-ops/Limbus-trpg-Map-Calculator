@@ -77,6 +77,7 @@ let hudState = {
     isCollapsed: false,
     position: { ...HUD_CONFIG.DEFAULT_POSITION },
     activeDefenseIndex: 1, // Default: 格擋防禦 (Block)
+    activeAttackIndex: 0, // Default: 第一個攻擊預設
     boundTab: null,
     lastRefresh: 0,
     data: null
@@ -87,7 +88,8 @@ const HUD_STORAGE_KEYS = {
     POSITION: 'limbus_hud_position',
     COLLAPSED: 'limbus_hud_collapsed',
     ACTIVE_TAB: 'limbus_hud_active_tab',
-    DEFENSE_INDEX: 'limbus_hud_defense_index'
+    DEFENSE_INDEX: 'limbus_hud_defense_index',
+    ATTACK_INDEX: 'limbus_hud_attack_index'
 };
 
 // ===== Initialize HUD =====
@@ -213,6 +215,9 @@ function loadHUDSettings() {
 
         const defIdx = localStorage.getItem(HUD_STORAGE_KEYS.DEFENSE_INDEX);
         if (defIdx !== null) hudState.activeDefenseIndex = parseInt(defIdx);
+
+        const atkIdx = localStorage.getItem(HUD_STORAGE_KEYS.ATTACK_INDEX);
+        if (atkIdx !== null) hudState.activeAttackIndex = parseInt(atkIdx);
     } catch (e) {
         console.error('Failed to load HUD settings:', e);
     }
@@ -224,6 +229,7 @@ function saveHUDSettings() {
         localStorage.setItem(HUD_STORAGE_KEYS.COLLAPSED, JSON.stringify(hudState.isCollapsed));
         localStorage.setItem(HUD_STORAGE_KEYS.ACTIVE_TAB, hudState.boundTab || '');
         localStorage.setItem(HUD_STORAGE_KEYS.DEFENSE_INDEX, hudState.activeDefenseIndex.toString());
+        localStorage.setItem(HUD_STORAGE_KEYS.ATTACK_INDEX, hudState.activeAttackIndex.toString());
     } catch (e) {
         console.error('Failed to save HUD settings:', e);
     }
@@ -786,20 +792,43 @@ function renderDefenses(defenses) {
 }
 
 function renderAttacks(attacks) {
+    const activeIdx = hudState.activeAttackIndex;
+    const activeAtk = attacks[activeIdx];
+
+    // 如果沒有有效的攻擊資料，重置為第一個
+    if (!activeAtk && attacks.length > 0) {
+        hudState.activeAttackIndex = 0;
+        saveHUDSettings();
+        return renderAttacks(attacks);
+    }
+
+    if (!activeAtk) {
+        return '<div style="text-align:center;color:var(--hud-text-dim);padding:20px;">無攻擊預設</div>';
+    }
+
     return `
-        <div class="attack-presets">
-            ${attacks.map(atk => `
-                <div class="attack-card">
-                    <div class="attack-name" title="${escapeHtml(atk.name)}">${escapeHtml(atk.name)}</div>
-                    <div class="attack-dp">${atk.dp} + ${atk.extra}</div>
-                    <div class="attack-limit">上限: ${atk.limit}</div>
-                    <div class="attack-tags">
-                        ${atk.penVal > 0 ? `<span class="attack-tag pen">破甲 ${atk.penVal}</span>` : ''}
-                        ${atk.magicVal > 0 ? `<span class="attack-tag magic">破魔 ${atk.magicVal}</span>` : ''}
-                        ${atk.speedVal > 0 ? `<span class="attack-tag speed">高速 ${atk.speedVal}</span>` : ''}
-                    </div>
-                </div>
+        <div class="attack-tabs">
+            ${attacks.map((atk, idx) => `
+                <button class="attack-tab-btn ${idx === activeIdx ? 'active' : ''}"
+                        onclick="switchAttack(${idx})"
+                        title="${escapeHtml(atk.name)}">
+                    ${idx + 1}
+                </button>
             `).join('')}
+        </div>
+        <div class="active-attack-card">
+            <div class="attack-card-row">
+                <div class="attack-card-name">${escapeHtml(activeAtk.name)}</div>
+                <div class="attack-card-dp">${activeAtk.dp} + ${activeAtk.extra}</div>
+            </div>
+            <div class="attack-card-row">
+                <div class="attack-card-tags">
+                    ${activeAtk.penVal > 0 ? `<span class="attack-tag pen">破甲 ${activeAtk.penVal}</span>` : ''}
+                    ${activeAtk.magicVal > 0 ? `<span class="attack-tag magic">破魔 ${activeAtk.magicVal}</span>` : ''}
+                    ${activeAtk.speedVal > 0 ? `<span class="attack-tag speed">高速 ${activeAtk.speedVal}</span>` : ''}
+                </div>
+                <div class="attack-card-limit">上限: ${activeAtk.limit}</div>
+            </div>
         </div>
     `;
 }
@@ -807,6 +836,13 @@ function renderAttacks(attacks) {
 // ===== Defense Switching =====
 function switchDefense(index) {
     hudState.activeDefenseIndex = index;
+    saveHUDSettings();
+    renderHUDContent();
+}
+
+// ===== Attack Switching =====
+function switchAttack(index) {
+    hudState.activeAttackIndex = index;
     saveHUDSettings();
     renderHUDContent();
 }

@@ -308,7 +308,7 @@
 .combat-stats-compact {
     display: flex;
     gap: 10px;
-    align-items: stretch;
+    align-items: flex-start;
 }
 
 .stat-compact {
@@ -496,7 +496,94 @@
     color: var(--hud-text);
 }
 
-/* ===== Attack Presets ===== */
+/* ===== Attack Presets (Tabbed) ===== */
+.attack-tabs {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+.attack-tab-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--hud-text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.attack-tab-btn:hover {
+    background: rgba(212, 175, 55, 0.15);
+    border-color: var(--hud-gold-dim);
+    color: var(--hud-text);
+}
+
+.attack-tab-btn.active {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(0, 229, 255, 0.1) 100%);
+    border: 2px solid var(--hud-gold);
+    color: var(--hud-gold);
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.3);
+}
+
+.attack-tab-btn:active {
+    transform: scale(0.92);
+}
+
+.active-attack-card {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.attack-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.attack-card-row:first-child {
+    margin-bottom: 10px;
+}
+
+.attack-card-name {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--hud-text);
+}
+
+.attack-card-dp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--hud-highlight);
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+}
+
+.attack-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.attack-card-limit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--hud-text-dim);
+    text-align: right;
+}
+
+/* ===== Attack Presets (Legacy - Keep for compatibility) ===== */
 .attack-presets {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -548,10 +635,10 @@
 }
 
 .attack-tag {
-    font-size: 0.7rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 500;
+    font-size: 0.75rem;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 600;
 }
 
 .attack-tag.pen {

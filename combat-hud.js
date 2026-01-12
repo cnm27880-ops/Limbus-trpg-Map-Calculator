@@ -650,16 +650,20 @@ function renderHUDContent() {
         <div class="hud-section">
             <div class="hud-section-header">戰鬥數值</div>
             <div class="hud-section-body">
-                <div class="combat-stats-compact">
-                    <div class="stat-compact">
-                        <div class="stat-label">先攻加值</div>
-                        <div class="stat-value highlight">+${data.initiative}</div>
+                <div class="combat-stats-layout">
+                    <div class="combat-stats-left">
+                        <div class="stat-compact">
+                            <div class="stat-label">先攻加值</div>
+                            <div class="stat-value highlight">+${data.initiative}</div>
+                        </div>
+                        <div class="saves-section-compact">
+                            <div class="saves-label">豁免</div>
+                            ${renderSaves(data.saves)}
+                        </div>
                     </div>
-                    ${renderDefenseCompact(data.defenses)}
-                </div>
-                <div class="saves-section">
-                    <div class="saves-label">豁免</div>
-                    ${renderSaves(data.saves)}
+                    <div class="combat-stats-right">
+                        ${renderDefenseGrid(data.defenses)}
+                    </div>
                 </div>
             </div>
         </div>
@@ -751,6 +755,28 @@ function renderDefenseCompact(defenses) {
                     return `<span class="defense-mini" onclick="switchDefense(${idx})" title="${def.type}">${val}</span>`;
                 }).join('')}
             </div>
+        </div>
+    `;
+}
+
+function renderDefenseGrid(defenses) {
+    const activeIdx = hudState.activeDefenseIndex;
+
+    return `
+        <div class="defense-grid">
+            ${defenses.map((def, idx) => {
+                const val = def.single ? def.base : (def.base + def.extra);
+                const isActive = idx === activeIdx;
+                return `
+                    <div class="defense-grid-item ${isActive ? 'active' : ''}"
+                         onclick="switchDefense(${idx})"
+                         title="${def.type}">
+                        <div class="defense-grid-type">${def.type}</div>
+                        <div class="defense-grid-value">${val}</div>
+                        ${!def.single ? `<div class="defense-grid-breakdown">${def.base}+${def.extra}</div>` : ''}
+                    </div>
+                `;
+            }).join('')}
         </div>
     `;
 }

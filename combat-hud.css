@@ -304,7 +304,28 @@
     color: var(--hud-highlight);
 }
 
-/* ===== Compact Combat Stats (New Layout) ===== */
+/* ===== Combat Stats Layout (Left: Initiative+Saves, Right: Defense Grid) ===== */
+.combat-stats-layout {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+}
+
+.combat-stats-left {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 120px;
+}
+
+.combat-stats-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
+
+/* ===== Compact Combat Stats (Legacy) ===== */
 .combat-stats-compact {
     display: flex;
     gap: 10px;
@@ -312,7 +333,6 @@
 }
 
 .stat-compact {
-    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -386,6 +406,13 @@
     margin-top: 10px;
 }
 
+.saves-section-compact {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 8px 10px;
+}
+
 .saves-label {
     font-size: 0.7rem;
     color: var(--hud-text-dim);
@@ -417,6 +444,66 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.9rem;
     color: var(--hud-text);
+}
+
+/* ===== Defense Grid (2x2 Layout) ===== */
+.defense-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 6px;
+    width: 100%;
+}
+
+.defense-grid-item {
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.defense-grid-item:hover {
+    background: rgba(212, 175, 55, 0.1);
+    border-color: var(--hud-gold-dim);
+}
+
+.defense-grid-item.active {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(0, 229, 255, 0.1) 100%);
+    border: 2px solid var(--hud-gold);
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+}
+
+.defense-grid-type {
+    font-size: 0.65rem;
+    color: var(--hud-text-dim);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.defense-grid-item.active .defense-grid-type {
+    color: var(--hud-gold);
+}
+
+.defense-grid-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--hud-text);
+    line-height: 1.2;
+}
+
+.defense-grid-item.active .defense-grid-value {
+    color: var(--hud-highlight);
+}
+
+.defense-grid-breakdown {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--hud-text-dim);
+    margin-top: 2px;
 }
 
 /* ===== Defense Section ===== */

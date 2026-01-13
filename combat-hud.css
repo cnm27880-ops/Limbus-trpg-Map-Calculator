@@ -31,15 +31,14 @@
         0 0 30px rgba(212, 175, 55, 0.2),
         0 10px 40px rgba(0, 0, 0, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    min-width: 320px;
-    max-width: 500px;
+    width: 380px; /* 固定寬度，移除 resize 功能 */
     height: auto;
     max-height: 85vh;
     overflow: hidden; /* Clip content, scrolling handled by hud-body */
     display: flex;
     flex-direction: column;
     transition: opacity 0.3s ease, transform 0.3s ease;
-    resize: both; /* Allow user to resize both directions */
+    /* resize 功能已移除 */
 }
 
 .combat-hud.collapsed {
@@ -315,12 +314,12 @@
     flex: 0 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px; /* 減少間距，讓左欄更緊湊 */
     min-width: 120px;
 }
 
 .combat-stats-right {
-    flex: 1;
+    flex: 1; /* 自動填滿剩餘空間，讓防禦按鈕更大 */
     display: flex;
     align-items: center;
 }
@@ -403,46 +402,53 @@
 
 /* ===== Saves Section ===== */
 .saves-section {
-    margin-top: 10px;
+    margin-top: 6px;
 }
 
 .saves-section-compact {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 8px 10px;
+    /* 移除背景色、邊框和 padding */
+    background: none;
+    border: none;
+    padding: 0;
 }
 
 .saves-label {
-    font-size: 0.7rem;
-    color: var(--hud-text-dim);
-    margin-bottom: 6px;
-    text-transform: uppercase;
+    /* 移除標題 */
+    display: none;
 }
 
-/* ===== Saves Display ===== */
+/* ===== Saves Display - 三個小框框橫向排列 ===== */
 .saves-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 4px;
+    font-size: 0.8rem;
 }
 
 .save-item {
-    text-align: center;
-    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    text-align: center;
 }
 
 .save-label {
     font-size: 0.65rem;
     color: var(--hud-text-dim);
-    margin-bottom: 4px;
+    margin-bottom: 0;
+    text-transform: uppercase;
 }
 
 .save-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: var(--hud-text);
 }
 
@@ -453,16 +459,22 @@
     grid-template-rows: repeat(2, 1fr);
     gap: 6px;
     width: 100%;
+    height: 100%; /* 填滿父容器高度，與左側對齊 */
 }
 
 .defense-grid-item {
-    padding: 8px;
+    padding: 6px 8px; /* 減少上下 padding，與左側高度一致 */
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
 }
 
 .defense-grid-item:hover {
@@ -489,7 +501,7 @@
 
 .defense-grid-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.2rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: var(--hud-text);
     line-height: 1.2;
@@ -586,20 +598,20 @@
 /* ===== Attack Presets (Tabbed) ===== */
 .attack-tabs {
     display: flex;
-    gap: 6px;
+    gap: 4px; /* 減少間距，更緊湊 */
     justify-content: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px; /* 減少下方間距 */
 }
 
 .attack-tab-btn {
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    width: 26px; /* 減少寬度 */
+    height: 24px; /* 減少高度，更緊湊 */
+    border-radius: 5px;
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: var(--hud-text-dim);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
+    font-size: 0.75rem; /* 減小字體 */
     font-weight: 600;
     display: flex;
     align-items: center;
@@ -651,7 +663,7 @@
 
 .attack-card-dp {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 1.5rem;
+    font-size: 1rem; /* 調整為與攻擊名稱差不多大小 */
     font-weight: 700;
     color: var(--hud-highlight);
     text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
@@ -1028,47 +1040,16 @@
     background: var(--hud-gold);
 }
 
-/* ===== Resize Handle ===== */
-.combat-hud::after {
-    content: '⋮⋮';
-    position: absolute;
-    bottom: 4px;
-    right: 4px;
-    width: 16px;
-    height: 16px;
-    font-size: 10px;
-    line-height: 16px;
-    text-align: center;
-    color: var(--hud-gold-dim);
-    cursor: se-resize;
-    opacity: 0.6;
-    pointer-events: none;
-    transform: rotate(-45deg);
-    letter-spacing: -2px;
-}
-
-.combat-hud:hover::after {
-    opacity: 1;
-    color: var(--hud-gold);
-}
-
-.combat-hud.collapsed::after {
-    display: none;
-}
+/* ===== Resize Handle（已移除） ===== */
+/* Resize 功能已移除，不再顯示縮放指標 */
 
 /* ===== Mobile Responsive ===== */
 @media (max-width: 480px) {
     .combat-hud {
-        min-width: 320px;
-        max-width: calc(100vw - 20px);
+        width: calc(100vw - 20px); /* 手機版固定寬度 */
         max-height: 70vh;
         left: 10px !important;
         right: 10px;
-        resize: none; /* Disable resize on mobile */
-    }
-
-    .combat-hud::after {
-        display: none;
     }
 
     .attack-presets {

@@ -719,19 +719,20 @@ function renderEnergyPools(pools) {
 }
 
 function renderSaves(saves) {
+    // 純文字行顯示，緊貼在先攻條下方
     return `
         <div class="saves-grid">
             <div class="save-item">
-                <div class="save-label">意志</div>
-                <div class="save-value">${saves.will.base} + ${saves.will.extra}</div>
+                <span class="save-label">意志</span>
+                <span class="save-value">${saves.will.base}+${saves.will.extra}</span>
             </div>
             <div class="save-item">
-                <div class="save-label">反射</div>
-                <div class="save-value">${saves.reflex.base} + ${saves.reflex.extra}</div>
+                <span class="save-label">反射</span>
+                <span class="save-value">${saves.reflex.base}+${saves.reflex.extra}</span>
             </div>
             <div class="save-item">
-                <div class="save-label">強韌</div>
-                <div class="save-value">${saves.fort.base} + ${saves.fort.extra}</div>
+                <span class="save-label">強韌</span>
+                <span class="save-value">${saves.fort.base}+${saves.fort.extra}</span>
             </div>
         </div>
     `;
@@ -765,15 +766,14 @@ function renderDefenseGrid(defenses) {
     return `
         <div class="defense-grid">
             ${defenses.map((def, idx) => {
-                const val = def.single ? def.base : (def.base + def.extra);
+                const displayValue = def.single ? def.base : `${def.base}+${def.extra}`;
                 const isActive = idx === activeIdx;
                 return `
                     <div class="defense-grid-item ${isActive ? 'active' : ''}"
                          onclick="switchDefense(${idx})"
                          title="${def.type}">
                         <div class="defense-grid-type">${def.type}</div>
-                        <div class="defense-grid-value">${val}</div>
-                        ${!def.single ? `<div class="defense-grid-breakdown">${def.base}+${def.extra}</div>` : ''}
+                        <div class="defense-grid-value">${displayValue}</div>
                     </div>
                 `;
             }).join('')}
@@ -910,9 +910,13 @@ function toggleHUDCollapse() {
     hud.classList.toggle('collapsed', hudState.isCollapsed);
     saveHUDSettings();
 
-    // Update minimized bar content if collapsed
-    if (hudState.isCollapsed && hudState.data) {
-        renderMinimizedBar();
+    // Update content based on collapsed state
+    if (hudState.data) {
+        if (hudState.isCollapsed) {
+            renderMinimizedBar();
+        } else {
+            renderHUDContent();
+        }
     }
 }
 

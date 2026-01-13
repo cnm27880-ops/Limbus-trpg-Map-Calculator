@@ -380,10 +380,25 @@
     border-radius: 6px;
 }
 
-/* ===== Unit Init Input ===== */
+/* ===== Unit Init Input（優化版）===== */
 .unit-init {
-    width: 50px;
+    width: 70px;
+    height: 36px;
     text-align: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    padding: 4px 8px;
+    background: var(--bg-input);
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    transition: border-color 0.2s ease;
+}
+
+.unit-init:focus {
+    outline: none;
+    border-color: #FFD700; /* 金色邊框高亮 */
+    box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.2);
 }
 
 /* ===== Status Badges ===== */

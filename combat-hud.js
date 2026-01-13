@@ -719,19 +719,20 @@ function renderEnergyPools(pools) {
 }
 
 function renderSaves(saves) {
+    // 純文字行顯示，緊貼在先攻條下方
     return `
         <div class="saves-grid">
             <div class="save-item">
-                <div class="save-label">意志</div>
-                <div class="save-value">${saves.will.base} + ${saves.will.extra}</div>
+                <span class="save-label">意志</span>
+                <span class="save-value">${saves.will.base}+${saves.will.extra}</span>
             </div>
             <div class="save-item">
-                <div class="save-label">反射</div>
-                <div class="save-value">${saves.reflex.base} + ${saves.reflex.extra}</div>
+                <span class="save-label">反射</span>
+                <span class="save-value">${saves.reflex.base}+${saves.reflex.extra}</span>
             </div>
             <div class="save-item">
-                <div class="save-label">強韌</div>
-                <div class="save-value">${saves.fort.base} + ${saves.fort.extra}</div>
+                <span class="save-label">強韌</span>
+                <span class="save-value">${saves.fort.base}+${saves.fort.extra}</span>
             </div>
         </div>
     `;

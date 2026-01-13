@@ -124,6 +124,20 @@ function switchPage(pageId) {
         targetTab.classList.add('active');
     }
 
+    // HUD 頁面綁定邏輯：只在地圖頁顯示
+    const hud = document.getElementById('combat-hud');
+    if (hud && typeof hudState !== 'undefined') {
+        if (pageId === 'map') {
+            // 在地圖頁且 HUD 應該可見時，顯示 HUD
+            if (hudState.isVisible) {
+                hud.classList.remove('hidden');
+            }
+        } else {
+            // 不在地圖頁時，強制隱藏 HUD
+            hud.classList.add('hidden');
+        }
+    }
+
     // 當切換到地圖頁面時，重新渲染地圖以修復手機版黑屏問題
     if (pageId === 'map') {
         // 使用 requestAnimationFrame 確保 DOM 已更新後再渲染

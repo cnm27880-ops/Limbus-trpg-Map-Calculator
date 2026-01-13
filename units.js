@@ -147,7 +147,8 @@ function renderUnitsList() {
 
         const avaStyle = u.avatar ? `background-image:url(${u.avatar});color:transparent;` : '';
         const initReadonly = !canControlUnit(u) ? 'readonly' : '';
-        const initInput = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${initReadonly} style="width:50px;text-align:center;">`;
+        // 移除 inline style，使用 CSS 設定的樣式（width: 70px, height: 36px, font-size: 1.1rem）
+        const initInput = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${initReadonly}>`;
         const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
         // 使用者自己的單位有特殊邊框

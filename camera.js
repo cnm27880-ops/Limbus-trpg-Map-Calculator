@@ -99,7 +99,7 @@ function initCameraEvents() {
 
             if (lastDist && lastPinchCenter) {
                 const diff = dist - lastDist;
-                const zoomDelta = diff * 0.005;
+                const zoomDelta = diff * 0.002;
 
                 // 取得視口位置
                 const vpRect = vp.getBoundingClientRect();

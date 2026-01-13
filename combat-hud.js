@@ -766,15 +766,14 @@ function renderDefenseGrid(defenses) {
     return `
         <div class="defense-grid">
             ${defenses.map((def, idx) => {
-                const val = def.single ? def.base : (def.base + def.extra);
+                const displayValue = def.single ? def.base : `${def.base}+${def.extra}`;
                 const isActive = idx === activeIdx;
                 return `
                     <div class="defense-grid-item ${isActive ? 'active' : ''}"
                          onclick="switchDefense(${idx})"
                          title="${def.type}">
                         <div class="defense-grid-type">${def.type}</div>
-                        <div class="defense-grid-value">${val}</div>
-                        ${!def.single ? `<div class="defense-grid-breakdown">${def.base}+${def.extra}</div>` : ''}
+                        <div class="defense-grid-value">${displayValue}</div>
                     </div>
                 `;
             }).join('')}
@@ -911,9 +910,13 @@ function toggleHUDCollapse() {
     hud.classList.toggle('collapsed', hudState.isCollapsed);
     saveHUDSettings();
 
-    // Update minimized bar content if collapsed
-    if (hudState.isCollapsed && hudState.data) {
-        renderMinimizedBar();
+    // Update content based on collapsed state
+    if (hudState.data) {
+        if (hudState.isCollapsed) {
+            renderMinimizedBar();
+        } else {
+            renderHUDContent();
+        }
     }
 }
 

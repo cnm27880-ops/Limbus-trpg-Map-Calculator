@@ -228,33 +228,21 @@ function renderMap() {
 
             // --- 互動事件綁定 ---
 
+            // 儲存點擊起始座標（用於判斷是拖曳還是點擊）
+            let clickStartX = null;
+            let clickStartY = null;
+            let cellTargetX = x;
+            let cellTargetY = y;
+
             div.onpointerdown = (e) => {
+                // 記錄起始座標
+                clickStartX = e.clientX;
+                clickStartY = e.clientY;
+
                 // 游標模式
                 if (currentTool === 'cursor') {
-                    // 如果有選中單位，點擊格子移動該單位
-                    if (selectedUnitId !== null) {
-                        const u = findUnitById(selectedUnitId);
-                        const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
-
-                        if (u && controllable) {
-                            if (myRole === 'st') {
-                                u.x = x; u.y = y;
-                                selectedUnitId = null;
-                                sendState(); renderAll();
-                            } else {
-                                sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: x, y: y });
-                                // 玩家端預先更新本地顯示
-                                u.x = x; u.y = y;
-                                selectedUnitId = null; renderAll();
-                            }
-                            // 點擊移動後阻止事件冒泡，不觸發地圖拖曳
-                            e.stopPropagation();
-                            return;
-                        }
-                    }
-
                     // 游標模式下沒有選中單位時，ST 可查看該格的地形資訊
-                    if (myRole === 'st') {
+                    if (selectedUnitId === null && myRole === 'st') {
                         updateTileInfo(x, y);
                     }
                     // 允許事件冒泡以觸發地圖拖曳
@@ -266,6 +254,51 @@ function renderMap() {
                     handleMapInput(x, y, e);
                     // 阻止事件冒泡，避免觸發相機平移
                     e.stopPropagation();
+                }
+            };
+
+            div.onpointerup = (e) => {
+                // 游標模式 + 有選中單位 → 檢查是否為有效點擊（非拖曳）
+                if (currentTool === 'cursor' && selectedUnitId !== null) {
+                    // 計算拖曳距離
+                    const dragDistance = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
+
+                    // 拖曳距離閾值：10px
+                    const DRAG_THRESHOLD = 10;
+
+                    // 如果是拖曳操作（超過閾值），忽略單位移動
+                    if (dragDistance > DRAG_THRESHOLD) {
+                        return;
+                    }
+
+                    // 如果 isDraggingMap 為 true，表示正在拖曳地圖，也要忽略
+                    if (isDraggingMap) {
+                        return;
+                    }
+
+                    // 有效點擊：移動單位
+                    const u = findUnitById(selectedUnitId);
+                    const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+
+                    if (u && controllable) {
+                        if (myRole === 'st') {
+                            u.x = cellTargetX;
+                            u.y = cellTargetY;
+                            selectedUnitId = null;
+                            sendState();
+                            renderAll();
+                        } else {
+                            sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: cellTargetX, y: cellTargetY });
+                            // 玩家端預先更新本地顯示
+                            u.x = cellTargetX;
+                            u.y = cellTargetY;
+                            selectedUnitId = null;
+                            renderAll();
+                        }
+                        // 點擊移動後阻止事件冒泡
+                        e.stopPropagation();
+                        return;
+                    }
                 }
             };
 

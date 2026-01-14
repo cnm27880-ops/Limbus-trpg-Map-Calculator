@@ -45,6 +45,12 @@ function initCameraEvents() {
 
     // 指標移動 (pointermove) - 綁定到 window 以防止滑鼠移出視口失效
     window.addEventListener('pointermove', e => {
+        // 🔥 衝突防禦：偵測到多點觸控，禁止執行平移
+        // 這確保雙指縮放時，不會意外觸發單指拖曳
+        if (e.touches && e.touches.length > 1) {
+            return;
+        }
+
         // A. 處理繪製拖曳 (邏輯主要由 map.js 的 cell:pointerenter 處理，這裡只需阻擋相機)
         if (isPaintingDrag) {
             return;
@@ -82,6 +88,33 @@ function initCameraEvents() {
     // ===== 觸控捏合縮放 (Touch Pinch) - 以雙指中心點為縮放中心 =====
     let lastPinchCenter = null;
 
+    // ===== 觸控開始 (touchstart) - 關鍵修復：立即初始化雙指縮放參數 =====
+    vp.addEventListener('touchstart', e => {
+        // 檢測到雙指觸控：立即進入縮放模式
+        if (e.touches.length === 2) {
+            // 🔥 關鍵修復：強制中斷單指拖曳模式
+            isDraggingMap = false;
+
+            // 立即計算雙指中心點（螢幕座標）
+            const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+            // 立即計算雙指初始距離
+            const dist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+
+            // 🎯 目的：確保手指開始移動前，已有正確的基準距離
+            // 這樣 touchmove 觸發時就不會因為缺少參考值而產生跳動
+            lastDist = dist;
+            lastPinchCenter = { x: centerX, y: centerY };
+
+            // 阻止瀏覽器預設行為
+            e.preventDefault();
+        }
+    }, { passive: false });
+
     vp.addEventListener('touchmove', e => {
         // 雙指操作：進行縮放
         if (e.touches.length === 2) {
@@ -101,8 +134,18 @@ function initCameraEvents() {
                 e.touches[0].clientY - e.touches[1].clientY
             );
 
+            // ===== 防呆檢查：確保 lastDist 有效 =====
+            // 如果 lastDist 無效（= 0 或 null），代表 touchstart 沒有正確初始化
+            // 此時只初始化參數，不執行縮放，避免產生錯誤的距離變化量
+            if (!lastDist || lastDist === 0) {
+                // 僅初始化，不縮放
+                lastDist = dist;
+                lastPinchCenter = { x: centerX, y: centerY };
+                return;
+            }
+
             // 只有在有上一次記錄時才執行縮放
-            if (lastDist && lastPinchCenter) {
+            if (lastPinchCenter) {
                 // ===== Step 3: 計算距離變化量 =====
                 const distanceDelta = dist - lastDist;
 
@@ -129,10 +172,23 @@ function initCameraEvents() {
         }
     }, { passive: false });
 
-    // 觸控結束：重置狀態
-    vp.addEventListener('touchend', () => {
+    // ===== 觸控結束 (touchend) - 強化：處理單指殘留 =====
+    vp.addEventListener('touchend', e => {
+        // 重置雙指縮放參數
         lastDist = 0;
         lastPinchCenter = null;
+
+        // 🔥 關鍵修復：處理從「雙指縮放」切換到「單指拖曳」的情況
+        // 當一根手指離開螢幕，還剩一根手指在螢幕上時（e.touches.length === 1）
+        // 必須更新 lastPointer 為剩餘手指的當前位置
+        // 否則下一次移動時，會從舊的 lastPointer 位置計算位移，導致地圖瞬間飛到錯誤位置
+        if (e.touches.length === 1) {
+            // 更新單指拖曳的參考點為剩餘手指的位置
+            lastPointer = {
+                x: e.touches[0].clientX,
+                y: e.touches[0].clientY
+            };
+        }
     });
 }
 

@@ -189,13 +189,16 @@ function renderMap() {
 
     const theme = getCurrentTheme();
 
+    // 使用 DocumentFragment 提升效能（減少 DOM 重繪次數）
+    const fragment = document.createDocumentFragment();
+
     // 渲染格子
     for (let y = 0; y < state.mapH; y++) {
         for (let x = 0; x < state.mapW; x++) {
             const val = state.mapData[y][x];
             const div = document.createElement('div');
             div.className = 'cell';
-            
+
             // 部署高亮邏輯
             if (currentTool === 'cursor' && selectedUnitId !== null) {
                 const u = findUnitById(selectedUnitId);
@@ -208,7 +211,7 @@ function renderMap() {
 
             // 套用地形樣式
             let tileDef = theme.tiles.find(t => t.id === val);
-            
+
             // 舊存檔相容性
             if (!tileDef && state.themeId === 0) {
                 if (val === 1) tileDef = theme.tiles.find(t => t.name === '牆壁');
@@ -224,7 +227,7 @@ function renderMap() {
             }
 
             // --- 互動事件綁定 ---
-            
+
             div.onpointerdown = (e) => {
                 // 游標模式
                 if (currentTool === 'cursor') {
@@ -265,7 +268,7 @@ function renderMap() {
                     e.stopPropagation();
                 }
             };
-            
+
             // 實現拖曳繪製 (Mouse Drag Paint)
             div.onpointerenter = (e) => {
                 // 條件：必須是 ST + 非游標工具 + 正在繪製中（已按下 pointerdown）
@@ -273,10 +276,13 @@ function renderMap() {
                     handleMapInput(x, y, e);
                 }
             };
-            
-            grid.appendChild(div);
+
+            fragment.appendChild(div);
         }
     }
+
+    // 一次性添加所有格子到 DOM，避免多次重繪
+    grid.appendChild(fragment);
     
     // 渲染 Tokens（先渲染大型單位，再渲染小型單位，確保小單位不被遮蓋）
     const sortedUnits = state.units.filter(u => u.x >= 0).sort((a, b) => {

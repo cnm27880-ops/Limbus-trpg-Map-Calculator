@@ -14,7 +14,7 @@
 const HUD_CONFIG = {
     DEFAULT_SPREADSHEET_ID: '1kW0xdl7J7khTgl6cLTn05xjVa6xktMgct-KdwAiitwc',
     DEFAULT_API_KEY: '', // 需要用戶自行設定
-    REFRESH_COOLDOWN: 10000, // 10 seconds
+    REFRESH_COOLDOWN: 60000, // 60 seconds (60秒冷卻)
     DEFAULT_POSITION: { x: 20, y: 80 }
 };
 
@@ -89,7 +89,8 @@ const HUD_STORAGE_KEYS = {
     COLLAPSED: 'limbus_hud_collapsed',
     ACTIVE_TAB: 'limbus_hud_active_tab',
     DEFENSE_INDEX: 'limbus_hud_defense_index',
-    ATTACK_INDEX: 'limbus_hud_attack_index'
+    ATTACK_INDEX: 'limbus_hud_attack_index',
+    REFRESH_COOLDOWN_END: 'limbus_hud_refresh_cooldown_end'
 };
 
 // ===== Initialize HUD =====
@@ -98,6 +99,15 @@ function initCombatHUD() {
     createHUDElement();
     createImportModal();
     createSettingsModal();
+
+    // 檢查並恢復冷卻狀態
+    const cooldownEnd = parseInt(localStorage.getItem(HUD_STORAGE_KEYS.REFRESH_COOLDOWN_END)) || 0;
+    const now = Date.now();
+
+    if (now < cooldownEnd) {
+        // 還在冷卻中，啟動倒數計時器
+        startCooldownTimer();
+    }
 
     // Restore HUD if previously bound
     if (hudState.boundTab) {
@@ -395,12 +405,55 @@ async function selectCharacterTab(tabName) {
     await refreshHUDData();
 }
 
+// ===== Cooldown Timer Management =====
+let cooldownTimerInterval = null;
+
+function updateCooldownUI() {
+    const refreshBtn = document.getElementById('hud-refresh-btn');
+    if (!refreshBtn) return;
+
+    const cooldownEnd = parseInt(localStorage.getItem(HUD_STORAGE_KEYS.REFRESH_COOLDOWN_END)) || 0;
+    const now = Date.now();
+    const remaining = Math.max(0, cooldownEnd - now);
+
+    if (remaining > 0) {
+        const seconds = Math.ceil(remaining / 1000);
+        refreshBtn.disabled = true;
+        refreshBtn.classList.add('cooldown');
+        refreshBtn.textContent = `⏳ ${seconds}s`;
+    } else {
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove('cooldown');
+        refreshBtn.textContent = '⟳';
+        if (cooldownTimerInterval) {
+            clearInterval(cooldownTimerInterval);
+            cooldownTimerInterval = null;
+        }
+        localStorage.removeItem(HUD_STORAGE_KEYS.REFRESH_COOLDOWN_END);
+    }
+}
+
+function startCooldownTimer() {
+    // 先清除舊的計時器
+    if (cooldownTimerInterval) {
+        clearInterval(cooldownTimerInterval);
+    }
+
+    // 立即更新一次
+    updateCooldownUI();
+
+    // 每秒更新倒數
+    cooldownTimerInterval = setInterval(updateCooldownUI, 1000);
+}
+
 // ===== Fetch Character Data =====
 async function refreshHUDData() {
-    // Check cooldown
+    // Check cooldown from localStorage
+    const cooldownEnd = parseInt(localStorage.getItem(HUD_STORAGE_KEYS.REFRESH_COOLDOWN_END)) || 0;
     const now = Date.now();
-    if (now - hudState.lastRefresh < HUD_CONFIG.REFRESH_COOLDOWN) {
-        const remaining = Math.ceil((HUD_CONFIG.REFRESH_COOLDOWN - (now - hudState.lastRefresh)) / 1000);
+
+    if (now < cooldownEnd) {
+        const remaining = Math.ceil((cooldownEnd - now) / 1000);
         if (typeof showToast === 'function') {
             showToast(`請等待 ${remaining} 秒後再刷新`);
         }
@@ -409,14 +462,13 @@ async function refreshHUDData() {
 
     if (!hudState.boundTab) return;
 
-    // Set cooldown state
-    const refreshBtn = document.getElementById('hud-refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.classList.add('cooldown');
-        setTimeout(() => refreshBtn.classList.remove('cooldown'), HUD_CONFIG.REFRESH_COOLDOWN);
-    }
-
+    // Start cooldown - 記錄結束時間到 localStorage
+    const newCooldownEnd = now + HUD_CONFIG.REFRESH_COOLDOWN;
+    localStorage.setItem(HUD_STORAGE_KEYS.REFRESH_COOLDOWN_END, newCooldownEnd.toString());
     hudState.lastRefresh = now;
+
+    // 啟動 UI 倒數計時器
+    startCooldownTimer();
 
     // Build ranges array
     const ranges = buildRangesArray(hudState.boundTab);

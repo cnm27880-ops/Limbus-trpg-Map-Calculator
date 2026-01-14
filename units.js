@@ -368,7 +368,7 @@ function updateInit(id, val) {
     }
 
     if (myRole === 'st') {
-        u.init = parseInt(val);
+        u.init = parseInt(val) || 0;
         sendState();
         renderAll();
     } else {
@@ -376,7 +376,7 @@ function updateInit(id, val) {
             type: 'updateInit',
             playerId: myPlayerId,
             unitId: id,
-            init: parseInt(val)
+            init: parseInt(val) || 0
         });
     }
 }

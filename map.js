@@ -495,6 +495,9 @@ function startDeploy(id) {
     }
 
     switchPage('map');
+    // 確保切換到游標工具，否則點擊格子無法觸發部署邏輯
+    currentTool = 'cursor';
+    setTool('cursor');  // 同時更新 UI 狀態
     selectedUnitId = id;
     renderMap();
     showToast('請在地圖上點擊位置部署');

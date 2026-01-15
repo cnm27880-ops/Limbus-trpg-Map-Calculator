@@ -878,7 +878,8 @@ function saveSession(sessionData) {
             name: sessionData.name,
             roomCode: sessionData.roomCode,
             role: sessionData.role,
-            savedAt: Date.now()
+            savedAt: Date.now(),
+            loggedOut: false  // 明確標記為未登出（清除之前可能的登出標記）
         };
         localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         console.log('Session 已儲存:', session);
@@ -910,12 +911,19 @@ function clearSession() {
 
 /**
  * 登出並重置
- * 清除 Session 並重新載入頁面
+ * 保留識別碼以便下次登入，並重新載入頁面
  */
 function logoutAndReset() {
-    if (confirm('確定要登出嗎？這將清除已儲存的登入資訊。')) {
-        // 清除 Session
-        clearSession();
+    if (confirm('確定要登出嗎？')) {
+        // 保留識別碼以便下次登入（不完全清除 session）
+        const session = getSession();
+        if (session) {
+            // 標記為已登出，但保留識別碼供下次預填
+            session.loggedOut = true;
+            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        } else {
+            clearSession();
+        }
 
         // 如果是玩家，標記離線
         if (roomRef && myPlayerId && myRole === 'player') {
@@ -955,6 +963,12 @@ function checkExistingSession() {
     const sevenDays = 7 * 24 * 60 * 60 * 1000;
     if (Date.now() - session.savedAt > sevenDays) {
         clearSession();
+        prefillInputsFromStorage();
+        return;
+    }
+
+    // 如果是手動登出的，預填輸入框但不自動登入
+    if (session.loggedOut) {
         prefillInputsFromStorage();
         return;
     }

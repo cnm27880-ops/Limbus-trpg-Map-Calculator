@@ -24,6 +24,11 @@ function initCameraEvents() {
     }, { passive: false });
 
     // 指標按下 (pointerdown) - 決定互動模式
+    // 新增：追蹤是否開始拖曳的標記
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let isPotentialDrag = false;  // 是否可能是拖曳（尚未確定）
+
     vp.addEventListener('pointerdown', e => {
         // 1. 如果點擊到 Token，忽略此處，由 Token 自己的 handler (在 map.js) 處理
         if (e.target.classList.contains('token')) return;
@@ -35,8 +40,12 @@ function initCameraEvents() {
             return;
         }
 
-        // 3. 否則視為地圖平移
-        isDraggingMap = true;
+        // 3. 記錄起始位置，準備可能的地圖平移
+        // 🔥 修復：不立即設置 isDraggingMap，等待實際移動後再設置
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        isPotentialDrag = true;
+        isDraggingMap = false;  // 確保初始狀態為 false
         lastPointer = { x: e.clientX, y: e.clientY };
 
         // 鎖定指針到視口，優化平移體驗
@@ -44,6 +53,8 @@ function initCameraEvents() {
     });
 
     // 指標移動 (pointermove) - 綁定到 window 以防止滑鼠移出視口失效
+    const CAMERA_DRAG_THRESHOLD = 5;  // 開始拖曳的閾值（像素）
+
     window.addEventListener('pointermove', e => {
         // 🔥 衝突防禦：偵測到多點觸控，禁止執行平移
         // 這確保雙指縮放時，不會意外觸發單指拖曳
@@ -57,6 +68,14 @@ function initCameraEvents() {
         }
 
         // B. 處理地圖平移
+        // 🔥 修復：只有在移動超過閾值後才開始實際拖曳
+        if (isPotentialDrag && !isDraggingMap) {
+            const moveDistance = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+            if (moveDistance > CAMERA_DRAG_THRESHOLD) {
+                isDraggingMap = true;  // 現在確認是拖曳操作
+            }
+        }
+
         if (isDraggingMap) {
             e.preventDefault();
             const dx = e.clientX - lastPointer.x;
@@ -75,12 +94,14 @@ function initCameraEvents() {
             isPaintingDrag = false;
             // 繪製結束後，如果是 ST，發送狀態更新
             if (myRole === 'st') sendState();
+            isPotentialDrag = false;  // 重置潛在拖曳狀態
             return;
         }
 
         // B. 結束地圖平移
-        if (isDraggingMap) {
+        if (isDraggingMap || isPotentialDrag) {
             isDraggingMap = false;
+            isPotentialDrag = false;  // 🔥 修復：重置潛在拖曳狀態
             try { vp.releasePointerCapture(e.pointerId); } catch(err){}
         }
     });

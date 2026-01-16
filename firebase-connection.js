@@ -9,6 +9,7 @@ let roomRef = null;           // Firebase 房間參考
 let unsubscribeListeners = [];  // 用於儲存監聯器，方便清理
 let heartbeatInterval = null;  // 心跳計時器
 let isConnected = false;       // Firebase 連線狀態
+let roomUsers = {};            // 房間內的使用者列表（用於分配權限）
 
 // ===== 連線狀態 UI =====
 /**
@@ -315,6 +316,9 @@ function createRoom(roomCode) {
                 initializeNewRoom();
             }
 
+            // 註冊 ST 到 users 路徑
+            registerUserPresence();
+
             // 設置監聽器
             setupRoomListeners();
 
@@ -427,7 +431,7 @@ function joinRoom(roomCode, isST) {
             // 載入房間資料
             loadRoomData(snapshot.val());
 
-            // 玩家加入：註冊自己到玩家列表
+            // 玩家加入：註冊自己到玩家列表和使用者列表
             if (!isST) {
                 const playerData = {
                     name: myName,
@@ -438,6 +442,9 @@ function joinRoom(roomCode, isST) {
                 roomRef.child('players/' + myPlayerId).set(playerData);
                 showToast(`已加入房間！識別碼：${myPlayerCode}`);
             }
+
+            // 註冊到 users 路徑（ST 和玩家都需要）
+            registerUserPresence();
 
             // 設置監聽器
             setupRoomListeners();
@@ -592,6 +599,16 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('players').off('value', playersListener));
 
+    // 監聽使用者在線列表（用於分配權限功能）
+    const usersListener = roomRef.child('users').on('value', snapshot => {
+        if (snapshot.exists()) {
+            roomUsers = snapshot.val();
+        } else {
+            roomUsers = {};
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('users').off('value', usersListener));
+
     // 監聽音樂狀態變更
     const musicListener = roomRef.child('music').on('value', snapshot => {
         if (typeof handleMusicUpdate === 'function') {
@@ -683,6 +700,11 @@ function startHeartbeat() {
                 .catch(err => {
                     console.warn('心跳發送失敗:', err);
                 });
+
+            // 同時更新使用者在線狀態
+            if (typeof updateUserPresence === 'function') {
+                updateUserPresence();
+            }
         }
     }, HEARTBEAT_INTERVAL);
 
@@ -710,6 +732,90 @@ function cleanupListeners() {
     // 清理所有 Firebase 監聽器
     unsubscribeListeners.forEach(unsubscribe => unsubscribe());
     unsubscribeListeners = [];
+}
+
+// ===== 使用者在線系統 =====
+
+/**
+ * 註冊使用者到 users 路徑並設置 onDisconnect
+ */
+function registerUserPresence() {
+    if (!roomRef || !myPlayerId) return;
+
+    const userRef = roomRef.child('users/' + myPlayerId);
+    const userData = {
+        name: myName,
+        role: myRole,
+        online: true,
+        last_active: firebase.database.ServerValue.TIMESTAMP
+    };
+
+    // 寫入使用者資料
+    userRef.set(userData);
+
+    // 設置斷線時自動更新狀態
+    userRef.child('online').onDisconnect().set(false);
+    userRef.child('last_active').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+
+    unsubscribeListeners.push(() => {
+        userRef.child('online').onDisconnect().cancel();
+        userRef.child('last_active').onDisconnect().cancel();
+    });
+}
+
+/**
+ * 更新使用者活動時間（由心跳機制調用）
+ */
+function updateUserPresence() {
+    if (!roomRef || !myPlayerId) return;
+    roomRef.child('users/' + myPlayerId + '/last_active').set(firebase.database.ServerValue.TIMESTAMP);
+}
+
+/**
+ * 取得房間內的在線使用者列表
+ * @returns {Array} 使用者陣列 [{userId, name, role, online, last_active}]
+ */
+function getOnlineUsers() {
+    const users = [];
+    const now = Date.now();
+    const OFFLINE_THRESHOLD = 5 * 60 * 1000; // 5 分鐘內視為在線
+
+    for (const [userId, userData] of Object.entries(roomUsers)) {
+        // 過濾掉離線太久的使用者
+        const lastActive = userData.last_active || 0;
+        const isRecent = (now - lastActive) < OFFLINE_THRESHOLD;
+        const isOnline = userData.online || isRecent;
+
+        if (isOnline) {
+            users.push({
+                id: userId,
+                name: userData.name || '未知',
+                role: userData.role || 'player',
+                online: userData.online,
+                last_active: lastActive
+            });
+        }
+    }
+
+    return users;
+}
+
+/**
+ * 取得所有使用者列表（包含離線使用者）
+ * @returns {Array} 使用者陣列
+ */
+function getAllUsers() {
+    const users = [];
+    for (const [userId, userData] of Object.entries(roomUsers)) {
+        users.push({
+            id: userId,
+            name: userData.name || '未知',
+            role: userData.role || 'player',
+            online: userData.online || false,
+            last_active: userData.last_active || 0
+        });
+    }
+    return users;
 }
 
 // ===== 資料同步函數 =====

@@ -10,11 +10,11 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-    <!-- CSS 檔案 - 同一層級 -->
-    <link rel="stylesheet" href="main.css">
-    <link rel="stylesheet" href="components.css">
-    <link rel="stylesheet" href="calculator.css">
-    <link rel="stylesheet" href="combat-hud.css">
+    <!-- CSS 檔案 -->
+    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/components.css">
+    <link rel="stylesheet" href="styles/calculator.css">
+    <link rel="stylesheet" href="styles/combat-hud.css">
 </head>
 <body>
 <input type="file" id="file-upload" accept="image/*" style="display:none;">
@@ -320,32 +320,33 @@
     </div>
 </div>
 
-<!-- JS 檔案 - 同一層級，順序很重要！ -->
-<script src="config.js"></script>
+<!-- JS 檔案 - 分層載入，順序很重要！ -->
+<!-- 配置層 -->
+<script src="src/config/config.js"></script>
+<script src="src/config/status-config.js"></script>
+<script src="src/config/firebase-config.js"></script>
 
-<!-- 狀態效果系統 - 需在 units.js 之前載入 -->
-<script src="status-config.js"></script>
-<script src="status-manager.js"></script>
+<!-- 核心層 -->
+<script src="src/core/state.js"></script>
 
-<!-- Firebase 配置 - 必須在其他模組之前載入 -->
-<script src="firebase-config.js"></script>
+<!-- 工具層 -->
+<script src="src/utils/utils.js"></script>
 
-<script src="state.js"></script>
-<script src="utils.js"></script>
-<script src="storage.js"></script>
+<!-- 資料層 -->
+<script src="src/data/storage.js"></script>
+<script src="src/data/firebase-connection.js"></script>
 
-<!-- Firebase 連線模組 - 替代原本的 P2P 連線 -->
-<script src="firebase-connection.js"></script>
-
-<script src="camera.js"></script>
-<script src="map.js"></script>
-<script src="map-manager.js"></script>
-<script src="units.js"></script>
-<script src="calculator.js"></script>
-<script src="hotkeys.js"></script>
-<script src="modals.js"></script>
-<script src="audio.js"></script>
-<script src="combat-hud.js"></script>
-<script src="main.js"></script>
+<!-- UI 層 -->
+<script src="src/ui/camera.js"></script>
+<script src="src/ui/map.js"></script>
+<script src="src/core/map-manager.js"></script>
+<script src="src/ui/units.js"></script>
+<script src="src/core/status-manager.js"></script>
+<script src="src/core/calculator.js"></script>
+<script src="src/ui/hotkeys.js"></script>
+<script src="src/ui/modals.js"></script>
+<script src="src/utils/audio.js"></script>
+<script src="src/ui/combat-hud.js"></script>
+<script src="src/ui/main.js"></script>
 </body>
 </html>

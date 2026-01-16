@@ -132,6 +132,9 @@ function renderUnitsList() {
         // 操作按鈕（只顯示給可控制的使用者）
         let actions = '';
         if (canControlUnit(u)) {
+            // ST 專屬的分配權限按鈕
+            const assignBtn = isSt ? `<button class="action-btn" onclick="openAssignOwnerModal('${u.id}')" title="分配給其他玩家">👮</button>` : '';
+
             actions = `
                 <div class="unit-actions">
                     <button class="action-btn dmg-b" onclick="modifyHP('${u.id}','b',1)" title="按住Shift開啟數量輸入">+B</button>
@@ -140,6 +143,7 @@ function renderUnitsList() {
                     <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
                     <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
                     ${deployBtn}
+                    ${assignBtn}
                     <button class="action-btn" onclick="deleteUnit('${u.id}')">✕</button>
                 </div>
             `;

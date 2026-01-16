@@ -138,6 +138,24 @@ function initModals() {
         </div>
 
         <!-- 狀態 Modal 已移至 status-manager.js 動態生成 -->
+
+        <!-- Assign Owner Modal (分配權限) -->
+        <div class="modal-overlay" id="modal-assign-owner">
+            <div class="modal">
+                <div class="modal-header">
+                    <span id="assign-modal-title">分配棋子給...</span>
+                    <button onclick="closeModal('modal-assign-owner')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom:10px;color:var(--text-dim);font-size:0.9rem;">選擇要將此棋子分配給的玩家：</div>
+                    <div id="assign-player-list" style="max-height:300px;overflow-y:auto;"></div>
+                    <input type="hidden" id="assign-target-unit-id">
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="closeModal('modal-assign-owner')" style="background:var(--bg-card);">取消</button>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -302,3 +320,130 @@ function confirmHpModify() {
 // ===== 狀態 Modal =====
 // 注意：狀態管理功能已移至 status-manager.js
 // openStatusModal, selectStatus, addStatusToUnit 等函數在該檔案中定義
+
+// ===== 分配權限 Modal =====
+/**
+ * 開啟分配權限 Modal
+ * @param {string} unitId - 要分配的單位 ID
+ */
+function openAssignOwnerModal(unitId) {
+    // 只有 ST 可以分配權限
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以分配棋子權限');
+        return;
+    }
+
+    const u = findUnitById(unitId);
+    if (!u) {
+        showToast('找不到該單位');
+        return;
+    }
+
+    // 設定目標單位 ID
+    document.getElementById('assign-target-unit-id').value = unitId;
+    document.getElementById('assign-modal-title').innerText = `分配「${u.name}」給...`;
+
+    // 取得玩家列表
+    const playerList = document.getElementById('assign-player-list');
+
+    // 使用 getAllUsers() 取得所有使用者（如果函數存在）
+    let users = [];
+    if (typeof getAllUsers === 'function') {
+        users = getAllUsers();
+    } else if (typeof roomUsers !== 'undefined') {
+        // 回退方案：直接從 roomUsers 取得
+        for (const [userId, userData] of Object.entries(roomUsers)) {
+            users.push({
+                id: userId,
+                name: userData.name || '未知',
+                role: userData.role || 'player',
+                online: userData.online || false
+            });
+        }
+    }
+
+    // 如果沒有玩家，顯示提示
+    if (users.length === 0) {
+        playerList.innerHTML = `
+            <div style="text-align:center;color:var(--text-dim);padding:20px;">
+                目前沒有其他玩家在房間內
+            </div>
+        `;
+        openModal('modal-assign-owner');
+        return;
+    }
+
+    // 渲染玩家列表
+    playerList.innerHTML = users.map(user => {
+        const isCurrentOwner = u.ownerId === user.id;
+        const isST = user.role === 'st';
+        const statusDot = user.online ? '🟢' : '⚪';
+        const roleTag = isST ? '<span style="color:var(--accent-yellow);font-size:0.75rem;">[ST]</span>' : '';
+        const ownerTag = isCurrentOwner ? '<span style="color:var(--accent-green);font-size:0.75rem;margin-left:4px;">(目前擁有者)</span>' : '';
+
+        return `
+            <div class="assign-player-item" style="
+                display:flex;
+                align-items:center;
+                justify-content:space-between;
+                padding:12px;
+                margin-bottom:8px;
+                background:var(--bg-input);
+                border:1px solid ${isCurrentOwner ? 'var(--accent-green)' : 'var(--border)'};
+                border-radius:8px;
+                cursor:pointer;
+                transition:all 0.2s;
+            " onclick="assignOwner('${unitId}', '${user.id}', '${escapeHtml(user.name)}')"
+            onmouseover="this.style.borderColor='var(--accent-yellow)'"
+            onmouseout="this.style.borderColor='${isCurrentOwner ? 'var(--accent-green)' : 'var(--border)'}'">
+                <div>
+                    <span style="margin-right:6px;">${statusDot}</span>
+                    <span style="font-weight:600;">${escapeHtml(user.name)}</span>
+                    ${roleTag}
+                    ${ownerTag}
+                </div>
+                <div style="color:var(--text-dim);font-size:0.8rem;">
+                    ${user.id.substring(0, 12)}...
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    openModal('modal-assign-owner');
+}
+
+/**
+ * 分配單位給指定玩家
+ * @param {string} unitId - 單位 ID
+ * @param {string} newOwnerId - 新擁有者 ID
+ * @param {string} newOwnerName - 新擁有者名稱
+ */
+function assignOwner(unitId, newOwnerId, newOwnerName) {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以分配權限');
+        return;
+    }
+
+    const u = findUnitById(unitId);
+    if (!u) {
+        showToast('找不到該單位');
+        return;
+    }
+
+    // 更新本地狀態
+    u.ownerId = newOwnerId;
+    u.ownerName = newOwnerName;
+
+    // 同步到 Firebase
+    if (roomRef) {
+        roomRef.child(`units/${unitId}/ownerId`).set(newOwnerId);
+        roomRef.child(`units/${unitId}/ownerName`).set(newOwnerName);
+    }
+
+    // 關閉 Modal 並顯示提示
+    closeModal('modal-assign-owner');
+    showToast(`已將「${u.name}」分配給 ${newOwnerName}`);
+
+    // 重新渲染
+    renderAll();
+}

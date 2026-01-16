@@ -241,8 +241,14 @@ function renderMap() {
 
                 // 游標模式
                 if (currentTool === 'cursor') {
+                    // 🔥 修復：如果有選中單位（準備部署或移動），阻止事件冒泡，避免觸發相機拖曳
+                    if (selectedUnitId !== null) {
+                        e.stopPropagation();
+                        return;
+                    }
+
                     // 游標模式下沒有選中單位時，ST 可查看該格的地形資訊
-                    if (selectedUnitId === null && myRole === 'st') {
+                    if (myRole === 'st') {
                         updateTileInfo(x, y);
                     }
                     // 允許事件冒泡以觸發地圖拖曳

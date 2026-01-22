@@ -209,10 +209,17 @@ function renderCurrentStatuses(unit) {
  * @param {string} name - 狀態名稱
  */
 function getStatusByName(name) {
+    // 先查詢預設狀態庫
     for (const category of Object.values(STATUS_LIBRARY)) {
         const status = category.find(s => s.name === name);
         if (status) return status;
     }
+
+    // 🔥 修復：再查詢自訂狀態
+    const customs = getCustomStatuses();
+    const custom = customs.find(s => s.name === name);
+    if (custom) return custom;
+
     return null;
 }
 

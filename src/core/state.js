@@ -35,6 +35,11 @@ let lastDist = 0;  // 用於捏合縮放
 // ===== 繪製拖曳狀態 =====
 let isPaintingDrag = false;
 
+// ===== 多點觸控狀態 =====
+// 用於追蹤是否正在進行雙指縮放操作
+// 當此標記為 true 時，pointermove 應忽略拖曳操作
+let isPinchZooming = false;
+
 // 注意：Token 拖曳功能已移除 (isDraggingToken, draggedUnit 等)
 // 現在使用「點選單位 -> 點擊目標格」的操作模式
 

@@ -56,9 +56,10 @@ function initCameraEvents() {
     const CAMERA_DRAG_THRESHOLD = 5;  // 開始拖曳的閾值（像素）
 
     window.addEventListener('pointermove', e => {
-        // 🔥 衝突防禦：偵測到多點觸控，禁止執行平移
-        // 這確保雙指縮放時，不會意外觸發單指拖曳
-        if (e.touches && e.touches.length > 1) {
+        // 🔥 關鍵修復：檢查全域 isPinchZooming 標記
+        // PointerEvent 沒有 touches 屬性，所以需要使用全域變數來追蹤多點觸控狀態
+        // 當正在進行雙指縮放時，忽略所有拖曳操作
+        if (isPinchZooming) {
             return;
         }
 
@@ -112,9 +113,12 @@ function initCameraEvents() {
     // ===== 觸控開始 (touchstart) - 關鍵修復：立即初始化雙指縮放參數 =====
     vp.addEventListener('touchstart', e => {
         // 檢測到雙指觸控：立即進入縮放模式
-        if (e.touches.length === 2) {
-            // 🔥 關鍵修復：強制中斷單指拖曳模式
+        if (e.touches.length >= 2) {
+            // 🔥 關鍵修復：設置全域標記，通知 pointermove 忽略拖曳操作
+            isPinchZooming = true;
+            // 強制中斷單指拖曳模式
             isDraggingMap = false;
+            isPotentialDrag = false;
 
             // 立即計算雙指中心點（螢幕座標）
             const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
@@ -138,9 +142,12 @@ function initCameraEvents() {
 
     vp.addEventListener('touchmove', e => {
         // 雙指操作：進行縮放
-        if (e.touches.length === 2) {
+        if (e.touches.length >= 2) {
+            // 🔥 確保 isPinchZooming 標記被設置（防止 touchstart 沒有正確觸發的情況）
+            isPinchZooming = true;
             // 防抖動處理：強制停止地圖拖曳
             isDraggingMap = false;
+            isPotentialDrag = false;
 
             // 阻止瀏覽器預設行為（防止頁面縮放或滾動）
             e.preventDefault();
@@ -193,7 +200,7 @@ function initCameraEvents() {
         }
     }, { passive: false });
 
-    // ===== 觸控結束 (touchend) - 強化：處理單指殘留 =====
+    // ===== 觸控結束 (touchend) - 強化：處理單指殘留與狀態重置 =====
     vp.addEventListener('touchend', e => {
         // 重置雙指縮放參數
         lastDist = 0;
@@ -204,12 +211,36 @@ function initCameraEvents() {
         // 必須更新 lastPointer 為剩餘手指的當前位置
         // 否則下一次移動時，會從舊的 lastPointer 位置計算位移，導致地圖瞬間飛到錯誤位置
         if (e.touches.length === 1) {
+            // 🔥 重要：延遲重置 isPinchZooming，防止立即觸發拖曳
+            // 使用 setTimeout 確保 pointermove 不會在手指離開的瞬間處理拖曳
+            setTimeout(() => {
+                isPinchZooming = false;
+            }, 50);
+
             // 更新單指拖曳的參考點為剩餘手指的位置
             lastPointer = {
                 x: e.touches[0].clientX,
                 y: e.touches[0].clientY
             };
+            // 重置拖曳狀態，等待新的拖曳操作
+            isDraggingMap = false;
+            isPotentialDrag = false;
+        } else if (e.touches.length === 0) {
+            // 所有手指都離開螢幕，完全重置所有狀態
+            isPinchZooming = false;
+            isDraggingMap = false;
+            isPotentialDrag = false;
         }
+    });
+
+    // ===== 觸控取消 (touchcancel) - 處理中斷情況 =====
+    vp.addEventListener('touchcancel', e => {
+        // 當觸控被中斷時（例如來電、系統手勢等），重置所有狀態
+        lastDist = 0;
+        lastPinchCenter = null;
+        isPinchZooming = false;
+        isDraggingMap = false;
+        isPotentialDrag = false;
     });
 }
 

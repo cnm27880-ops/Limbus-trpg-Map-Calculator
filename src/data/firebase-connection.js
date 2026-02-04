@@ -1044,6 +1044,11 @@ function logoutAndReset() {
             stopBGM();
         }
 
+        // 清理戰鬥儀表板狀態
+        if (typeof unbindHUDCharacter === 'function') {
+            unbindHUDCharacter();
+        }
+
         // 重新載入頁面
         showToast('正在登出...');
         setTimeout(() => {

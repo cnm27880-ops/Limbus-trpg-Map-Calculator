@@ -397,6 +397,10 @@ function renderMap() {
             }
         }
 
+        // 儲存棋子點擊起始座標（用於判斷是拖曳還是點擊）
+        let tokenClickStartX = null;
+        let tokenClickStartY = null;
+
         t.onpointerdown = (e) => {
             if (currentTool !== 'cursor') return;
 
@@ -405,9 +409,47 @@ function renderMap() {
             // 阻止圖片預設拖曳
             e.preventDefault();
 
-            // 點擊 Token 時選取該單位
+            // 記錄起始座標
+            tokenClickStartX = e.clientX;
+            tokenClickStartY = e.clientY;
+        };
+
+        t.onpointerup = (e) => {
+            if (currentTool !== 'cursor') return;
+            if (tokenClickStartX === null || tokenClickStartY === null) return;
+
+            // 阻止格子接收點擊事件
+            e.stopPropagation();
+            // 阻止圖片預設拖曳
+            e.preventDefault();
+
+            // 計算拖曳距離
+            const dragDistance = Math.hypot(e.clientX - tokenClickStartX, e.clientY - tokenClickStartY);
+
+            // 拖曳距離閾值：10px（與格子點擊一致）
+            const DRAG_THRESHOLD = 10;
+
+            // 如果是拖曳操作（超過閾值），忽略選中
+            if (dragDistance > DRAG_THRESHOLD) {
+                tokenClickStartX = null;
+                tokenClickStartY = null;
+                return;
+            }
+
+            // 如果 isDraggingMap 為 true，表示正在拖曳地圖，也要忽略
+            if (isDraggingMap) {
+                tokenClickStartX = null;
+                tokenClickStartY = null;
+                return;
+            }
+
+            // 有效點擊：選取該單位
             // 移動邏輯：選取後點擊地圖格子來移動（見 cell.onpointerdown）
             selectUnit(u.id);
+
+            // 重置起始座標
+            tokenClickStartX = null;
+            tokenClickStartY = null;
         };
 
         grid.appendChild(t);

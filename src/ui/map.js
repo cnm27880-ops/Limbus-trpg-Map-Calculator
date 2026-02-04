@@ -350,9 +350,12 @@ function renderMap() {
         t.style.width = tokenSize + 'px';
         t.style.height = tokenSize + 'px';
 
-        // +2 是為了配合 CSS 的邊框內縮
-        t.style.left = (u.x * gridSize + 2) + 'px';
-        t.style.top = (u.y * gridSize + 2) + 'px';
+        // +2 是為了配合 CSS 的邊框內縮，使用 Math.round() 避免小數座標導致模糊
+        t.style.left = Math.round(u.x * gridSize + 2) + 'px';
+        t.style.top = Math.round(u.y * gridSize + 2) + 'px';
+
+        // GPU 加速，提升渲染清晰度
+        t.style.transform = 'translateZ(0)';
 
         // 大型單位 z-index 較低，小型單位較高
         // BOSS 有更高的 z-index

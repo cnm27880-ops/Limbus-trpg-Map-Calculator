@@ -149,43 +149,52 @@
 /* ===== Token HP Ring (環狀血量條) ===== */
 .token-hp-ring {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 110%;
-    height: 110%;
+    top: -4px;
+    left: -4px;
+    width: calc(100% + 8px);
+    height: calc(100% + 8px);
     border-radius: 50%;
     z-index: -1;
     pointer-events: none;
 
-    /* 使用 mask 製作環形效果 */
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 4px));
-    mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 4px));
+    /* 使用 mask 製作環形效果（3px 寬度的環） */
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
 
     /* 背景漸層會由 JS 動態設定 */
     background: var(--hp-ring-gradient, transparent);
 
-    /* 柔和發光效果 */
-    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.3));
+    /* 能量環發光效果 */
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
 }
 
-/* BOSS Token 的血量環需要調整 z-index */
+/* BOSS Token 的血量環 */
 .token.boss .token-hp-ring {
     z-index: 48;  /* 在 ::before (z-index: 49) 下方 */
-    width: 105%;
-    height: 105%;
+    top: -3px;
+    left: -3px;
+    width: calc(100% + 6px);
+    height: calc(100% + 6px);
 }
 
 /* 選中狀態的血量環發光更強 */
 .token.selected .token-hp-ring {
-    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.5));
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
 }
 
-/* 大型 Token 的血量環稍微調整 */
-.token.size-2x2 .token-hp-ring,
+/* 大型 Token 的血量環 */
+.token.size-2x2 .token-hp-ring {
+    top: -5px;
+    left: -5px;
+    width: calc(100% + 10px);
+    height: calc(100% + 10px);
+}
+
 .token.size-3x3 .token-hp-ring {
-    width: 108%;
-    height: 108%;
+    top: -6px;
+    left: -6px;
+    width: calc(100% + 12px);
+    height: calc(100% + 12px);
 }
 
 /* ===== Units Page ===== */

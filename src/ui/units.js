@@ -209,21 +209,14 @@ function renderSidebarUnits() {
         const isSt = myRole === 'st';
         const isBoss = u.isBoss || u.type === 'boss';
         const hpArr = u.hpArr || [];
-        const maxHp = u.maxHp || hpArr.length || 1;
 
-        const bar = `<div class="hp-bar-wrap" style="height:6px;margin-top:4px;">` +
-            hpArr.map(h => {
-                const cls = h === 0 ? 'hp-empty' : h === 1 ? 'hp-b' : h === 2 ? 'hp-l' : 'hp-a';
-                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
-            }).join('') +
-            `</div>`;
-
+        // 簡潔的傷害狀態文字
         let statusTxt = isEnemy && !isSt
             ? getVagueStatus(u)
-            : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L`;
+            : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L ${hpArr.filter(x => x === 1).length}B`;
 
         const unitName = u.name || 'Unknown';
-        
+
         // 單位卡片類別
         const cardClasses = [
             'unit-card',
@@ -233,13 +226,12 @@ function renderSidebarUnits() {
         ].filter(Boolean).join(' ');
 
         return `
-            <div class="${cardClasses}" style="padding:8px;margin-bottom:6px;">
-                <div style="display:flex;justify-content:space-between;">
-                    <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(unitName)}</span>
-                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init || 0}</span>
+            <div class="${cardClasses}" style="padding:6px 8px;margin-bottom:4px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-weight:bold;font-size:0.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(unitName)}</span>
+                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';font-size:0.85rem;margin-left:8px;">${u.init || 0}</span>
                 </div>
-                <div style="font-size:0.75rem;color:#777;">${statusTxt}</div>
-                ${bar}
+                <div style="font-size:0.7rem;color:#888;margin-top:2px;">${statusTxt}</div>
             </div>
         `;
     }).join('');

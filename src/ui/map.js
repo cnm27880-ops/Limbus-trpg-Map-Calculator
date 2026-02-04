@@ -457,8 +457,8 @@ function renderMap() {
             `;
             hpRing.style.setProperty('--hp-ring-gradient', `conic-gradient(${gradientStops.join(', ')})`);
 
-            // 將血量環添加到 tokensContainer（在 Token 之前）
-            tokensContainer.appendChild(hpRing);
+            // 將血量環添加到 grid（在 Token 之前）
+            grid.appendChild(hpRing);
         }
 
         // 儲存棋子點擊起始座標（用於判斷是拖曳還是點擊）

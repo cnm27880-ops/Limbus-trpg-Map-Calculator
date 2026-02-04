@@ -109,8 +109,9 @@ function initCombatHUD() {
         startCooldownTimer();
     }
 
-    // Restore HUD if previously bound
-    if (hudState.boundTab) {
+    // Restore HUD if previously bound (only if user is logged in)
+    // 檢查 myRole 是否存在，避免在登入頁面顯示儀表板
+    if (hudState.boundTab && typeof myRole !== 'undefined' && myRole) {
         showCombatHUD();
         refreshHUDData();
     }

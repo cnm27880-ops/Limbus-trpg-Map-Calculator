@@ -401,6 +401,7 @@ function renderMap() {
         }
 
         // ===== 環狀血量條 (HP Ring) =====
+        // 注意：血量環必須作為 Token 的兄弟元素，因為 Token 有 overflow:hidden
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
 
@@ -439,11 +440,25 @@ function renderMap() {
                 gradientStops.push(`#333 ${currentDeg}deg 360deg`);
             }
 
-            // 創建血量環 DOM
+            // 創建血量環 DOM（作為獨立元素，不是 Token 的子元素）
             const hpRing = document.createElement('div');
             hpRing.className = 'token-hp-ring';
+
+            // 計算血量環的尺寸和位置
+            const ringPadding = isBoss ? 3 : (unitSize === 3 ? 6 : unitSize === 2 ? 5 : 4);
+            const ringSize = tokenSize + ringPadding * 2;
+            hpRing.style.cssText = `
+                position: absolute;
+                width: ${ringSize}px;
+                height: ${ringSize}px;
+                left: ${Math.round(u.x * gridSize + 2 - ringPadding)}px;
+                top: ${Math.round(u.y * gridSize + 2 - ringPadding)}px;
+                z-index: ${isBoss ? 48 : 5};
+            `;
             hpRing.style.setProperty('--hp-ring-gradient', `conic-gradient(${gradientStops.join(', ')})`);
-            t.appendChild(hpRing);
+
+            // 將血量環添加到 tokensContainer（在 Token 之前）
+            tokensContainer.appendChild(hpRing);
         }
 
         // 儲存棋子點擊起始座標（用於判斷是拖曳還是點擊）

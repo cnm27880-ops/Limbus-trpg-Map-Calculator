@@ -146,6 +146,48 @@
     /* 保持相同比例 */
 }
 
+/* ===== Token HP Ring (環狀血量條) ===== */
+.token-hp-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 110%;
+    height: 110%;
+    border-radius: 50%;
+    z-index: -1;
+    pointer-events: none;
+
+    /* 使用 mask 製作環形效果 */
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 4px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 4px));
+
+    /* 背景漸層會由 JS 動態設定 */
+    background: var(--hp-ring-gradient, transparent);
+
+    /* 柔和發光效果 */
+    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.3));
+}
+
+/* BOSS Token 的血量環需要調整 z-index */
+.token.boss .token-hp-ring {
+    z-index: 48;  /* 在 ::before (z-index: 49) 下方 */
+    width: 105%;
+    height: 105%;
+}
+
+/* 選中狀態的血量環發光更強 */
+.token.selected .token-hp-ring {
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.5));
+}
+
+/* 大型 Token 的血量環稍微調整 */
+.token.size-2x2 .token-hp-ring,
+.token.size-3x3 .token-hp-ring {
+    width: 108%;
+    height: 108%;
+}
+
 /* ===== Units Page ===== */
 #page-units {
     flex-direction: column;

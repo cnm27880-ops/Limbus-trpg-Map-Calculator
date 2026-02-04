@@ -20,6 +20,20 @@ function initModals() {
                     <button onclick="closeModal('modal-add-unit')">×</button>
                 </div>
                 <div class="modal-body">
+                    <!-- 模板選擇區 -->
+                    <div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                        <select id="template-select" onchange="loadUnitTemplate(this.value)" style="flex:1;">
+                            <option value="">-- 載入模板 --</option>
+                        </select>
+                        <button class="modal-btn" onclick="deleteSelectedTemplate()" style="background:var(--bg-input);padding:8px 12px;" title="刪除選中的模板">🗑️</button>
+                    </div>
+
+                    <!-- 頭像預覽區 -->
+                    <div id="template-avatar-preview" style="display:none;text-align:center;margin-bottom:12px;">
+                        <div style="width:64px;height:64px;border-radius:50%;margin:0 auto;background-size:cover;background-position:center;border:2px solid var(--border);" id="template-avatar-img"></div>
+                        <button onclick="clearTemplateAvatar()" style="margin-top:6px;font-size:0.75rem;background:none;border:none;color:var(--accent-red);cursor:pointer;">清除頭像</button>
+                    </div>
+
                     <input type="text" id="add-name" placeholder="名稱">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                         <input type="number" id="add-hp" value="10" placeholder="HP">
@@ -42,9 +56,13 @@ function initModals() {
                             <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
                         </div>
                     </div>
+
+                    <!-- 隱藏欄位：儲存模板頭像 -->
+                    <input type="hidden" id="add-template-avatar" value="">
                 </div>
                 <div class="modal-footer">
                     <button class="modal-btn" onclick="closeModal('modal-add-unit')" style="background:var(--bg-card);">取消</button>
+                    <button class="modal-btn" onclick="saveAsUnitTemplate()" style="background:var(--accent-purple);color:#fff;">💾 存為模板</button>
                     <button class="modal-btn" onclick="confirmAddUnit()" style="background:var(--accent-green);color:#000;">確認</button>
                 </div>
             </div>
@@ -182,7 +200,168 @@ function closeModal(id) {
  * 開啟新增單位 Modal
  */
 function openAddUnitModal() {
+    // 刷新模板下拉選單
+    refreshTemplateSelect();
+
+    // 重置表單
+    document.getElementById('add-name').value = '';
+    document.getElementById('add-hp').value = '10';
+    document.getElementById('add-type').value = 'enemy';
+    document.getElementById('add-size').value = '1';
+    document.getElementById('add-avatar').checked = false;
+    document.getElementById('add-template-avatar').value = '';
+    document.getElementById('template-select').value = '';
+
+    // 隱藏頭像預覽
+    const preview = document.getElementById('template-avatar-preview');
+    if (preview) preview.style.display = 'none';
+
     openModal('modal-add-unit');
+}
+
+/**
+ * 刷新模板下拉選單
+ */
+function refreshTemplateSelect() {
+    const select = document.getElementById('template-select');
+    if (!select) return;
+
+    const templates = typeof getUnitTemplates === 'function' ? getUnitTemplates() : [];
+
+    // 重建選項
+    select.innerHTML = '<option value="">-- 載入模板 --</option>';
+    templates.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.name} (HP:${t.hp}, ${t.type === 'boss' ? 'BOSS' : t.type === 'enemy' ? '敵方' : '我方'})`;
+        select.appendChild(opt);
+    });
+}
+
+/**
+ * 載入單位模板
+ * @param {string} templateId - 模板 ID
+ */
+function loadUnitTemplate(templateId) {
+    if (!templateId) {
+        // 選擇了空選項，重置頭像預覽
+        document.getElementById('add-template-avatar').value = '';
+        document.getElementById('template-avatar-preview').style.display = 'none';
+        return;
+    }
+
+    const templates = typeof getUnitTemplates === 'function' ? getUnitTemplates() : [];
+    const template = templates.find(t => t.id === templateId);
+
+    if (!template) {
+        showToast('找不到該模板');
+        return;
+    }
+
+    // 填入表單
+    document.getElementById('add-name').value = template.name || '';
+    document.getElementById('add-hp').value = template.hp || 10;
+    document.getElementById('add-type').value = template.type || 'enemy';
+    document.getElementById('add-size').value = template.size || 1;
+
+    // 處理頭像
+    if (template.avatar) {
+        document.getElementById('add-template-avatar').value = template.avatar;
+        document.getElementById('add-avatar').checked = false;  // 不需要另外上傳
+        // 顯示頭像預覽
+        const preview = document.getElementById('template-avatar-preview');
+        const img = document.getElementById('template-avatar-img');
+        if (preview && img) {
+            img.style.backgroundImage = `url(${template.avatar})`;
+            preview.style.display = 'block';
+        }
+    } else {
+        document.getElementById('add-template-avatar').value = '';
+        document.getElementById('template-avatar-preview').style.display = 'none';
+    }
+
+    showToast(`已載入模板：${template.name}`);
+}
+
+/**
+ * 存為單位模板
+ */
+function saveAsUnitTemplate() {
+    const name = document.getElementById('add-name').value;
+    if (!name || name.trim() === '') {
+        showToast('請先輸入單位名稱');
+        return;
+    }
+
+    const hp = parseInt(document.getElementById('add-hp').value) || 10;
+    const type = document.getElementById('add-type').value;
+    const size = parseInt(document.getElementById('add-size').value) || 1;
+    const avatar = document.getElementById('add-template-avatar').value || null;
+
+    if (typeof saveUnitTemplate !== 'function') {
+        showToast('模板功能不可用');
+        return;
+    }
+
+    const saved = saveUnitTemplate({
+        name: name.trim(),
+        hp: hp,
+        type: type,
+        size: size,
+        avatar: avatar
+    });
+
+    if (saved) {
+        showToast(`已儲存模板：${saved.name}`);
+        refreshTemplateSelect();
+        // 選中剛儲存的模板
+        document.getElementById('template-select').value = saved.id;
+    } else {
+        showToast('儲存模板失敗');
+    }
+}
+
+/**
+ * 刪除選中的模板
+ */
+function deleteSelectedTemplate() {
+    const select = document.getElementById('template-select');
+    const templateId = select ? select.value : '';
+
+    if (!templateId) {
+        showToast('請先選擇要刪除的模板');
+        return;
+    }
+
+    const templates = typeof getUnitTemplates === 'function' ? getUnitTemplates() : [];
+    const template = templates.find(t => t.id === templateId);
+
+    if (!template) {
+        showToast('找不到該模板');
+        return;
+    }
+
+    if (!confirm(`確定要刪除模板「${template.name}」嗎？`)) {
+        return;
+    }
+
+    if (typeof deleteUnitTemplate === 'function' && deleteUnitTemplate(templateId)) {
+        showToast(`已刪除模板：${template.name}`);
+        refreshTemplateSelect();
+        // 清空頭像預覽
+        document.getElementById('add-template-avatar').value = '';
+        document.getElementById('template-avatar-preview').style.display = 'none';
+    } else {
+        showToast('刪除模板失敗');
+    }
+}
+
+/**
+ * 清除模板頭像
+ */
+function clearTemplateAvatar() {
+    document.getElementById('add-template-avatar').value = '';
+    document.getElementById('template-avatar-preview').style.display = 'none';
 }
 
 /**
@@ -202,13 +381,19 @@ function confirmAddUnit() {
     const type = document.getElementById('add-type').value;
     const size = parseInt(document.getElementById('add-size').value) || 1;
     const useAvatar = document.getElementById('add-avatar').checked;
+    const templateAvatar = document.getElementById('add-template-avatar').value || '';
 
     if (myRole === 'st') {
         const u = createUnit(name, hp, type, myPlayerId, myName, size);
-        if (useAvatar) {
+
+        // 優先使用模板頭像，否則觸發上傳
+        if (templateAvatar) {
+            u.avatar = templateAvatar;
+        } else if (useAvatar) {
             uploadTargetId = u.id;
             document.getElementById('file-upload').click();
         }
+
         state.units.push(u);
         closeModal('modal-add-unit');
         sendState();
@@ -221,7 +406,8 @@ function confirmAddUnit() {
             hp: hp,
             unitType: type,
             playerName: myName,
-            size: size
+            size: size,
+            avatar: templateAvatar || null  // 傳送模板頭像給 ST
         });
         closeModal('modal-add-unit');
         showToast('已請求新增單位');

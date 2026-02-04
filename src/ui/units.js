@@ -209,6 +209,7 @@ function renderSidebarUnits() {
         const isSt = myRole === 'st';
         const isBoss = u.isBoss || u.type === 'boss';
         const hpArr = u.hpArr || [];
+        const maxHp = u.maxHp || hpArr.length || 1;
 
         // 簡潔的傷害狀態文字
         let statusTxt = isEnemy && !isSt
@@ -225,6 +226,28 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
+        // 生成戰術血條（10 格方塊）
+        const segmentCount = 10;
+        let tacticalSegments = '';
+        for (let i = 0; i < segmentCount; i++) {
+            // 計算此格對應的 hpArr 索引
+            const hpIndex = Math.floor((i / segmentCount) * maxHp);
+            const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
+
+            let segmentClass = 'hp-tactical-segment';
+            if (hpValue === 0) {
+                segmentClass += ' hp-healthy';  // 完好 = 綠色
+            } else if (hpValue === 1) {
+                segmentClass += ' hp-b';  // B傷 = 藍色
+            } else if (hpValue === 2) {
+                segmentClass += ' hp-l';  // L傷 = 橙色
+            } else if (hpValue === 3) {
+                segmentClass += ' hp-a';  // A傷 = 紅色
+            }
+
+            tacticalSegments += `<div class="${segmentClass}"></div>`;
+        }
+
         return `
             <div class="${cardClasses}" style="padding:6px 8px;margin-bottom:4px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -232,6 +255,7 @@ function renderSidebarUnits() {
                     <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';font-size:0.85rem;margin-left:8px;">${u.init || 0}</span>
                 </div>
                 <div style="font-size:0.7rem;color:#888;margin-top:2px;">${statusTxt}</div>
+                <div class="hp-tactical-container">${tacticalSegments}</div>
             </div>
         `;
     }).join('');

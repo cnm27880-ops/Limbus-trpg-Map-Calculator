@@ -400,67 +400,6 @@ function renderMap() {
             }
         }
 
-        // ===== 環狀血量條 (HP Ring) =====
-        // 注意：血量環必須作為 Token 的兄弟元素，因為 Token 有 overflow:hidden
-        const hpArr = u.hpArr || [];
-        const maxHp = u.maxHp || hpArr.length || 1;
-
-        // 只有在有傷害時才顯示血量環
-        const hasDamage = hpArr.some(h => h > 0);
-        if (hasDamage && maxHp > 0) {
-            // 統計各類傷害
-            const bCount = hpArr.filter(h => h === 1).length;  // B傷
-            const lCount = hpArr.filter(h => h === 2).length;  // L傷
-            const aCount = hpArr.filter(h => h === 3).length;  // A傷
-            const emptyCount = maxHp - bCount - lCount - aCount;  // 完好
-
-            // 計算百分比（轉換為度數，一圈 = 360deg）
-            let gradientStops = [];
-            let currentDeg = 0;
-
-            // 順序：A傷（紅）→ L傷（橙）→ B傷（藍）→ 完好（深灰）
-            // 這樣最嚴重的傷害在最前面
-            if (aCount > 0) {
-                const aDeg = (aCount / maxHp) * 360;
-                gradientStops.push(`var(--accent-red) ${currentDeg}deg ${currentDeg + aDeg}deg`);
-                currentDeg += aDeg;
-            }
-            if (lCount > 0) {
-                const lDeg = (lCount / maxHp) * 360;
-                gradientStops.push(`var(--accent-orange) ${currentDeg}deg ${currentDeg + lDeg}deg`);
-                currentDeg += lDeg;
-            }
-            if (bCount > 0) {
-                const bDeg = (bCount / maxHp) * 360;
-                gradientStops.push(`var(--accent-blue) ${currentDeg}deg ${currentDeg + bDeg}deg`);
-                currentDeg += bDeg;
-            }
-            if (emptyCount > 0) {
-                // 完好部分用深灰色顯示
-                gradientStops.push(`#333 ${currentDeg}deg 360deg`);
-            }
-
-            // 創建血量環 DOM（作為獨立元素，不是 Token 的子元素）
-            const hpRing = document.createElement('div');
-            hpRing.className = 'token-hp-ring';
-
-            // 計算血量環的尺寸和位置
-            const ringPadding = isBoss ? 3 : (unitSize === 3 ? 6 : unitSize === 2 ? 5 : 4);
-            const ringSize = tokenSize + ringPadding * 2;
-            hpRing.style.cssText = `
-                position: absolute;
-                width: ${ringSize}px;
-                height: ${ringSize}px;
-                left: ${Math.round(u.x * gridSize + 2 - ringPadding)}px;
-                top: ${Math.round(u.y * gridSize + 2 - ringPadding)}px;
-                z-index: ${isBoss ? 48 : 5};
-            `;
-            hpRing.style.setProperty('--hp-ring-gradient', `conic-gradient(${gradientStops.join(', ')})`);
-
-            // 將血量環添加到 grid（在 Token 之前）
-            grid.appendChild(hpRing);
-        }
-
         // 儲存棋子點擊起始座標（用於判斷是拖曳還是點擊）
         let tokenClickStartX = null;
         let tokenClickStartY = null;

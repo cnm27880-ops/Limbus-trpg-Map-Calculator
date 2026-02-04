@@ -146,23 +146,6 @@
     /* 保持相同比例 */
 }
 
-/* ===== Token HP Ring (環狀血量條) ===== */
-/* 注意：血量環是獨立元素，不是 Token 的子元素（避免 overflow:hidden 裁切） */
-.token-hp-ring {
-    border-radius: 50%;
-    pointer-events: none;
-
-    /* 使用 mask 製作環形效果（3px 寬度的環） */
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
-    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff calc(100% - 3px));
-
-    /* 背景漸層會由 JS 動態設定 */
-    background: var(--hp-ring-gradient, transparent);
-
-    /* 能量環發光效果 */
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
-}
-
 /* ===== Units Page ===== */
 #page-units {
     flex-direction: column;
@@ -206,6 +189,7 @@
 
 /* ===== Unit Card ===== */
 .unit-card {
+    position: relative;
     background: var(--bg-card);
     border-radius: 8px;
     padding: 10px;
@@ -301,6 +285,52 @@
 
 .hp-a {
     background: var(--accent-red);
+}
+
+/* ===== Tactical HP Bar (右下角戰術血條) ===== */
+.hp-tactical-container {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    display: flex;
+    gap: 2px;
+    transform: skewX(-15deg);
+    z-index: 5;
+    height: 8px;
+}
+
+.hp-tactical-segment {
+    width: 5px;
+    height: 100%;
+    transition: all 0.2s;
+    opacity: 0.9;
+    box-shadow: 0 0 4px currentColor;
+}
+
+.hp-tactical-segment.empty {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+    opacity: 0.5;
+}
+
+.hp-tactical-segment.hp-healthy {
+    background-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+.hp-tactical-segment.hp-b {
+    background-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.hp-tactical-segment.hp-l {
+    background-color: var(--accent-orange);
+    color: var(--accent-orange);
+}
+
+.hp-tactical-segment.hp-a {
+    background-color: var(--accent-red);
+    color: var(--accent-red);
 }
 
 /* ===== Unit Actions ===== */

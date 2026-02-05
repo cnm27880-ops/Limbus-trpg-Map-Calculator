@@ -213,6 +213,7 @@ function renderSidebarUnits() {
         const isBoss = u.isBoss || u.type === 'boss';
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
+        const currentHp = maxHp - hpArr.filter(x => x > 0).length;
 
         // 簡潔的傷害狀態文字
         let statusTxt = isEnemy && !isSt
@@ -257,6 +258,7 @@ function renderSidebarUnits() {
                 <div class="unit-header">
                     <div class="unit-info">
                         <div class="unit-name">${escapeHtml(unitName)}</div>
+                        <div class="unit-hp-text">HP: ${currentHp} / ${maxHp}</div>
                         <div class="unit-status">${statusTxt}</div>
                     </div>
                     <div class="hp-tactical-container">${tacticalSegments}</div>

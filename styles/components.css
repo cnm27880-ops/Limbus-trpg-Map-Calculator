@@ -258,29 +258,35 @@
     flex: 0 0 auto;
     min-width: 0;
     max-width: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .unit-name {
     font-weight: bold;
-    font-size: 0.85rem;
+    font-size: 1.1rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text-main);
+    line-height: 1.2;
 }
 
 .unit-hp-text {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--accent-green);
-    margin-top: 1px;
+    display: none; /* 隱藏 HP 數字顯示 */
 }
 
 .unit-status {
-    font-size: 0.65rem;
-    color: #888;
-    margin-top: 1px;
+    font-size: 0.75rem;
+    margin-top: 2px;
+    font-weight: 600;
 }
+
+/* B、L、A 傷害狀態文字的顏色標記 */
+.unit-status .dmg-a { color: var(--accent-red); }
+.unit-status .dmg-l { color: var(--accent-orange); }
+.unit-status .dmg-b { color: var(--accent-blue); }
 
 /* 右側先攻區 */
 .unit-init-box {
@@ -288,18 +294,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid var(--accent-yellow);
-    border-radius: 4px;
-    padding: 2px 6px;
-    min-width: 28px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid var(--accent-yellow);
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 40px;
+    min-height: 36px;
+    box-shadow: 0 0 8px rgba(253, 216, 53, 0.3);
 }
 
 .unit-init-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.9rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: var(--accent-yellow);
+    text-shadow: 0 0 6px rgba(253, 216, 53, 0.5);
 }
 
 .unit-avatar {
@@ -374,16 +383,17 @@
     justify-content: flex-end;
     gap: 2px;
     transform: skewX(-10deg);
-    height: 100%;
-    padding: 4px 0;
+    min-height: 36px;
+    padding: 6px 4px;
 }
 
 .hp-tactical-segment {
-    width: 5px;
-    height: 100%;
+    width: 6px;
+    height: 24px;
+    border-radius: 2px;
     transition: all 0.2s;
-    opacity: 0.9;
-    box-shadow: 0 0 4px currentColor;
+    opacity: 0.95;
+    box-shadow: 0 0 6px currentColor;
 }
 
 .hp-tactical-segment.empty {

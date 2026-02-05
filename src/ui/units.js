@@ -28,7 +28,10 @@ function renderUnitsToolbar() {
 
     if (myRole === 'st') {
         toolbar.innerHTML = `
-            <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
+            <div class="turn-controls">
+                <button class="turn-btn" onclick="prevTurn()" title="上一個">▲</button>
+                <button class="turn-btn" onclick="nextTurn()" title="下一個">▼</button>
+            </div>
             <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
             <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
             <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
@@ -248,14 +251,19 @@ function renderSidebarUnits() {
             tacticalSegments += `<div class="${segmentClass}"></div>`;
         }
 
+        // 三欄佈局：左名-中血-右速
         return `
-            <div class="${cardClasses}" style="padding:6px 8px;margin-bottom:4px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-weight:bold;font-size:0.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(unitName)}</span>
-                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';font-size:0.85rem;margin-left:8px;">${u.init || 0}</span>
+            <div class="${cardClasses}">
+                <div class="unit-header">
+                    <div class="unit-info">
+                        <div class="unit-name">${escapeHtml(unitName)}</div>
+                        <div class="unit-status">${statusTxt}</div>
+                    </div>
+                    <div class="hp-tactical-container">${tacticalSegments}</div>
+                    <div class="unit-init-box">
+                        <span class="unit-init-value">${u.init || 0}</span>
+                    </div>
                 </div>
-                <div style="font-size:0.7rem;color:#888;margin-top:2px;">${statusTxt}</div>
-                <div class="hp-tactical-container">${tacticalSegments}</div>
             </div>
         `;
     }).join('');
@@ -424,6 +432,26 @@ function nextTurn() {
     }
     if (state.units.length) {
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
+        broadcastState();
+
+        setTimeout(() => {
+            const el = document.querySelector('.unit-card.active-turn');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
+}
+
+/**
+ * 上一回合
+ */
+function prevTurn() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制回合');
+        return;
+    }
+    if (state.units.length) {
+        // 處理 < 0 的循環情況
+        state.turnIdx = (state.turnIdx - 1 + state.units.length) % state.units.length;
         broadcastState();
 
         setTimeout(() => {

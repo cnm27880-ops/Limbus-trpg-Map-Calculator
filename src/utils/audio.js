@@ -90,16 +90,30 @@ class MusicManager {
         url = url.trim();
 
         // Dropbox 處理
-        if (url.includes('www.dropbox.com')) {
-            // 替換為直連域名
-            url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com');
-            // 移除網址參數
-            const urlObj = new URL(url);
-            return urlObj.origin + urlObj.pathname;
+        // 新舊格式都支援：
+        //   舊: https://www.dropbox.com/s/FILE_ID/filename.mp3?dl=0
+        //   新: https://www.dropbox.com/scl/fi/HASH/filename.mp3?rlkey=KEY&st=ABC&dl=0
+        // 使用 raw=1 參數取得直接檔案內容（保留 rlkey 等必要參數）
+        if (url.includes('dropbox.com/') || url.includes('dropboxusercontent.com/')) {
+            try {
+                const urlObj = new URL(url);
+                // 將舊的 dl.dropboxusercontent.com 轉回 www.dropbox.com
+                if (urlObj.hostname === 'dl.dropboxusercontent.com') {
+                    urlObj.hostname = 'www.dropbox.com';
+                }
+                // 移除 dl 參數，加上 raw=1
+                urlObj.searchParams.delete('dl');
+                urlObj.searchParams.set('raw', '1');
+                return urlObj.toString();
+            } catch (e) {
+                // URL 解析失敗，嘗試簡單替換
+                return url.replace(/[?&]dl=\d/, '?raw=1');
+            }
         }
 
         // Google Drive 處理
-        if (url.includes('drive.google.com')) {
+        // drive.google.com/uc?export=download 已失效，改用 drive.usercontent.google.com
+        if (url.includes('drive.google.com/')) {
             // 提取文件 ID
             let fileId = null;
 
@@ -116,7 +130,7 @@ class MusicManager {
             }
 
             if (fileId) {
-                return `https://drive.google.com/uc?export=download&id=${fileId}`;
+                return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
             }
         }
 

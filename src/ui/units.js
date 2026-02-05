@@ -215,10 +215,13 @@ function renderSidebarUnits() {
         const maxHp = u.maxHp || hpArr.length || 1;
         const currentHp = maxHp - hpArr.filter(x => x > 0).length;
 
-        // 簡潔的傷害狀態文字
+        // 簡潔的傷害狀態文字（帶顏色標記）
+        const aCount = hpArr.filter(x => x === 3).length;
+        const lCount = hpArr.filter(x => x === 2).length;
+        const bCount = hpArr.filter(x => x === 1).length;
         let statusTxt = isEnemy && !isSt
             ? getVagueStatus(u)
-            : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L ${hpArr.filter(x => x === 1).length}B`;
+            : `<span class="dmg-b">${bCount}B</span> <span class="dmg-l">${lCount}L</span> <span class="dmg-a">${aCount}A</span>`;
 
         const unitName = u.name || 'Unknown';
 
@@ -258,7 +261,6 @@ function renderSidebarUnits() {
                 <div class="unit-header">
                     <div class="unit-info">
                         <div class="unit-name">${escapeHtml(unitName)}</div>
-                        <div class="unit-hp-text">HP: ${currentHp} / ${maxHp}</div>
                         <div class="unit-status">${statusTxt}</div>
                     </div>
                     <div class="hp-tactical-container">${tacticalSegments}</div>

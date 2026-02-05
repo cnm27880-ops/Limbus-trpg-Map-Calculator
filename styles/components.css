@@ -375,11 +375,11 @@
     background: var(--accent-red);
 }
 
-/* ===== Tactical HP Bar (中間戰術血條) ===== */
+/* ===== Tactical HP Bar - 階梯式三角能量血條 ===== */
 .hp-tactical-container {
     flex: 1;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: flex-end;
     gap: 2px;
     transform: skewX(-10deg);
@@ -388,38 +388,34 @@
 }
 
 .hp-tactical-segment {
-    width: 6px;
-    height: 24px;
+    flex: 1;
+    min-width: 4px;
+    /* 階梯式高度：隨 --i 遞增，形成三角形輪廓 */
+    height: calc(10px + var(--i) * 4px);
     border-radius: 2px;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
     opacity: 0.95;
+    background-color: var(--accent-green);
+    color: var(--accent-green);
     box-shadow: 0 0 6px currentColor;
 }
 
 .hp-tactical-segment.empty {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
     box-shadow: none;
+    opacity: 0.3;
+}
+
+.hp-tactical-segment.ghost {
+    background: rgba(67, 160, 71, 0.3);
+    box-shadow: 0 0 4px rgba(67, 160, 71, 0.2);
     opacity: 0.5;
+    animation: ghost-fade 1.5s ease-out forwards;
 }
 
-.hp-tactical-segment.hp-healthy {
-    background-color: var(--accent-green);
-    color: var(--accent-green);
-}
-
-.hp-tactical-segment.hp-b {
-    background-color: var(--accent-blue);
-    color: var(--accent-blue);
-}
-
-.hp-tactical-segment.hp-l {
-    background-color: var(--accent-orange);
-    color: var(--accent-orange);
-}
-
-.hp-tactical-segment.hp-a {
-    background-color: var(--accent-red);
-    color: var(--accent-red);
+@keyframes ghost-fade {
+    from { opacity: 0.5; }
+    to { opacity: 0.15; }
 }
 
 /* ===== Unit Actions ===== */

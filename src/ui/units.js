@@ -233,26 +233,24 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
-        // 生成戰術血條（10 格方塊）
-        const segmentCount = 10;
+        // 階梯式三角能量血條（6 格）
+        const totalSegments = 6;
+        const currentSegments = Math.round((currentHp / maxHp) * totalSegments);
+
+        // 殘影判定：記錄前一次格數，用於顯示殘影效果
+        if (!window._prevSegments) window._prevSegments = {};
+        const prevSegments = window._prevSegments[u.id] !== undefined
+            ? window._prevSegments[u.id] : currentSegments;
+        window._prevSegments[u.id] = currentSegments;
+
         let tacticalSegments = '';
-        for (let i = 0; i < segmentCount; i++) {
-            // 計算此格對應的 hpArr 索引
-            const hpIndex = Math.floor((i / segmentCount) * maxHp);
-            const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
-
-            let segmentClass = 'hp-tactical-segment';
-            if (hpValue === 0) {
-                segmentClass += ' hp-healthy';  // 完好 = 綠色
-            } else if (hpValue === 1) {
-                segmentClass += ' hp-b';  // B傷 = 藍色
-            } else if (hpValue === 2) {
-                segmentClass += ' hp-l';  // L傷 = 橙色
-            } else if (hpValue === 3) {
-                segmentClass += ' hp-a';  // A傷 = 紅色
+        for (let i = 0; i < totalSegments; i++) {
+            let cls = 'hp-tactical-segment';
+            if (i >= currentSegments) {
+                // 殘影：介於 current 和 prev 之間的格子顯示殘影
+                cls += i < prevSegments ? ' ghost' : ' empty';
             }
-
-            tacticalSegments += `<div class="${segmentClass}"></div>`;
+            tacticalSegments += `<div class="${cls}" style="--i: ${i}; --total: ${totalSegments};"></div>`;
         }
 
         // 三欄佈局：左名-中血-右速

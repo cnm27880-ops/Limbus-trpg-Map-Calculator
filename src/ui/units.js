@@ -66,6 +66,11 @@ function renderUnitsList() {
         const hideDetails = isEnemy && !isSt && !isMyUnit;
         const isBoss = u.isBoss || u.type === 'boss';
 
+        const canEdit = canControlUnit(u);
+        const maxHpLabel = canEdit
+            ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限" style="cursor:pointer;text-decoration:underline dotted;color:var(--accent-yellow);margin-left:4px;">[HP:${maxHp}]</span>`
+            : `<span style="margin-left:4px;color:var(--text-muted);">[HP:${maxHp}]</span>`;
+
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
         if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
 
@@ -182,7 +187,7 @@ function renderUnitsList() {
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
                         <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
-                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
+                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
                 </div>
@@ -421,8 +426,19 @@ function sortByInit() {
         showToast('只有 ST 可以排序');
         return;
     }
+    // 記住當前回合的單位 ID，排序後恢復位置
+    const currentUnit = state.units[state.turnIdx];
+    const currentUnitId = currentUnit ? currentUnit.id : null;
+
     state.units.sort((a, b) => b.init - a.init);
-    state.turnIdx = 0;
+
+    // 找回該單位的新索引
+    if (currentUnitId) {
+        const newIdx = state.units.findIndex(u => u.id === currentUnitId);
+        state.turnIdx = newIdx >= 0 ? newIdx : 0;
+    } else {
+        state.turnIdx = 0;
+    }
     broadcastState();
 }
 

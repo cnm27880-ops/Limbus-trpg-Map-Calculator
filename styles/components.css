@@ -110,7 +110,7 @@
     height: 115%;
     top: -7.5%;
     left: -7.5%;
-    background-image: url('https://raw.githubusercontent.com/cnm27880-ops/Limbus-trpg-Map-Calculator/main/boss_frame.png');
+    background-image: url('../assets/images/boss_frame.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -144,6 +144,31 @@
 .token.boss.size-3x3::before,
 .token.boss.size-3x3::after {
     /* 保持相同比例 */
+}
+
+/* ===== Your Turn Indicator (旋轉符文) ===== */
+@keyframes rune-spin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes rune-pulse {
+    0%, 100% { opacity: 0.7; }
+    50%      { opacity: 1; }
+}
+
+.turn-indicator-rune {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+    animation: rune-spin 6s linear infinite, rune-pulse 2s ease-in-out infinite;
+}
+
+/* 符文用 SVG 繪製的圓形符文圖騰 */
+.turn-indicator-rune svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 6px rgba(253, 216, 53, 0.8));
 }
 
 /* ===== Units Page ===== */
@@ -622,6 +647,55 @@
 .status-search-bar input:focus {
     border-color: var(--accent-yellow);
     outline: none;
+}
+
+/* ===== Recent Status Bar (最近使用快選) ===== */
+.recent-status-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    scrollbar-width: thin;
+}
+
+.recent-status-bar::-webkit-scrollbar {
+    height: 4px;
+}
+
+.recent-status-bar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.recent-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.08);
+    color: var(--accent-yellow);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.recent-tag:hover {
+    background: var(--accent-yellow);
+    color: #000;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(253, 216, 53, 0.3);
+}
+
+.recent-tag:active {
+    transform: scale(0.96);
 }
 
 .current-statuses-section {

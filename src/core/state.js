@@ -11,7 +11,8 @@ let state = {
     mapH: MAP_DEFAULTS.HEIGHT,
     mapData: [],
     themeId: 0,
-    players: {}
+    players: {},
+    customStatuses: []  // 房間共享的自訂狀態（透過 Firebase 同步）
 };
 
 // ===== 連線狀態 =====
@@ -59,7 +60,8 @@ function resetState() {
         mapH: MAP_DEFAULTS.HEIGHT,
         mapData: [],
         themeId: 0,
-        players: {}
+        players: {},
+        customStatuses: []
     };
 }
 

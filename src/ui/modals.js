@@ -155,6 +155,31 @@ function initModals() {
             </div>
         </div>
 
+        <!-- Modify Max HP Modal -->
+        <div class="modal-overlay" id="modal-max-hp">
+            <div class="modal">
+                <div class="modal-header">
+                    <span id="max-hp-modal-title">修改生命上限</span>
+                    <button onclick="closeModal('modal-max-hp')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom:10px;color:var(--text-dim);font-size:0.9rem;">
+                        設定新的生命上限（HP 上限）。<br>
+                        <span style="color:var(--accent-orange);font-size:0.8rem;">增加上限會新增完好的 HP 格；減少上限會從末尾移除。</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span class="calc-label" style="white-space:nowrap;">新的 HP 上限：</span>
+                        <input type="number" id="max-hp-value" value="10" min="1" style="flex:1;text-align:center;font-size:1.2rem;">
+                    </div>
+                    <input type="hidden" id="max-hp-target-id">
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="closeModal('modal-max-hp')" style="background:var(--bg-card);">取消</button>
+                    <button class="modal-btn" onclick="confirmMaxHpModify()" style="background:var(--accent-green);color:#000;">確認</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 狀態 Modal 已移至 status-manager.js 動態生成 -->
 
         <!-- Assign Owner Modal (分配權限) -->
@@ -632,4 +657,78 @@ function assignOwner(unitId, newOwnerId, newOwnerName) {
 
     // 重新渲染
     renderAll();
+}
+
+// ===== 修改生命上限 Modal =====
+/**
+ * 開啟修改生命上限 Modal
+ * @param {string} id - 單位 ID
+ */
+function openMaxHpModal(id) {
+    const u = findUnitById(id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    document.getElementById('max-hp-target-id').value = id;
+    document.getElementById('max-hp-value').value = u.maxHp || 10;
+    document.getElementById('max-hp-modal-title').innerText = `修改生命上限：${u.name}`;
+
+    openModal('modal-max-hp');
+}
+
+/**
+ * 確認修改生命上限
+ */
+function confirmMaxHpModify() {
+    const id = document.getElementById('max-hp-target-id').value;
+    const newMaxHp = parseInt(document.getElementById('max-hp-value').value);
+
+    if (!newMaxHp || newMaxHp < 1) {
+        showToast('HP 上限必須至少為 1');
+        return;
+    }
+
+    const u = findUnitById(id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        const oldMaxHp = u.maxHp || u.hpArr.length;
+        if (newMaxHp > oldMaxHp) {
+            // 增加上限：新增完好的 HP 格
+            const diff = newMaxHp - oldMaxHp;
+            for (let i = 0; i < diff; i++) {
+                u.hpArr.push(0);
+            }
+        } else if (newMaxHp < oldMaxHp) {
+            // 減少上限：從末尾移除（優先移除完好格）
+            // 先排序使受傷格在前、完好格在後
+            u.hpArr.sort((a, b) => b - a);
+            u.hpArr = u.hpArr.slice(0, newMaxHp);
+        }
+        u.maxHp = newMaxHp;
+        // 重新排序
+        u.hpArr.sort((a, b) => b - a);
+
+        closeModal('modal-max-hp');
+        broadcastState();
+        showToast(`已將「${u.name}」的生命上限修改為 ${newMaxHp}`);
+    } else {
+        sendToHost({
+            type: 'modifyMaxHp',
+            playerId: myPlayerId,
+            unitId: id,
+            newMaxHp: newMaxHp
+        });
+        closeModal('modal-max-hp');
+        showToast('已請求修改生命上限');
+    }
 }

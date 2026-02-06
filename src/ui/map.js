@@ -456,6 +456,43 @@ function renderMap() {
         };
 
         grid.appendChild(t);
+
+        // ===== Your Turn 旋轉符文指示器 =====
+        const unitIdx = state.units.findIndex(su => su.id === u.id);
+        if (unitIdx === state.turnIdx) {
+            const rune = document.createElement('div');
+            rune.className = 'turn-indicator-rune';
+            // 符文大小比 token 大 60%
+            const runeSize = tokenSize * 1.6;
+            rune.style.width = runeSize + 'px';
+            rune.style.height = runeSize + 'px';
+            // 置中在 token 中心
+            const tokenCenterX = u.x * gridSize + 2 + tokenSize / 2;
+            const tokenCenterY = u.y * gridSize + 2 + tokenSize / 2;
+            rune.style.left = Math.round(tokenCenterX) + 'px';
+            rune.style.top = Math.round(tokenCenterY) + 'px';
+            // SVG 符文圖騰
+            rune.innerHTML = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(253,216,53,0.6)" stroke-width="1.5" stroke-dasharray="6 4"/>
+                <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(253,216,53,0.4)" stroke-width="1" stroke-dasharray="3 5"/>
+                <!-- 四個方位符號 -->
+                <text x="50" y="8" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <text x="50" y="98" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <text x="4" y="54" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <text x="96" y="54" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <!-- 對角線裝飾 -->
+                <line x1="15" y1="15" x2="22" y2="22" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <line x1="85" y1="15" x2="78" y2="22" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <line x1="15" y1="85" x2="22" y2="78" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <line x1="85" y1="85" x2="78" y2="78" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <!-- 小三角箭頭 -->
+                <polygon points="50,3 47,9 53,9" fill="rgba(253,216,53,0.7)"/>
+                <polygon points="50,97 47,91 53,91" fill="rgba(253,216,53,0.7)"/>
+                <polygon points="3,50 9,47 9,53" fill="rgba(253,216,53,0.7)"/>
+                <polygon points="97,50 91,47 91,53" fill="rgba(253,216,53,0.7)"/>
+            </svg>`;
+            grid.appendChild(rune);
+        }
     });
 }
 

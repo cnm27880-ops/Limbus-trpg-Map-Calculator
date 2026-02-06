@@ -856,6 +856,23 @@ function handleSTMessage(conn, data) {
             }
             break;
 
+        case 'modifyMaxHp':
+            const maxHpU = state.units.find(u => u.id === data.unitId);
+            if (maxHpU && maxHpU.ownerId === playerId && data.newMaxHp >= 1) {
+                const oldM = maxHpU.maxHp || maxHpU.hpArr.length;
+                const newM = data.newMaxHp;
+                if (newM > oldM) {
+                    for (let i = 0; i < newM - oldM; i++) maxHpU.hpArr.push(0);
+                } else if (newM < oldM) {
+                    maxHpU.hpArr.sort((a, b) => b - a);
+                    maxHpU.hpArr = maxHpU.hpArr.slice(0, newM);
+                }
+                maxHpU.maxHp = newM;
+                maxHpU.hpArr.sort((a, b) => b - a);
+                broadcastState();
+            }
+            break;
+
         case 'uploadAvatar':
             const unit4 = state.units.find(u => u.id === data.unitId);
             if (unit4 && unit4.ownerId === playerId) {

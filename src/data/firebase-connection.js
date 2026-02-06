@@ -917,6 +917,27 @@ function sendToHost(message) {
             roomRef.child(`units/${message.unitId}/init`).set(message.init);
             break;
 
+        case 'modifyMaxHp':
+            const maxHpUnit = state.units.find(u => u.id === message.unitId);
+            if (maxHpUnit && message.newMaxHp >= 1) {
+                const oldMax = maxHpUnit.maxHp || maxHpUnit.hpArr.length;
+                const newMax = message.newMaxHp;
+                if (newMax > oldMax) {
+                    const diff = newMax - oldMax;
+                    for (let i = 0; i < diff; i++) {
+                        maxHpUnit.hpArr.push(0);
+                    }
+                } else if (newMax < oldMax) {
+                    maxHpUnit.hpArr.sort((a, b) => b - a);
+                    maxHpUnit.hpArr = maxHpUnit.hpArr.slice(0, newMax);
+                }
+                maxHpUnit.maxHp = newMax;
+                maxHpUnit.hpArr.sort((a, b) => b - a);
+                roomRef.child(`units/${message.unitId}/maxHp`).set(newMax);
+                roomRef.child(`units/${message.unitId}/hpArr`).set(maxHpUnit.hpArr);
+            }
+            break;
+
         case 'uploadAvatar':
             roomRef.child(`units/${message.unitId}/avatar`).set(message.avatar);
             break;

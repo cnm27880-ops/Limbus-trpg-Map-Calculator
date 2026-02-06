@@ -28,7 +28,10 @@ function renderUnitsToolbar() {
 
     if (myRole === 'st') {
         toolbar.innerHTML = `
-            <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
+            <div class="turn-controls">
+                <button class="turn-btn" onclick="prevTurn()" title="上一個">▲</button>
+                <button class="turn-btn" onclick="nextTurn()" title="下一個">▼</button>
+            </div>
             <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
             <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
             <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
@@ -62,6 +65,11 @@ function renderUnitsList() {
         const isMyUnit = u.ownerId === myPlayerId;
         const hideDetails = isEnemy && !isSt && !isMyUnit;
         const isBoss = u.isBoss || u.type === 'boss';
+
+        const canEdit = canControlUnit(u);
+        const maxHpLabel = canEdit
+            ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限" style="cursor:pointer;text-decoration:underline dotted;color:var(--accent-yellow);margin-left:4px;">[HP:${maxHp}]</span>`
+            : `<span style="margin-left:4px;color:var(--text-muted);">[HP:${maxHp}]</span>`;
 
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
         if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
@@ -179,7 +187,7 @@ function renderUnitsList() {
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
                         <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
-                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
+                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
                 </div>
@@ -210,20 +218,18 @@ function renderSidebarUnits() {
         const isBoss = u.isBoss || u.type === 'boss';
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
+        const currentHp = maxHp - hpArr.filter(x => x > 0).length;
 
-        const bar = `<div class="hp-bar-wrap" style="height:6px;margin-top:4px;">` +
-            hpArr.map(h => {
-                const cls = h === 0 ? 'hp-empty' : h === 1 ? 'hp-b' : h === 2 ? 'hp-l' : 'hp-a';
-                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
-            }).join('') +
-            `</div>`;
-
+        // 簡潔的傷害狀態文字（帶顏色標記）
+        const aCount = hpArr.filter(x => x === 3).length;
+        const lCount = hpArr.filter(x => x === 2).length;
+        const bCount = hpArr.filter(x => x === 1).length;
         let statusTxt = isEnemy && !isSt
             ? getVagueStatus(u)
-            : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L`;
+            : `<span class="dmg-b">${bCount}B</span> <span class="dmg-l">${lCount}L</span> <span class="dmg-a">${aCount}A</span>`;
 
         const unitName = u.name || 'Unknown';
-        
+
         // 單位卡片類別
         const cardClasses = [
             'unit-card',
@@ -232,14 +238,41 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
+        // 生成戰術血條（10 格方塊）
+        const segmentCount = 10;
+        let tacticalSegments = '';
+        for (let i = 0; i < segmentCount; i++) {
+            // 計算此格對應的 hpArr 索引
+            const hpIndex = Math.floor((i / segmentCount) * maxHp);
+            const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
+
+            let segmentClass = 'hp-tactical-segment';
+            if (hpValue === 0) {
+                segmentClass += ' hp-healthy';  // 完好 = 綠色
+            } else if (hpValue === 1) {
+                segmentClass += ' hp-b';  // B傷 = 藍色
+            } else if (hpValue === 2) {
+                segmentClass += ' hp-l';  // L傷 = 橙色
+            } else if (hpValue === 3) {
+                segmentClass += ' hp-a';  // A傷 = 紅色
+            }
+
+            tacticalSegments += `<div class="${segmentClass}"></div>`;
+        }
+
+        // 三欄佈局：左名-中血-右速
         return `
-            <div class="${cardClasses}" style="padding:8px;margin-bottom:6px;">
-                <div style="display:flex;justify-content:space-between;">
-                    <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(unitName)}</span>
-                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init || 0}</span>
+            <div class="${cardClasses}">
+                <div class="unit-header">
+                    <div class="unit-info">
+                        <div class="unit-name">${escapeHtml(unitName)}</div>
+                        <div class="unit-status">${statusTxt}</div>
+                    </div>
+                    <div class="hp-tactical-container">${tacticalSegments}</div>
+                    <div class="unit-init-box">
+                        <span class="unit-init-value">${u.init || 0}</span>
+                    </div>
                 </div>
-                <div style="font-size:0.75rem;color:#777;">${statusTxt}</div>
-                ${bar}
             </div>
         `;
     }).join('');
@@ -393,8 +426,19 @@ function sortByInit() {
         showToast('只有 ST 可以排序');
         return;
     }
+    // 記住當前回合的單位 ID，排序後恢復位置
+    const currentUnit = state.units[state.turnIdx];
+    const currentUnitId = currentUnit ? currentUnit.id : null;
+
     state.units.sort((a, b) => b.init - a.init);
-    state.turnIdx = 0;
+
+    // 找回該單位的新索引
+    if (currentUnitId) {
+        const newIdx = state.units.findIndex(u => u.id === currentUnitId);
+        state.turnIdx = newIdx >= 0 ? newIdx : 0;
+    } else {
+        state.turnIdx = 0;
+    }
     broadcastState();
 }
 
@@ -408,6 +452,26 @@ function nextTurn() {
     }
     if (state.units.length) {
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
+        broadcastState();
+
+        setTimeout(() => {
+            const el = document.querySelector('.unit-card.active-turn');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
+}
+
+/**
+ * 上一回合
+ */
+function prevTurn() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制回合');
+        return;
+    }
+    if (state.units.length) {
+        // 處理 < 0 的循環情況
+        state.turnIdx = (state.turnIdx - 1 + state.units.length) % state.units.length;
         broadcastState();
 
         setTimeout(() => {

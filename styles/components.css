@@ -649,6 +649,55 @@
     outline: none;
 }
 
+/* ===== Recent Status Bar (最近使用快選) ===== */
+.recent-status-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    scrollbar-width: thin;
+}
+
+.recent-status-bar::-webkit-scrollbar {
+    height: 4px;
+}
+
+.recent-status-bar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.recent-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.08);
+    color: var(--accent-yellow);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.recent-tag:hover {
+    background: var(--accent-yellow);
+    color: #000;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(253, 216, 53, 0.3);
+}
+
+.recent-tag:active {
+    transform: scale(0.96);
+}
+
 .current-statuses-section {
     padding: 12px;
     border-bottom: 1px solid var(--border);

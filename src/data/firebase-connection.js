@@ -534,6 +534,12 @@ function loadRoomData(data) {
     } else {
         state.players = {};
     }
+
+    if (data.customStatuses) {
+        state.customStatuses = Object.values(data.customStatuses);
+    } else {
+        state.customStatuses = [];
+    }
 }
 
 /**
@@ -598,6 +604,21 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('players').off('value', playersListener));
+
+    // 監聽自訂狀態變更（房間共享）
+    const customStatusesListener = roomRef.child('customStatuses').on('value', snapshot => {
+        if (snapshot.exists()) {
+            state.customStatuses = Object.values(snapshot.val());
+        } else {
+            state.customStatuses = [];
+        }
+        // 如果狀態 Modal 正在開啟且在自訂分類，刷新網格
+        const statusGrid = document.getElementById('status-grid');
+        if (statusGrid && typeof currentStatusCategory !== 'undefined' && currentStatusCategory === 'custom') {
+            statusGrid.innerHTML = renderStatusGrid('custom');
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('customStatuses').off('value', customStatusesListener));
 
     // 監聽使用者在線列表（用於分配權限功能）
     const usersListener = roomRef.child('users').on('value', snapshot => {
@@ -881,6 +902,43 @@ function broadcastState() {
     renderAll();
 }
 
+// ===== 自訂狀態同步 =====
+
+/**
+ * 新增自訂狀態到房間（透過 Firebase 同步給所有人）
+ * @param {Object} statusObj - 自訂狀態物件
+ */
+function addCustomStatusToRoom(statusObj) {
+    if (!roomRef) return;
+
+    if (myRole === 'st') {
+        // ST 直接寫入 Firebase
+        if (!state.customStatuses) state.customStatuses = [];
+        state.customStatuses.push(statusObj);
+        roomRef.child('customStatuses/' + statusObj.id).set(statusObj);
+    } else {
+        // 玩家透過 sendToHost 請求
+        sendToHost({
+            type: 'addCustomStatus',
+            playerId: myPlayerId,
+            statusObj: statusObj
+        });
+    }
+}
+
+/**
+ * 從房間移除自訂狀態
+ * @param {string} statusId - 狀態 ID
+ */
+function removeCustomStatusFromRoom(statusId) {
+    if (!roomRef) return;
+
+    if (myRole === 'st') {
+        state.customStatuses = (state.customStatuses || []).filter(s => s.id !== statusId);
+        roomRef.child('customStatuses/' + statusId).remove();
+    }
+}
+
 // ===== 玩家操作函數 =====
 
 /**
@@ -972,6 +1030,13 @@ function sendToHost(message) {
                     // 同步到 Firebase
                     roomRef.child(`units/${message.unitId}/status`).set(statusUnit.status);
                 }
+            }
+            break;
+
+        case 'addCustomStatus':
+            // 玩家請求新增自訂狀態到房間
+            if (message.statusObj && message.statusObj.id) {
+                roomRef.child('customStatuses/' + message.statusObj.id).set(message.statusObj);
             }
             break;
     }

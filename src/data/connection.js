@@ -905,6 +905,14 @@ function handleSTMessage(conn, data) {
                 broadcastState();
             }
             break;
+
+        case 'addCustomStatus':
+            if (data.statusObj && data.statusObj.id) {
+                if (!state.customStatuses) state.customStatuses = [];
+                state.customStatuses.push(data.statusObj);
+                broadcastState();
+            }
+            break;
     }
 }
 

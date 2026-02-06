@@ -3,6 +3,10 @@
  * 處理地圖渲染、工具、地形等
  */
 
+// ===== 測距尺狀態 =====
+let isMeasuring = false;
+let measureStart = { x: 0, y: 0 };
+
 // ===== 地圖初始化 =====
 /**
  * 初始化地圖資料
@@ -185,6 +189,22 @@ function renderMap() {
         container.style.height = pxH + 'px';
         container.style.marginLeft = `-${pxW / 2}px`;
         container.style.marginTop = `-${pxH / 2}px`;
+    }
+
+    // 確保測距尺 SVG 層存在
+    if (!document.getElementById('ruler-overlay')) {
+        const rulerSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        rulerSvg.id = 'ruler-overlay';
+        container.appendChild(rulerSvg);
+    }
+
+    // 確保測距尺標籤存在
+    if (!document.getElementById('ruler-label')) {
+        const rulerLabel = document.createElement('div');
+        rulerLabel.id = 'ruler-label';
+        rulerLabel.className = 'ruler-label';
+        rulerLabel.style.display = 'none';
+        document.getElementById('map-viewport').appendChild(rulerLabel);
     }
 
     const theme = getCurrentTheme();
@@ -658,7 +678,116 @@ function updateTileInfo(x, y) {
     if (panel) panel.style.display = 'block';
 }
 
-// ===== 地圖大小監聽器 =====
+// ===== 測距尺功能 (Alt + 拖曳) =====
+/**
+ * 將螢幕座標轉換為格子座標
+ * @param {number} clientX - 滑鼠螢幕 X
+ * @param {number} clientY - 滑鼠螢幕 Y
+ * @returns {{ x: number, y: number }} 格子座標
+ */
+function screenToGrid(clientX, clientY) {
+    const grid = document.getElementById('battle-map');
+    if (!grid) return { x: 0, y: 0 };
+
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
+    const rect = grid.getBoundingClientRect();
+
+    // rect 已反映 CSS transform，除以 cam.scale 得到原始地圖像素座標
+    const mapPixelX = (clientX - rect.left) / cam.scale;
+    const mapPixelY = (clientY - rect.top) / cam.scale;
+
+    let gx = Math.floor(mapPixelX / gridSize);
+    let gy = Math.floor(mapPixelY / gridSize);
+
+    // 限制在地圖範圍內
+    gx = Math.max(0, Math.min(state.mapW - 1, gx));
+    gy = Math.max(0, Math.min(state.mapH - 1, gy));
+
+    return { x: gx, y: gy };
+}
+
+/**
+ * 初始化測距尺事件
+ */
+function initRulerEvents() {
+    const vp = document.getElementById('map-viewport');
+    if (!vp) return;
+
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
+
+    // 使用 capture 階段攔截，確保在相機拖曳之前處理
+    vp.addEventListener('pointerdown', e => {
+        if (!e.altKey) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        isMeasuring = true;
+        measureStart = screenToGrid(e.clientX, e.clientY);
+
+        // 建立 SVG 線段
+        const svg = document.getElementById('ruler-overlay');
+        if (svg) {
+            const cx = measureStart.x * gridSize + gridSize / 2;
+            const cy = measureStart.y * gridSize + gridSize / 2;
+            svg.innerHTML = `<line class="ruler-line" x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy}"/>`;
+        }
+    }, { capture: true });
+
+    window.addEventListener('pointermove', e => {
+        if (!isMeasuring) return;
+
+        const current = screenToGrid(e.clientX, e.clientY);
+
+        // 起點與終點的像素中心
+        const x1 = measureStart.x * gridSize + gridSize / 2;
+        const y1 = measureStart.y * gridSize + gridSize / 2;
+        const x2 = current.x * gridSize + gridSize / 2;
+        const y2 = current.y * gridSize + gridSize / 2;
+
+        // 更新 SVG 線段
+        const line = document.querySelector('#ruler-overlay .ruler-line');
+        if (line) {
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+        }
+
+        // 計算歐幾里得距離（格數）
+        const dx = current.x - measureStart.x;
+        const dy = current.y - measureStart.y;
+        const dist = Math.sqrt(dx * dx + dy * dy).toFixed(1);
+
+        // 更新標籤
+        const label = document.getElementById('ruler-label');
+        if (label) {
+            label.style.display = 'block';
+            label.textContent = `${dist} 格`;
+
+            // 標籤跟隨游標（相對於 viewport）
+            const vpRect = vp.getBoundingClientRect();
+            label.style.left = (e.clientX - vpRect.left) + 'px';
+            label.style.top = (e.clientY - vpRect.top) + 'px';
+        }
+    });
+
+    window.addEventListener('pointerup', e => {
+        if (!isMeasuring) return;
+
+        isMeasuring = false;
+
+        // 清除 SVG 線段
+        const svg = document.getElementById('ruler-overlay');
+        if (svg) svg.innerHTML = '';
+
+        // 隱藏標籤
+        const label = document.getElementById('ruler-label');
+        if (label) label.style.display = 'none';
+    });
+}
+
+// ===== 地圖大小監聯器 =====
 /**
  * 初始化地圖大小輸入框的監聯器
  * 當輸入框變更時，標記「套用」按鈕為待儲存狀態

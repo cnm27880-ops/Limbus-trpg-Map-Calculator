@@ -56,6 +56,11 @@ function initCameraEvents() {
     const CAMERA_DRAG_THRESHOLD = 5;  // 開始拖曳的閾值（像素）
 
     window.addEventListener('pointermove', e => {
+        // 測距尺啟動時，忽略所有拖曳操作
+        if (isMeasuring) {
+            return;
+        }
+
         // 🔥 關鍵修復：檢查全域 isPinchZooming 標記
         // PointerEvent 沒有 touches 屬性，所以需要使用全域變數來追蹤多點觸控狀態
         // 當正在進行雙指縮放時，忽略所有拖曳操作

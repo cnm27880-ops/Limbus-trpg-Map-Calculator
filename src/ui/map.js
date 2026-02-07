@@ -19,51 +19,81 @@ function initMapData() {
 // ===== 主題與工具 =====
 /**
  * 更換地圖主題
+ * 將該主題的地形匯入調色盤（合併，不覆蓋已存在的）
  * @param {string|number} id - 主題 ID
  */
 function changeMapTheme(id) {
     if (myRole !== 'st') return;
     state.themeId = parseInt(id);
+
+    // 將選中主題的地形合併到調色盤
+    const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+    if (!state.mapPalette) state.mapPalette = [];
+
+    theme.tiles.forEach(t => {
+        // 只匯入尚未存在的地形
+        if (!state.mapPalette.find(p => p.id === t.id)) {
+            state.mapPalette.push({
+                id: t.id, name: t.name,
+                color: t.color, effect: t.effect
+            });
+        }
+    });
+
     updateToolbar();
     sendState();
+    syncMapPalette();
     renderAll();
 }
 
 /**
  * 更新工具列
+ * 從 state.mapPalette 讀取地形，並提供新增按鈕
  */
 function updateToolbar() {
     const container = document.getElementById('dynamic-tools');
     if (!container) return;
 
+    // 確保調色盤已初始化
+    if (typeof initMapPalette === 'function') initMapPalette();
+
     // 清空容器並重建所有工具
     container.innerHTML = '';
 
-    // 添加固定工具
+    // 固定工具：游標
     const cursorBtn = document.createElement('button');
-    cursorBtn.className = 'tool-btn active';
+    cursorBtn.className = 'tool-btn' + (currentTool === 'cursor' ? ' active' : '');
     cursorBtn.dataset.tool = 'cursor';
     cursorBtn.innerText = '👆';
     cursorBtn.onclick = () => setTool('cursor');
     container.appendChild(cursorBtn);
 
+    // 固定工具：橡皮擦
     const floorBtn = document.createElement('button');
-    floorBtn.className = 'tool-btn';
+    floorBtn.className = 'tool-btn' + (currentTool === 'floor' ? ' active' : '');
     floorBtn.dataset.tool = 'floor';
     floorBtn.innerText = '🧹';
     floorBtn.onclick = () => setTool('floor');
     container.appendChild(floorBtn);
 
-    // 添加主題工具
-    const theme = getCurrentTheme();
-    theme.tiles.forEach(tile => {
+    // 從調色盤渲染地形按鈕
+    const palette = state.mapPalette || [];
+    palette.forEach(tile => {
         if (tile.name === '地板') return;
 
         const btn = document.createElement('button');
-        btn.className = 'tool-btn';
+        btn.className = 'tool-btn' + (currentTool == tile.id ? ' active' : '');
         btn.dataset.tool = tile.id;
-        btn.title = tile.name;
+        btn.title = `${tile.name}\n${tile.effect}\n(右鍵編輯)`;
         btn.onclick = () => setTool(tile.id);
+
+        // 右鍵編輯地形
+        btn.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (myRole === 'st' && typeof openTileEditorModal === 'function') {
+                openTileEditorModal(tile.id);
+            }
+        };
 
         const dot = document.createElement('div');
         dot.className = 'color-indicator';
@@ -73,6 +103,18 @@ function updateToolbar() {
         btn.appendChild(dot);
         container.appendChild(btn);
     });
+
+    // ST 才顯示「+」新增地形按鈕
+    if (myRole === 'st') {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'tool-btn tool-btn-add';
+        addBtn.title = '新增自訂地形';
+        addBtn.innerText = '+';
+        addBtn.onclick = () => {
+            if (typeof openTileEditorModal === 'function') openTileEditorModal();
+        };
+        container.appendChild(addBtn);
+    }
 }
 
 /**
@@ -81,7 +123,7 @@ function updateToolbar() {
  */
 function setTool(tool) {
     currentTool = tool;
-    
+
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
     if (btn) btn.classList.add('active');
@@ -89,7 +131,6 @@ function setTool(tool) {
     if (myRole === 'st') {
         const panel = document.getElementById('tile-info-panel');
         const info = document.getElementById('tile-effect-desc');
-        const theme = getCurrentTheme();
         let desc = "";
 
         if (tool === 'floor') {
@@ -97,12 +138,14 @@ function setTool(tool) {
         } else if (tool === 'cursor') {
             desc = "選擇單位 / 查看格子";
         } else {
-            const t = theme.tiles.find(x => x.id == tool);
+            const t = (typeof getTileFromPalette === 'function')
+                ? getTileFromPalette(parseInt(tool))
+                : null;
             if (t) desc = `${t.name}: ${t.effect}`;
         }
 
         if (info) info.innerText = desc;
-        if (panel) panel.style.display = 'block';  // 顯示面板
+        if (panel) panel.style.display = 'block';
     }
 }
 
@@ -208,8 +251,6 @@ function renderMap() {
         document.getElementById('map-viewport').appendChild(rulerLabel);
     }
 
-    const theme = getCurrentTheme();
-
     // 使用 DocumentFragment 提升效能（減少 DOM 重繪次數）
     const fragment = document.createDocumentFragment();
 
@@ -223,18 +264,20 @@ function renderMap() {
             // 部署高亮邏輯
             if (currentTool === 'cursor' && selectedUnitId !== null) {
                 const u = findUnitById(selectedUnitId);
-                // 檢查 canControlUnit，若無此函數則預設為 true (避免報錯)
                 const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
                 if (u && u.x === -1 && controllable) {
                     div.classList.add('deploy-target');
                 }
             }
 
-            // 套用地形樣式
-            let tileDef = theme.tiles.find(t => t.id === val);
+            // 從調色盤查找地形定義（內含舊存檔回退邏輯）
+            let tileDef = (typeof getTileFromPalette === 'function')
+                ? getTileFromPalette(val)
+                : null;
 
-            // 舊存檔相容性
+            // 舊存檔相容性（ID 1~3 的舊格式）
             if (!tileDef && state.themeId === 0) {
+                const theme = getCurrentTheme();
                 if (val === 1) tileDef = theme.tiles.find(t => t.name === '牆壁');
                 else if (val === 2) tileDef = theme.tiles.find(t => t.name === '掩體');
                 else if (val === 3) tileDef = theme.tiles.find(t => t.name === '險地');
@@ -537,8 +580,8 @@ function handleMapInput(x, y, e) {
 
         // 優化：直接修改 DOM 樣式，而不是重繪整個地圖 (效能提升)
         if (e && e.target && e.target.classList.contains('cell')) {
-            const theme = getCurrentTheme();
-            const tileDef = theme.tiles.find(t => t.id === newVal);
+            const tileDef = (typeof getTileFromPalette === 'function')
+                ? getTileFromPalette(newVal) : null;
 
             if (tileDef) {
                 e.target.style.backgroundColor = tileDef.color;
@@ -653,7 +696,6 @@ function updateTileInfo(x, y) {
     const info = document.getElementById('tile-effect-desc');
     if (!info) return;
 
-    const theme = getCurrentTheme();
     const val = state.mapData[y]?.[x];
 
     if (val === undefined) {
@@ -668,14 +710,15 @@ function updateTileInfo(x, y) {
         return;
     }
 
-    const tileDef = theme.tiles.find(t => t.id === val);
+    const tileDef = (typeof getTileFromPalette === 'function')
+        ? getTileFromPalette(val) : null;
+
     if (tileDef) {
         info.innerText = `座標 (${x}, ${y}): ${tileDef.name} - ${tileDef.effect}`;
     } else {
         info.innerText = `座標 (${x}, ${y}): 未知地形`;
     }
 
-    // 顯示地形效果面板
     if (panel) panel.style.display = 'block';
 }
 

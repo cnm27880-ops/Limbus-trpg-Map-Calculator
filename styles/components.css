@@ -1759,6 +1759,116 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
+/* ===== 地形編輯器 (Tile Editor) ===== */
+
+/* 工具列「+」按鈕 */
+.tool-btn-add {
+    border: 2px dashed var(--text-dim) !important;
+    background: transparent !important;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.tool-btn-add:hover {
+    border-color: var(--accent-yellow) !important;
+    color: var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.1) !important;
+}
+
+/* 地形編輯 Modal */
+.tile-editor-modal {
+    max-width: 420px;
+    width: 100%;
+}
+
+.tile-editor-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.tile-editor-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.tile-import-section {
+    padding: 12px;
+}
+
+.tile-editor-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0;
+}
+
+.tile-editor-form {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tile-editor-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tile-editor-form textarea {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.tile-color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tile-color-picker {
+    width: 44px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    cursor: pointer;
+    background: var(--bg-input);
+}
+
+.tile-color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.tile-color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.tile-color-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.tile-color-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
 /* ===== 測距尺 (Ruler) ===== */
 
 /* 測距尺 SVG 容器 */

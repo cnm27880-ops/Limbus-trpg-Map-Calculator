@@ -659,6 +659,225 @@ function assignOwner(unitId, newOwnerId, newOwnerName) {
     renderAll();
 }
 
+// ===== 地形編輯器 Modal =====
+
+/**
+ * 開啟地形編輯器 Modal
+ * @param {number|null} existingTileId - 若提供則為編輯模式
+ */
+function openTileEditorModal(existingTileId = null) {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以編輯地形');
+        return;
+    }
+
+    const isEdit = existingTileId !== null;
+    let tile = null;
+    if (isEdit) {
+        tile = (typeof getTileFromPalette === 'function')
+            ? getTileFromPalette(existingTileId)
+            : (state.mapPalette || []).find(t => t.id === existingTileId);
+    }
+
+    // 預設值
+    const tileName = tile ? tile.name : '';
+    const tileColor = tile ? tile.color : '#666666';
+    // 將 rgba/named colors 轉為 hex 以供 color picker
+    const colorHex = colorToHex(tileColor);
+    const tileEffect = tile ? tile.effect : '';
+
+    // 建立「從預設庫匯入」選項列表
+    let presetOptions = '';
+    MAP_PRESETS.forEach((preset, pi) => {
+        preset.tiles.forEach(t => {
+            presetOptions += `<option value="${pi}_${t.id}">${preset.name} - ${t.name}</option>`;
+        });
+    });
+
+    const modalHtml = `
+        <div class="modal-overlay show" id="tile-editor-modal" onclick="closeTileEditorOnOverlay(event)">
+            <div class="modal tile-editor-modal" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">🎨 ${isEdit ? '編輯地形' : '新增地形'}</span>
+                    <button onclick="closeTileEditorModal()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <!-- 從預設庫匯入 -->
+                    <div class="tile-import-section">
+                        <label class="tile-editor-label">從預設庫匯入</label>
+                        <div style="display:flex;gap:6px;">
+                            <select id="tile-import-select" class="tile-editor-select">
+                                <option value="">-- 選擇預設地形 --</option>
+                                ${presetOptions}
+                            </select>
+                            <button onclick="importPresetTile()" class="modal-btn" style="background:var(--accent-blue);white-space:nowrap;padding:8px 12px;">匯入</button>
+                        </div>
+                    </div>
+
+                    <div class="tile-editor-divider"></div>
+
+                    <!-- 自訂表單 -->
+                    <div class="tile-editor-form">
+                        <div class="form-group">
+                            <label class="tile-editor-label">地形名稱</label>
+                            <input type="text" id="tile-edit-name" value="${escapeHtml(tileName)}" placeholder="例如：熔岩地帶" maxlength="20">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="tile-editor-label">顏色</label>
+                            <div class="tile-color-row">
+                                <input type="color" id="tile-edit-color" value="${colorHex}" class="tile-color-picker">
+                                <span class="tile-color-hex" id="tile-color-hex">${colorHex}</span>
+                                <div class="tile-color-preview" id="tile-color-preview" style="background:${colorHex};"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="tile-editor-label">效果描述</label>
+                            <textarea id="tile-edit-effect" placeholder="例如：每回合受 2 點火焰傷害" rows="3">${escapeHtml(tileEffect)}</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    ${isEdit ? `<button onclick="deletePaletteTile(${existingTileId})" class="modal-btn" style="background:var(--accent-red);margin-right:auto;">刪除</button>` : ''}
+                    <button onclick="closeTileEditorModal()" class="modal-btn" style="background:var(--bg-card);">取消</button>
+                    <button onclick="saveTileFromEditor(${isEdit ? existingTileId : 'null'})" class="modal-btn" style="background:var(--accent-green);color:#000;">
+                        ${isEdit ? '儲存變更' : '新增地形'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const container = document.getElementById('modals-container');
+    const existing = document.getElementById('tile-editor-modal');
+    if (existing) existing.remove();
+    container.insertAdjacentHTML('beforeend', modalHtml);
+
+    // 顏色選取器即時預覽
+    const colorInput = document.getElementById('tile-edit-color');
+    if (colorInput) {
+        colorInput.addEventListener('input', () => {
+            const hex = colorInput.value;
+            document.getElementById('tile-color-hex').textContent = hex;
+            document.getElementById('tile-color-preview').style.background = hex;
+        });
+    }
+}
+
+/**
+ * 從預設庫匯入地形到編輯表單
+ */
+function importPresetTile() {
+    const select = document.getElementById('tile-import-select');
+    if (!select || !select.value) {
+        showToast('請先選擇一個預設地形');
+        return;
+    }
+
+    const [presetIdx, tileId] = select.value.split('_').map(Number);
+    const preset = MAP_PRESETS[presetIdx];
+    if (!preset) return;
+
+    const tile = preset.tiles.find(t => t.id === tileId);
+    if (!tile) return;
+
+    // 填入表單
+    document.getElementById('tile-edit-name').value = tile.name;
+    document.getElementById('tile-edit-color').value = colorToHex(tile.color);
+    document.getElementById('tile-color-hex').textContent = colorToHex(tile.color);
+    document.getElementById('tile-color-preview').style.background = tile.color;
+    document.getElementById('tile-edit-effect').value = tile.effect;
+}
+
+/**
+ * 儲存地形（新增或編輯）
+ * @param {number|null} existingId - 若提供則更新現有地形
+ */
+function saveTileFromEditor(existingId) {
+    const name = document.getElementById('tile-edit-name')?.value.trim();
+    const color = document.getElementById('tile-edit-color')?.value || '#666666';
+    const effect = document.getElementById('tile-edit-effect')?.value.trim() || '';
+
+    if (!name) {
+        showToast('請輸入地形名稱');
+        return;
+    }
+
+    if (!state.mapPalette) state.mapPalette = [];
+
+    if (existingId !== null) {
+        // 編輯模式：更新現有地形
+        const idx = state.mapPalette.findIndex(t => t.id === existingId);
+        if (idx !== -1) {
+            state.mapPalette[idx].name = name;
+            state.mapPalette[idx].color = color;
+            state.mapPalette[idx].effect = effect;
+        }
+        showToast(`已更新地形「${name}」`);
+    } else {
+        // 新增模式：生成唯一 ID
+        const newId = Date.now() % 100000 + 1000;
+        state.mapPalette.push({ id: newId, name, color, effect });
+        showToast(`已新增地形「${name}」`);
+    }
+
+    closeTileEditorModal();
+    updateToolbar();
+
+    // 同步到 Firebase
+    if (typeof syncMapPalette === 'function') syncMapPalette();
+    if (myRole === 'st') sendState();
+
+    // 重繪地圖以反映顏色變更
+    renderMap();
+}
+
+/**
+ * 從調色盤刪除地形
+ * @param {number} tileId - 地形 ID
+ */
+function deletePaletteTile(tileId) {
+    if (!confirm('確定要從調色盤移除此地形？\n（已繪製在地圖上的格子不會消失，但無法再使用此工具繪製）')) return;
+
+    state.mapPalette = (state.mapPalette || []).filter(t => t.id !== tileId);
+
+    closeTileEditorModal();
+    updateToolbar();
+    showToast('地形已從調色盤移除');
+
+    if (typeof syncMapPalette === 'function') syncMapPalette();
+    if (myRole === 'st') sendState();
+}
+
+/**
+ * 關閉地形編輯器 Modal
+ */
+function closeTileEditorModal() {
+    const modal = document.getElementById('tile-editor-modal');
+    if (modal) modal.remove();
+}
+
+function closeTileEditorOnOverlay(event) {
+    if (event.target.id === 'tile-editor-modal') closeTileEditorModal();
+}
+
+/**
+ * 將 CSS 顏色轉換為 hex
+ * @param {string} color - CSS 顏色值
+ * @returns {string} hex 格式
+ */
+function colorToHex(color) {
+    if (!color) return '#666666';
+    // 已經是 hex
+    if (color.startsWith('#') && (color.length === 7 || color.length === 4)) return color;
+
+    // 使用 canvas 轉換
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.fillStyle = color;
+    return ctx.fillStyle; // 瀏覽器會自動轉為 hex
+}
+
 // ===== 修改生命上限 Modal =====
 /**
  * 開啟修改生命上限 Modal

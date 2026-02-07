@@ -158,7 +158,7 @@ function saveCurrentMap() {
         return;
     }
 
-    // 創建地圖資料
+    // 創建地圖資料（包含調色盤）
     const mapData = {
         id: 'map_' + Date.now(),
         name: name,
@@ -166,7 +166,8 @@ function saveCurrentMap() {
         mapW: state.mapW,
         mapH: state.mapH,
         themeId: state.themeId,
-        mapData: JSON.parse(JSON.stringify(state.mapData)) // 深拷貝
+        mapData: JSON.parse(JSON.stringify(state.mapData)), // 深拷貝
+        mapPalette: JSON.parse(JSON.stringify(state.mapPalette || []))
     };
 
     // 新增到列表開頭
@@ -208,6 +209,14 @@ function loadSavedMap(index) {
     state.mapH = map.mapH;
     state.themeId = map.themeId;
     state.mapData = JSON.parse(JSON.stringify(map.mapData)); // 深拷貝
+
+    // 載入調色盤（舊存檔相容）
+    if (map.mapPalette && map.mapPalette.length > 0) {
+        state.mapPalette = JSON.parse(JSON.stringify(map.mapPalette));
+    } else {
+        state.mapPalette = [];
+        if (typeof initMapPalette === 'function') initMapPalette();
+    }
 
     // 更新 UI
     document.getElementById('map-w').value = state.mapW;
@@ -309,6 +318,11 @@ function importMap() {
                 // 驗證資料結構
                 if (!mapData.mapW || !mapData.mapH || !mapData.mapData) {
                     throw new Error('無效的地圖格式');
+                }
+
+                // 匯入調色盤（如有）
+                if (!mapData.mapPalette) {
+                    mapData.mapPalette = [];
                 }
 
                 // 確保有名稱

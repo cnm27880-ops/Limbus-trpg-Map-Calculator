@@ -11,6 +11,7 @@ let state = {
     mapH: MAP_DEFAULTS.HEIGHT,
     mapData: [],
     themeId: 0,
+    mapPalette: [],             // 自訂調色盤（混用地形）
     players: {},
     customStatuses: []  // 房間共享的自訂狀態（透過 Firebase 同步）
 };
@@ -60,9 +61,50 @@ function resetState() {
         mapH: MAP_DEFAULTS.HEIGHT,
         mapData: [],
         themeId: 0,
+        mapPalette: [],
         players: {},
         customStatuses: []
     };
+}
+
+/**
+ * 初始化地圖調色盤
+ * 如果 palette 為空，從當前主題複製地形資料
+ */
+function initMapPalette() {
+    if (state.mapPalette && state.mapPalette.length > 0) return;
+
+    const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+    state.mapPalette = theme.tiles.map(t => ({
+        id: t.id,
+        name: t.name,
+        color: t.color,
+        effect: t.effect
+    }));
+}
+
+/**
+ * 從調色盤查找地形定義
+ * 優先查 mapPalette，回退查 MAP_PRESETS
+ * @param {number} tileId - 地形 ID
+ * @returns {Object|null}
+ */
+function getTileFromPalette(tileId) {
+    if (tileId === 0) return null; // 地板
+
+    // 優先從調色盤查找
+    if (state.mapPalette && state.mapPalette.length > 0) {
+        const found = state.mapPalette.find(t => t.id === tileId);
+        if (found) return found;
+    }
+
+    // 回退到所有預設主題（舊存檔相容）
+    for (const preset of MAP_PRESETS) {
+        const found = preset.tiles.find(t => t.id === tileId);
+        if (found) return found;
+    }
+
+    return null;
 }
 
 /**

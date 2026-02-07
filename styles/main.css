@@ -382,6 +382,7 @@ input[type="number"] {
     width: var(--grid-size);
     height: var(--grid-size);
     border: 1px solid rgba(255, 255, 255, 0.35);  /* 格線透明度 35% 與背景區分 */
+    background-color: #1a1a1f;  /* 深灰色地板，與純黑背景區分 */
     position: relative;
     touch-action: none;
 }

@@ -540,6 +540,14 @@ function loadRoomData(data) {
     } else {
         state.customStatuses = [];
     }
+
+    // 載入調色盤
+    if (data.mapPalette) {
+        state.mapPalette = Array.isArray(data.mapPalette) ? data.mapPalette : Object.values(data.mapPalette);
+    } else {
+        state.mapPalette = [];
+        if (typeof initMapPalette === 'function') initMapPalette();
+    }
 }
 
 /**
@@ -554,6 +562,20 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('mapData').off('value', mapDataListener));
+
+    // 監聽調色盤變更
+    const paletteListener = roomRef.child('mapPalette').on('value', snapshot => {
+        if (snapshot.exists()) {
+            const val = snapshot.val();
+            state.mapPalette = Array.isArray(val) ? val : Object.values(val);
+        } else {
+            state.mapPalette = [];
+            if (typeof initMapPalette === 'function') initMapPalette();
+        }
+        updateToolbar();
+        renderMap();
+    });
+    unsubscribeListeners.push(() => roomRef.child('mapPalette').off('value', paletteListener));
 
     // 監聽單位變更
     const unitsListener = roomRef.child('units').on('value', snapshot => {
@@ -850,6 +872,14 @@ function syncMapData() {
 }
 
 /**
+ * 更新調色盤到 Firebase
+ */
+function syncMapPalette() {
+    if (!roomRef) return;
+    roomRef.child('mapPalette').set(state.mapPalette || []);
+}
+
+/**
  * 更新單位到 Firebase
  * 注意：會自動為每個單位設定 sortOrder 以保持排序順序
  */
@@ -888,6 +918,7 @@ function syncState() {
 function sendState() {
     if (myRole === 'st') {
         syncMapData();
+        syncMapPalette();
         syncUnits();
         syncState();
     }

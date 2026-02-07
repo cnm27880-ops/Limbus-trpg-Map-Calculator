@@ -5,7 +5,8 @@
 
 // ===== 測距尺狀態 =====
 let isMeasuring = false;
-let measureStart = { x: 0, y: 0 };
+let rulerPoints = [];       // 所有折點的格子座標 [{x, y}, ...]
+let rulerCurrentPos = null; // 目前游標的格子座標
 
 // ===== 地圖初始化 =====
 /**
@@ -678,7 +679,7 @@ function updateTileInfo(x, y) {
     if (panel) panel.style.display = 'block';
 }
 
-// ===== 測距尺功能 (Alt + 拖曳) =====
+// ===== 測距尺功能 (Alt 按住 = 測量) =====
 /**
  * 將螢幕座標轉換為格子座標
  * @param {number} clientX - 滑鼠螢幕 X
@@ -707,57 +708,127 @@ function screenToGrid(clientX, clientY) {
 }
 
 /**
+ * 計算折線總距離
+ * @param {Array} points - 折點陣列
+ * @param {{ x: number, y: number }|null} current - 當前游標位置
+ * @returns {number}
+ */
+function calcRulerDistance(points, current) {
+    const all = current ? [...points, current] : points;
+    let total = 0;
+    for (let i = 1; i < all.length; i++) {
+        const dx = all[i].x - all[i - 1].x;
+        const dy = all[i].y - all[i - 1].y;
+        total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+}
+
+/**
+ * 重繪測距尺 SVG（所有折線段 + 游標段）
+ */
+function renderRuler() {
+    const svg = document.getElementById('ruler-overlay');
+    if (!svg) return;
+
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
+    const all = rulerCurrentPos ? [...rulerPoints, rulerCurrentPos] : [...rulerPoints];
+
+    if (all.length < 2) {
+        svg.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    for (let i = 1; i < all.length; i++) {
+        const x1 = all[i - 1].x * gridSize + gridSize / 2;
+        const y1 = all[i - 1].y * gridSize + gridSize / 2;
+        const x2 = all[i].x * gridSize + gridSize / 2;
+        const y2 = all[i].y * gridSize + gridSize / 2;
+        html += `<line class="ruler-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    }
+
+    // 在每個折點畫一個小圓點
+    for (let i = 0; i < rulerPoints.length; i++) {
+        const cx = rulerPoints[i].x * gridSize + gridSize / 2;
+        const cy = rulerPoints[i].y * gridSize + gridSize / 2;
+        html += `<circle cx="${cx}" cy="${cy}" r="4" fill="var(--accent-yellow)" stroke="rgba(0,0,0,0.8)" stroke-width="1.5"/>`;
+    }
+
+    svg.innerHTML = html;
+}
+
+/**
+ * 清除測距尺狀態
+ */
+function clearRuler() {
+    isMeasuring = false;
+    rulerPoints = [];
+    rulerCurrentPos = null;
+
+    const svg = document.getElementById('ruler-overlay');
+    if (svg) svg.innerHTML = '';
+
+    const label = document.getElementById('ruler-label');
+    if (label) label.style.display = 'none';
+}
+
+/**
  * 初始化測距尺事件
+ * 操作方式：
+ *   - 按住 Alt 鍵：開始測量，線條從游標所在格拉出
+ *   - 移動滑鼠：線段跟隨游標
+ *   - 右鍵點擊：新增折點（轉折）
+ *   - 放開 Alt 鍵：結束測量，線條消失
  */
 function initRulerEvents() {
     const vp = document.getElementById('map-viewport');
     if (!vp) return;
 
-    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
-
-    // 使用 capture 階段攔截，確保在相機拖曳之前處理
-    vp.addEventListener('pointerdown', e => {
-        if (!e.altKey) return;
+    // Alt 按下 → 開始測量
+    window.addEventListener('keydown', e => {
+        if (e.key !== 'Alt') return;
+        if (isMeasuring) return; // 避免重複觸發
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
 
         e.preventDefault();
-        e.stopPropagation();
-
         isMeasuring = true;
-        measureStart = screenToGrid(e.clientX, e.clientY);
+        rulerPoints = [];
+        rulerCurrentPos = null;
 
-        // 建立 SVG 線段
-        const svg = document.getElementById('ruler-overlay');
-        if (svg) {
-            const cx = measureStart.x * gridSize + gridSize / 2;
-            const cy = measureStart.y * gridSize + gridSize / 2;
-            svg.innerHTML = `<line class="ruler-line" x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy}"/>`;
+        // 如果有上一次 pointermove 記錄的游標位置，以此作為起點
+        if (lastRulerScreenPos) {
+            const start = screenToGrid(lastRulerScreenPos.x, lastRulerScreenPos.y);
+            rulerPoints.push(start);
         }
-    }, { capture: true });
+    });
 
+    // Alt 放開 → 結束測量
+    window.addEventListener('keyup', e => {
+        if (e.key !== 'Alt') return;
+        if (!isMeasuring) return;
+        clearRuler();
+    });
+
+    // 追蹤滑鼠位置（即使尚未測量也記錄，這樣按下 Alt 時能取得起點）
     window.addEventListener('pointermove', e => {
+        lastRulerScreenPos = { x: e.clientX, y: e.clientY };
+
         if (!isMeasuring) return;
 
         const current = screenToGrid(e.clientX, e.clientY);
 
-        // 起點與終點的像素中心
-        const x1 = measureStart.x * gridSize + gridSize / 2;
-        const y1 = measureStart.y * gridSize + gridSize / 2;
-        const x2 = current.x * gridSize + gridSize / 2;
-        const y2 = current.y * gridSize + gridSize / 2;
-
-        // 更新 SVG 線段
-        const line = document.querySelector('#ruler-overlay .ruler-line');
-        if (line) {
-            line.setAttribute('x1', x1);
-            line.setAttribute('y1', y1);
-            line.setAttribute('x2', x2);
-            line.setAttribute('y2', y2);
+        // 若尚無折點，以當前位置作為起點
+        if (rulerPoints.length === 0) {
+            rulerPoints.push(current);
+            return;
         }
 
-        // 計算歐幾里得距離（格數）
-        const dx = current.x - measureStart.x;
-        const dy = current.y - measureStart.y;
-        const dist = Math.sqrt(dx * dx + dy * dy).toFixed(1);
+        rulerCurrentPos = current;
+        renderRuler();
+
+        // 計算總距離
+        const dist = calcRulerDistance(rulerPoints, rulerCurrentPos).toFixed(1);
 
         // 更新標籤
         const label = document.getElementById('ruler-label');
@@ -765,27 +836,33 @@ function initRulerEvents() {
             label.style.display = 'block';
             label.textContent = `${dist} 格`;
 
-            // 標籤跟隨游標（相對於 viewport）
             const vpRect = vp.getBoundingClientRect();
             label.style.left = (e.clientX - vpRect.left) + 'px';
             label.style.top = (e.clientY - vpRect.top) + 'px';
         }
     });
 
-    window.addEventListener('pointerup', e => {
+    // 右鍵 → 新增折點
+    vp.addEventListener('contextmenu', e => {
         if (!isMeasuring) return;
 
-        isMeasuring = false;
+        e.preventDefault();
+        e.stopPropagation();
 
-        // 清除 SVG 線段
-        const svg = document.getElementById('ruler-overlay');
-        if (svg) svg.innerHTML = '';
+        if (rulerCurrentPos) {
+            rulerPoints.push({ ...rulerCurrentPos });
+            renderRuler();
+        }
+    });
 
-        // 隱藏標籤
-        const label = document.getElementById('ruler-label');
-        if (label) label.style.display = 'none';
+    // 視窗失焦時清除
+    window.addEventListener('blur', () => {
+        if (isMeasuring) clearRuler();
     });
 }
+
+// 追蹤游標螢幕位置（用於 Alt 按下瞬間取得起點）
+let lastRulerScreenPos = null;
 
 // ===== 地圖大小監聯器 =====
 /**

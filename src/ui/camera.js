@@ -30,6 +30,9 @@ function initCameraEvents() {
     let isPotentialDrag = false;  // 是否可能是拖曳（尚未確定）
 
     vp.addEventListener('pointerdown', e => {
+        // 0. 測距尺啟動時，不啟動相機拖曳
+        if (isMeasuring || e.altKey) return;
+
         // 1. 如果點擊到 Token，忽略此處，由 Token 自己的 handler (在 map.js) 處理
         if (e.target.classList.contains('token')) return;
 

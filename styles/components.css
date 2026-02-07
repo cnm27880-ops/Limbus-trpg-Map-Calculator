@@ -807,12 +807,44 @@
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
+    position: relative;
 }
 
 .status-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     border-color: var(--text-dim);
+}
+
+/* 自訂狀態刪除按鈕 */
+.status-card-delete {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-red);
+    color: #fff;
+    border: 2px solid var(--bg-card);
+    font-size: 0.75rem;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    padding: 0;
+    transition: transform 0.1s;
+}
+
+.status-card:hover .status-card-delete {
+    display: flex;
+}
+
+.status-card-delete:hover {
+    transform: scale(1.2);
+    background: #c62828;
 }
 
 .status-card-icon {

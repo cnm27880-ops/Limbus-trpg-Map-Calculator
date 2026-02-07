@@ -26,23 +26,16 @@ function changeMapTheme(id) {
     if (myRole !== 'st') return;
     state.themeId = parseInt(id);
 
-    // 將選中主題的地形合併到調色盤
+    // 用該主題的地形取代調色盤
     const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
-    if (!state.mapPalette) state.mapPalette = [];
-
-    theme.tiles.forEach(t => {
-        // 只匯入尚未存在的地形
-        if (!state.mapPalette.find(p => p.id === t.id)) {
-            state.mapPalette.push({
-                id: t.id, name: t.name,
-                color: t.color, effect: t.effect
-            });
-        }
-    });
+    state.mapPalette = theme.tiles.map(t => ({
+        id: t.id, name: t.name,
+        color: t.color, effect: t.effect
+    }));
 
     updateToolbar();
     sendState();
-    syncMapPalette();
+    if (typeof syncMapPalette === 'function') syncMapPalette();
     renderAll();
 }
 

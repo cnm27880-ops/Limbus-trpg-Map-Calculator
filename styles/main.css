@@ -485,6 +485,11 @@ input[type="number"] {
 
 /* ===== 戰鬥模式 (Combat Mode) ===== */
 
+/* 戰鬥模式下覆蓋灰色背景 */
+body.combat-mode {
+    background: #000 !important;
+}
+
 /* 導覽列向上滑出 */
 .navbar {
     transition: transform 0.5s ease;
@@ -496,6 +501,7 @@ body.combat-mode .navbar {
     top: 0;
     left: 0;
     right: 0;
+    z-index: 300;
 }
 
 /* 戰鬥模式下暫時展開 navbar (hover/click peek) */
@@ -507,26 +513,29 @@ body.combat-mode.navbar-peek .navbar {
 .combat-navbar-peek {
     display: none;
     position: fixed;
-    top: 6px;
-    left: 10px;
-    z-index: 250;
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-    background: rgba(30, 30, 35, 0.75);
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 350;
+    width: 48px;
+    height: 18px;
+    border-radius: 0 0 8px 8px;
+    background: rgba(30, 30, 35, 0.65);
     border: 1px solid var(--border);
+    border-top: none;
     color: var(--accent-yellow);
-    font-size: 1rem;
+    font-size: 0.65rem;
     cursor: pointer;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s, opacity 0.3s;
-    opacity: 0.6;
+    transition: background 0.2s, opacity 0.3s, height 0.2s;
+    opacity: 0.5;
     backdrop-filter: blur(4px);
 }
 
 .combat-navbar-peek:hover {
     opacity: 1;
+    height: 24px;
     background: rgba(50, 50, 55, 0.9);
 }
 

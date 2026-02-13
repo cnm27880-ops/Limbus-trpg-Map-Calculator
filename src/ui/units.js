@@ -208,6 +208,7 @@ function renderUnitsList() {
                     <button class="action-btn dmg-a" onclick="modifyHP('${u.id}','a',1)" title="按住Shift開啟數量輸入">+A</button>
                     <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
                     <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
+                    <button class="action-btn heal" onclick="resetUnitHp('${u.id}')" title="清除所有傷害，重置血條">♻</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${assignBtn}
@@ -338,6 +339,34 @@ function renderSidebarUnits() {
 }
 
 // ===== 單位操作 =====
+/**
+ * 重置單位血量（清除所有傷害）
+ * @param {string} id - 單位 ID
+ */
+function resetUnitHp(id) {
+    const u = findUnitById(id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        if (u.hpArr) {
+            u.hpArr = u.hpArr.map(() => 0);
+        }
+        broadcastState();
+        showToast(`${u.name || '單位'} 血量已重置`);
+    } else {
+        sendToHost({
+            type: 'resetUnitHp',
+            playerId: myPlayerId,
+            unitId: id
+        });
+    }
+}
+
 /**
  * 修改單位 HP
  * @param {string} id - 單位 ID

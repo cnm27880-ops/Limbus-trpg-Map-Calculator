@@ -557,6 +557,9 @@ function renderMap() {
         document.body.classList.add('combat-mode');
     } else {
         document.body.classList.remove('combat-mode');
+        document.body.classList.remove('navbar-peek');
+        const peekBtn = document.getElementById('combat-navbar-peek');
+        if (peekBtn) peekBtn.classList.remove('active');
     }
 
     // ===== BOSS 血條 HUD =====
@@ -1000,13 +1003,44 @@ function initMapSizeListeners() {
     };
 }
 
+// ===== 戰鬥模式 Navbar Peek 按鈕 =====
+/**
+ * 初始化戰鬥模式下的 Navbar 暫開按鈕
+ * 點擊切換 peek 狀態，滑鼠移出 navbar 區域時自動收回
+ */
+function initCombatNavbarPeek() {
+    const peekBtn = document.getElementById('combat-navbar-peek');
+    const navbar = document.querySelector('.navbar');
+    if (!peekBtn || !navbar) return;
+
+    // 點擊切換 peek
+    peekBtn.addEventListener('click', () => {
+        const isPeeking = document.body.classList.toggle('navbar-peek');
+        peekBtn.classList.toggle('active', isPeeking);
+    });
+
+    // 滑鼠離開 navbar 區域時自動收回
+    navbar.addEventListener('mouseleave', () => {
+        if (document.body.classList.contains('navbar-peek')) {
+            document.body.classList.remove('navbar-peek');
+            peekBtn.classList.remove('active');
+        }
+    });
+}
+
 // 當頁面載入時自動初始化
 if (typeof window !== 'undefined') {
     // 延遲執行，確保 DOM 已載入
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initMapSizeListeners);
+        document.addEventListener('DOMContentLoaded', () => {
+            initMapSizeListeners();
+            initCombatNavbarPeek();
+        });
     } else {
         // 如果已經載入完成，直接執行
-        setTimeout(initMapSizeListeners, 100);
+        setTimeout(() => {
+            initMapSizeListeners();
+            initCombatNavbarPeek();
+        }, 100);
     }
 }

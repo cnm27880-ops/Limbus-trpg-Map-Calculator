@@ -2029,6 +2029,10 @@ body.combat-mode .boss-hud-container {
 .action-btn.boss-toggle {
     color: var(--accent-purple);
     font-size: 0.85rem;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .action-btn.boss-toggle.active {

@@ -494,6 +494,55 @@ body.combat-mode .navbar {
     transform: translateY(-100%);
 }
 
+/* 戰鬥模式下暫時展開 navbar (hover/click peek) */
+body.combat-mode.navbar-peek .navbar {
+    transform: translateY(0);
+}
+
+/* Navbar peek 觸發按鈕（僅戰鬥模式顯示） */
+.combat-navbar-peek {
+    display: none;
+    position: fixed;
+    top: 6px;
+    left: 10px;
+    z-index: 250;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: rgba(30, 30, 35, 0.75);
+    border: 1px solid var(--border);
+    color: var(--accent-yellow);
+    font-size: 1rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, opacity 0.3s;
+    opacity: 0.6;
+    backdrop-filter: blur(4px);
+}
+
+.combat-navbar-peek:hover {
+    opacity: 1;
+    background: rgba(50, 50, 55, 0.9);
+}
+
+.combat-navbar-peek.active {
+    opacity: 1;
+    background: var(--accent-yellow);
+    color: #000;
+}
+
+body.combat-mode .combat-navbar-peek {
+    display: flex;
+}
+
+/* peek 時 navbar 也要有 transition */
+body.combat-mode.navbar-peek .map-toolbar {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
 /* 地圖工具列向上隱藏 */
 .map-toolbar {
     transition: transform 0.5s ease, opacity 0.5s ease;

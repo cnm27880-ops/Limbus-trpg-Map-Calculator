@@ -807,12 +807,44 @@
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
+    position: relative;
 }
 
 .status-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     border-color: var(--text-dim);
+}
+
+/* 自訂狀態刪除按鈕 */
+.status-card-delete {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-red);
+    color: #fff;
+    border: 2px solid var(--bg-card);
+    font-size: 0.75rem;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    padding: 0;
+    transition: transform 0.1s;
+}
+
+.status-card:hover .status-card-delete {
+    display: flex;
+}
+
+.status-card-delete:hover {
+    transform: scale(1.2);
+    background: #c62828;
 }
 
 .status-card-icon {
@@ -1725,6 +1757,161 @@
     color: var(--accent-red);
     border-color: var(--accent-red);
     background: rgba(229, 57, 53, 0.1);
+}
+
+/* ===== 地形編輯器 (Tile Editor) ===== */
+
+/* 工具列「+」按鈕 */
+.tool-btn-add {
+    border: 2px dashed var(--text-dim) !important;
+    background: transparent !important;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.tool-btn-add:hover {
+    border-color: var(--accent-yellow) !important;
+    color: var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.1) !important;
+}
+
+/* 地形編輯 Modal */
+.tile-editor-modal {
+    max-width: 420px;
+    width: 100%;
+}
+
+.tile-editor-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.tile-editor-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.tile-import-section {
+    padding: 12px;
+}
+
+.tile-editor-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0;
+}
+
+.tile-editor-form {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tile-editor-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tile-editor-form textarea {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.tile-color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tile-color-picker {
+    width: 44px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    cursor: pointer;
+    background: var(--bg-input);
+}
+
+.tile-color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.tile-color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.tile-color-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.tile-color-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* ===== 測距尺 (Ruler) ===== */
+
+/* 測距尺 SVG 容器 */
+#ruler-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 100;
+    overflow: visible;
+}
+
+/* 測距線條 */
+.ruler-line {
+    stroke: var(--accent-yellow);
+    stroke-width: 3px;
+    stroke-dasharray: 8 4;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+    animation: ruler-dash 1s linear infinite;
+}
+
+@keyframes ruler-dash {
+    to { stroke-dashoffset: -12; }
+}
+
+/* 測距文字標籤 */
+.ruler-label {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: var(--accent-yellow);
+    border: 1px solid var(--accent-yellow);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 101;
+    transform: translate(-50%, -120%);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
 }
 
 /* Mobile adjustments for quick action ball & music player */

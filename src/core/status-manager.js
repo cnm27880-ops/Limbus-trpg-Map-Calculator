@@ -176,10 +176,16 @@ function renderStatusCard(status) {
     const categoryInfo = STATUS_CATEGORIES[getStatusCategory(status.id)] || {};
     const borderColor = categoryInfo.color || '#666';
 
+    // 自訂狀態才顯示刪除按鈕
+    const deleteBtn = status.isCustom
+        ? `<button class="status-card-delete" onclick="event.stopPropagation();confirmDeleteCustomStatus('${status.id}','${escapeHtml(status.name)}')" title="刪除此自訂狀態">×</button>`
+        : '';
+
     return `
         <div class="status-card" data-status-id="${status.id}"
              style="border-left-color:${borderColor}"
              onclick="selectStatus('${status.id}')">
+            ${deleteBtn}
             <div class="status-card-icon">${status.icon}</div>
             <div class="status-card-info">
                 <div class="status-card-name">${status.name}</div>
@@ -808,6 +814,85 @@ function quickAddRecentStatus(statusId) {
     const recentBar = document.getElementById('recent-status-bar');
     if (recentBar) {
         recentBar.innerHTML = renderRecentStatusBar();
+    }
+}
+
+// ===== 刪除自訂狀態 =====
+
+/**
+ * 顯示刪除自訂狀態的確認對話框
+ * @param {string} statusId - 狀態 ID
+ * @param {string} statusName - 狀態名稱（用於顯示）
+ */
+function confirmDeleteCustomStatus(statusId, statusName) {
+    const confirmHtml = `
+        <div class="status-detail-overlay" id="confirm-delete-overlay" onclick="closeConfirmDeleteOverlay(event)">
+            <div class="status-detail-panel" style="max-width:340px;" onclick="event.stopPropagation()">
+                <div class="detail-header" style="border-color:var(--accent-red)">
+                    <span class="detail-icon">⚠️</span>
+                    <span class="detail-name">確認刪除</span>
+                </div>
+                <div class="detail-body" style="text-align:center;">
+                    <p style="margin:0;color:var(--text-main);">確定要刪除自訂狀態<br><strong style="color:var(--accent-red);">${statusName}</strong>？</p>
+                    <p style="margin:8px 0 0;font-size:0.8rem;color:var(--text-dim);">此操作無法復原</p>
+                </div>
+                <div class="detail-footer" style="justify-content:center;">
+                    <button onclick="executeDeleteCustomStatus('${statusId}')" class="modal-btn" style="background:var(--accent-red);">
+                        確認刪除
+                    </button>
+                    <button onclick="closeConfirmDeleteOverlay()" class="modal-btn">取消</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const modal = document.getElementById('status-modal');
+    if (modal) {
+        // 移除舊的確認面板
+        const old = document.getElementById('confirm-delete-overlay');
+        if (old) old.remove();
+
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = confirmHtml;
+        modal.appendChild(wrapper.firstElementChild);
+    }
+}
+
+/**
+ * 關閉確認刪除 overlay
+ */
+function closeConfirmDeleteOverlay(event) {
+    if (event && event.target.id !== 'confirm-delete-overlay') return;
+    const overlay = document.getElementById('confirm-delete-overlay');
+    if (overlay) overlay.remove();
+}
+
+/**
+ * 執行刪除自訂狀態
+ * @param {string} statusId - 狀態 ID
+ */
+function executeDeleteCustomStatus(statusId) {
+    // 透過 Firebase 移除
+    if (typeof removeCustomStatusFromRoom === 'function') {
+        removeCustomStatusFromRoom(statusId);
+    } else {
+        // 本地移除
+        state.customStatuses = (state.customStatuses || []).filter(s => s.id !== statusId);
+    }
+
+    showToast('已刪除自訂狀態');
+    closeConfirmDeleteOverlay();
+
+    // 刷新狀態網格
+    const grid = document.getElementById('status-grid');
+    if (grid) {
+        grid.innerHTML = renderStatusGrid(currentStatusCategory);
+    }
+
+    // 刷新分類標籤數量
+    const tabs = document.getElementById('status-category-tabs');
+    if (tabs) {
+        tabs.innerHTML = renderCategoryTabs();
     }
 }
 

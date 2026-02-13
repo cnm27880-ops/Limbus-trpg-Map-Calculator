@@ -77,6 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 初始化鍵盤控制 (新增功能)
     initKeyboardControls();
+
+    // 初始化測距尺事件 (Alt + 拖曳)
+    if (typeof initRulerEvents === 'function') initRulerEvents();
     
     console.log('Limbus Command v7.5 initialized');
 });

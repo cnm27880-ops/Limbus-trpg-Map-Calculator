@@ -552,17 +552,23 @@ function renderMap() {
         }
     });
 
+    // ===== 戰鬥模式 UI 切換 =====
+    if (state.isCombatActive) {
+        document.body.classList.add('combat-mode');
+    } else {
+        document.body.classList.remove('combat-mode');
+    }
+
     // ===== BOSS 血條 HUD =====
     const oldHud = document.getElementById('boss-hud');
 
     if (state.activeBossId) {
         const boss = findUnitById(state.activeBossId);
         if (boss) {
-            const hpArr = boss.hpArr || [];
-            const maxHp = boss.maxHp || hpArr.length || 1;
-            const damaged = hpArr.filter(x => x > 0).length;
-            const currentHp = maxHp - damaged;
-            const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
+            // 使用加權 HP 算法（B=1, L=2, A=3 分）
+            const hpPercent = (typeof calculateWeightedHpPercent === 'function')
+                ? calculateWeightedHpPercent(boss)
+                : 100;
 
             if (oldHud) {
                 // 更新現有 HUD：紅色血條立刻縮減，白色殘影延遲跟隨

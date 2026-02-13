@@ -483,6 +483,43 @@ input[type="number"] {
     transform: translateX(-50%) translateY(0);
 }
 
+/* ===== 戰鬥模式 (Combat Mode) ===== */
+
+/* 導覽列向上滑出 */
+.navbar {
+    transition: transform 0.5s ease;
+}
+
+body.combat-mode .navbar {
+    transform: translateY(-100%);
+}
+
+/* 地圖工具列向上隱藏 */
+.map-toolbar {
+    transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+body.combat-mode .map-toolbar {
+    transform: translateY(-120%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 側邊欄按鈕保持可見 */
+.sidebar-toggle {
+    position: relative;
+    z-index: 200;
+}
+
+/* 戰鬥模式下，地圖視口擴展全螢幕 */
+body.combat-mode .main-wrapper {
+    height: 100vh;
+    height: 100dvh;
+    top: 0;
+    position: fixed;
+    inset: 0;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 1023px) {
     /* 手機版：側邊欄預設隱藏，需要點擊按鈕開啟 */

@@ -1916,7 +1916,7 @@
 
 /* ===== BOSS HUD (魂系風格血條) ===== */
 
-/* BOSS 血條容器 (懸浮於地圖視窗底部) */
+/* BOSS 血條容器 - 預設在底部，戰鬥模式時滑到頂部 */
 .boss-hud-container {
     position: fixed;
     bottom: 24px;
@@ -1929,7 +1929,13 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: opacity 0.5s ease, transform 0.5s ease;
+    transition: top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.5s ease, opacity 0.5s ease;
+}
+
+/* 戰鬥模式下，血條從頂部滑入至 navbar 原本位置 */
+body.combat-mode .boss-hud-container {
+    bottom: auto;
+    top: 20px;
 }
 
 .boss-hud-container.hidden {
@@ -1948,27 +1954,27 @@
     font-family: 'Noto Sans TC', sans-serif;
 }
 
-/* 血條外框 (華麗裝飾) */
+/* 血條外框 (金色邊框裝飾) */
 .boss-hud-bar-frame {
     width: 100%;
     height: 22px;
-    background: rgba(20, 20, 25, 0.9);
-    border: 2px solid #5c5c5c;
-    border-bottom: 2px solid #333;
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid #d4af37;
+    border-bottom: 2px solid #b8960c;
     border-radius: 2px;
     position: relative;
     padding: 3px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.3), 0 5px 20px rgba(0,0,0,0.5);
 }
 
-/* 裝飾性邊角 */
+/* 裝飾性邊角 (金色) */
 .boss-hud-bar-frame::before, .boss-hud-bar-frame::after {
     content: '';
     position: absolute;
     top: -4px; bottom: -4px;
     width: 4px;
-    background: var(--accent-red);
-    box-shadow: 0 0 10px var(--accent-red);
+    background: #d4af37;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.6);
 }
 .boss-hud-bar-frame::before { left: -2px; }
 .boss-hud-bar-frame::after { right: -2px; }
@@ -1985,13 +1991,13 @@
     z-index: 0;
 }
 
-/* 血條填充 (漸層紅，在白色殘影之上) */
+/* 血條填充 (三段式漸層紅，在白色殘影之上) */
 .boss-hud-fill {
     position: absolute;
     top: 3px;
     left: 3px;
     height: calc(100% - 6px);
-    background: linear-gradient(90deg, #8e0000 0%, #d32f2f 50%, #ff6659 100%);
+    background: linear-gradient(90deg, #4a0000 0%, #b71c1c 60%, #ff5252 100%);
     width: 100%;
     transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
     box-shadow: 0 0 10px rgba(211, 47, 47, 0.6);

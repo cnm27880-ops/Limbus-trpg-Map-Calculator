@@ -508,6 +508,8 @@ function loadRoomData(data) {
         state.mapH = data.state.mapH || MAP_DEFAULTS.HEIGHT;
         state.themeId = data.state.themeId || 0;
         state.turnIdx = data.state.turnIdx || 0;
+        state.isCombatActive = data.state.isCombatActive || false;
+        state.activeBossId = data.state.activeBossId || null;
     }
 
     if (data.mapData) {
@@ -614,7 +616,11 @@ function setupRoomListeners() {
                 renderMap();
             }
             state.turnIdx = newState.turnIdx || 0;
+            state.isCombatActive = newState.isCombatActive || false;
+            state.activeBossId = newState.activeBossId || null;
             renderUnitsList();
+            renderUnitsToolbar();
+            renderMap();
         }
     });
     unsubscribeListeners.push(() => roomRef.child('state').off('value', stateListener));
@@ -908,7 +914,9 @@ function syncState() {
         mapW: state.mapW,
         mapH: state.mapH,
         themeId: state.themeId,
-        turnIdx: state.turnIdx
+        turnIdx: state.turnIdx,
+        isCombatActive: state.isCombatActive || false,
+        activeBossId: state.activeBossId || null
     });
 }
 

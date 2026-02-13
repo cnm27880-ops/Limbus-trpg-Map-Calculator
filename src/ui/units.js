@@ -8,6 +8,50 @@
 const AVATAR_SIZE = 256;  // 從 64 提升到 256，確保 3x3 token 在高解析度螢幕也清晰
 const AVATAR_QUALITY = 0.85;  // 較高品質，但仍保持合理檔案大小
 
+// ===== 戰鬥流程控制 =====
+/**
+ * 切換戰鬥狀態
+ */
+function toggleCombat() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制戰鬥');
+        return;
+    }
+
+    if (state.isCombatActive) {
+        // 結束戰鬥：重置先攻、回合、BOSS HUD
+        state.isCombatActive = false;
+        state.units.forEach(u => u.init = 0);
+        state.turnIdx = -1;
+        state.activeBossId = null;
+        sendState();
+        renderAll();
+        showToast('戰鬥已結束，先攻已歸零');
+    } else {
+        // 開始戰鬥：排序並設定第一回合
+        state.isCombatActive = true;
+        sortByInit();
+        state.turnIdx = 0;
+        sendState();
+        renderAll();
+        showToast('戰鬥開始！');
+    }
+}
+
+/**
+ * 切換 BOSS 血條顯示
+ * @param {string} id - BOSS 單位 ID
+ */
+function toggleActiveBoss(id) {
+    if (state.activeBossId === id) {
+        state.activeBossId = null;
+    } else {
+        state.activeBossId = id;
+    }
+    sendState();
+    renderAll();
+}
+
 // ===== 渲染函數 =====
 /**
  * 渲染所有內容
@@ -27,11 +71,20 @@ function renderUnitsToolbar() {
     if (!toolbar) return;
 
     if (myRole === 'st') {
-        toolbar.innerHTML = `
-            <div class="turn-controls">
+        const combatBtn = state.isCombatActive
+            ? `<button class="units-btn combat-btn-reset" onclick="toggleCombat()">🔄 重置戰鬥</button>`
+            : `<button class="units-btn combat-btn-start" onclick="toggleCombat()">⚔️ 開始戰鬥</button>`;
+
+        const turnControls = state.isCombatActive
+            ? `<div class="turn-controls">
                 <button class="turn-btn" onclick="prevTurn()" title="上一個">▲</button>
                 <button class="turn-btn" onclick="nextTurn()" title="下一個">▼</button>
-            </div>
+              </div>`
+            : '';
+
+        toolbar.innerHTML = `
+            ${combatBtn}
+            ${turnControls}
             <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
             <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
             <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
@@ -143,6 +196,11 @@ function renderUnitsList() {
             // ST 專屬的分配權限按鈕
             const assignBtn = isSt ? `<button class="action-btn" onclick="openAssignOwnerModal('${u.id}')" title="分配給其他玩家">👮</button>` : '';
 
+            // BOSS 血條切換按鈕
+            const bossToggleBtn = isBoss
+                ? `<button class="action-btn boss-toggle${state.activeBossId === u.id ? ' active' : ''}" onclick="toggleActiveBoss('${u.id}')" title="顯示/隱藏 BOSS 血條">👑</button>`
+                : '';
+
             actions = `
                 <div class="unit-actions">
                     <button class="action-btn dmg-b" onclick="modifyHP('${u.id}','b',1)" title="按住Shift開啟數量輸入">+B</button>
@@ -151,6 +209,7 @@ function renderUnitsList() {
                     <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
                     <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
                     ${deployBtn}
+                    ${bossToggleBtn}
                     ${assignBtn}
                     <button class="action-btn" onclick="deleteUnit('${u.id}')">✕</button>
                 </div>

@@ -516,7 +516,7 @@ function renderMap() {
 
         // ===== Your Turn 旋轉符文指示器 =====
         const unitIdx = state.units.findIndex(su => su.id === u.id);
-        if (unitIdx === state.turnIdx) {
+        if (state.isCombatActive && unitIdx === state.turnIdx) {
             const rune = document.createElement('div');
             rune.className = 'turn-indicator-rune';
             // 符文大小比 token 大 60%
@@ -551,6 +551,34 @@ function renderMap() {
             grid.appendChild(rune);
         }
     });
+
+    // ===== BOSS 血條 HUD =====
+    // 移除舊的 HUD（如果存在）
+    const oldHud = document.getElementById('boss-hud');
+    if (oldHud) oldHud.remove();
+
+    if (state.activeBossId) {
+        const boss = findUnitById(state.activeBossId);
+        if (boss) {
+            const hpArr = boss.hpArr || [];
+            const maxHp = boss.maxHp || hpArr.length || 1;
+            const damaged = hpArr.filter(x => x > 0).length;
+            const currentHp = maxHp - damaged;
+            const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
+
+            const hud = document.createElement('div');
+            hud.id = 'boss-hud';
+            hud.className = 'boss-hud-container';
+            hud.innerHTML = `
+                <div class="boss-hud-name">${escapeHtml(boss.name || 'BOSS')}</div>
+                <div class="boss-hud-bar-frame">
+                    <div class="boss-hud-fill" style="width:${hpPercent}%"></div>
+                    <div class="boss-hud-hp-text">${currentHp} / ${maxHp}</div>
+                </div>
+            `;
+            document.body.appendChild(hud);
+        }
+    }
 }
 
 /**

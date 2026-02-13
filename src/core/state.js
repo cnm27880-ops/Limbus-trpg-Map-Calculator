@@ -13,7 +13,9 @@ let state = {
     themeId: 0,
     mapPalette: [],             // 自訂調色盤（混用地形）
     players: {},
-    customStatuses: []  // 房間共享的自訂狀態（透過 Firebase 同步）
+    customStatuses: [],  // 房間共享的自訂狀態（透過 Firebase 同步）
+    isCombatActive: false,      // 是否處於戰鬥狀態
+    activeBossId: null          // 當前顯示大血條的 BOSS 單位 ID
 };
 
 // ===== 連線狀態 =====
@@ -63,7 +65,9 @@ function resetState() {
         themeId: 0,
         mapPalette: [],
         players: {},
-        customStatuses: []
+        customStatuses: [],
+        isCombatActive: false,
+        activeBossId: null
     };
 }
 

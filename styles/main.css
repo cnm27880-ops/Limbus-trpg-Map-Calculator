@@ -492,6 +492,10 @@ input[type="number"] {
 
 body.combat-mode .navbar {
     transform: translateY(-100%);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
 }
 
 /* 戰鬥模式下暫時展開 navbar (hover/click peek) */

@@ -138,6 +138,16 @@ function switchPage(pageId) {
         }
     }
 
+    // BOSS 血條 HUD：只在地圖頁顯示
+    const bossHud = document.getElementById('boss-hud');
+    if (bossHud) {
+        if (pageId === 'map') {
+            bossHud.classList.remove('hidden');
+        } else {
+            bossHud.classList.add('hidden');
+        }
+    }
+
     // 當切換到地圖頁面時，重新渲染地圖以修復手機版黑屏問題
     if (pageId === 'map') {
         // 使用 requestAnimationFrame 確保 DOM 已更新後再渲染

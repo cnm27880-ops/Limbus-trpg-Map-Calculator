@@ -553,9 +553,7 @@ function renderMap() {
     });
 
     // ===== BOSS 血條 HUD =====
-    // 移除舊的 HUD（如果存在）
     const oldHud = document.getElementById('boss-hud');
-    if (oldHud) oldHud.remove();
 
     if (state.activeBossId) {
         const boss = findUnitById(state.activeBossId);
@@ -566,18 +564,45 @@ function renderMap() {
             const currentHp = maxHp - damaged;
             const hpPercent = Math.max(0, Math.min(100, (currentHp / maxHp) * 100));
 
-            const hud = document.createElement('div');
-            hud.id = 'boss-hud';
-            hud.className = 'boss-hud-container';
-            hud.innerHTML = `
-                <div class="boss-hud-name">${escapeHtml(boss.name || 'BOSS')}</div>
-                <div class="boss-hud-bar-frame">
-                    <div class="boss-hud-fill" style="width:${hpPercent}%"></div>
-                    <div class="boss-hud-hp-text">${currentHp} / ${maxHp}</div>
-                </div>
-            `;
-            document.body.appendChild(hud);
+            if (oldHud) {
+                // 更新現有 HUD：紅色血條立刻縮減，白色殘影延遲跟隨
+                const fill = oldHud.querySelector('.boss-hud-fill');
+                const drain = oldHud.querySelector('.boss-hud-drain');
+                const nameEl = oldHud.querySelector('.boss-hud-name');
+                if (nameEl) nameEl.textContent = boss.name || 'BOSS';
+                if (fill) fill.style.width = hpPercent + '%';
+                // 白色殘影延遲 0.4 秒後才開始移動（等紅色先扣完）
+                if (drain) {
+                    setTimeout(() => { drain.style.width = hpPercent + '%'; }, 400);
+                }
+                oldHud.classList.remove('hidden');
+            } else {
+                // 首次建立 HUD
+                const hud = document.createElement('div');
+                hud.id = 'boss-hud';
+                hud.className = 'boss-hud-container';
+                hud.innerHTML = `
+                    <div class="boss-hud-name">${escapeHtml(boss.name || 'BOSS')}</div>
+                    <div class="boss-hud-bar-frame">
+                        <div class="boss-hud-drain" style="width:${hpPercent}%"></div>
+                        <div class="boss-hud-fill" style="width:${hpPercent}%"></div>
+                    </div>
+                `;
+                // 掛載到 page-map 確保只在地圖頁可見
+                const mapPage = document.getElementById('page-map');
+                if (mapPage) {
+                    mapPage.appendChild(hud);
+                } else {
+                    document.body.appendChild(hud);
+                }
+            }
+        } else {
+            // activeBossId 指向的單位不存在，移除 HUD
+            if (oldHud) oldHud.remove();
         }
+    } else {
+        // 沒有 activeBoss，移除 HUD
+        if (oldHud) oldHud.remove();
     }
 }
 

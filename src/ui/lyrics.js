@@ -321,4 +321,85 @@ function delay(ms, signal) {
     });
 }
 
+// ===== UI 控制 =====
+
+/**
+ * 從面板的輸入框切換歌詞播放/停止
+ */
+function toggleLyricsPlayback() {
+    if (lyricsActive) {
+        stopLyrics();
+        updateLyricsPlayBtn(false);
+        return;
+    }
+
+    const textarea = document.getElementById('lyrics-input');
+    if (!textarea) return;
+
+    const text = textarea.value.trim();
+    if (!text) {
+        if (typeof showToast === 'function') showToast('請先輸入歌詞');
+        return;
+    }
+
+    const lines = text.split('\n');
+    const speedSlider = document.getElementById('lyrics-speed');
+    const pauseSlider = document.getElementById('lyrics-pause');
+    const loopCheckbox = document.getElementById('lyrics-loop');
+
+    const speed = speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED;
+    const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
+    const loop = loopCheckbox ? loopCheckbox.checked : false;
+
+    updateLyricsPlayBtn(true);
+
+    playLyrics(lines, { speed, linePause, loop }).then(() => {
+        updateLyricsPlayBtn(false);
+    });
+}
+
+/**
+ * 更新播放按鈕外觀
+ * @param {boolean} isPlaying
+ */
+function updateLyricsPlayBtn(isPlaying) {
+    const btn = document.getElementById('lyrics-play-btn');
+    if (!btn) return;
+    if (isPlaying) {
+        btn.textContent = '⏹ 停止';
+        btn.classList.add('playing');
+    } else {
+        btn.textContent = '▶ 播放';
+        btn.classList.remove('playing');
+    }
+}
+
+/**
+ * 初始化歌詞面板的滑桿即時數值顯示
+ */
+function initLyricsUI() {
+    const speedSlider = document.getElementById('lyrics-speed');
+    const speedVal = document.getElementById('lyrics-speed-val');
+    if (speedSlider && speedVal) {
+        speedSlider.addEventListener('input', () => {
+            speedVal.textContent = speedSlider.value + 'ms';
+        });
+    }
+
+    const pauseSlider = document.getElementById('lyrics-pause');
+    const pauseVal = document.getElementById('lyrics-pause-val');
+    if (pauseSlider && pauseVal) {
+        pauseSlider.addEventListener('input', () => {
+            pauseVal.textContent = (parseInt(pauseSlider.value) / 1000).toFixed(1) + 's';
+        });
+    }
+}
+
+// 頁面載入後初始化歌詞 UI
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLyricsUI);
+} else {
+    initLyricsUI();
+}
+
 console.log('Lyrics: 雙欄循環式動態歌詞系統已載入');

@@ -1737,6 +1737,115 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
+/* ===== Lyrics Section ===== */
+.lyrics-section {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+}
+
+.lyrics-textarea {
+    width: 100%;
+    min-height: 80px;
+    max-height: 150px;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 0.82rem;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.lyrics-textarea:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+}
+
+.lyrics-textarea::placeholder {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+
+.lyrics-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.lyrics-speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lyrics-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    min-width: 28px;
+    flex-shrink: 0;
+}
+
+.lyrics-slider {
+    flex: 1;
+    height: 4px;
+    accent-color: var(--accent-yellow);
+    cursor: pointer;
+}
+
+.lyrics-speed-val {
+    font-size: 0.72rem;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 36px;
+    text-align: right;
+}
+
+.lyrics-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.lyrics-checkbox-label {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.lyrics-checkbox-label input[type="checkbox"] {
+    accent-color: var(--accent-yellow);
+}
+
+.lyrics-play-btn {
+    padding: 6px 16px;
+    background: var(--accent-yellow);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.lyrics-play-btn:hover {
+    filter: brightness(1.1);
+}
+
+.lyrics-play-btn.playing {
+    background: var(--accent-red);
+    color: #fff;
+}
+
 /* ===== Logout Button ===== */
 .logout-btn {
     width: 32px;

@@ -315,6 +315,27 @@
                 <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
             </div>
         </div>
+        <!-- 歌詞字幕系統 -->
+        <div class="lyrics-section">
+            <div class="music-section-title">歌詞字幕</div>
+            <textarea id="lyrics-input" class="lyrics-textarea" placeholder="在此輸入歌詞，每行一句&#10;例如：&#10;在黑暗中前行&#10;尋找那道光芒&#10;即使世界崩塌"></textarea>
+            <div class="lyrics-controls">
+                <div class="lyrics-speed-control">
+                    <label class="lyrics-label" for="lyrics-speed">速度</label>
+                    <input type="range" id="lyrics-speed" class="lyrics-slider" min="30" max="200" value="80">
+                    <span id="lyrics-speed-val" class="lyrics-speed-val">80ms</span>
+                </div>
+                <div class="lyrics-speed-control">
+                    <label class="lyrics-label" for="lyrics-pause">行距</label>
+                    <input type="range" id="lyrics-pause" class="lyrics-slider" min="200" max="2000" value="600" step="100">
+                    <span id="lyrics-pause-val" class="lyrics-speed-val">0.6s</span>
+                </div>
+                <div class="lyrics-actions">
+                    <label class="lyrics-checkbox-label"><input type="checkbox" id="lyrics-loop"> 循環</label>
+                    <button class="lyrics-play-btn" id="lyrics-play-btn" onclick="toggleLyricsPlayback()">▶ 播放</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 快捷鍵說明面板 -->

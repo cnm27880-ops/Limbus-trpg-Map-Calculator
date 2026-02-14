@@ -516,7 +516,7 @@ function renderMap() {
 
         // ===== Your Turn 旋轉符文指示器 =====
         const unitIdx = state.units.findIndex(su => su.id === u.id);
-        if (unitIdx === state.turnIdx) {
+        if (state.isCombatActive && unitIdx === state.turnIdx) {
             const rune = document.createElement('div');
             rune.className = 'turn-indicator-rune';
             // 符文大小比 token 大 60%
@@ -551,6 +551,68 @@ function renderMap() {
             grid.appendChild(rune);
         }
     });
+
+    // ===== 戰鬥模式 UI 切換 =====
+    if (state.isCombatActive) {
+        document.body.classList.add('combat-mode');
+    } else {
+        document.body.classList.remove('combat-mode');
+        document.body.classList.remove('navbar-peek');
+        const peekBtn = document.getElementById('combat-navbar-peek');
+        if (peekBtn) peekBtn.classList.remove('active');
+    }
+
+    // ===== BOSS 血條 HUD =====
+    const oldHud = document.getElementById('boss-hud');
+
+    if (state.activeBossId) {
+        const boss = findUnitById(state.activeBossId);
+        if (boss) {
+            // 使用加權 HP 算法（B=1, L=2, A=3 分）
+            const hpPercent = (typeof calculateWeightedHpPercent === 'function')
+                ? calculateWeightedHpPercent(boss)
+                : 100;
+
+            if (oldHud) {
+                // 更新現有 HUD：紅色血條立刻縮減，白色殘影延遲跟隨
+                const fill = oldHud.querySelector('.boss-hud-fill');
+                const drain = oldHud.querySelector('.boss-hud-drain');
+                const nameEl = oldHud.querySelector('.boss-hud-name');
+                if (nameEl) nameEl.textContent = boss.name || 'BOSS';
+                if (fill) fill.style.width = hpPercent + '%';
+                // 白色殘影延遲 0.4 秒後才開始移動（等紅色先扣完）
+                if (drain) {
+                    setTimeout(() => { drain.style.width = hpPercent + '%'; }, 400);
+                }
+                oldHud.classList.remove('hidden');
+            } else {
+                // 首次建立 HUD
+                const hud = document.createElement('div');
+                hud.id = 'boss-hud';
+                hud.className = 'boss-hud-container';
+                hud.innerHTML = `
+                    <div class="boss-hud-name">${escapeHtml(boss.name || 'BOSS')}</div>
+                    <div class="boss-hud-bar-frame">
+                        <div class="boss-hud-drain" style="width:${hpPercent}%"></div>
+                        <div class="boss-hud-fill" style="width:${hpPercent}%"></div>
+                    </div>
+                `;
+                // 掛載到 page-map 確保只在地圖頁可見
+                const mapPage = document.getElementById('page-map');
+                if (mapPage) {
+                    mapPage.appendChild(hud);
+                } else {
+                    document.body.appendChild(hud);
+                }
+            }
+        } else {
+            // activeBossId 指向的單位不存在，移除 HUD
+            if (oldHud) oldHud.remove();
+        }
+    } else {
+        // 沒有 activeBoss，移除 HUD
+        if (oldHud) oldHud.remove();
+    }
 }
 
 /**
@@ -941,13 +1003,44 @@ function initMapSizeListeners() {
     };
 }
 
+// ===== 戰鬥模式 Navbar Peek 按鈕 =====
+/**
+ * 初始化戰鬥模式下的 Navbar 暫開按鈕
+ * 點擊切換 peek 狀態，滑鼠移出 navbar 區域時自動收回
+ */
+function initCombatNavbarPeek() {
+    const peekBtn = document.getElementById('combat-navbar-peek');
+    const navbar = document.querySelector('.navbar');
+    if (!peekBtn || !navbar) return;
+
+    // 點擊切換 peek
+    peekBtn.addEventListener('click', () => {
+        const isPeeking = document.body.classList.toggle('navbar-peek');
+        peekBtn.classList.toggle('active', isPeeking);
+    });
+
+    // 滑鼠離開 navbar 區域時自動收回
+    navbar.addEventListener('mouseleave', () => {
+        if (document.body.classList.contains('navbar-peek')) {
+            document.body.classList.remove('navbar-peek');
+            peekBtn.classList.remove('active');
+        }
+    });
+}
+
 // 當頁面載入時自動初始化
 if (typeof window !== 'undefined') {
     // 延遲執行，確保 DOM 已載入
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initMapSizeListeners);
+        document.addEventListener('DOMContentLoaded', () => {
+            initMapSizeListeners();
+            initCombatNavbarPeek();
+        });
     } else {
         // 如果已經載入完成，直接執行
-        setTimeout(initMapSizeListeners, 100);
+        setTimeout(() => {
+            initMapSizeListeners();
+            initCombatNavbarPeek();
+        }, 100);
     }
 }

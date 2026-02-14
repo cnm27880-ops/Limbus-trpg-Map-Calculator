@@ -1006,25 +1006,58 @@ function initMapSizeListeners() {
 // ===== 戰鬥模式 Navbar Peek 按鈕 =====
 /**
  * 初始化戰鬥模式下的 Navbar 暫開按鈕
- * 點擊切換 peek 狀態，滑鼠移出 navbar 區域時自動收回
+ * 點擊切換 peek 狀態，滑鼠離開 navbar + peek 按鈕區域時自動收回
  */
 function initCombatNavbarPeek() {
     const peekBtn = document.getElementById('combat-navbar-peek');
     const navbar = document.querySelector('.navbar');
     if (!peekBtn || !navbar) return;
 
+    // 防止 mouseleave 在開啟動畫期間誤觸的寬限期 (ms)
+    let peekGraceUntil = 0;
+
+    // 追蹤滑鼠是否在 peek 按鈕或 navbar 上
+    let mouseOnNavbar = false;
+    let mouseOnPeekBtn = false;
+
+    function closePeek() {
+        document.body.classList.remove('navbar-peek');
+        peekBtn.classList.remove('active');
+    }
+
+    function tryAutoClose() {
+        // 寬限期內不自動收回
+        if (Date.now() < peekGraceUntil) return;
+        // 滑鼠仍在 navbar 或 peek 按鈕上時不收回
+        if (mouseOnNavbar || mouseOnPeekBtn) return;
+        if (document.body.classList.contains('navbar-peek')) {
+            closePeek();
+        }
+    }
+
     // 點擊切換 peek
     peekBtn.addEventListener('click', () => {
         const isPeeking = document.body.classList.toggle('navbar-peek');
         peekBtn.classList.toggle('active', isPeeking);
+        if (isPeeking) {
+            // 設定寬限期：等待 navbar 滑出動畫完成 (transition 0.5s + 緩衝)
+            peekGraceUntil = Date.now() + 600;
+        }
     });
 
-    // 滑鼠離開 navbar 區域時自動收回
+    // 追蹤 navbar 的滑鼠進出
+    navbar.addEventListener('mouseenter', () => { mouseOnNavbar = true; });
     navbar.addEventListener('mouseleave', () => {
-        if (document.body.classList.contains('navbar-peek')) {
-            document.body.classList.remove('navbar-peek');
-            peekBtn.classList.remove('active');
-        }
+        mouseOnNavbar = false;
+        // 延遲檢查，給使用者時間移動到 peek 按鈕
+        setTimeout(tryAutoClose, 80);
+    });
+
+    // 追蹤 peek 按鈕的滑鼠進出
+    peekBtn.addEventListener('mouseenter', () => { mouseOnPeekBtn = true; });
+    peekBtn.addEventListener('mouseleave', () => {
+        mouseOnPeekBtn = false;
+        setTimeout(tryAutoClose, 80);
     });
 }
 

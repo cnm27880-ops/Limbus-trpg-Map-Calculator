@@ -8,6 +8,51 @@
 const AVATAR_SIZE = 256;  // 從 64 提升到 256，確保 3x3 token 在高解析度螢幕也清晰
 const AVATAR_QUALITY = 0.85;  // 較高品質，但仍保持合理檔案大小
 
+// ===== 戰鬥流程控制 =====
+/**
+ * 切換戰鬥狀態
+ */
+function toggleCombat() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制戰鬥');
+        return;
+    }
+
+    if (state.isCombatActive) {
+        // 結束戰鬥：重置先攻、回合、BOSS HUD
+        state.isCombatActive = false;
+        state.units.forEach(u => u.init = 0);
+        state.turnIdx = -1;
+        state.activeBossId = null;
+        sendState();
+        renderAll();
+        showToast('戰鬥已結束，先攻已歸零');
+    } else {
+        // 開始戰鬥：排序並設定第一回合
+        state.isCombatActive = true;
+        // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
+        state.units.sort((a, b) => b.init - a.init);
+        state.turnIdx = 0;
+        sendState();
+        renderAll();
+        showToast('戰鬥開始！');
+    }
+}
+
+/**
+ * 切換 BOSS 血條顯示
+ * @param {string} id - BOSS 單位 ID
+ */
+function toggleActiveBoss(id) {
+    if (state.activeBossId === id) {
+        state.activeBossId = null;
+    } else {
+        state.activeBossId = id;
+    }
+    sendState();
+    renderAll();
+}
+
 // ===== 渲染函數 =====
 /**
  * 渲染所有內容
@@ -27,8 +72,20 @@ function renderUnitsToolbar() {
     if (!toolbar) return;
 
     if (myRole === 'st') {
+        const combatBtn = state.isCombatActive
+            ? `<button class="units-btn combat-btn-reset" onclick="toggleCombat()">🔄 重置戰鬥</button>`
+            : `<button class="units-btn combat-btn-start" onclick="toggleCombat()">⚔️ 開始戰鬥</button>`;
+
+        const turnControls = state.isCombatActive
+            ? `<div class="turn-controls">
+                <button class="turn-btn" onclick="prevTurn()" title="上一個">▲</button>
+                <button class="turn-btn" onclick="nextTurn()" title="下一個">▼</button>
+              </div>`
+            : '';
+
         toolbar.innerHTML = `
-            <button class="units-btn primary" onclick="nextTurn()">▶ 下一回合</button>
+            ${combatBtn}
+            ${turnControls}
             <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
             <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
             <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
@@ -62,6 +119,11 @@ function renderUnitsList() {
         const isMyUnit = u.ownerId === myPlayerId;
         const hideDetails = isEnemy && !isSt && !isMyUnit;
         const isBoss = u.isBoss || u.type === 'boss';
+
+        const canEdit = canControlUnit(u);
+        const maxHpLabel = canEdit
+            ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限" style="cursor:pointer;text-decoration:underline dotted;color:var(--accent-yellow);margin-left:4px;">[HP:${maxHp}]</span>`
+            : `<span style="margin-left:4px;color:var(--text-muted);">[HP:${maxHp}]</span>`;
 
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
         if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
@@ -135,6 +197,11 @@ function renderUnitsList() {
             // ST 專屬的分配權限按鈕
             const assignBtn = isSt ? `<button class="action-btn" onclick="openAssignOwnerModal('${u.id}')" title="分配給其他玩家">👮</button>` : '';
 
+            // BOSS 血條切換按鈕
+            const bossToggleBtn = isBoss
+                ? `<button class="action-btn boss-toggle${state.activeBossId === u.id ? ' active' : ''}" onclick="toggleActiveBoss('${u.id}')" title="顯示/隱藏 BOSS 血條">👑</button>`
+                : '';
+
             actions = `
                 <div class="unit-actions">
                     <button class="action-btn dmg-b" onclick="modifyHP('${u.id}','b',1)" title="按住Shift開啟數量輸入">+B</button>
@@ -142,7 +209,9 @@ function renderUnitsList() {
                     <button class="action-btn dmg-a" onclick="modifyHP('${u.id}','a',1)" title="按住Shift開啟數量輸入">+A</button>
                     <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
                     <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
+                    <button class="action-btn heal" onclick="resetUnitHp('${u.id}')" title="清除所有傷害，重置血條">♻</button>
                     ${deployBtn}
+                    ${bossToggleBtn}
                     ${assignBtn}
                     <button class="action-btn" onclick="deleteUnit('${u.id}')">✕</button>
                 </div>
@@ -179,7 +248,7 @@ function renderUnitsList() {
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
                         <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
-                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}</div>
+                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
                 </div>
@@ -210,20 +279,18 @@ function renderSidebarUnits() {
         const isBoss = u.isBoss || u.type === 'boss';
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
+        const currentHp = maxHp - hpArr.filter(x => x > 0).length;
 
-        const bar = `<div class="hp-bar-wrap" style="height:6px;margin-top:4px;">` +
-            hpArr.map(h => {
-                const cls = h === 0 ? 'hp-empty' : h === 1 ? 'hp-b' : h === 2 ? 'hp-l' : 'hp-a';
-                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
-            }).join('') +
-            `</div>`;
-
+        // 簡潔的傷害狀態文字（帶顏色標記）
+        const aCount = hpArr.filter(x => x === 3).length;
+        const lCount = hpArr.filter(x => x === 2).length;
+        const bCount = hpArr.filter(x => x === 1).length;
         let statusTxt = isEnemy && !isSt
             ? getVagueStatus(u)
-            : `${hpArr.filter(x => x === 3).length}A ${hpArr.filter(x => x === 2).length}L`;
+            : `<span class="dmg-b">${bCount}B</span> <span class="dmg-l">${lCount}L</span> <span class="dmg-a">${aCount}A</span>`;
 
         const unitName = u.name || 'Unknown';
-        
+
         // 單位卡片類別
         const cardClasses = [
             'unit-card',
@@ -232,20 +299,75 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
+        // 生成戰術血條（10 格方塊）
+        const segmentCount = 10;
+        let tacticalSegments = '';
+        for (let i = 0; i < segmentCount; i++) {
+            // 計算此格對應的 hpArr 索引
+            const hpIndex = Math.floor((i / segmentCount) * maxHp);
+            const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
+
+            let segmentClass = 'hp-tactical-segment';
+            if (hpValue === 0) {
+                segmentClass += ' hp-healthy';  // 完好 = 綠色
+            } else if (hpValue === 1) {
+                segmentClass += ' hp-b';  // B傷 = 藍色
+            } else if (hpValue === 2) {
+                segmentClass += ' hp-l';  // L傷 = 橙色
+            } else if (hpValue === 3) {
+                segmentClass += ' hp-a';  // A傷 = 紅色
+            }
+
+            tacticalSegments += `<div class="${segmentClass}"></div>`;
+        }
+
+        // 三欄佈局：左名-中血-右速
         return `
-            <div class="${cardClasses}" style="padding:8px;margin-bottom:6px;">
-                <div style="display:flex;justify-content:space-between;">
-                    <span style="font-weight:bold;font-size:0.9rem;">${escapeHtml(unitName)}</span>
-                    <span style="color:var(--accent-yellow);font-family:'JetBrains Mono';">${u.init || 0}</span>
+            <div class="${cardClasses}">
+                <div class="unit-header">
+                    <div class="unit-info">
+                        <div class="unit-name">${escapeHtml(unitName)}</div>
+                        <div class="unit-status">${statusTxt}</div>
+                    </div>
+                    <div class="hp-tactical-container">${tacticalSegments}</div>
+                    <div class="unit-init-box">
+                        <span class="unit-init-value">${u.init || 0}</span>
+                    </div>
                 </div>
-                <div style="font-size:0.75rem;color:#777;">${statusTxt}</div>
-                ${bar}
             </div>
         `;
     }).join('');
 }
 
 // ===== 單位操作 =====
+/**
+ * 重置單位血量（清除所有傷害）
+ * @param {string} id - 單位 ID
+ */
+function resetUnitHp(id) {
+    const u = findUnitById(id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    if (myRole === 'st') {
+        if (u.hpArr) {
+            u.hpArr = u.hpArr.map(() => 0);
+        }
+        broadcastState();
+        showToast(`${u.name || '單位'} 血量已重置`);
+    } else {
+        sendToHost({
+            type: 'resetUnitHp',
+            playerId: myPlayerId,
+            unitId: id
+        });
+    }
+}
+
 /**
  * 修改單位 HP
  * @param {string} id - 單位 ID
@@ -393,8 +515,19 @@ function sortByInit() {
         showToast('只有 ST 可以排序');
         return;
     }
+    // 記住當前回合的單位 ID，排序後恢復位置
+    const currentUnit = state.units[state.turnIdx];
+    const currentUnitId = currentUnit ? currentUnit.id : null;
+
     state.units.sort((a, b) => b.init - a.init);
-    state.turnIdx = 0;
+
+    // 找回該單位的新索引
+    if (currentUnitId) {
+        const newIdx = state.units.findIndex(u => u.id === currentUnitId);
+        state.turnIdx = newIdx >= 0 ? newIdx : 0;
+    } else {
+        state.turnIdx = 0;
+    }
     broadcastState();
 }
 
@@ -408,6 +541,26 @@ function nextTurn() {
     }
     if (state.units.length) {
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
+        broadcastState();
+
+        setTimeout(() => {
+            const el = document.querySelector('.unit-card.active-turn');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
+}
+
+/**
+ * 上一回合
+ */
+function prevTurn() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以控制回合');
+        return;
+    }
+    if (state.units.length) {
+        // 處理 < 0 的循環情況
+        state.turnIdx = (state.turnIdx - 1 + state.units.length) % state.units.length;
         broadcastState();
 
         setTimeout(() => {

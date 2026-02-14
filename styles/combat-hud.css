@@ -42,6 +42,7 @@
 }
 
 .combat-hud.collapsed {
+    width: auto;
     min-width: auto;
     max-width: none;
     max-height: none;
@@ -758,12 +759,16 @@
     border: 1px solid rgba(33, 150, 243, 0.3);
 }
 
-/* ===== Minimized Bar ===== */
+/* ===== Minimized Bar (inside header when collapsed) ===== */
 .hud-minimized-bar {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 12px;
+    gap: 8px;
+}
+
+.hud-mini-icon {
+    font-size: 1rem;
+    line-height: 1;
 }
 
 .hud-mini-resources {
@@ -788,6 +793,11 @@
 .hud-mini-resource .value {
     color: var(--hud-text);
     font-weight: 600;
+}
+
+/* Collapsed header cursor hint */
+.combat-hud.collapsed .hud-header {
+    cursor: pointer;
 }
 
 /* ===== Sheet Import Modal ===== */

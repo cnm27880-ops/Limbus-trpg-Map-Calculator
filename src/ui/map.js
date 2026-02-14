@@ -3,6 +3,11 @@
  * 處理地圖渲染、工具、地形等
  */
 
+// ===== 測距尺狀態 =====
+let isMeasuring = false;
+let rulerPoints = [];       // 所有折點的格子座標 [{x, y}, ...]
+let rulerCurrentPos = null; // 目前游標的格子座標
+
 // ===== 地圖初始化 =====
 /**
  * 初始化地圖資料
@@ -14,51 +19,74 @@ function initMapData() {
 // ===== 主題與工具 =====
 /**
  * 更換地圖主題
+ * 將該主題的地形匯入調色盤（合併，不覆蓋已存在的）
  * @param {string|number} id - 主題 ID
  */
 function changeMapTheme(id) {
     if (myRole !== 'st') return;
     state.themeId = parseInt(id);
+
+    // 用該主題的地形取代調色盤
+    const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
+    state.mapPalette = theme.tiles.map(t => ({
+        id: t.id, name: t.name,
+        color: t.color, effect: t.effect
+    }));
+
     updateToolbar();
     sendState();
+    if (typeof syncMapPalette === 'function') syncMapPalette();
     renderAll();
 }
 
 /**
  * 更新工具列
+ * 從 state.mapPalette 讀取地形，並提供新增按鈕
  */
 function updateToolbar() {
     const container = document.getElementById('dynamic-tools');
     if (!container) return;
 
+    // 確保調色盤已初始化
+    if (typeof initMapPalette === 'function') initMapPalette();
+
     // 清空容器並重建所有工具
     container.innerHTML = '';
 
-    // 添加固定工具
+    // 固定工具：游標
     const cursorBtn = document.createElement('button');
-    cursorBtn.className = 'tool-btn active';
+    cursorBtn.className = 'tool-btn' + (currentTool === 'cursor' ? ' active' : '');
     cursorBtn.dataset.tool = 'cursor';
     cursorBtn.innerText = '👆';
     cursorBtn.onclick = () => setTool('cursor');
     container.appendChild(cursorBtn);
 
+    // 固定工具：橡皮擦
     const floorBtn = document.createElement('button');
-    floorBtn.className = 'tool-btn';
+    floorBtn.className = 'tool-btn' + (currentTool === 'floor' ? ' active' : '');
     floorBtn.dataset.tool = 'floor';
     floorBtn.innerText = '🧹';
     floorBtn.onclick = () => setTool('floor');
     container.appendChild(floorBtn);
 
-    // 添加主題工具
-    const theme = getCurrentTheme();
-    theme.tiles.forEach(tile => {
+    // 從調色盤渲染地形按鈕
+    const palette = state.mapPalette || [];
+    palette.forEach(tile => {
         if (tile.name === '地板') return;
 
         const btn = document.createElement('button');
-        btn.className = 'tool-btn';
+        btn.className = 'tool-btn' + (currentTool == tile.id ? ' active' : '');
         btn.dataset.tool = tile.id;
-        btn.title = tile.name;
+        btn.title = `${tile.name}\n${tile.effect}\n(右鍵編輯)`;
         btn.onclick = () => setTool(tile.id);
+
+        // 右鍵編輯地形
+        btn.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (myRole === 'st' && typeof openTileEditorModal === 'function') {
+                openTileEditorModal(tile.id);
+            }
+        };
 
         const dot = document.createElement('div');
         dot.className = 'color-indicator';
@@ -68,6 +96,18 @@ function updateToolbar() {
         btn.appendChild(dot);
         container.appendChild(btn);
     });
+
+    // ST 才顯示「+」新增地形按鈕
+    if (myRole === 'st') {
+        const addBtn = document.createElement('button');
+        addBtn.className = 'tool-btn tool-btn-add';
+        addBtn.title = '新增自訂地形';
+        addBtn.innerText = '+';
+        addBtn.onclick = () => {
+            if (typeof openTileEditorModal === 'function') openTileEditorModal();
+        };
+        container.appendChild(addBtn);
+    }
 }
 
 /**
@@ -76,7 +116,7 @@ function updateToolbar() {
  */
 function setTool(tool) {
     currentTool = tool;
-    
+
     document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
     const btn = document.querySelector(`.tool-btn[data-tool="${tool}"]`);
     if (btn) btn.classList.add('active');
@@ -84,7 +124,6 @@ function setTool(tool) {
     if (myRole === 'st') {
         const panel = document.getElementById('tile-info-panel');
         const info = document.getElementById('tile-effect-desc');
-        const theme = getCurrentTheme();
         let desc = "";
 
         if (tool === 'floor') {
@@ -92,12 +131,14 @@ function setTool(tool) {
         } else if (tool === 'cursor') {
             desc = "選擇單位 / 查看格子";
         } else {
-            const t = theme.tiles.find(x => x.id == tool);
+            const t = (typeof getTileFromPalette === 'function')
+                ? getTileFromPalette(parseInt(tool))
+                : null;
             if (t) desc = `${t.name}: ${t.effect}`;
         }
 
         if (info) info.innerText = desc;
-        if (panel) panel.style.display = 'block';  // 顯示面板
+        if (panel) panel.style.display = 'block';
     }
 }
 
@@ -187,7 +228,21 @@ function renderMap() {
         container.style.marginTop = `-${pxH / 2}px`;
     }
 
-    const theme = getCurrentTheme();
+    // 確保測距尺 SVG 層存在
+    if (!document.getElementById('ruler-overlay')) {
+        const rulerSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        rulerSvg.id = 'ruler-overlay';
+        container.appendChild(rulerSvg);
+    }
+
+    // 確保測距尺標籤存在
+    if (!document.getElementById('ruler-label')) {
+        const rulerLabel = document.createElement('div');
+        rulerLabel.id = 'ruler-label';
+        rulerLabel.className = 'ruler-label';
+        rulerLabel.style.display = 'none';
+        document.getElementById('map-viewport').appendChild(rulerLabel);
+    }
 
     // 使用 DocumentFragment 提升效能（減少 DOM 重繪次數）
     const fragment = document.createDocumentFragment();
@@ -202,18 +257,20 @@ function renderMap() {
             // 部署高亮邏輯
             if (currentTool === 'cursor' && selectedUnitId !== null) {
                 const u = findUnitById(selectedUnitId);
-                // 檢查 canControlUnit，若無此函數則預設為 true (避免報錯)
                 const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
                 if (u && u.x === -1 && controllable) {
                     div.classList.add('deploy-target');
                 }
             }
 
-            // 套用地形樣式
-            let tileDef = theme.tiles.find(t => t.id === val);
+            // 從調色盤查找地形定義（內含舊存檔回退邏輯）
+            let tileDef = (typeof getTileFromPalette === 'function')
+                ? getTileFromPalette(val)
+                : null;
 
-            // 舊存檔相容性
+            // 舊存檔相容性（ID 1~3 的舊格式）
             if (!tileDef && state.themeId === 0) {
+                const theme = getCurrentTheme();
                 if (val === 1) tileDef = theme.tiles.find(t => t.name === '牆壁');
                 else if (val === 2) tileDef = theme.tiles.find(t => t.name === '掩體');
                 else if (val === 3) tileDef = theme.tiles.find(t => t.name === '險地');
@@ -350,9 +407,12 @@ function renderMap() {
         t.style.width = tokenSize + 'px';
         t.style.height = tokenSize + 'px';
 
-        // +2 是為了配合 CSS 的邊框內縮
-        t.style.left = (u.x * gridSize + 2) + 'px';
-        t.style.top = (u.y * gridSize + 2) + 'px';
+        // +2 是為了配合 CSS 的邊框內縮，使用 Math.round() 避免小數座標導致模糊
+        t.style.left = Math.round(u.x * gridSize + 2) + 'px';
+        t.style.top = Math.round(u.y * gridSize + 2) + 'px';
+
+        // GPU 加速，提升渲染清晰度
+        t.style.transform = 'translateZ(0)';
 
         // 大型單位 z-index 較低，小型單位較高
         // BOSS 有更高的 z-index
@@ -453,7 +513,106 @@ function renderMap() {
         };
 
         grid.appendChild(t);
+
+        // ===== Your Turn 旋轉符文指示器 =====
+        const unitIdx = state.units.findIndex(su => su.id === u.id);
+        if (state.isCombatActive && unitIdx === state.turnIdx) {
+            const rune = document.createElement('div');
+            rune.className = 'turn-indicator-rune';
+            // 符文大小比 token 大 60%
+            const runeSize = tokenSize * 1.6;
+            rune.style.width = runeSize + 'px';
+            rune.style.height = runeSize + 'px';
+            // 置中在 token 中心
+            const tokenCenterX = u.x * gridSize + 2 + tokenSize / 2;
+            const tokenCenterY = u.y * gridSize + 2 + tokenSize / 2;
+            rune.style.left = Math.round(tokenCenterX) + 'px';
+            rune.style.top = Math.round(tokenCenterY) + 'px';
+            // SVG 符文圖騰
+            rune.innerHTML = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(253,216,53,0.6)" stroke-width="1.5" stroke-dasharray="6 4"/>
+                <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(253,216,53,0.4)" stroke-width="1" stroke-dasharray="3 5"/>
+                <!-- 四個方位符號 -->
+                <text x="50" y="8" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <text x="50" y="98" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <text x="4" y="54" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <text x="96" y="54" text-anchor="middle" fill="rgba(253,216,53,0.8)" font-size="8" font-weight="bold">⬥</text>
+                <!-- 對角線裝飾 -->
+                <line x1="15" y1="15" x2="22" y2="22" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <line x1="85" y1="15" x2="78" y2="22" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <line x1="15" y1="85" x2="22" y2="78" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <line x1="85" y1="85" x2="78" y2="78" stroke="rgba(253,216,53,0.5)" stroke-width="1.5"/>
+                <!-- 小三角箭頭 -->
+                <polygon points="50,3 47,9 53,9" fill="rgba(253,216,53,0.7)"/>
+                <polygon points="50,97 47,91 53,91" fill="rgba(253,216,53,0.7)"/>
+                <polygon points="3,50 9,47 9,53" fill="rgba(253,216,53,0.7)"/>
+                <polygon points="97,50 91,47 91,53" fill="rgba(253,216,53,0.7)"/>
+            </svg>`;
+            grid.appendChild(rune);
+        }
     });
+
+    // ===== 戰鬥模式 UI 切換 =====
+    if (state.isCombatActive) {
+        document.body.classList.add('combat-mode');
+    } else {
+        document.body.classList.remove('combat-mode');
+        document.body.classList.remove('navbar-peek');
+        const peekBtn = document.getElementById('combat-navbar-peek');
+        if (peekBtn) peekBtn.classList.remove('active');
+    }
+
+    // ===== BOSS 血條 HUD =====
+    const oldHud = document.getElementById('boss-hud');
+
+    if (state.activeBossId) {
+        const boss = findUnitById(state.activeBossId);
+        if (boss) {
+            // 使用加權 HP 算法（B=1, L=2, A=3 分）
+            const hpPercent = (typeof calculateWeightedHpPercent === 'function')
+                ? calculateWeightedHpPercent(boss)
+                : 100;
+
+            if (oldHud) {
+                // 更新現有 HUD：紅色血條立刻縮減，白色殘影延遲跟隨
+                const fill = oldHud.querySelector('.boss-hud-fill');
+                const drain = oldHud.querySelector('.boss-hud-drain');
+                const nameEl = oldHud.querySelector('.boss-hud-name');
+                if (nameEl) nameEl.textContent = boss.name || 'BOSS';
+                if (fill) fill.style.width = hpPercent + '%';
+                // 白色殘影延遲 0.4 秒後才開始移動（等紅色先扣完）
+                if (drain) {
+                    setTimeout(() => { drain.style.width = hpPercent + '%'; }, 400);
+                }
+                oldHud.classList.remove('hidden');
+            } else {
+                // 首次建立 HUD
+                const hud = document.createElement('div');
+                hud.id = 'boss-hud';
+                hud.className = 'boss-hud-container';
+                hud.innerHTML = `
+                    <div class="boss-hud-name">${escapeHtml(boss.name || 'BOSS')}</div>
+                    <div class="boss-hud-bar-frame">
+                        <div class="boss-hud-drain" style="width:${hpPercent}%"></div>
+                        <div class="boss-hud-fill" style="width:${hpPercent}%"></div>
+                    </div>
+                `;
+                // 掛載到 page-map 確保只在地圖頁可見
+                const mapPage = document.getElementById('page-map');
+                if (mapPage) {
+                    mapPage.appendChild(hud);
+                } else {
+                    document.body.appendChild(hud);
+                }
+            }
+        } else {
+            // activeBossId 指向的單位不存在，移除 HUD
+            if (oldHud) oldHud.remove();
+        }
+    } else {
+        // 沒有 activeBoss，移除 HUD
+        if (oldHud) oldHud.remove();
+    }
 }
 
 /**
@@ -476,8 +635,8 @@ function handleMapInput(x, y, e) {
 
         // 優化：直接修改 DOM 樣式，而不是重繪整個地圖 (效能提升)
         if (e && e.target && e.target.classList.contains('cell')) {
-            const theme = getCurrentTheme();
-            const tileDef = theme.tiles.find(t => t.id === newVal);
+            const tileDef = (typeof getTileFromPalette === 'function')
+                ? getTileFromPalette(newVal) : null;
 
             if (tileDef) {
                 e.target.style.backgroundColor = tileDef.color;
@@ -592,7 +751,6 @@ function updateTileInfo(x, y) {
     const info = document.getElementById('tile-effect-desc');
     if (!info) return;
 
-    const theme = getCurrentTheme();
     const val = state.mapData[y]?.[x];
 
     if (val === undefined) {
@@ -607,18 +765,204 @@ function updateTileInfo(x, y) {
         return;
     }
 
-    const tileDef = theme.tiles.find(t => t.id === val);
+    const tileDef = (typeof getTileFromPalette === 'function')
+        ? getTileFromPalette(val) : null;
+
     if (tileDef) {
         info.innerText = `座標 (${x}, ${y}): ${tileDef.name} - ${tileDef.effect}`;
     } else {
         info.innerText = `座標 (${x}, ${y}): 未知地形`;
     }
 
-    // 顯示地形效果面板
     if (panel) panel.style.display = 'block';
 }
 
-// ===== 地圖大小監聽器 =====
+// ===== 測距尺功能 (Alt 按住 = 測量) =====
+/**
+ * 將螢幕座標轉換為格子座標
+ * @param {number} clientX - 滑鼠螢幕 X
+ * @param {number} clientY - 滑鼠螢幕 Y
+ * @returns {{ x: number, y: number }} 格子座標
+ */
+function screenToGrid(clientX, clientY) {
+    const grid = document.getElementById('battle-map');
+    if (!grid) return { x: 0, y: 0 };
+
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
+    const rect = grid.getBoundingClientRect();
+
+    // rect 已反映 CSS transform，除以 cam.scale 得到原始地圖像素座標
+    const mapPixelX = (clientX - rect.left) / cam.scale;
+    const mapPixelY = (clientY - rect.top) / cam.scale;
+
+    let gx = Math.floor(mapPixelX / gridSize);
+    let gy = Math.floor(mapPixelY / gridSize);
+
+    // 限制在地圖範圍內
+    gx = Math.max(0, Math.min(state.mapW - 1, gx));
+    gy = Math.max(0, Math.min(state.mapH - 1, gy));
+
+    return { x: gx, y: gy };
+}
+
+/**
+ * 計算折線總距離
+ * @param {Array} points - 折點陣列
+ * @param {{ x: number, y: number }|null} current - 當前游標位置
+ * @returns {number}
+ */
+function calcRulerDistance(points, current) {
+    const all = current ? [...points, current] : points;
+    let total = 0;
+    for (let i = 1; i < all.length; i++) {
+        const dx = all[i].x - all[i - 1].x;
+        const dy = all[i].y - all[i - 1].y;
+        total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+}
+
+/**
+ * 重繪測距尺 SVG（所有折線段 + 游標段）
+ */
+function renderRuler() {
+    const svg = document.getElementById('ruler-overlay');
+    if (!svg) return;
+
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
+    const all = rulerCurrentPos ? [...rulerPoints, rulerCurrentPos] : [...rulerPoints];
+
+    if (all.length < 2) {
+        svg.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    for (let i = 1; i < all.length; i++) {
+        const x1 = all[i - 1].x * gridSize + gridSize / 2;
+        const y1 = all[i - 1].y * gridSize + gridSize / 2;
+        const x2 = all[i].x * gridSize + gridSize / 2;
+        const y2 = all[i].y * gridSize + gridSize / 2;
+        html += `<line class="ruler-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    }
+
+    // 在每個折點畫一個小圓點
+    for (let i = 0; i < rulerPoints.length; i++) {
+        const cx = rulerPoints[i].x * gridSize + gridSize / 2;
+        const cy = rulerPoints[i].y * gridSize + gridSize / 2;
+        html += `<circle cx="${cx}" cy="${cy}" r="4" fill="var(--accent-yellow)" stroke="rgba(0,0,0,0.8)" stroke-width="1.5"/>`;
+    }
+
+    svg.innerHTML = html;
+}
+
+/**
+ * 清除測距尺狀態
+ */
+function clearRuler() {
+    isMeasuring = false;
+    rulerPoints = [];
+    rulerCurrentPos = null;
+
+    const svg = document.getElementById('ruler-overlay');
+    if (svg) svg.innerHTML = '';
+
+    const label = document.getElementById('ruler-label');
+    if (label) label.style.display = 'none';
+}
+
+/**
+ * 初始化測距尺事件
+ * 操作方式：
+ *   - 按住 Alt 鍵：開始測量，線條從游標所在格拉出
+ *   - 移動滑鼠：線段跟隨游標
+ *   - 右鍵點擊：新增折點（轉折）
+ *   - 放開 Alt 鍵：結束測量，線條消失
+ */
+function initRulerEvents() {
+    const vp = document.getElementById('map-viewport');
+    if (!vp) return;
+
+    // Alt 按下 → 開始測量
+    window.addEventListener('keydown', e => {
+        if (e.key !== 'Alt') return;
+        if (isMeasuring) return; // 避免重複觸發
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+
+        e.preventDefault();
+        isMeasuring = true;
+        rulerPoints = [];
+        rulerCurrentPos = null;
+
+        // 如果有上一次 pointermove 記錄的游標位置，以此作為起點
+        if (lastRulerScreenPos) {
+            const start = screenToGrid(lastRulerScreenPos.x, lastRulerScreenPos.y);
+            rulerPoints.push(start);
+        }
+    });
+
+    // Alt 放開 → 結束測量
+    window.addEventListener('keyup', e => {
+        if (e.key !== 'Alt') return;
+        if (!isMeasuring) return;
+        clearRuler();
+    });
+
+    // 追蹤滑鼠位置（即使尚未測量也記錄，這樣按下 Alt 時能取得起點）
+    window.addEventListener('pointermove', e => {
+        lastRulerScreenPos = { x: e.clientX, y: e.clientY };
+
+        if (!isMeasuring) return;
+
+        const current = screenToGrid(e.clientX, e.clientY);
+
+        // 若尚無折點，以當前位置作為起點
+        if (rulerPoints.length === 0) {
+            rulerPoints.push(current);
+            return;
+        }
+
+        rulerCurrentPos = current;
+        renderRuler();
+
+        // 計算總距離
+        const dist = calcRulerDistance(rulerPoints, rulerCurrentPos).toFixed(1);
+
+        // 更新標籤
+        const label = document.getElementById('ruler-label');
+        if (label) {
+            label.style.display = 'block';
+            label.textContent = `${dist} 格`;
+
+            const vpRect = vp.getBoundingClientRect();
+            label.style.left = (e.clientX - vpRect.left) + 'px';
+            label.style.top = (e.clientY - vpRect.top) + 'px';
+        }
+    });
+
+    // 右鍵 → 新增折點
+    vp.addEventListener('contextmenu', e => {
+        if (!isMeasuring) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (rulerCurrentPos) {
+            rulerPoints.push({ ...rulerCurrentPos });
+            renderRuler();
+        }
+    });
+
+    // 視窗失焦時清除
+    window.addEventListener('blur', () => {
+        if (isMeasuring) clearRuler();
+    });
+}
+
+// 追蹤游標螢幕位置（用於 Alt 按下瞬間取得起點）
+let lastRulerScreenPos = null;
+
+// ===== 地圖大小監聯器 =====
 /**
  * 初始化地圖大小輸入框的監聯器
  * 當輸入框變更時，標記「套用」按鈕為待儲存狀態
@@ -659,13 +1003,44 @@ function initMapSizeListeners() {
     };
 }
 
+// ===== 戰鬥模式 Navbar Peek 按鈕 =====
+/**
+ * 初始化戰鬥模式下的 Navbar 暫開按鈕
+ * 點擊切換 peek 狀態，滑鼠移出 navbar 區域時自動收回
+ */
+function initCombatNavbarPeek() {
+    const peekBtn = document.getElementById('combat-navbar-peek');
+    const navbar = document.querySelector('.navbar');
+    if (!peekBtn || !navbar) return;
+
+    // 點擊切換 peek
+    peekBtn.addEventListener('click', () => {
+        const isPeeking = document.body.classList.toggle('navbar-peek');
+        peekBtn.classList.toggle('active', isPeeking);
+    });
+
+    // 滑鼠離開 navbar 區域時自動收回
+    navbar.addEventListener('mouseleave', () => {
+        if (document.body.classList.contains('navbar-peek')) {
+            document.body.classList.remove('navbar-peek');
+            peekBtn.classList.remove('active');
+        }
+    });
+}
+
 // 當頁面載入時自動初始化
 if (typeof window !== 'undefined') {
     // 延遲執行，確保 DOM 已載入
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initMapSizeListeners);
+        document.addEventListener('DOMContentLoaded', () => {
+            initMapSizeListeners();
+            initCombatNavbarPeek();
+        });
     } else {
         // 如果已經載入完成，直接執行
-        setTimeout(initMapSizeListeners, 100);
+        setTimeout(() => {
+            initMapSizeListeners();
+            initCombatNavbarPeek();
+        }, 100);
     }
 }

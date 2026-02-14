@@ -7,7 +7,8 @@
 const STORAGE_KEYS = {
     ROOMS: 'limbus_rooms',           // 所有房間數據
     CURRENT_USER: 'limbus_current_user',  // 當前用戶資訊
-    USER_PROFILE: 'limbus_user_'     // 用戶資料前綴 (limbus_user_CODE)
+    USER_PROFILE: 'limbus_user_',    // 用戶資料前綴 (limbus_user_CODE)
+    UNIT_TEMPLATES: 'limbus_unit_templates'  // 單位模板
 };
 
 // ===== 房間管理 =====
@@ -243,4 +244,71 @@ function cleanupOldRooms() {
 // 頁面載入時執行清理
 if (typeof document !== 'undefined') {
     cleanupOldRooms();
+}
+
+// ===== 單位模板管理 =====
+
+/**
+ * 獲取所有單位模板
+ * @returns {Array} 模板列表
+ */
+function getUnitTemplates() {
+    try {
+        const data = localStorage.getItem(STORAGE_KEYS.UNIT_TEMPLATES);
+        return data ? JSON.parse(data) : [];
+    } catch (e) {
+        console.error('Failed to load unit templates:', e);
+        return [];
+    }
+}
+
+/**
+ * 保存單位模板
+ * @param {Object} template - 模板數據 {name, hp, type, size, avatar}
+ * @returns {Object} 保存的模板（含 ID）
+ */
+function saveUnitTemplate(template) {
+    try {
+        const templates = getUnitTemplates();
+
+        const newTemplate = {
+            id: Date.now().toString() + '_' + Math.floor(Math.random() * 10000).toString(),
+            name: template.name || 'Template',
+            hp: template.hp || 10,
+            type: template.type || 'enemy',
+            size: template.size || 1,
+            avatar: template.avatar || null,
+            createdAt: Date.now()
+        };
+
+        templates.push(newTemplate);
+        localStorage.setItem(STORAGE_KEYS.UNIT_TEMPLATES, JSON.stringify(templates));
+
+        return newTemplate;
+    } catch (e) {
+        console.error('Failed to save unit template:', e);
+        return null;
+    }
+}
+
+/**
+ * 刪除單位模板
+ * @param {string} id - 模板 ID
+ * @returns {boolean} 是否成功刪除
+ */
+function deleteUnitTemplate(id) {
+    try {
+        const templates = getUnitTemplates();
+        const idx = templates.findIndex(t => t.id === id);
+
+        if (idx !== -1) {
+            templates.splice(idx, 1);
+            localStorage.setItem(STORAGE_KEYS.UNIT_TEMPLATES, JSON.stringify(templates));
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error('Failed to delete unit template:', e);
+        return false;
+    }
 }

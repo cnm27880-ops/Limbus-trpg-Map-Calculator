@@ -278,14 +278,49 @@ function createHUDElement() {
     // Apply collapsed state
     if (hudState.isCollapsed) {
         hud.classList.add('collapsed');
+        renderMinimizedBar();
     }
 
     // Setup drag functionality
     setupHUDDrag();
 
-    // Setup double-click to collapse
+    // Setup collapse/expand interactions
     const header = document.getElementById('hud-header');
-    header.addEventListener('dblclick', toggleHUDCollapse);
+    let collapseClickTimer = null;
+    let justExpanded = false;
+
+    // Double-click to collapse (only when expanded)
+    header.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.hud-btn') || e.target.closest('button')) return;
+        // Clear any pending single-click expand
+        if (collapseClickTimer) {
+            clearTimeout(collapseClickTimer);
+            collapseClickTimer = null;
+        }
+        // Only collapse if currently expanded (not just expanded by click)
+        if (!hudState.isCollapsed && !justExpanded) {
+            toggleHUDCollapse();
+        }
+        justExpanded = false;
+    });
+
+    // Single click on collapsed header to expand (with delay to distinguish from dblclick)
+    header.addEventListener('click', (e) => {
+        if (!hudState.isCollapsed) return;
+        if (e.target.closest('.hud-btn') || e.target.closest('button')) return;
+
+        // Use a short delay to distinguish from double-click
+        if (collapseClickTimer) clearTimeout(collapseClickTimer);
+        collapseClickTimer = setTimeout(() => {
+            collapseClickTimer = null;
+            if (hudState.isCollapsed) {
+                justExpanded = true;
+                toggleHUDCollapse();
+                // Reset justExpanded after dblclick window passes
+                setTimeout(() => { justExpanded = false; }, 400);
+            }
+        }, 250);
+    });
 }
 
 // ===== Create Import Modal =====
@@ -964,24 +999,36 @@ function toggleHUDCollapse() {
     saveHUDSettings();
 
     // Update content based on collapsed state
-    if (hudState.data) {
-        if (hudState.isCollapsed) {
-            renderMinimizedBar();
-        } else {
+    if (hudState.isCollapsed) {
+        renderMinimizedBar();
+    } else {
+        removeMinimizedBar();
+        if (hudState.data) {
             renderHUDContent();
         }
     }
 }
 
 function renderMinimizedBar() {
-    const body = document.getElementById('hud-body');
-    if (!body || !hudState.isCollapsed) return;
+    // Remove existing minimized bar if any
+    removeMinimizedBar();
+
+    const header = document.getElementById('hud-header');
+    if (!header) return;
+
+    // Hide the full title elements
+    const title = header.querySelector('.hud-title');
+    if (title) title.style.display = 'none';
+
+    // Create minimized indicator inside the header (visible even when collapsed)
+    const miniBar = document.createElement('div');
+    miniBar.className = 'hud-minimized-bar';
+    miniBar.id = 'hud-mini-bar';
 
     const data = hudState.data;
-    if (!data) return;
-
-    body.innerHTML = `
-        <div class="hud-minimized-bar">
+    if (data) {
+        miniBar.innerHTML = `
+            <span class="hud-mini-icon">⚔️</span>
             <div class="hud-mini-resources">
                 <div class="hud-mini-resource">
                     <span class="label">意志</span>
@@ -994,8 +1041,26 @@ function renderMinimizedBar() {
                     </div>
                 `).join('')}
             </div>
-        </div>
-    `;
+        `;
+    } else {
+        miniBar.innerHTML = `<span class="hud-mini-icon">⚔️</span><span style="color:var(--hud-text-dim);font-size:0.8rem;">戰鬥儀表板</span>`;
+    }
+
+    // Insert before controls
+    const controls = header.querySelector('.hud-controls');
+    header.insertBefore(miniBar, controls);
+}
+
+function removeMinimizedBar() {
+    const miniBar = document.getElementById('hud-mini-bar');
+    if (miniBar) miniBar.remove();
+
+    // Restore title visibility
+    const header = document.getElementById('hud-header');
+    if (header) {
+        const title = header.querySelector('.hud-title');
+        if (title) title.style.display = '';
+    }
 }
 
 // ===== Drag Functionality =====
@@ -1006,6 +1071,8 @@ function setupHUDDrag() {
     if (!hud || !header) return;
 
     let isDragging = false;
+    let hasMoved = false; // Track if actual drag movement occurred
+    const DRAG_THRESHOLD = 5; // Minimum px movement to start drag
     let startX, startY;
     let startPosX, startPosY;
 
@@ -1017,9 +1084,7 @@ function setupHUDDrag() {
         if (e.target.closest('.hud-btn') || e.target.closest('button')) return;
 
         isDragging = true;
-
-        // Add dragging class to prevent transitions during drag
-        hud.classList.add('dragging');
+        hasMoved = false;
 
         if (e.type === 'touchstart') {
             startX = e.touches[0].clientX;
@@ -1040,7 +1105,11 @@ function setupHUDDrag() {
         document.addEventListener('touchmove', onDrag, { passive: false });
         document.addEventListener('touchend', stopDrag);
 
-        e.preventDefault();
+        // Don't preventDefault here - it blocks dblclick/click detection
+        // Only prevent on touch to avoid scroll
+        if (e.type === 'touchstart') {
+            e.preventDefault();
+        }
     }
 
     function onDrag(e) {
@@ -1057,6 +1126,16 @@ function setupHUDDrag() {
 
         const deltaX = clientX - startX;
         const deltaY = clientY - startY;
+
+        // Only start actual dragging after threshold is exceeded
+        if (!hasMoved && Math.abs(deltaX) < DRAG_THRESHOLD && Math.abs(deltaY) < DRAG_THRESHOLD) {
+            return;
+        }
+
+        if (!hasMoved) {
+            hasMoved = true;
+            hud.classList.add('dragging');
+        }
 
         // Calculate new position with bounds checking
         const newX = startPosX + deltaX;
@@ -1077,8 +1156,11 @@ function setupHUDDrag() {
     function stopDrag() {
         if (isDragging) {
             isDragging = false;
-            hud.classList.remove('dragging');
-            saveHUDSettings();
+            if (hasMoved) {
+                hud.classList.remove('dragging');
+                saveHUDSettings();
+            }
+            hasMoved = false;
         }
 
         document.removeEventListener('mousemove', onDrag);

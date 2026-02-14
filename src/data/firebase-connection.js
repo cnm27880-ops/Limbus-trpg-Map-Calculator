@@ -393,7 +393,9 @@ function initializeNewRoom() {
             mapW: state.mapW,
             mapH: state.mapH,
             themeId: state.themeId,
-            turnIdx: state.turnIdx
+            turnIdx: state.turnIdx,
+            isCombatActive: false,
+            activeBossId: null
         },
         mapData: state.mapData,
         units: {},
@@ -1069,6 +1071,14 @@ function sendToHost(message) {
                     // 同步到 Firebase
                     roomRef.child(`units/${message.unitId}/status`).set(statusUnit.status);
                 }
+            }
+            break;
+
+        case 'resetUnitHp':
+            const resetUnit = state.units.find(u => u.id === message.unitId);
+            if (resetUnit && resetUnit.hpArr) {
+                resetUnit.hpArr = resetUnit.hpArr.map(() => 0);
+                roomRef.child(`units/${message.unitId}/hpArr`).set(resetUnit.hpArr);
             }
             break;
 

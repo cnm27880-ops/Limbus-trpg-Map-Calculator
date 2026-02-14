@@ -30,7 +30,8 @@ function toggleCombat() {
     } else {
         // 開始戰鬥：排序並設定第一回合
         state.isCombatActive = true;
-        sortByInit();
+        // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
+        state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
         sendState();
         renderAll();

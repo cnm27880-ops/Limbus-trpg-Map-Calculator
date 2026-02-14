@@ -2040,6 +2040,65 @@ body.combat-mode .boss-hud-container {
     color: #fff;
 }
 
+/* ===== 歌詞系統 (Resonance Lyrics) ===== */
+
+/* 顫抖動畫 - 微幅飄動效果 */
+@keyframes resonance-tremble {
+    0%   { transform: translate(-50%, -50%) translate(0, 0); }
+    20%  { transform: translate(-50%, -50%) translate(0.5px, -0.8px); }
+    40%  { transform: translate(-50%, -50%) translate(-0.7px, 0.3px); }
+    60%  { transform: translate(-50%, -50%) translate(0.3px, 0.6px); }
+    80%  { transform: translate(-50%, -50%) translate(-0.4px, -0.5px); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
+}
+
+/* 單字淡入動畫 */
+@keyframes resonance-char-in {
+    from {
+        opacity: 0;
+        filter: blur(4px);
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0);
+    }
+}
+
+/* 歌詞行容器 */
+.resonance-line {
+    position: fixed;
+    opacity: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 500;
+    font-family: 'Noto Serif TC', 'Georgia', 'Times New Roman', serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 2px;
+    text-shadow:
+        0 0 8px rgba(255, 255, 255, 0.9),
+        0 0 20px rgba(255, 255, 255, 0.5),
+        0 0 40px rgba(200, 200, 255, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.8);
+    transition: opacity 2s ease-out, filter 2s ease-out;
+    animation: resonance-tremble 3s ease-in-out infinite;
+}
+
+/* 淡出效果 */
+.resonance-line.fading-out {
+    opacity: 0;
+    filter: blur(10px);
+}
+
+/* 單字元素 */
+.resonance-char {
+    display: inline-block;
+    animation: resonance-char-in 0.3s ease-out forwards;
+}
+
 /* Mobile adjustments for quick action ball & music player */
 @media (max-width: 768px) {
     .qab-container {

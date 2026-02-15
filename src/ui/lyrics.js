@@ -28,6 +28,16 @@ let speedPresets = { 1: 80, 2: 80 };   // 預設速度 (ms)
 let activePreset = 1;                   // 目前啟用的預設組
 let lyricsLiveSpeed = null;             // 播放中即時生效的速度 (ms/字)
 
+// ===== 逐行速度 / 時間軸 =====
+let lyricsTimeline = null;              // AI 匯入的時間軸數據 [{time, text, speed}]
+let lyricsPerLineSpeeds = {};           // 逐行自訂速度 { lineIndex: speed(ms) }
+
+// ===== localStorage 鍵名 =====
+const LYRICS_STORAGE_KEY = 'limbus_lyrics_text';
+const LYRICS_SPEEDS_KEY = 'limbus_lyrics_perline';
+const LYRICS_TIMELINE_KEY = 'limbus_lyrics_timeline';
+const LYRICS_PRESETS_KEY = 'limbus_lyrics_presets';
+
 // ===== 空間偵測 =====
 
 /**
@@ -261,8 +271,11 @@ async function playLyrics(lines, options = {}) {
                 // 加入佇列 (自動淡出超量行)
                 enqueueLyricsLine(lineEl);
 
+                // 取得此行的速度（逐行自訂 > 全域速度）
+                const lineSpeed = lyricsPerLineSpeeds[i] || speed;
+
                 // 打字機逐字顯示
-                await typewriterLine(lineEl, text, speed, signal);
+                await typewriterLine(lineEl, text, lineSpeed, signal);
 
                 // 行間停頓
                 await delay(linePause, signal);
@@ -510,8 +523,9 @@ function saveCurrentSpeedToPreset() {
     // 同步即時速度
     lyricsLiveSpeed = speed;
 
-    // 更新按鈕顯示
+    // 更新按鈕顯示 + 持久化
     updatePresetBtnsUI();
+    saveLyricsPresets();
 
     // 儲存按鈕閃爍回饋
     const saveBtn = document.getElementById('speed-preset-save');
@@ -539,10 +553,203 @@ function updatePresetBtnsUI() {
     });
 }
 
+// ===== AI JSON 匯入 =====
+
+/**
+ * 匯入 AI 分析數據 (JSON 時間軸)
+ * 彈出 prompt 讓使用者貼上 JSON 字串
+ */
+function importJsonTimeline() {
+    const jsonStr = prompt(
+        '請貼上 auto_sync.py 產生的 JSON 數據：\n' +
+        '格式：[{"time": 12.5, "text": "台詞", "speed": 80}, ...]'
+    );
+
+    if (!jsonStr || !jsonStr.trim()) return;
+
+    let data;
+    try {
+        data = JSON.parse(jsonStr.trim());
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('JSON 格式錯誤，請檢查');
+        return;
+    }
+
+    // 驗證格式
+    if (!Array.isArray(data) || data.length === 0) {
+        if (typeof showToast === 'function') showToast('數據必須是非空陣列');
+        return;
+    }
+
+    for (let i = 0; i < data.length; i++) {
+        if (!data[i].text) {
+            if (typeof showToast === 'function') showToast(`第 ${i + 1} 筆缺少 text 欄位`);
+            return;
+        }
+    }
+
+    // 儲存時間軸
+    lyricsTimeline = data;
+    saveLyricsTimeline();
+
+    // 將歌詞文字填入 textarea
+    const textarea = document.getElementById('lyrics-input');
+    if (textarea) {
+        const lyricsText = data.map(d => d.text).join('\n');
+        textarea.value = lyricsText;
+        saveLyricsText();
+    }
+
+    // 將每行速度寫入 perLineSpeeds
+    lyricsPerLineSpeeds = {};
+    data.forEach((d, i) => {
+        if (d.speed) lyricsPerLineSpeeds[i] = d.speed;
+    });
+    saveLyricsPerLineSpeeds();
+
+    // 更新逐行編輯器
+    renderLineEditor();
+
+    if (typeof showToast === 'function') showToast('AI 數據匯入成功！請檢查微調。');
+}
+
+// ===== 逐行速度編輯器 =====
+
+/**
+ * 根據 textarea 的內容渲染逐行速度編輯器
+ */
+function renderLineEditor() {
+    const editor = document.getElementById('lyrics-line-editor');
+    const list = document.getElementById('lyrics-line-list');
+    const textarea = document.getElementById('lyrics-input');
+    if (!editor || !list || !textarea) return;
+
+    const text = textarea.value.trim();
+    if (!text) {
+        editor.style.display = 'none';
+        return;
+    }
+
+    const lines = text.split('\n');
+    editor.style.display = '';
+
+    list.innerHTML = '';
+    lines.forEach((lineText, i) => {
+        if (!lineText.trim()) return; // 跳過空行
+
+        const item = document.createElement('div');
+        item.className = 'lyrics-line-item';
+
+        const num = document.createElement('span');
+        num.className = 'lyrics-line-num';
+        num.textContent = (i + 1) + '.';
+
+        const textEl = document.createElement('span');
+        textEl.className = 'lyrics-line-text';
+        textEl.textContent = lineText;
+        textEl.title = lineText;
+
+        const speedInput = document.createElement('input');
+        speedInput.type = 'number';
+        speedInput.className = 'lyrics-line-speed-input';
+        speedInput.min = '0';
+        speedInput.max = '1000';
+        speedInput.step = '5';
+        speedInput.value = lyricsPerLineSpeeds[i] || '';
+        speedInput.placeholder = '--';
+        speedInput.addEventListener('change', () => {
+            const val = parseInt(speedInput.value);
+            if (!isNaN(val) && val >= 0) {
+                lyricsPerLineSpeeds[i] = val;
+            } else {
+                delete lyricsPerLineSpeeds[i];
+                speedInput.value = '';
+            }
+            saveLyricsPerLineSpeeds();
+        });
+
+        const unit = document.createElement('span');
+        unit.className = 'lyrics-line-unit';
+        unit.textContent = 'ms';
+
+        item.appendChild(num);
+        item.appendChild(textEl);
+        item.appendChild(speedInput);
+        item.appendChild(unit);
+        list.appendChild(item);
+    });
+}
+
+// ===== localStorage 持久化 =====
+
+function saveLyricsText() {
+    const textarea = document.getElementById('lyrics-input');
+    if (textarea) {
+        try { localStorage.setItem(LYRICS_STORAGE_KEY, textarea.value); } catch (e) {}
+    }
+}
+
+function loadLyricsText() {
+    const textarea = document.getElementById('lyrics-input');
+    if (!textarea) return;
+    try {
+        const saved = localStorage.getItem(LYRICS_STORAGE_KEY);
+        if (saved !== null) textarea.value = saved;
+    } catch (e) {}
+}
+
+function saveLyricsPerLineSpeeds() {
+    try { localStorage.setItem(LYRICS_SPEEDS_KEY, JSON.stringify(lyricsPerLineSpeeds)); } catch (e) {}
+}
+
+function loadLyricsPerLineSpeeds() {
+    try {
+        const saved = localStorage.getItem(LYRICS_SPEEDS_KEY);
+        if (saved) lyricsPerLineSpeeds = JSON.parse(saved);
+    } catch (e) {}
+}
+
+function saveLyricsTimeline() {
+    try { localStorage.setItem(LYRICS_TIMELINE_KEY, JSON.stringify(lyricsTimeline)); } catch (e) {}
+}
+
+function loadLyricsTimeline() {
+    try {
+        const saved = localStorage.getItem(LYRICS_TIMELINE_KEY);
+        if (saved) lyricsTimeline = JSON.parse(saved);
+    } catch (e) {}
+}
+
+function saveLyricsPresets() {
+    try {
+        localStorage.setItem(LYRICS_PRESETS_KEY, JSON.stringify({
+            presets: speedPresets,
+            active: activePreset
+        }));
+    } catch (e) {}
+}
+
+function loadLyricsPresets() {
+    try {
+        const saved = localStorage.getItem(LYRICS_PRESETS_KEY);
+        if (saved) {
+            const data = JSON.parse(saved);
+            if (data.presets) speedPresets = data.presets;
+            if (data.active) activePreset = data.active;
+        }
+    } catch (e) {}
+}
+
 /**
  * 初始化歌詞面板的滑桿即時數值顯示
  */
 function initLyricsUI() {
+    // 從 localStorage 恢復資料
+    loadLyricsPresets();
+    loadLyricsText();
+    loadLyricsPerLineSpeeds();
+    loadLyricsTimeline();
+
     const speedSlider = document.getElementById('lyrics-speed');
     const speedVal = document.getElementById('lyrics-speed-val');
     if (speedSlider && speedVal) {
@@ -575,7 +782,19 @@ function initLyricsUI() {
         saveBtn.addEventListener('click', () => saveCurrentSpeedToPreset());
     }
 
+    // 歌詞 textarea 變更時自動儲存並更新編輯器
+    const textarea = document.getElementById('lyrics-input');
+    if (textarea) {
+        textarea.addEventListener('input', () => {
+            saveLyricsText();
+            // 延遲更新編輯器避免打字時卡頓
+            clearTimeout(textarea._editorTimer);
+            textarea._editorTimer = setTimeout(() => renderLineEditor(), 500);
+        });
+    }
+
     updatePresetBtnsUI();
+    renderLineEditor();
 }
 
 // 頁面載入後初始化歌詞 UI

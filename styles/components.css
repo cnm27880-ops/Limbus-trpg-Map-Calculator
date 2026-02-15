@@ -1978,6 +1978,101 @@
     font-weight: 600;
 }
 
+/* ===== AI Import Button ===== */
+.lyrics-import-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(156, 39, 176, 0.2);
+    border: 1px solid rgba(156, 39, 176, 0.4);
+    border-radius: 6px;
+    color: #ce93d8;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.lyrics-import-btn:hover {
+    background: rgba(156, 39, 176, 0.35);
+    border-color: rgba(156, 39, 176, 0.6);
+}
+
+/* ===== Per-Line Speed Editor ===== */
+.lyrics-line-editor {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+}
+
+.lyrics-line-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.lyrics-line-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.lyrics-line-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.lyrics-line-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 5px;
+    font-size: 0.73rem;
+}
+
+.lyrics-line-num {
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    min-width: 18px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.lyrics-line-text {
+    flex: 1;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.lyrics-line-speed-input {
+    width: 52px;
+    padding: 2px 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.lyrics-line-speed-input:focus {
+    outline: none;
+    border-color: var(--accent-yellow);
+}
+
+.lyrics-line-unit {
+    color: var(--text-dim);
+    font-size: 0.65rem;
+    flex-shrink: 0;
+}
+
 /* ===== Logout Button ===== */
 .logout-btn {
     width: 32px;

@@ -301,7 +301,7 @@
             </div>
             <div class="music-controls">
                 <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
-                <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="stStopMusic()" title="停止">⏹</button>
+                <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="handleStopMusic()" title="停止">⏹</button>
                 <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
                 <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
             </div>
@@ -347,6 +347,13 @@
                         <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
                         <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
                     </div>
+                    <!-- AI 數據匯入 -->
+                    <button class="lyrics-import-btn" onclick="importJsonTimeline()">匯入 AI 分析數據 (JSON)</button>
+                </div>
+                <!-- 逐行速度微調編輯器 -->
+                <div id="lyrics-line-editor" class="lyrics-line-editor" style="display:none;">
+                    <div class="music-section-title">逐行速度微調</div>
+                    <div id="lyrics-line-list" class="lyrics-line-list"></div>
                 </div>
             </div>
         </div>

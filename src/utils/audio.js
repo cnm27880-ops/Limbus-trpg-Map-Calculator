@@ -738,6 +738,17 @@ function stStopMusic() {
 }
 
 /**
+ * 停止音樂：ST 模式走同步，非 ST 模式本地停止
+ */
+function handleStopMusic() {
+    if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
+        stStopMusic();
+    } else {
+        musicManager.stopMusic();
+    }
+}
+
+/**
  * 切換音樂播放器面板
  */
 function toggleMusicPlayer() {

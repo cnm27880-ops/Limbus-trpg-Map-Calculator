@@ -261,6 +261,10 @@
             <span class="qab-menu-icon">🎵</span>
             <span class="qab-menu-text">音樂播放器</span>
         </div>
+        <div class="qab-menu-item" onclick="toggleLyricsPanel(); closeQABMenu();">
+            <span class="qab-menu-icon">🎤</span>
+            <span class="qab-menu-text">動態歌詞</span>
+        </div>
         <div class="qab-menu-item" onclick="toggleHotkeyHelp(); closeQABMenu();">
             <span class="qab-menu-icon">⌨</span>
             <span class="qab-menu-text">快捷鍵說明</span>
@@ -318,6 +322,38 @@
     <div class="qab-panel hotkey-help-panel hidden" id="hotkey-help">
         <!-- 內容由 JS 動態生成 -->
     </div>
+
+    <!-- 動態歌詞控制面板 -->
+    <div id="lyrics-control-panel" class="qab-panel lyrics-panel">
+        <div class="lyrics-panel-header">
+            <span class="lyrics-panel-title">動態歌詞</span>
+            <button class="lyrics-close-btn" onclick="toggleLyricsPanel()">×</button>
+        </div>
+        <div class="lyrics-panel-body">
+            <!-- 歌詞輸入 -->
+            <div class="lyrics-input-section">
+                <textarea id="lyrics-text" class="lyrics-textarea" placeholder="在此輸入歌詞..."></textarea>
+            </div>
+            <!-- 速度控制 -->
+            <div class="lyrics-speed-section">
+                <label class="lyrics-label">打字速度</label>
+                <input type="range" id="lyrics-speed-range" min="20" max="300" value="80" class="lyrics-speed-slider">
+                <span id="lyrics-speed-value" class="lyrics-speed-val">80ms</span>
+            </div>
+            <!-- Tap Tempo 測速區塊 -->
+            <div class="tap-tempo-section">
+                <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
+                <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
+            </div>
+            <!-- 播放控制 -->
+            <div class="lyrics-play-section">
+                <button class="lyrics-btn lyrics-btn-play" onclick="playLyrics()">▶ 播放</button>
+                <button class="lyrics-btn lyrics-btn-stop" onclick="stopLyrics()">⏹ 停止</button>
+            </div>
+            <!-- 歌詞顯示區 -->
+            <div id="lyrics-display" class="lyrics-display"></div>
+        </div>
+    </div>
 </div>
 
 <!-- JS 檔案 - 分層載入，順序很重要！ -->
@@ -346,6 +382,7 @@
 <script src="src/ui/hotkeys.js"></script>
 <script src="src/ui/modals.js"></script>
 <script src="src/utils/audio.js"></script>
+<script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-hud.js"></script>
 <script src="src/ui/main.js"></script>
 </body>

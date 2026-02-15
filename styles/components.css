@@ -1500,6 +1500,7 @@
 /* ===== Music Player ===== */
 .music-panel {
     width: 300px;
+    max-height: calc(100vh - 80px);
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -1511,6 +1512,29 @@
 
 .music-panel.expanded {
     display: flex;
+}
+
+.music-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.music-panel-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.music-panel-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.music-panel-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.music-panel-body::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-yellow);
 }
 
 .music-header {
@@ -1844,6 +1868,62 @@
 .lyrics-play-btn.playing {
     background: var(--accent-red);
     color: #fff;
+}
+
+/* ===== Speed Presets ===== */
+.lyrics-speed-presets {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.speed-preset-btn {
+    padding: 4px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.speed-preset-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--text-main);
+}
+
+.speed-preset-btn.active {
+    background: rgba(253, 216, 53, 0.15);
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+    font-weight: 600;
+}
+
+.speed-preset-save-btn {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: auto;
+}
+
+.speed-preset-save-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+.speed-preset-save-btn.saved {
+    border-style: solid;
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
 }
 
 /* ===== Tap Tempo Section ===== */

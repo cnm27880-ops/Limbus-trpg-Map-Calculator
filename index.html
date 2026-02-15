@@ -294,50 +294,59 @@
             <span class="music-title">背景音樂</span>
             <button class="music-close-btn" onclick="toggleMusicPanel()">×</button>
         </div>
-        <div class="music-now-playing">
-            <span class="music-label">正在播放</span>
-            <span id="bgm-now-playing" class="music-track-name">無音樂</span>
-        </div>
-        <div class="music-controls">
-            <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
-            <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="stStopMusic()" title="停止">⏹</button>
-            <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
-            <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
-        </div>
-        <div id="bgm-st-controls" class="music-st-section" style="display:none;">
-            <div class="music-section-title">播放清單 (ST)</div>
-            <div class="music-add-form">
-                <input type="text" id="bgm-input-name" placeholder="音樂名稱" class="music-input">
-                <input type="text" id="bgm-input-url" placeholder="音樂 URL" class="music-input">
-                <button class="music-add-btn" onclick="addToPlaylist(document.getElementById('bgm-input-name').value, document.getElementById('bgm-input-url').value)">+ 新增</button>
+        <div class="music-panel-body">
+            <div class="music-now-playing">
+                <span class="music-label">正在播放</span>
+                <span id="bgm-now-playing" class="music-track-name">無音樂</span>
             </div>
-            <div id="bgm-playlist" class="music-playlist">
-                <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
+            <div class="music-controls">
+                <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
+                <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="stStopMusic()" title="停止">⏹</button>
+                <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
+                <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
             </div>
-        </div>
-        <!-- 歌詞字幕系統 -->
-        <div class="lyrics-section">
-            <div class="music-section-title">歌詞字幕</div>
-            <textarea id="lyrics-input" class="lyrics-textarea" placeholder="在此輸入歌詞，每行一句&#10;例如：&#10;在黑暗中前行&#10;尋找那道光芒&#10;即使世界崩塌"></textarea>
-            <div class="lyrics-controls">
-                <div class="lyrics-speed-control">
-                    <label class="lyrics-label" for="lyrics-speed">速度</label>
-                    <input type="range" id="lyrics-speed" class="lyrics-slider" min="30" max="200" value="80">
-                    <span id="lyrics-speed-val" class="lyrics-speed-val">80ms</span>
+            <div id="bgm-st-controls" class="music-st-section" style="display:none;">
+                <div class="music-section-title">播放清單 (ST)</div>
+                <div class="music-add-form">
+                    <input type="text" id="bgm-input-name" placeholder="音樂名稱" class="music-input">
+                    <input type="text" id="bgm-input-url" placeholder="音樂 URL" class="music-input">
+                    <button class="music-add-btn" onclick="addToPlaylist(document.getElementById('bgm-input-name').value, document.getElementById('bgm-input-url').value)">+ 新增</button>
                 </div>
-                <div class="lyrics-speed-control">
-                    <label class="lyrics-label" for="lyrics-pause">行距</label>
-                    <input type="range" id="lyrics-pause" class="lyrics-slider" min="200" max="2000" value="600" step="100">
-                    <span id="lyrics-pause-val" class="lyrics-speed-val">0.6s</span>
+                <div id="bgm-playlist" class="music-playlist">
+                    <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
                 </div>
-                <div class="lyrics-actions">
-                    <label class="lyrics-checkbox-label"><input type="checkbox" id="lyrics-loop"> 循環</label>
-                    <button class="lyrics-play-btn" id="lyrics-play-btn" onclick="toggleLyricsPlayback()">▶ 播放</button>
-                </div>
-                <!-- Tap Tempo 測速區塊 -->
-                <div class="tap-tempo-section">
-                    <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
-                    <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
+            </div>
+            <!-- 歌詞字幕系統 -->
+            <div class="lyrics-section">
+                <div class="music-section-title">歌詞字幕</div>
+                <textarea id="lyrics-input" class="lyrics-textarea" placeholder="在此輸入歌詞，每行一句&#10;例如：&#10;在黑暗中前行&#10;尋找那道光芒&#10;即使世界崩塌"></textarea>
+                <div class="lyrics-controls">
+                    <div class="lyrics-speed-control">
+                        <label class="lyrics-label" for="lyrics-speed">速度</label>
+                        <input type="range" id="lyrics-speed" class="lyrics-slider" min="0" max="1000" value="80" step="5">
+                        <span id="lyrics-speed-val" class="lyrics-speed-val">80ms</span>
+                    </div>
+                    <div class="lyrics-speed-control">
+                        <label class="lyrics-label" for="lyrics-pause">行距</label>
+                        <input type="range" id="lyrics-pause" class="lyrics-slider" min="200" max="2000" value="600" step="100">
+                        <span id="lyrics-pause-val" class="lyrics-speed-val">0.6s</span>
+                    </div>
+                    <div class="lyrics-actions">
+                        <label class="lyrics-checkbox-label"><input type="checkbox" id="lyrics-loop"> 循環</label>
+                        <button class="lyrics-play-btn" id="lyrics-play-btn" onclick="toggleLyricsPlayback()">▶ 播放</button>
+                    </div>
+                    <!-- 速度預設組 -->
+                    <div class="lyrics-speed-presets">
+                        <span class="lyrics-label">預設</span>
+                        <button class="speed-preset-btn active" id="speed-preset-1" data-preset="1">A: 80ms</button>
+                        <button class="speed-preset-btn" id="speed-preset-2" data-preset="2">B: 80ms</button>
+                        <button class="speed-preset-save-btn" id="speed-preset-save" title="儲存目前速度到選中的預設">儲存</button>
+                    </div>
+                    <!-- Tap Tempo 測速區塊 -->
+                    <div class="tap-tempo-section">
+                        <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
+                        <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
+                    </div>
                 </div>
             </div>
         </div>

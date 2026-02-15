@@ -23,6 +23,11 @@ let lyricsCurrentSlot = 0;              // 目前要寫入的 Slot 索引 (0-19 
 let tapTimes = [];                      // 紀錄點擊時間戳記
 let detectedCharDelay = null;           // 計算出來的最佳延遲時間 (ms/字)
 
+// ===== 速度預設組 =====
+let speedPresets = { 1: 80, 2: 80 };   // 預設速度 (ms)
+let activePreset = 1;                   // 目前啟用的預設組
+let lyricsLiveSpeed = null;             // 播放中即時生效的速度 (ms/字)
+
 // ===== 空間偵測 =====
 
 /**
@@ -189,7 +194,9 @@ function typewriterLine(lineEl, text, charIntervalMs, signal) {
             lineEl.appendChild(charSpan);
 
             i++;
-            setTimeout(typeNext, charIntervalMs);
+            // 即時讀取 lyricsLiveSpeed，支援播放中切換速度
+            const currentDelay = (lyricsLiveSpeed !== null) ? lyricsLiveSpeed : charIntervalMs;
+            setTimeout(typeNext, currentDelay);
         }
 
         typeNext();
@@ -286,6 +293,7 @@ function stopLyrics() {
     }
 
     lyricsActive = false;
+    lyricsLiveSpeed = null;
 
     // 淡出所有現存歌詞行
     lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
@@ -375,6 +383,9 @@ function handleTap() {
     // 換算打字速度：一個拍子出現 4 個字
     detectedCharDelay = Math.round(avgInterval / 4);
 
+    // 播放中即時生效
+    lyricsLiveSpeed = detectedCharDelay;
+
     // 更新 UI
     if (bpmDisplay) {
         bpmDisplay.textContent = `BPM: ${bpm} (${detectedCharDelay}ms/字)`;
@@ -414,17 +425,19 @@ function toggleLyricsPlayback() {
     const pauseSlider = document.getElementById('lyrics-pause');
     const loopCheckbox = document.getElementById('lyrics-loop');
 
-    // 優先使用 Tap Tempo 偵測到的速度，否則使用滑桿值
-    const speed = (detectedCharDelay !== null)
-        ? detectedCharDelay
-        : (speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED);
+    // 優先使用 Tap Tempo 偵測到的速度，否則使用預設組或滑桿值
+    const speed = getCurrentSpeed();
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
     const loop = loopCheckbox ? loopCheckbox.checked : false;
+
+    // 設定即時速度（播放中可透過預設組切換改變）
+    lyricsLiveSpeed = speed;
 
     updateLyricsPlayBtn(true);
 
     playLyrics(lines, { speed, linePause, loop }).then(() => {
         updateLyricsPlayBtn(false);
+        lyricsLiveSpeed = null;
     });
 }
 
@@ -444,6 +457,88 @@ function updateLyricsPlayBtn(isPlaying) {
     }
 }
 
+// ===== 速度預設組 =====
+
+/**
+ * 取得目前生效的速度 (ms/字)
+ * 優先順序：Tap Tempo > 目前啟用的預設組 > 滑桿值
+ */
+function getCurrentSpeed() {
+    if (detectedCharDelay !== null) return detectedCharDelay;
+    return speedPresets[activePreset] || LYRICS_DEFAULT_SPEED;
+}
+
+/**
+ * 切換到指定的速度預設組，播放中即時生效
+ * @param {number} presetId - 預設組編號 (1 或 2)
+ */
+function switchSpeedPreset(presetId) {
+    activePreset = presetId;
+    const speed = speedPresets[presetId];
+
+    // 清除 Tap Tempo 偵測值，改用預設組
+    detectedCharDelay = null;
+
+    // 更新即時速度（播放中立刻生效）
+    lyricsLiveSpeed = speed;
+
+    // 同步滑桿
+    const speedSlider = document.getElementById('lyrics-speed');
+    const speedVal = document.getElementById('lyrics-speed-val');
+    if (speedSlider) speedSlider.value = speed;
+    if (speedVal) speedVal.textContent = speed + 'ms';
+
+    // 更新按鈕 UI
+    updatePresetBtnsUI();
+
+    // 重置 BPM 顯示
+    const bpmDisplay = document.getElementById('tap-bpm-display');
+    if (bpmDisplay) {
+        bpmDisplay.textContent = 'BPM: --';
+        bpmDisplay.classList.remove('active');
+    }
+}
+
+/**
+ * 將目前的速度值儲存到目前啟用的預設組
+ */
+function saveCurrentSpeedToPreset() {
+    const speedSlider = document.getElementById('lyrics-speed');
+    const speed = speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED;
+    speedPresets[activePreset] = speed;
+
+    // 同步即時速度
+    lyricsLiveSpeed = speed;
+
+    // 更新按鈕顯示
+    updatePresetBtnsUI();
+
+    // 儲存按鈕閃爍回饋
+    const saveBtn = document.getElementById('speed-preset-save');
+    if (saveBtn) {
+        saveBtn.classList.add('saved');
+        saveBtn.textContent = '已儲存';
+        setTimeout(() => {
+            saveBtn.classList.remove('saved');
+            saveBtn.textContent = '儲存';
+        }, 800);
+    }
+}
+
+/**
+ * 更新預設組按鈕的 UI 狀態
+ */
+function updatePresetBtnsUI() {
+    [1, 2].forEach(id => {
+        const btn = document.getElementById('speed-preset-' + id);
+        if (btn) {
+            btn.classList.toggle('active', id === activePreset);
+            const label = id === 1 ? 'A' : 'B';
+            btn.textContent = `${label}: ${speedPresets[id]}ms`;
+        }
+    });
+}
+
 /**
  * 初始化歌詞面板的滑桿即時數值顯示
  */
@@ -453,6 +548,9 @@ function initLyricsUI() {
     if (speedSlider && speedVal) {
         speedSlider.addEventListener('input', () => {
             speedVal.textContent = speedSlider.value + 'ms';
+            // 手動調整滑桿時清除 Tap Tempo，並即時更新播放速度
+            detectedCharDelay = null;
+            lyricsLiveSpeed = parseInt(speedSlider.value);
         });
     }
 
@@ -463,6 +561,21 @@ function initLyricsUI() {
             pauseVal.textContent = (parseInt(pauseSlider.value) / 1000).toFixed(1) + 's';
         });
     }
+
+    // 速度預設組按鈕
+    [1, 2].forEach(id => {
+        const btn = document.getElementById('speed-preset-' + id);
+        if (btn) {
+            btn.addEventListener('click', () => switchSpeedPreset(id));
+        }
+    });
+
+    const saveBtn = document.getElementById('speed-preset-save');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => saveCurrentSpeedToPreset());
+    }
+
+    updatePresetBtnsUI();
 }
 
 // 頁面載入後初始化歌詞 UI

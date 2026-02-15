@@ -1737,6 +1737,115 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
+/* ===== Lyrics Section ===== */
+.lyrics-section {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+}
+
+.lyrics-textarea {
+    width: 100%;
+    min-height: 80px;
+    max-height: 150px;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 0.82rem;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.lyrics-textarea:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+}
+
+.lyrics-textarea::placeholder {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+
+.lyrics-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.lyrics-speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lyrics-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    min-width: 28px;
+    flex-shrink: 0;
+}
+
+.lyrics-slider {
+    flex: 1;
+    height: 4px;
+    accent-color: var(--accent-yellow);
+    cursor: pointer;
+}
+
+.lyrics-speed-val {
+    font-size: 0.72rem;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 36px;
+    text-align: right;
+}
+
+.lyrics-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.lyrics-checkbox-label {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.lyrics-checkbox-label input[type="checkbox"] {
+    accent-color: var(--accent-yellow);
+}
+
+.lyrics-play-btn {
+    padding: 6px 16px;
+    background: var(--accent-yellow);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.lyrics-play-btn:hover {
+    filter: brightness(1.1);
+}
+
+.lyrics-play-btn.playing {
+    background: var(--accent-red);
+    color: #fff;
+}
+
 /* ===== Logout Button ===== */
 .logout-btn {
     width: 32px;
@@ -2038,6 +2147,65 @@ body.combat-mode .boss-hud-container {
 .action-btn.boss-toggle.active {
     background: var(--accent-purple);
     color: #fff;
+}
+
+/* ===== 歌詞系統 (Resonance Lyrics) ===== */
+
+/* 顫抖動畫 - 微幅飄動效果 */
+@keyframes resonance-tremble {
+    0%   { transform: translate(-50%, -50%) translate(0, 0); }
+    20%  { transform: translate(-50%, -50%) translate(0.5px, -0.8px); }
+    40%  { transform: translate(-50%, -50%) translate(-0.7px, 0.3px); }
+    60%  { transform: translate(-50%, -50%) translate(0.3px, 0.6px); }
+    80%  { transform: translate(-50%, -50%) translate(-0.4px, -0.5px); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
+}
+
+/* 單字淡入動畫 */
+@keyframes resonance-char-in {
+    from {
+        opacity: 0;
+        filter: blur(4px);
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0);
+    }
+}
+
+/* 歌詞行容器 */
+.resonance-line {
+    position: fixed;
+    opacity: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 500;
+    font-family: 'Noto Serif TC', 'Georgia', 'Times New Roman', serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 2px;
+    text-shadow:
+        0 0 8px rgba(255, 255, 255, 0.9),
+        0 0 20px rgba(255, 255, 255, 0.5),
+        0 0 40px rgba(200, 200, 255, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.8);
+    transition: opacity 2s ease-out, filter 2s ease-out;
+    animation: resonance-tremble 3s ease-in-out infinite;
+}
+
+/* 淡出效果 */
+.resonance-line.fading-out {
+    opacity: 0;
+    filter: blur(10px);
+}
+
+/* 單字元素 */
+.resonance-char {
+    display: inline-block;
+    animation: resonance-char-in 0.3s ease-out forwards;
 }
 
 /* Mobile adjustments for quick action ball & music player */

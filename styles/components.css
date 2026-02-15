@@ -1761,6 +1761,129 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
+/* ===== Lyrics Tool Panel (Standalone) ===== */
+.lyrics-tool-panel {
+    width: 320px;
+    max-height: calc(100vh - 80px);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    right: 310px;
+}
+
+.lyrics-tool-panel.expanded {
+    display: flex;
+}
+
+.lyrics-tool-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.lyrics-tool-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.lyrics-tool-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.lyrics-tool-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+/* ===== Recording Mode ===== */
+.rec-mode-desc {
+    font-size: 0.73rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+.rec-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.rec-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-main);
+    transition: all 0.15s;
+}
+
+.rec-btn:hover {
+    border-color: var(--accent-yellow);
+}
+
+.rec-btn.recording {
+    background: rgba(229, 57, 53, 0.2);
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+    animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.rec-clear-btn {
+    flex: 0 0 auto;
+    width: 60px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px dashed var(--border);
+}
+
+.rec-clear-btn:hover {
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+
+.rec-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+    min-height: 1.2em;
+}
+
+.rec-status.active {
+    color: var(--accent-red);
+}
+
+/* ===== Lyrics Line Editor: Timestamp Column ===== */
+.lyrics-line-time-input {
+    width: 52px;
+    padding: 2px 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.lyrics-line-time-input:focus {
+    outline: none;
+    border-color: var(--accent-yellow);
+}
+
 /* ===== Lyrics Section ===== */
 .lyrics-section {
     padding: 10px 12px;

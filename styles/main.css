@@ -531,11 +531,32 @@ body.combat-mode.navbar-peek .navbar {
     transition: background 0.2s, opacity 0.3s;
     opacity: 0.5;
     backdrop-filter: blur(4px);
+    /* 防止快速點擊選取文字 */
+    user-select: none;
+    -webkit-user-select: none;
+    /* 消除行動裝置點擊延遲 */
+    touch-action: manipulation;
+}
+
+/* 擴大點擊熱區：偽元素提供至少 48x48 的觸控區域 */
+.combat-navbar-peek::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -12px;
+    right: -12px;
+    bottom: -20px;
+    min-width: 72px;
+    min-height: 48px;
 }
 
 .combat-navbar-peek:hover {
     opacity: 1;
     background: rgba(50, 50, 55, 0.9);
+}
+
+.combat-navbar-peek:active {
+    transform: translateX(-50%) scale(0.93);
 }
 
 .combat-navbar-peek.active {

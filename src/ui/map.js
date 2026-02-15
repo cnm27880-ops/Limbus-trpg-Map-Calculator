@@ -1013,6 +1013,9 @@ function initCombatNavbarPeek() {
     const navbar = document.querySelector('.navbar');
     if (!peekBtn || !navbar) return;
 
+    // 自動收回的延遲時間 (ms)：滑鼠離開後等待多久才收回
+    const AUTO_CLOSE_DELAY = 500;
+
     // 防止 mouseleave 在開啟動畫期間誤觸的寬限期 (ms)
     let peekGraceUntil = 0;
 
@@ -1020,44 +1023,68 @@ function initCombatNavbarPeek() {
     let mouseOnNavbar = false;
     let mouseOnPeekBtn = false;
 
+    // 自動收回的計時器 ID，用於取消
+    let autoCloseTimer = null;
+
     function closePeek() {
         document.body.classList.remove('navbar-peek');
         peekBtn.classList.remove('active');
     }
 
-    function tryAutoClose() {
-        // 寬限期內不自動收回
-        if (Date.now() < peekGraceUntil) return;
-        // 滑鼠仍在 navbar 或 peek 按鈕上時不收回
-        if (mouseOnNavbar || mouseOnPeekBtn) return;
-        if (document.body.classList.contains('navbar-peek')) {
-            closePeek();
+    function scheduleAutoClose() {
+        // 清除前一次排程
+        if (autoCloseTimer) clearTimeout(autoCloseTimer);
+        autoCloseTimer = setTimeout(() => {
+            // 寬限期內不自動收回
+            if (Date.now() < peekGraceUntil) return;
+            // 滑鼠仍在 navbar 或 peek 按鈕上時不收回
+            if (mouseOnNavbar || mouseOnPeekBtn) return;
+            if (document.body.classList.contains('navbar-peek')) {
+                closePeek();
+            }
+        }, AUTO_CLOSE_DELAY);
+    }
+
+    function cancelAutoClose() {
+        if (autoCloseTimer) {
+            clearTimeout(autoCloseTimer);
+            autoCloseTimer = null;
         }
     }
 
-    // 點擊切換 peek
-    peekBtn.addEventListener('click', () => {
+    // 使用 pointerdown 取代 click，消除行動裝置 300ms 延遲並提高快速點擊的回應
+    peekBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
         const isPeeking = document.body.classList.toggle('navbar-peek');
         peekBtn.classList.toggle('active', isPeeking);
         if (isPeeking) {
             // 設定寬限期：等待 navbar 滑出動畫完成 (transition 0.5s + 緩衝)
             peekGraceUntil = Date.now() + 600;
+            cancelAutoClose();
         }
     });
 
+    // 防止 pointerdown 後的 click 造成重複觸發
+    peekBtn.addEventListener('click', (e) => { e.preventDefault(); });
+
     // 追蹤 navbar 的滑鼠進出
-    navbar.addEventListener('mouseenter', () => { mouseOnNavbar = true; });
+    navbar.addEventListener('mouseenter', () => {
+        mouseOnNavbar = true;
+        cancelAutoClose();
+    });
     navbar.addEventListener('mouseleave', () => {
         mouseOnNavbar = false;
-        // 延遲檢查，給使用者時間移動到 peek 按鈕
-        setTimeout(tryAutoClose, 80);
+        scheduleAutoClose();
     });
 
     // 追蹤 peek 按鈕的滑鼠進出
-    peekBtn.addEventListener('mouseenter', () => { mouseOnPeekBtn = true; });
+    peekBtn.addEventListener('mouseenter', () => {
+        mouseOnPeekBtn = true;
+        cancelAutoClose();
+    });
     peekBtn.addEventListener('mouseleave', () => {
         mouseOnPeekBtn = false;
-        setTimeout(tryAutoClose, 80);
+        scheduleAutoClose();
     });
 }
 

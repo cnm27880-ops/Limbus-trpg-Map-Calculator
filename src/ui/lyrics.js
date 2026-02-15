@@ -19,6 +19,10 @@ let lyricsAbortController = null;       // 用於中斷播放的控制器
 let lyricsActiveLines = [];             // 目前畫面上的歌詞行 (FIFO 佇列)
 let lyricsCurrentSlot = 0;              // 目前要寫入的 Slot 索引 (0-19 循環)
 
+// ===== Tap Tempo 狀態 =====
+let tapTimes = [];                      // 紀錄點擊時間戳記
+let detectedCharDelay = null;           // 計算出來的最佳延遲時間 (ms/字)
+
 // ===== 空間偵測 =====
 
 /**
@@ -321,6 +325,69 @@ function delay(ms, signal) {
     });
 }
 
+// ===== Tap Tempo 測速 =====
+
+/**
+ * 處理 Tap Tempo 點擊
+ * 記錄時間戳、計算平均間隔、換算 BPM 和打字速度
+ */
+function handleTap() {
+    const now = Date.now();
+    const btn = document.getElementById('tap-btn');
+    const bpmDisplay = document.getElementById('tap-bpm-display');
+
+    // 超時重置：距離上次點擊超過 2 秒，重新計算
+    if (tapTimes.length > 0 && (now - tapTimes[tapTimes.length - 1]) > 2000) {
+        tapTimes = [];
+    }
+
+    // 紀錄時間，只保留最後 5 次
+    tapTimes.push(now);
+    if (tapTimes.length > 5) {
+        tapTimes.shift();
+    }
+
+    // 按鈕閃爍回饋
+    if (btn) {
+        btn.classList.add('tap-flash');
+        setTimeout(() => btn.classList.remove('tap-flash'), 100);
+    }
+
+    // 至少需要 2 次點擊才能計算
+    if (tapTimes.length < 2) {
+        if (bpmDisplay) {
+            bpmDisplay.textContent = 'BPM: 再按一下...';
+            bpmDisplay.classList.remove('active');
+        }
+        return;
+    }
+
+    // 計算每次點擊的間隔平均值
+    let totalInterval = 0;
+    for (let i = 1; i < tapTimes.length; i++) {
+        totalInterval += tapTimes[i] - tapTimes[i - 1];
+    }
+    const avgInterval = totalInterval / (tapTimes.length - 1);
+
+    // 換算 BPM
+    const bpm = Math.round(60000 / avgInterval);
+
+    // 換算打字速度：一個拍子出現 4 個字
+    detectedCharDelay = Math.round(avgInterval / 4);
+
+    // 更新 UI
+    if (bpmDisplay) {
+        bpmDisplay.textContent = `BPM: ${bpm} (${detectedCharDelay}ms/字)`;
+        bpmDisplay.classList.add('active');
+    }
+
+    // 同步更新速度滑桿的顯示（不改變滑桿值，僅作為視覺提示）
+    const speedVal = document.getElementById('lyrics-speed-val');
+    if (speedVal) {
+        speedVal.textContent = detectedCharDelay + 'ms*';
+    }
+}
+
 // ===== UI 控制 =====
 
 /**
@@ -347,7 +414,10 @@ function toggleLyricsPlayback() {
     const pauseSlider = document.getElementById('lyrics-pause');
     const loopCheckbox = document.getElementById('lyrics-loop');
 
-    const speed = speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED;
+    // 優先使用 Tap Tempo 偵測到的速度，否則使用滑桿值
+    const speed = (detectedCharDelay !== null)
+        ? detectedCharDelay
+        : (speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED);
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
     const loop = loopCheckbox ? loopCheckbox.checked : false;
 

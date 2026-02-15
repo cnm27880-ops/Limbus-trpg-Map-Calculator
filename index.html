@@ -334,6 +334,11 @@
                     <label class="lyrics-checkbox-label"><input type="checkbox" id="lyrics-loop"> 循環</label>
                     <button class="lyrics-play-btn" id="lyrics-play-btn" onclick="toggleLyricsPlayback()">▶ 播放</button>
                 </div>
+                <!-- Tap Tempo 測速區塊 -->
+                <div class="tap-tempo-section">
+                    <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
+                    <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
+                </div>
             </div>
         </div>
     </div>

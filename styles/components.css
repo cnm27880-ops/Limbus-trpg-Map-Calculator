@@ -1626,6 +1626,18 @@
     border-color: var(--accent-yellow);
 }
 
+.music-ctrl-btn.active {
+    background: rgba(33, 150, 243, 0.3);
+    border-color: #64b5f6;
+    color: #64b5f6;
+}
+
+.bgm-lyrics-icon {
+    font-size: 0.75rem;
+    margin-right: 2px;
+    opacity: 0.8;
+}
+
 .music-volume {
     flex: 1;
     height: 6px;
@@ -2174,6 +2186,14 @@
     font-size: 0.65rem;
     font-weight: 600;
     margin-left: 4px;
+}
+
+.lyrics-lib-badge.music {
+    background: rgba(33, 150, 243, 0.25);
+    color: #64b5f6;
+    font-size: 0.7rem;
+    margin-left: 0;
+    margin-right: 3px;
 }
 
 .lyrics-lib-delete {

@@ -341,6 +341,10 @@ function createRoom(roomCode) {
             const musicStControls = document.getElementById('bgm-st-controls');
             if (musicStControls) musicStControls.style.display = 'block';
 
+            // 顯示 ST 歌詞錄製/清單區塊
+            const lyricsStControls = document.getElementById('lyrics-st-controls');
+            if (lyricsStControls) lyricsStControls.style.display = 'block';
+
             // 初始化音樂播放器
             if (typeof initAudio === 'function') initAudio();
 

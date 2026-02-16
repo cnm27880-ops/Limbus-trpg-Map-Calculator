@@ -19,10 +19,6 @@ let lyricsAbortController = null;       // 用於中斷播放的控制器
 let lyricsActiveLines = [];             // 目前畫面上的歌詞行 (FIFO 佇列)
 let lyricsCurrentSlot = 0;              // 目前要寫入的 Slot 索引 (0-19 循環)
 
-// ===== Tap Tempo 狀態 =====
-let tapTimes = [];                      // 紀錄點擊時間戳記
-let detectedCharDelay = null;           // 計算出來的最佳延遲時間 (ms/字)
-
 // ===== 速度預設組 =====
 let speedPresets = { 1: 80, 2: 80 };   // 預設速度 (ms)
 let activePreset = 1;                   // 目前啟用的預設組
@@ -38,6 +34,17 @@ let recIsRecording = false;             // 是否正在錄製
 let recStartTime = 0;                   // 錄製開始的基準時間
 let recLineIndex = 0;                   // 下一個待錄製的行數
 let recTimestamps = [];                 // 錄製的時間戳
+
+// ===== 座標快取（防止分頁切換導致位移）=====
+let lyricsCachedMargins = null;         // 最後一次有效的 margin 數據
+
+// ===== 延遲補償 =====
+let lyricsSyncOffset = -0.5;            // 全域同步偏移 (秒)，負值 = 歌詞提早出現
+const LYRICS_OFFSET_KEY = 'limbus_lyrics_sync_offset';
+
+// ===== 音樂歌詞聯動 =====
+let lyricsAutoSync = true;              // 是否自動配對歌詞
+const LYRICS_AUTOSYNC_KEY = 'limbus_lyrics_autosync';
 
 // ===== localStorage 鍵名 =====
 const LYRICS_STORAGE_KEY = 'limbus_lyrics_text';
@@ -55,10 +62,15 @@ const LYRICS_PRESETS_KEY = 'limbus_lyrics_presets';
 function detectMargins() {
     const battleMap = document.getElementById('battle-map');
     const viewport = document.getElementById('map-viewport');
-    if (!battleMap || !viewport) return null;
+    if (!battleMap || !viewport) return lyricsCachedMargins;
 
     const mapRect = battleMap.getBoundingClientRect();
     const viewRect = viewport.getBoundingClientRect();
+
+    // 如果地圖被隱藏（分頁切換），rect 全為 0，使用快取
+    if (viewRect.width === 0 || viewRect.height === 0) {
+        return lyricsCachedMargins;
+    }
 
     // 左側黑邊中心 X = viewport 左邊緣到 map 左邊緣的中點
     const leftEdge = viewRect.left;
@@ -74,13 +86,32 @@ function detectMargins() {
     const leftMarginWidth = mapLeftEdge - leftEdge;
     const rightMarginWidth = rightEdge - mapRightEdge;
 
-    return {
+    const result = {
         leftCenterX,
         rightCenterX,
         leftMarginWidth,
         rightMarginWidth,
         viewRect
     };
+
+    // 快取有效結果
+    lyricsCachedMargins = result;
+    return result;
+}
+
+/**
+ * 重新校正畫面上所有歌詞行的位置（切回地圖頁時呼叫）
+ */
+function recalibrateLyricsPositions() {
+    const margins = detectMargins();
+    if (!margins) return;
+
+    document.querySelectorAll('.resonance-line').forEach(el => {
+        const side = el.dataset.side;
+        if (!side) return;
+        const centerX = side === 'left' ? margins.leftCenterX : margins.rightCenterX;
+        el.style.left = centerX + 'px';
+    });
 }
 
 // ===== Slot 系統 =====
@@ -157,6 +188,9 @@ function createLyricsLineElement(side, localSlot) {
 
     const line = document.createElement('div');
     line.className = 'resonance-line';
+
+    // 記錄側邊資訊（供校正使用）
+    line.dataset.side = side;
 
     // 計算 Y 位置
     const yPercent = getSlotYPercent(localSlot);
@@ -354,72 +388,6 @@ function delay(ms, signal) {
     });
 }
 
-// ===== Tap Tempo 測速 =====
-
-/**
- * 處理 Tap Tempo 點擊
- * 記錄時間戳、計算平均間隔、換算 BPM 和打字速度
- */
-function handleTap() {
-    const now = Date.now();
-    const btn = document.getElementById('tap-btn');
-    const bpmDisplay = document.getElementById('tap-bpm-display');
-
-    // 超時重置：距離上次點擊超過 2 秒，重新計算
-    if (tapTimes.length > 0 && (now - tapTimes[tapTimes.length - 1]) > 2000) {
-        tapTimes = [];
-    }
-
-    // 紀錄時間，只保留最後 5 次
-    tapTimes.push(now);
-    if (tapTimes.length > 5) {
-        tapTimes.shift();
-    }
-
-    // 按鈕閃爍回饋
-    if (btn) {
-        btn.classList.add('tap-flash');
-        setTimeout(() => btn.classList.remove('tap-flash'), 100);
-    }
-
-    // 至少需要 2 次點擊才能計算
-    if (tapTimes.length < 2) {
-        if (bpmDisplay) {
-            bpmDisplay.textContent = 'BPM: 再按一下...';
-            bpmDisplay.classList.remove('active');
-        }
-        return;
-    }
-
-    // 計算每次點擊的間隔平均值
-    let totalInterval = 0;
-    for (let i = 1; i < tapTimes.length; i++) {
-        totalInterval += tapTimes[i] - tapTimes[i - 1];
-    }
-    const avgInterval = totalInterval / (tapTimes.length - 1);
-
-    // 換算 BPM
-    const bpm = Math.round(60000 / avgInterval);
-
-    // 換算打字速度：一個拍子出現 4 個字
-    detectedCharDelay = Math.round(avgInterval / 4);
-
-    // 播放中即時生效
-    lyricsLiveSpeed = detectedCharDelay;
-
-    // 更新 UI
-    if (bpmDisplay) {
-        bpmDisplay.textContent = `BPM: ${bpm} (${detectedCharDelay}ms/字)`;
-        bpmDisplay.classList.add('active');
-    }
-
-    // 同步更新速度滑桿的顯示（不改變滑桿值，僅作為視覺提示）
-    const speedVal = document.getElementById('lyrics-speed-val');
-    if (speedVal) {
-        speedVal.textContent = detectedCharDelay + 'ms*';
-    }
-}
-
 // ===== UI 控制 =====
 
 /**
@@ -429,6 +397,10 @@ function toggleLyricsPlayback() {
     if (lyricsActive) {
         stopLyrics();
         updateLyricsPlayBtn(false);
+        // 同步停止給所有玩家
+        if (typeof myRole !== 'undefined' && myRole === 'st') {
+            syncLyricsStop();
+        }
         return;
     }
 
@@ -446,7 +418,6 @@ function toggleLyricsPlayback() {
     const pauseSlider = document.getElementById('lyrics-pause');
     const loopCheckbox = document.getElementById('lyrics-loop');
 
-    // 優先使用 Tap Tempo 偵測到的速度，否則使用預設組或滑桿值
     const speed = getCurrentSpeed();
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
     const loop = loopCheckbox ? loopCheckbox.checked : false;
@@ -455,6 +426,11 @@ function toggleLyricsPlayback() {
     lyricsLiveSpeed = speed;
 
     updateLyricsPlayBtn(true);
+
+    // 同步播放給所有玩家
+    if (typeof myRole !== 'undefined' && myRole === 'st') {
+        syncLyricsPlay();
+    }
 
     // 如果有時間戳數據，使用時間軸同步播放
     const hasTimestamps = Object.keys(lyricsPerLineTimestamps).length > 0;
@@ -488,10 +464,9 @@ function updateLyricsPlayBtn(isPlaying) {
 
 /**
  * 取得目前生效的速度 (ms/字)
- * 優先順序：Tap Tempo > 目前啟用的預設組 > 滑桿值
+ * 優先順序：目前啟用的預設組 > 滑桿值
  */
 function getCurrentSpeed() {
-    if (detectedCharDelay !== null) return detectedCharDelay;
     return speedPresets[activePreset] || LYRICS_DEFAULT_SPEED;
 }
 
@@ -502,9 +477,6 @@ function getCurrentSpeed() {
 function switchSpeedPreset(presetId) {
     activePreset = presetId;
     const speed = speedPresets[presetId];
-
-    // 清除 Tap Tempo 偵測值，改用預設組
-    detectedCharDelay = null;
 
     // 更新即時速度（播放中立刻生效）
     lyricsLiveSpeed = speed;
@@ -517,13 +489,6 @@ function switchSpeedPreset(presetId) {
 
     // 更新按鈕 UI
     updatePresetBtnsUI();
-
-    // 重置 BPM 顯示
-    const bpmDisplay = document.getElementById('tap-bpm-display');
-    if (bpmDisplay) {
-        bpmDisplay.textContent = 'BPM: --';
-        bpmDisplay.classList.remove('active');
-    }
 }
 
 /**
@@ -639,14 +604,18 @@ function toggleRecording() {
     if (recIsRecording) {
         stopRecording();
     } else {
-        startRecording();
+        // 讀取起始行輸入
+        const startLineInput = document.getElementById('rec-start-line');
+        const startLine = startLineInput ? parseInt(startLineInput.value) - 1 : 0; // 轉為 0-based
+        startRecording(startLine >= 0 ? startLine : 0);
     }
 }
 
 /**
  * 開始錄製：記錄基準時間，監聽空白鍵
+ * @param {number} [startFromLine] - 從第幾行開始錄製 (0-based)，預設 0
  */
-function startRecording() {
+function startRecording(startFromLine) {
     const textarea = document.getElementById('lyrics-input');
     if (!textarea || !textarea.value.trim()) {
         if (typeof showToast === 'function') showToast('請先輸入歌詞');
@@ -656,10 +625,34 @@ function startRecording() {
     const lines = textarea.value.trim().split('\n').filter(l => l.trim());
     if (lines.length === 0) return;
 
+    // 決定起始行
+    const startIdx = (typeof startFromLine === 'number' && startFromLine >= 0 && startFromLine < lines.length)
+        ? startFromLine : 0;
+
     recIsRecording = true;
-    recStartTime = Date.now();
-    recLineIndex = 0;
-    recTimestamps = [];
+    recLineIndex = startIdx;
+
+    // 保留之前已錄製的時間戳（只覆蓋 startIdx 之後的部分）
+    if (startIdx === 0) {
+        recTimestamps = [];
+    } else {
+        // 保留 startIdx 之前的已錄時間戳
+        recTimestamps = [];
+        for (let i = 0; i < startIdx; i++) {
+            recTimestamps[i] = lyricsPerLineTimestamps[i] !== undefined
+                ? lyricsPerLineTimestamps[i] : 0;
+        }
+    }
+
+    // 使用音樂的當前播放時間作為基準（如果有音樂的話）
+    const audio = (typeof musicManager !== 'undefined' && musicManager.currentAudio)
+        ? musicManager.currentAudio : null;
+    if (audio && !audio.paused) {
+        // 以音樂當前播放時間為基準
+        recStartTime = Date.now() - (audio.currentTime * 1000);
+    } else {
+        recStartTime = Date.now();
+    }
 
     // 更新 UI
     const btn = document.getElementById('rec-start-btn');
@@ -667,7 +660,7 @@ function startRecording() {
         btn.textContent = '⏹ 停止錄製';
         btn.classList.add('recording');
     }
-    updateRecStatus(`等待第 1/${lines.length} 句... 按空白鍵定點`);
+    updateRecStatus(`從第 ${startIdx + 1} 句開始，等待第 ${startIdx + 1}/${lines.length} 句... 按空白鍵定點`);
 
     // 綁定鍵盤監聽
     document.addEventListener('keydown', handleRecKeydown);
@@ -746,11 +739,36 @@ function updateRecStatus(msg) {
     }
 }
 
+// ===== 高精度等待（使用 requestAnimationFrame）=====
+
+/**
+ * 使用 requestAnimationFrame 高精度等待，直到條件成立
+ * @param {function} conditionFn - 返回 true 表示條件已滿足
+ * @param {AbortSignal} signal - 中斷信號
+ * @returns {Promise<void>}
+ */
+function waitUntilRAF(conditionFn, signal) {
+    return new Promise((resolve, reject) => {
+        function check() {
+            if (signal.aborted) {
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
+            }
+            if (conditionFn()) {
+                resolve();
+                return;
+            }
+            requestAnimationFrame(check);
+        }
+        requestAnimationFrame(check);
+    });
+}
+
 // ===== 時間軸播放 (搭配音樂) =====
 
 /**
  * 使用時間戳播放歌詞（與音樂同步）
- * 如果有 lyricsPerLineTimestamps，按照時間戳觸發每行
+ * 使用 requestAnimationFrame 高精度同步（~16ms），並套用 syncOffset 補償延遲
  */
 async function playLyricsWithTimestamps(lines, options = {}) {
     if (lyricsActive) {
@@ -772,11 +790,26 @@ async function playLyricsWithTimestamps(lines, options = {}) {
     // 取得音樂的當前播放時間作為同步基準
     const audio = (typeof musicManager !== 'undefined' && musicManager.currentAudio)
         ? musicManager.currentAudio : null;
-    const getAudioTime = () => audio ? audio.currentTime : (Date.now() - playStartMs) / 1000;
-    const playStartMs = Date.now();
 
     try {
         do {
+            // 每輪循環開始時記錄基準時間，用於計算相對偏移
+            let loopBaseAudioTime = audio ? audio.currentTime : 0;
+            let loopBaseWallTime = Date.now();
+
+            const getElapsed = () => {
+                if (audio) {
+                    let elapsed = audio.currentTime - loopBaseAudioTime;
+                    if (elapsed < -1) {
+                        loopBaseAudioTime = audio.currentTime;
+                        loopBaseWallTime = Date.now();
+                        elapsed = 0;
+                    }
+                    return elapsed;
+                }
+                return (Date.now() - loopBaseWallTime) / 1000;
+            };
+
             for (let i = 0; i < lines.length; i++) {
                 if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -786,13 +819,11 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                     continue;
                 }
 
-                // 等到這一行的時間戳
+                // 等到這一行的時間戳（套用 syncOffset 補償）
                 const targetTime = lyricsPerLineTimestamps[i];
                 if (targetTime !== undefined) {
-                    while (getAudioTime() < targetTime) {
-                        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-                        await new Promise(r => setTimeout(r, 50));
-                    }
+                    const adjustedTarget = targetTime + lyricsSyncOffset;
+                    await waitUntilRAF(() => getElapsed() >= adjustedTarget, signal);
                 }
 
                 const { side, localSlot } = resolveSlot(lyricsCurrentSlot);
@@ -805,6 +836,18 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                 await typewriterLine(lineEl, text, lineSpeed, signal);
 
                 lyricsCurrentSlot++;
+            }
+
+            // 循環模式：等待音樂回到起點再開始下一輪
+            if (loop && !signal.aborted && audio) {
+                lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
+                lyricsActiveLines = [];
+
+                const lastTime = audio.currentTime;
+                await waitUntilRAF(() => {
+                    if (signal.aborted) return true;
+                    return audio.currentTime < lastTime - 0.5;
+                }, signal);
             }
         } while (loop && !signal.aborted);
     } catch (e) {
@@ -880,37 +923,10 @@ function renderLineEditor() {
         textEl.textContent = lineText;
         textEl.title = lineText;
 
-        // 速度欄位
-        const speedInput = document.createElement('input');
-        speedInput.type = 'number';
-        speedInput.className = 'lyrics-line-speed-input';
-        speedInput.min = '0';
-        speedInput.max = '1000';
-        speedInput.step = '5';
-        speedInput.value = lyricsPerLineSpeeds[i] || '';
-        speedInput.placeholder = '--';
-        speedInput.title = '速度 (ms/字)';
-        speedInput.addEventListener('change', () => {
-            const val = parseInt(speedInput.value);
-            if (!isNaN(val) && val >= 0) {
-                lyricsPerLineSpeeds[i] = val;
-            } else {
-                delete lyricsPerLineSpeeds[i];
-                speedInput.value = '';
-            }
-            saveLyricsPerLineSpeeds();
-        });
-
-        const speedSuffix = document.createElement('span');
-        speedSuffix.className = 'lyrics-line-unit';
-        speedSuffix.textContent = 'ms';
-
         item.appendChild(num);
         item.appendChild(timeInput);
         item.appendChild(timeSuffix);
         item.appendChild(textEl);
-        item.appendChild(speedInput);
-        item.appendChild(speedSuffix);
         list.appendChild(item);
     });
 }
@@ -996,13 +1012,14 @@ function initLyricsUI() {
     loadLyricsPerLineSpeeds();
     loadLyricsTimestamps();
     loadLyricsTimeline();
+    loadSyncOffset();
+    loadAutoSyncSetting();
 
     const speedSlider = document.getElementById('lyrics-speed');
     const speedVal = document.getElementById('lyrics-speed-val');
     if (speedSlider && speedVal) {
         speedSlider.addEventListener('input', () => {
             speedVal.textContent = speedSlider.value + 'ms';
-            detectedCharDelay = null;
             lyricsLiveSpeed = parseInt(speedSlider.value);
         });
     }
@@ -1028,6 +1045,19 @@ function initLyricsUI() {
         saveBtn.addEventListener('click', () => saveCurrentSpeedToPreset());
     }
 
+    // 同步偏移輸入
+    const offsetInput = document.getElementById('lyrics-sync-offset');
+    const offsetVal = document.getElementById('lyrics-sync-offset-val');
+    if (offsetInput) {
+        offsetInput.value = lyricsSyncOffset;
+        if (offsetVal) offsetVal.textContent = lyricsSyncOffset.toFixed(1) + 's';
+        offsetInput.addEventListener('input', () => {
+            lyricsSyncOffset = parseFloat(offsetInput.value) || 0;
+            if (offsetVal) offsetVal.textContent = lyricsSyncOffset.toFixed(1) + 's';
+            saveSyncOffset();
+        });
+    }
+
     // 歌詞 textarea 變更時自動儲存並更新編輯器
     const textarea = document.getElementById('lyrics-input');
     if (textarea) {
@@ -1040,6 +1070,405 @@ function initLyricsUI() {
 
     updatePresetBtnsUI();
     renderLineEditor();
+    renderLyricsLibrary();
+}
+
+// ===== 歌詞清單 (Library) =====
+const LYRICS_LIBRARY_KEY = 'limbus_lyrics_library';
+
+/**
+ * 從 localStorage 載入歌詞清單
+ * @returns {Array} 歌詞清單 [{id, name, text, timestamps, perLineSpeeds, speed, linePause, loop, savedAt}]
+ */
+function loadLyricsLibrary() {
+    try {
+        const saved = localStorage.getItem(LYRICS_LIBRARY_KEY);
+        if (saved) return JSON.parse(saved);
+    } catch (e) {
+        console.error('Lyrics: 載入歌詞清單失敗', e);
+    }
+    return [];
+}
+
+/**
+ * 儲存歌詞清單到 localStorage
+ * @param {Array} library
+ */
+function persistLyricsLibrary(library) {
+    try {
+        localStorage.setItem(LYRICS_LIBRARY_KEY, JSON.stringify(library));
+    } catch (e) {
+        console.error('Lyrics: 儲存歌詞清單失敗', e);
+    }
+}
+
+/**
+ * 將目前歌詞設定儲存到清單
+ */
+function saveLyricsToLibrary() {
+    const nameInput = document.getElementById('lyrics-save-name');
+    const textarea = document.getElementById('lyrics-input');
+    if (!textarea || !textarea.value.trim()) {
+        if (typeof showToast === 'function') showToast('請先輸入歌詞');
+        return;
+    }
+
+    let name = nameInput ? nameInput.value.trim() : '';
+    if (!name) {
+        // 使用歌詞第一行作為預設名稱
+        const firstLine = textarea.value.trim().split('\n')[0].trim();
+        name = firstLine.substring(0, 20) || '未命名歌詞';
+    }
+
+    const speedSlider = document.getElementById('lyrics-speed');
+    const pauseSlider = document.getElementById('lyrics-pause');
+    const loopCheckbox = document.getElementById('lyrics-loop');
+
+    // 自動記錄目前正在播放的音樂名稱（用於聯動配對）
+    let linkedMusic = null;
+    if (typeof musicManager !== 'undefined' && musicManager.currentTrack) {
+        linkedMusic = musicManager.currentTrack.name || null;
+    }
+
+    const entry = {
+        id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
+        name: name,
+        text: textarea.value,
+        timestamps: Object.keys(lyricsPerLineTimestamps).length > 0
+            ? { ...lyricsPerLineTimestamps } : null,
+        perLineSpeeds: Object.keys(lyricsPerLineSpeeds).length > 0
+            ? { ...lyricsPerLineSpeeds } : null,
+        speed: speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED,
+        linePause: pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS,
+        loop: loopCheckbox ? loopCheckbox.checked : false,
+        linkedMusic: linkedMusic,
+        savedAt: Date.now()
+    };
+
+    const library = loadLyricsLibrary();
+    library.unshift(entry); // 新的放最前面
+    persistLyricsLibrary(library);
+
+    // 清空名稱輸入
+    if (nameInput) nameInput.value = '';
+
+    renderLyricsLibrary();
+    if (typeof showToast === 'function') showToast(`已儲存「${name}」`);
+}
+
+/**
+ * 從清單載入指定歌詞
+ * @param {string} id - 歌詞項目 ID
+ */
+function loadLyricsFromLibrary(id) {
+    const library = loadLyricsLibrary();
+    const entry = library.find(e => e.id === id);
+    if (!entry) return;
+
+    // 填入歌詞文字
+    const textarea = document.getElementById('lyrics-input');
+    if (textarea) {
+        textarea.value = entry.text;
+        saveLyricsText();
+    }
+
+    // 恢復時間戳
+    lyricsPerLineTimestamps = entry.timestamps ? { ...entry.timestamps } : {};
+    saveLyricsTimestamps();
+
+    // 恢復逐行速度
+    lyricsPerLineSpeeds = entry.perLineSpeeds ? { ...entry.perLineSpeeds } : {};
+    saveLyricsPerLineSpeeds();
+
+    // 恢復速度滑桿
+    const speedSlider = document.getElementById('lyrics-speed');
+    const speedVal = document.getElementById('lyrics-speed-val');
+    if (speedSlider && entry.speed !== undefined) {
+        speedSlider.value = entry.speed;
+        if (speedVal) speedVal.textContent = entry.speed + 'ms';
+    }
+
+    // 恢復行距滑桿
+    const pauseSlider = document.getElementById('lyrics-pause');
+    const pauseVal = document.getElementById('lyrics-pause-val');
+    if (pauseSlider && entry.linePause !== undefined) {
+        pauseSlider.value = entry.linePause;
+        if (pauseVal) pauseVal.textContent = (entry.linePause / 1000).toFixed(1) + 's';
+    }
+
+    // 恢復循環設定
+    const loopCheckbox = document.getElementById('lyrics-loop');
+    if (loopCheckbox) {
+        loopCheckbox.checked = entry.loop || false;
+    }
+
+    // 更新逐行編輯器
+    renderLineEditor();
+
+    if (typeof showToast === 'function') showToast(`已載入「${entry.name}」`);
+}
+
+/**
+ * 從清單刪除指定歌詞
+ * @param {string} id - 歌詞項目 ID
+ */
+function deleteLyricsFromLibrary(id) {
+    const library = loadLyricsLibrary();
+    const idx = library.findIndex(e => e.id === id);
+    if (idx === -1) return;
+
+    const name = library[idx].name;
+    library.splice(idx, 1);
+    persistLyricsLibrary(library);
+    renderLyricsLibrary();
+
+    if (typeof showToast === 'function') showToast(`已刪除「${name}」`);
+}
+
+/**
+ * 渲染歌詞清單 UI
+ */
+function renderLyricsLibrary() {
+    const container = document.getElementById('lyrics-library-list');
+    if (!container) return;
+
+    const library = loadLyricsLibrary();
+    if (library.length === 0) {
+        container.innerHTML = '<div class="lyrics-library-empty">尚無儲存的歌詞</div>';
+        return;
+    }
+
+    container.innerHTML = library.map(entry => {
+        const lineCount = entry.text.trim().split('\n').filter(l => l.trim()).length;
+        const hasTimestamps = entry.timestamps && Object.keys(entry.timestamps).length > 0;
+        const badge = hasTimestamps ? '<span class="lyrics-lib-badge">已錄</span>' : '';
+        const musicBadge = entry.linkedMusic ? '<span class="lyrics-lib-badge music">🎤</span>' : '';
+        const date = new Date(entry.savedAt);
+        const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+
+        return `<div class="lyrics-library-item" onclick="loadLyricsFromLibrary('${entry.id}')">
+            <div class="lyrics-lib-info">
+                <span class="lyrics-lib-name">${musicBadge}${escapeHtmlLyrics(entry.name)}</span>
+                <span class="lyrics-lib-meta">${lineCount}句 · ${entry.speed}ms · ${dateStr} ${badge}${entry.linkedMusic ? ' · ' + escapeHtmlLyrics(entry.linkedMusic) : ''}</span>
+            </div>
+            <button class="lyrics-lib-delete" onclick="event.stopPropagation(); deleteLyricsFromLibrary('${entry.id}')" title="刪除">×</button>
+        </div>`;
+    }).join('');
+}
+
+/**
+ * HTML 轉義工具
+ */
+function escapeHtmlLyrics(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ===== 同步偏移持久化 =====
+
+function saveSyncOffset() {
+    try { localStorage.setItem(LYRICS_OFFSET_KEY, lyricsSyncOffset.toString()); } catch (e) {}
+}
+
+function loadSyncOffset() {
+    try {
+        const saved = localStorage.getItem(LYRICS_OFFSET_KEY);
+        if (saved !== null) lyricsSyncOffset = parseFloat(saved);
+    } catch (e) {}
+}
+
+// ===== 自動配對設定 =====
+
+function loadAutoSyncSetting() {
+    try {
+        const saved = localStorage.getItem(LYRICS_AUTOSYNC_KEY);
+        if (saved !== null) lyricsAutoSync = saved === 'true';
+    } catch (e) {}
+}
+
+function saveAutoSyncSetting() {
+    try { localStorage.setItem(LYRICS_AUTOSYNC_KEY, lyricsAutoSync.toString()); } catch (e) {}
+}
+
+function toggleAutoSync() {
+    lyricsAutoSync = !lyricsAutoSync;
+    saveAutoSyncSetting();
+    updateAutoSyncUI();
+}
+
+function updateAutoSyncUI() {
+    const btn = document.getElementById('bgm-autosync-btn');
+    if (btn) {
+        btn.classList.toggle('active', lyricsAutoSync);
+        btn.title = lyricsAutoSync ? '歌詞聯動：開啟' : '歌詞聯動：關閉';
+    }
+}
+
+// ===== 音樂歌詞聯動 =====
+
+/**
+ * 根據音樂名稱自動尋找匹配的歌詞並播放
+ * @param {string} musicName - 音樂名稱
+ * @returns {boolean} 是否成功找到並播放
+ */
+function autoPlayLinkedLyrics(musicName) {
+    if (!lyricsAutoSync || !musicName) return false;
+
+    const library = loadLyricsLibrary();
+    // 先找 linkedMusic 完全匹配的
+    let entry = library.find(e => e.linkedMusic && e.linkedMusic === musicName);
+    // 再找名稱包含音樂名的
+    if (!entry) {
+        entry = library.find(e => e.linkedMusic && musicName.includes(e.linkedMusic));
+    }
+    if (!entry) {
+        entry = library.find(e => e.name && musicName.includes(e.name));
+    }
+    if (!entry) return false;
+
+    // 載入並播放
+    loadLyricsFromLibrary(entry.id);
+
+    // 等一幀確保 DOM 更新後再播放
+    requestAnimationFrame(() => {
+        if (!lyricsActive) {
+            toggleLyricsPlayback();
+        }
+    });
+
+    return true;
+}
+
+/**
+ * 當音樂停止時自動停止歌詞
+ */
+function autoStopLinkedLyrics() {
+    if (!lyricsAutoSync) return;
+    if (lyricsActive) {
+        stopLyrics();
+        updateLyricsPlayBtn(false);
+        if (typeof myRole !== 'undefined' && myRole === 'st') {
+            syncLyricsStop();
+        }
+    }
+}
+
+/**
+ * 檢查播放清單中是否有配對的歌詞
+ * @param {string} musicName - 音樂名稱
+ * @returns {boolean}
+ */
+function hasLinkedLyrics(musicName) {
+    if (!musicName) return false;
+    const library = loadLyricsLibrary();
+    return library.some(e =>
+        (e.linkedMusic && e.linkedMusic === musicName) ||
+        (e.linkedMusic && musicName.includes(e.linkedMusic)) ||
+        (e.name && musicName.includes(e.name))
+    );
+}
+
+// ===== Firebase 歌詞同步 (讓玩家也能看到歌詞) =====
+
+/**
+ * 同步歌詞狀態到 Firebase（ST 專用）
+ * @param {Object} lyricsState - 歌詞狀態
+ */
+function syncLyricsState(lyricsState) {
+    if (typeof roomRef === 'undefined' || !roomRef) return;
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+
+    roomRef.child('lyrics').update(lyricsState);
+}
+
+/**
+ * ST 開始播放歌詞時，同步給所有玩家
+ */
+function syncLyricsPlay() {
+    const textarea = document.getElementById('lyrics-input');
+    if (!textarea) return;
+
+    const text = textarea.value.trim();
+    if (!text) return;
+
+    const speed = getCurrentSpeed();
+    const pauseSlider = document.getElementById('lyrics-pause');
+    const loopCheckbox = document.getElementById('lyrics-loop');
+    const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
+    const loop = loopCheckbox ? loopCheckbox.checked : false;
+    const hasTimestamps = Object.keys(lyricsPerLineTimestamps).length > 0;
+
+    syncLyricsState({
+        action: 'play',
+        text: text,
+        speed: speed,
+        linePause: linePause,
+        loop: loop,
+        timestamps: hasTimestamps ? lyricsPerLineTimestamps : null,
+        perLineSpeeds: Object.keys(lyricsPerLineSpeeds).length > 0 ? lyricsPerLineSpeeds : null,
+        syncOffset: lyricsSyncOffset,
+        timestamp: Date.now()
+    });
+}
+
+/**
+ * ST 停止歌詞時，同步給所有玩家
+ */
+function syncLyricsStop() {
+    syncLyricsState({
+        action: 'stop',
+        timestamp: Date.now()
+    });
+}
+
+/**
+ * 處理從 Firebase 接收到的歌詞同步更新（玩家端）
+ * @param {Object} data - 歌詞數據
+ */
+function handleLyricsUpdate(data) {
+    if (!data) return;
+    // ST 自己不需要接收同步（已經在本地播放）
+    if (typeof myRole !== 'undefined' && myRole === 'st') return;
+
+    if (data.action === 'play') {
+        // 停止當前播放
+        if (lyricsActive) stopLyrics();
+
+        const lines = data.text.split('\n');
+        const speed = data.speed || LYRICS_DEFAULT_SPEED;
+        const linePause = data.linePause || LYRICS_LINE_PAUSE_MS;
+        const loop = data.loop || false;
+
+        // 使用 ST 傳來的 syncOffset（玩家端統一使用 ST 的設定）
+        if (data.syncOffset !== undefined) {
+            lyricsSyncOffset = data.syncOffset;
+        }
+
+        // 設定同步過來的逐行數據
+        if (data.timestamps) {
+            lyricsPerLineTimestamps = data.timestamps;
+        } else {
+            lyricsPerLineTimestamps = {};
+        }
+        if (data.perLineSpeeds) {
+            lyricsPerLineSpeeds = data.perLineSpeeds;
+        } else {
+            lyricsPerLineSpeeds = {};
+        }
+
+        lyricsLiveSpeed = speed;
+
+        // 根據是否有時間戳選擇播放方式
+        const hasTimestamps = Object.keys(lyricsPerLineTimestamps).length > 0;
+        if (hasTimestamps) {
+            playLyricsWithTimestamps(lines, { speed, loop });
+        } else {
+            playLyrics(lines, { speed, linePause, loop });
+        }
+    } else if (data.action === 'stop') {
+        stopLyrics();
+    }
 }
 
 // 頁面載入後初始化歌詞 UI

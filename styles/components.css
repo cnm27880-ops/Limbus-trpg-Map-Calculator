@@ -1175,6 +1175,7 @@
     pointer-events: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 160px;
+    z-index: 170;
 }
 
 .qab-menu.show {
@@ -1625,6 +1626,18 @@
     border-color: var(--accent-yellow);
 }
 
+.music-ctrl-btn.active {
+    background: rgba(33, 150, 243, 0.3);
+    border-color: #64b5f6;
+    color: #64b5f6;
+}
+
+.bgm-lyrics-icon {
+    font-size: 0.75rem;
+    margin-right: 2px;
+    opacity: 0.8;
+}
+
 .music-volume {
     flex: 1;
     height: 6px;
@@ -1772,7 +1785,6 @@
     display: none;
     flex-direction: column;
     overflow: hidden;
-    right: 310px;
 }
 
 .lyrics-tool-panel.expanded {
@@ -1809,6 +1821,27 @@
 .rec-controls {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.rec-start-from {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+.rec-start-input {
+    width: 50px;
+    padding: 4px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-size: 0.8rem;
+    text-align: center;
 }
 
 .rec-btn {
@@ -1893,7 +1926,6 @@
 .lyrics-textarea {
     width: 100%;
     min-height: 80px;
-    max-height: 150px;
     padding: 8px 10px;
     background: var(--bg-input);
     border: 1px solid var(--border);
@@ -2049,56 +2081,142 @@
     color: var(--accent-yellow);
 }
 
-/* ===== Tap Tempo Section ===== */
-.tap-tempo-section {
-    margin-top: 8px;
-    padding: 10px;
-    border: 2px dashed var(--border);
-    border-radius: 8px;
-    text-align: center;
+/* ===== Lyrics Library ===== */
+.lyrics-library-save {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.lyrics-save-name-input {
+    flex: 1;
+    padding: 6px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-size: 0.8rem;
+}
+
+.lyrics-save-name-input:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+}
+
+.lyrics-save-btn {
+    padding: 6px 14px;
+    background: var(--accent-yellow);
+    border: none;
+    border-radius: 4px;
+    color: #000;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.lyrics-save-btn:hover {
+    opacity: 0.85;
+}
+
+.lyrics-library-list {
     display: flex;
     flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.lyrics-library-empty {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.lyrics-library-item {
+    display: flex;
     align-items: center;
     gap: 6px;
-}
-
-.tap-tempo-btn {
-    width: 100%;
-    padding: 12px 16px;
+    padding: 8px 10px;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text-main);
-    font-size: 0.85rem;
-    font-weight: 600;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background 0.15s, transform 0.1s, border-color 0.15s;
-    user-select: none;
+    transition: border-color 0.15s, background 0.15s;
 }
 
-.tap-tempo-btn:hover {
+.lyrics-library-item:hover {
     border-color: var(--accent-yellow);
+    background: rgba(255, 235, 59, 0.05);
 }
 
-.tap-tempo-btn:active {
-    transform: scale(0.97);
+.lyrics-lib-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.tap-tempo-btn.tap-flash {
-    background: var(--accent-yellow);
-    color: #000;
-    border-color: var(--accent-yellow);
-}
-
-.tap-bpm-display {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-}
-
-.tap-bpm-display.active {
-    color: var(--accent-yellow);
+.lyrics-lib-name {
+    font-size: 0.82rem;
     font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lyrics-lib-meta {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lyrics-lib-badge {
+    display: inline-block;
+    padding: 0 4px;
+    background: rgba(76, 175, 80, 0.25);
+    border-radius: 3px;
+    color: #81c784;
+    font-size: 0.65rem;
+    font-weight: 600;
+    margin-left: 4px;
+}
+
+.lyrics-lib-badge.music {
+    background: rgba(33, 150, 243, 0.25);
+    color: #64b5f6;
+    font-size: 0.7rem;
+    margin-left: 0;
+    margin-right: 3px;
+}
+
+.lyrics-lib-delete {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+}
+
+.lyrics-lib-delete:hover {
+    border-color: #ef5350;
+    color: #ef5350;
+    background: rgba(239, 83, 80, 0.1);
 }
 
 /* ===== AI Import Button ===== */

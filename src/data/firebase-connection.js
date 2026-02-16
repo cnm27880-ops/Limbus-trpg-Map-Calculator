@@ -341,6 +341,10 @@ function createRoom(roomCode) {
             const musicStControls = document.getElementById('bgm-st-controls');
             if (musicStControls) musicStControls.style.display = 'block';
 
+            // 顯示 ST 歌詞錄製/清單區塊
+            const lyricsStControls = document.getElementById('lyrics-st-controls');
+            if (lyricsStControls) lyricsStControls.style.display = 'block';
+
             // 初始化音樂播放器
             if (typeof initAudio === 'function') initAudio();
 
@@ -462,6 +466,9 @@ function joinRoom(roomCode, isST) {
                 // ST 的音樂控制區塊
                 const musicStControls = document.getElementById('bgm-st-controls');
                 if (musicStControls) musicStControls.style.display = 'block';
+                // ST 的歌詞錄製/清單區塊
+                const lyricsStControls = document.getElementById('lyrics-st-controls');
+                if (lyricsStControls) lyricsStControls.style.display = 'block';
             }
             document.getElementById('units-toolbar').style.display = 'flex';
             document.getElementById('my-id').innerText = roomCode;
@@ -667,6 +674,14 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('music').off('value', musicListener));
+
+    // 監聽歌詞狀態變更
+    const lyricsListener = roomRef.child('lyrics').on('value', snapshot => {
+        if (typeof handleLyricsUpdate === 'function') {
+            handleLyricsUpdate(snapshot.val());
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('lyrics').off('value', lyricsListener));
 
     // 定期更新活動時間（每 30 秒）
     const activityInterval = setInterval(() => {

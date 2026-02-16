@@ -203,7 +203,7 @@ class MusicManager {
     }
 
     /**
-     * 停止音樂播放
+     * 停止音樂播放（重置到開頭，清除曲目資訊）
      */
     stopMusic() {
         if (!this.currentAudio) return;
@@ -211,7 +211,31 @@ class MusicManager {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
         this.currentTrack = null;
+        this.isPlaying = false;
         this.updateUI();
+    }
+
+    /**
+     * 暫停音樂（保留播放位置和曲目資訊）
+     */
+    pauseMusic() {
+        if (!this.currentAudio || this.currentAudio.paused) return;
+
+        this.currentAudio.pause();
+        // 不重置 currentTime 和 currentTrack，只暫停
+        this.updateUI();
+    }
+
+    /**
+     * 繼續播放音樂
+     */
+    resumeMusic() {
+        if (!this.currentAudio || !this.currentAudio.src) return;
+
+        this.currentAudio.play().catch(error => {
+            console.warn('BGM: 播放失敗', error);
+            this.showInteractionPrompt();
+        });
     }
 
     /**
@@ -221,12 +245,9 @@ class MusicManager {
         if (!this.currentAudio || !this.currentAudio.src) return;
 
         if (this.currentAudio.paused) {
-            this.currentAudio.play().catch(error => {
-                console.warn('BGM: 播放失敗', error);
-                this.showInteractionPrompt();
-            });
+            this.resumeMusic();
         } else {
-            this.currentAudio.pause();
+            this.pauseMusic();
         }
     }
 
@@ -452,9 +473,11 @@ class MusicManager {
 
         container.innerHTML = this.playlist.map((item, index) => {
             const isPlaying = this.currentTrack && this.currentTrack.url === item.url && this.isPlaying;
+            const hasLyrics = (typeof hasLinkedLyrics === 'function') && hasLinkedLyrics(item.name);
+            const lyricsIcon = hasLyrics ? '<span class="bgm-lyrics-icon" title="有配對歌詞">🎤</span>' : '';
             return `
-                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="musicManager.playMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
-                    <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${this.escapeHtml(item.name)}</span>
+                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
+                    <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${lyricsIcon}${this.escapeHtml(item.name)}</span>
                     ${myRole === 'st' ? `<button class="bgm-item-remove" onclick="event.stopPropagation(); musicManager.removeFromPlaylist(${index})" title="移除">×</button>` : ''}
                 </div>
             `;
@@ -570,8 +593,12 @@ class MusicManager {
             if (state.isPlaying) {
                 this.playMusic(state.currentUrl, state.currentName);
             } else {
-                this.stopMusic();
+                // 有 URL 但 isPlaying 為 false = 暫停（保留播放位置）
+                this.pauseMusic();
             }
+        } else {
+            // 沒有 URL = 完全停止
+            this.stopMusic();
         }
     }
 }
@@ -681,7 +708,10 @@ function renderPlaylist() {
  * @param {string} name - 音樂名稱
  */
 function switchMusic(url, name) {
-    // 如果有 Firebase 同步，先更新 Firebase
+    // 播放音樂（本地端立即播放）
+    musicManager.playMusic(url, name);
+
+    // ST 模式：同步到 Firebase（讓所有玩家也聽到）
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
         syncMusicState({
             currentUrl: url,
@@ -689,9 +719,11 @@ function switchMusic(url, name) {
             isPlaying: true,
             timestamp: Date.now()
         });
-    } else {
-        // 否則直接播放
-        musicManager.playMusic(url, name);
+
+        // 自動配對歌詞（ST 端）
+        if (typeof autoPlayLinkedLyrics === 'function') {
+            autoPlayLinkedLyrics(name);
+        }
     }
 }
 
@@ -699,24 +731,24 @@ function switchMusic(url, name) {
  * ST 控制：播放/暫停音樂（向後兼容）
  */
 function stTogglePlayback() {
+    const state = musicManager.getState();
+
+    if (!state.currentUrl) {
+        showToast('請先選擇要播放的音樂');
+        return;
+    }
+
+    // 先在本地切換暫停/播放
+    musicManager.togglePlayback();
+
     // ST 模式：同步到 Firebase
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
-        const state = musicManager.getState();
-
-        if (!state.currentUrl) {
-            showToast('請先選擇要播放的音樂');
-            return;
-        }
-
         syncMusicState({
             currentUrl: state.currentUrl,
             currentName: state.currentName,
             isPlaying: !state.isPlaying,
             timestamp: Date.now()
         });
-    } else {
-        // 玩家模式：本地控制
-        musicManager.togglePlayback();
     }
 }
 
@@ -724,14 +756,20 @@ function stTogglePlayback() {
  * ST 控制：停止音樂（向後兼容）
  */
 function stStopMusic() {
-    // ST 模式：同步到 Firebase
+    // ST 模式：本地停止 + 同步到 Firebase
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
+        musicManager.stopMusic();
         syncMusicState({
             currentUrl: '',
             currentName: '',
             isPlaying: false,
             timestamp: Date.now()
         });
+
+        // 自動停止歌詞
+        if (typeof autoStopLinkedLyrics === 'function') {
+            autoStopLinkedLyrics();
+        }
     } else {
         showToast('只有 ST 可以停止音樂');
     }
@@ -820,14 +858,19 @@ function syncMusicPlaylist(playlist) {
  */
 function handleMusicUpdate(musicData) {
     if (!musicData) {
+        // ST 自己不需要接收同步（已經在本地操作）
+        if (typeof myRole !== 'undefined' && myRole === 'st') return;
         musicManager.stopMusic();
         return;
     }
 
+    // ST 自己不需要接收同步（已經在本地播放/暫停/停止）
+    if (typeof myRole !== 'undefined' && myRole === 'st') return;
+
     // 更新本地狀態
     window.musicState = musicData;
 
-    // 應用狀態
+    // 應用狀態（玩家端）
     musicManager.setState(musicData);
 }
 

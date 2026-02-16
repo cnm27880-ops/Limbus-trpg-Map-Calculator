@@ -159,6 +159,10 @@ function switchPage(pageId) {
             if (typeof applyCamera === 'function') {
                 applyCamera();
             }
+            // 校正歌詞位置（防止分頁切換導致座標偏移）
+            if (typeof recalibrateLyricsPositions === 'function') {
+                recalibrateLyricsPositions();
+            }
         });
     }
 }

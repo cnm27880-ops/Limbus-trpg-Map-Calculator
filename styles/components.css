@@ -1175,6 +1175,7 @@
     pointer-events: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 160px;
+    z-index: 170;
 }
 
 .qab-menu.show {
@@ -1772,7 +1773,6 @@
     display: none;
     flex-direction: column;
     overflow: hidden;
-    right: 310px;
 }
 
 .lyrics-tool-panel.expanded {

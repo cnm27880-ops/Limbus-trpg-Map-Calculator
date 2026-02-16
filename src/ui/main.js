@@ -69,6 +69,14 @@ function toggleLyricsPanel() {
     if (!panel) return;
 
     const isOpen = panel.classList.contains('expanded');
+
+    if (!isOpen) {
+        // 開啟歌詞面板時，根據音樂面板是否開啟來調整位置
+        const musicPanel = document.getElementById('music-player-panel');
+        const musicOpen = musicPanel && musicPanel.classList.contains('expanded');
+        panel.style.right = musicOpen ? (musicPanel.offsetWidth + 10) + 'px' : '0px';
+    }
+
     panel.classList.toggle('expanded', !isOpen);
 }
 

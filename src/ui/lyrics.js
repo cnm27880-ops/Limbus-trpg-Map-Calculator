@@ -380,7 +380,6 @@ function toggleLyricsPlayback() {
     const pauseSlider = document.getElementById('lyrics-pause');
     const loopCheckbox = document.getElementById('lyrics-loop');
 
-    // 優先使用 Tap Tempo 偵測到的速度，否則使用預設組或滑桿值
     const speed = getCurrentSpeed();
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
     const loop = loopCheckbox ? loopCheckbox.checked : false;

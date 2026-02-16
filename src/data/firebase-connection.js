@@ -462,6 +462,9 @@ function joinRoom(roomCode, isST) {
                 // ST 的音樂控制區塊
                 const musicStControls = document.getElementById('bgm-st-controls');
                 if (musicStControls) musicStControls.style.display = 'block';
+                // ST 的歌詞錄製/清單區塊
+                const lyricsStControls = document.getElementById('lyrics-st-controls');
+                if (lyricsStControls) lyricsStControls.style.display = 'block';
             }
             document.getElementById('units-toolbar').style.display = 'flex';
             document.getElementById('my-id').innerText = roomCode;

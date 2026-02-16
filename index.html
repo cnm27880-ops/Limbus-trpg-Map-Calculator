@@ -320,7 +320,6 @@
                     <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
                 </div>
             </div>
-            </div>
         </div>
     </div>
 
@@ -367,8 +366,13 @@
             <!-- 錄製模式 -->
             <div class="lyrics-section">
                 <div class="music-section-title">手動錄製定點</div>
-                <div class="rec-mode-desc">播放音樂後按「開始錄製」，在每句台詞開頭時按空白鍵定點。</div>
+                <div class="rec-mode-desc">播放音樂後按「開始錄製」，在每句台詞開頭時按空白鍵定點。可從指定行數開始重錄，之前的定點會保留。</div>
                 <div class="rec-controls">
+                    <div class="rec-start-from">
+                        <label class="lyrics-label" for="rec-start-line">從第</label>
+                        <input type="number" id="rec-start-line" class="rec-start-input" min="1" value="1" step="1">
+                        <label class="lyrics-label">句開始</label>
+                    </div>
                     <button class="rec-btn" id="rec-start-btn" onclick="toggleRecording()">⏺ 開始錄製</button>
                     <button class="rec-btn rec-clear-btn" id="rec-clear-btn" onclick="clearRecording()">清除</button>
                 </div>

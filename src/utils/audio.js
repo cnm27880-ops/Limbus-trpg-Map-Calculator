@@ -203,7 +203,7 @@ class MusicManager {
     }
 
     /**
-     * 停止音樂播放
+     * 停止音樂播放（重置到開頭，清除曲目資訊）
      */
     stopMusic() {
         if (!this.currentAudio) return;
@@ -211,7 +211,31 @@ class MusicManager {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
         this.currentTrack = null;
+        this.isPlaying = false;
         this.updateUI();
+    }
+
+    /**
+     * 暫停音樂（保留播放位置和曲目資訊）
+     */
+    pauseMusic() {
+        if (!this.currentAudio || this.currentAudio.paused) return;
+
+        this.currentAudio.pause();
+        // 不重置 currentTime 和 currentTrack，只暫停
+        this.updateUI();
+    }
+
+    /**
+     * 繼續播放音樂
+     */
+    resumeMusic() {
+        if (!this.currentAudio || !this.currentAudio.src) return;
+
+        this.currentAudio.play().catch(error => {
+            console.warn('BGM: 播放失敗', error);
+            this.showInteractionPrompt();
+        });
     }
 
     /**
@@ -221,12 +245,9 @@ class MusicManager {
         if (!this.currentAudio || !this.currentAudio.src) return;
 
         if (this.currentAudio.paused) {
-            this.currentAudio.play().catch(error => {
-                console.warn('BGM: 播放失敗', error);
-                this.showInteractionPrompt();
-            });
+            this.resumeMusic();
         } else {
-            this.currentAudio.pause();
+            this.pauseMusic();
         }
     }
 
@@ -570,8 +591,12 @@ class MusicManager {
             if (state.isPlaying) {
                 this.playMusic(state.currentUrl, state.currentName);
             } else {
-                this.stopMusic();
+                // 有 URL 但 isPlaying 為 false = 暫停（保留播放位置）
+                this.pauseMusic();
             }
+        } else {
+            // 沒有 URL = 完全停止
+            this.stopMusic();
         }
     }
 }
@@ -708,6 +733,10 @@ function stTogglePlayback() {
             return;
         }
 
+        // 先在本地切換暫停/播放
+        musicManager.togglePlayback();
+
+        // 同步狀態到 Firebase（保留 URL，只切換 isPlaying）
         syncMusicState({
             currentUrl: state.currentUrl,
             currentName: state.currentName,

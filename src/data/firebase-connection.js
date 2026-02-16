@@ -668,6 +668,14 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('music').off('value', musicListener));
 
+    // 監聽歌詞狀態變更
+    const lyricsListener = roomRef.child('lyrics').on('value', snapshot => {
+        if (typeof handleLyricsUpdate === 'function') {
+            handleLyricsUpdate(snapshot.val());
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('lyrics').off('value', lyricsListener));
+
     // 定期更新活動時間（每 30 秒）
     const activityInterval = setInterval(() => {
         roomRef.child('info/lastActive').set(firebase.database.ServerValue.TIMESTAMP);

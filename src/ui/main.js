@@ -61,6 +61,17 @@ function toggleQuickActions() {
     toggleQABMenu();
 }
 
+/**
+ * 切換歌詞工具面板
+ */
+function toggleLyricsPanel() {
+    const panel = document.getElementById('lyrics-panel');
+    if (!panel) return;
+
+    const isOpen = panel.classList.contains('expanded');
+    panel.classList.toggle('expanded', !isOpen);
+}
+
 // ===== 頁面載入初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
     // 初始化 Modal

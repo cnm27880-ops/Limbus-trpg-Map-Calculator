@@ -131,13 +131,6 @@ const HOTKEYS = {
         },
         description: '切換戰鬥儀表板',
         category: 'panels'
-    },
-    't': {
-        action: () => {
-            if (typeof handleTap === 'function') handleTap();
-        },
-        description: 'Tap Tempo 測速',
-        category: 'panels'
     }
 };
 

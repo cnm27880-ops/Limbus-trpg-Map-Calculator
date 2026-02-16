@@ -356,10 +356,6 @@
                         <button class="speed-preset-btn" id="speed-preset-2" data-preset="2">B: 80ms</button>
                         <button class="speed-preset-save-btn" id="speed-preset-save" title="儲存目前速度到選中的預設">儲存</button>
                     </div>
-                    <!-- Tap Tempo 測速區塊 -->
-                    <div class="tap-tempo-section">
-                        <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
-                        <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
                     </div>
                 </div>
             </div>
@@ -381,6 +377,17 @@
             <!-- 匯入 -->
             <div class="lyrics-section">
                 <button class="lyrics-import-btn" onclick="importJsonTimeline()">匯入 AI 分析數據 (JSON)</button>
+            </div>
+            <!-- 歌詞清單 -->
+            <div class="lyrics-section">
+                <div class="music-section-title">歌詞清單</div>
+                <div class="lyrics-library-save">
+                    <input type="text" id="lyrics-save-name" class="lyrics-save-name-input" placeholder="輸入歌詞名稱...">
+                    <button class="lyrics-save-btn" id="lyrics-save-btn" onclick="saveLyricsToLibrary()">儲存</button>
+                </div>
+                <div id="lyrics-library-list" class="lyrics-library-list">
+                    <div class="lyrics-library-empty">尚無儲存的歌詞</div>
+                </div>
             </div>
             <!-- 逐行微調編輯器 -->
             <div id="lyrics-line-editor" class="lyrics-line-editor" style="display:none;">

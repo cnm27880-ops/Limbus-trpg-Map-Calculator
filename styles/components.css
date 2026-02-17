@@ -1638,6 +1638,40 @@
     opacity: 0.8;
 }
 
+/* 歌詞選擇器下拉選單 */
+.lyrics-picker-dropdown {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    max-height: 240px;
+    overflow-y: auto;
+    min-width: 180px;
+    max-width: 260px;
+}
+.lyrics-picker-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.1s;
+}
+.lyrics-picker-item:first-child { border-radius: 8px 8px 0 0; }
+.lyrics-picker-item:last-child { border-radius: 0 0 8px 8px; }
+.lyrics-picker-item:hover { background: var(--accent-yellow); color: #000; }
+.lyrics-picker-stop { color: var(--accent-red); }
+.lyrics-picker-stop:hover { background: var(--accent-red); color: #fff; }
+.lyrics-picker-divider { border-top: 1px solid var(--border); }
+.lyrics-picker-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+
 .music-volume {
     flex: 1;
     height: 6px;
@@ -2541,6 +2575,7 @@ body.combat-mode .boss-hud-container {
     border-radius: 2px;
     position: relative;
     padding: 3px;
+    overflow: hidden;
     box-shadow: 0 0 15px rgba(212, 175, 55, 0.3), 0 5px 20px rgba(0,0,0,0.5);
 }
 

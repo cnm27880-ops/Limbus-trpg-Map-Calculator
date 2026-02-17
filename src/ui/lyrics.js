@@ -167,11 +167,7 @@ function fadeOutLyricsLine(lineEl) {
     lineEl.classList.add('fading-out');
 
     // 動畫結束後從 DOM 移除
-    setTimeout(() => {
-        if (lineEl.parentNode) {
-            lineEl.parentNode.removeChild(lineEl);
-        }
-    }, LYRICS_FADE_DURATION_MS);
+    setTimeout(() => lineEl.remove(), LYRICS_FADE_DURATION_MS);
 }
 
 // ===== 歌詞行建立 =====
@@ -196,12 +192,7 @@ function createLyricsLineElement(side, localSlot) {
     const yPercent = getSlotYPercent(localSlot);
 
     // 計算 X 位置
-    let centerX;
-    if (side === 'left') {
-        centerX = margins.leftCenterX;
-    } else {
-        centerX = margins.rightCenterX;
-    }
+    const centerX = side === 'left' ? margins.leftCenterX : margins.rightCenterX;
 
     // 定位 (使用 fixed positioning，在整個視窗上方)
     line.style.position = 'fixed';
@@ -231,12 +222,9 @@ function typewriterLine(lineEl, text, charIntervalMs, signal) {
 
         let rendered = 0;
         const startTime = performance.now();
-        // 記錄每個字元的預計出現時間（累計），支援播放中切換速度
-        const schedule = [0]; // 第 0 個字元在 t=0 出現
-        for (let k = 1; k < chars.length; k++) {
-            const spd = (lyricsLiveSpeed !== null) ? lyricsLiveSpeed : charIntervalMs;
-            schedule.push(schedule[k - 1] + spd);
-        }
+        // schedule[i] = 字元 i 的預計出現時間（ms, 相對於 startTime）
+        // 僅預設第 0 個，後續由 tick 內動態計算（支援播放中即時切速）
+        const schedule = [0];
 
         function tick() {
             if (signal.aborted) {
@@ -377,9 +365,7 @@ function stopLyrics() {
 
     // 清理所有殘留的 resonance-line 元素
     setTimeout(() => {
-        document.querySelectorAll('.resonance-line').forEach(el => {
-            if (el.parentNode) el.parentNode.removeChild(el);
-        });
+        document.querySelectorAll('.resonance-line').forEach(el => el.remove());
     }, LYRICS_FADE_DURATION_MS + 200);
 
     lyricsCurrentSlot = 0;
@@ -400,12 +386,17 @@ function delay(ms, signal) {
             return;
         }
 
-        const timer = setTimeout(resolve, ms);
-
-        signal.addEventListener('abort', () => {
+        const onAbort = () => {
             clearTimeout(timer);
             reject(new DOMException('Aborted', 'AbortError'));
-        }, { once: true });
+        };
+
+        const timer = setTimeout(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+        }, ms);
+
+        signal.addEventListener('abort', onAbort, { once: true });
     });
 }
 
@@ -435,7 +426,6 @@ function toggleLyricsPlayback() {
     }
 
     const lines = text.split('\n');
-    const speedSlider = document.getElementById('lyrics-speed');
     const pauseSlider = document.getElementById('lyrics-pause');
     const loopCheckbox = document.getElementById('lyrics-loop');
 
@@ -653,16 +643,11 @@ function startRecording(startFromLine) {
     recIsRecording = true;
     recLineIndex = startIdx;
 
-    // 保留之前已錄製的時間戳（只覆蓋 startIdx 之後的部分）
-    if (startIdx === 0) {
-        recTimestamps = [];
-    } else {
-        // 保留 startIdx 之前的已錄時間戳
-        recTimestamps = [];
-        for (let i = 0; i < startIdx; i++) {
-            recTimestamps[i] = lyricsPerLineTimestamps[i] !== undefined
-                ? lyricsPerLineTimestamps[i] : 0;
-        }
+    // 保留 startIdx 之前的已錄時間戳（只覆蓋 startIdx 之後的部分）
+    recTimestamps = [];
+    for (let i = 0; i < startIdx; i++) {
+        recTimestamps[i] = lyricsPerLineTimestamps[i] !== undefined
+            ? lyricsPerLineTimestamps[i] : 0;
     }
 
     // 使用音樂的當前播放時間作為基準（如果有音樂的話）
@@ -770,25 +755,29 @@ function updateRecStatus(msg) {
  */
 function waitUntilRAF(conditionFn, signal) {
     return new Promise((resolve, reject) => {
-        let done = false;
+        let rafId = 0;
+        let timerId = 0;
+
         function check() {
-            if (done) return;
+            // 先取消另一個待執行的回調，避免回調數量倍增
+            cancelAnimationFrame(rafId);
+            clearTimeout(timerId);
+
             if (signal.aborted) {
-                done = true;
                 reject(new DOMException('Aborted', 'AbortError'));
                 return;
             }
             if (conditionFn()) {
-                done = true;
                 resolve();
                 return;
             }
-            requestAnimationFrame(check);
-            // setTimeout 作為後備：分頁不可見時 rAF 會完全停止，
-            // 但 setTimeout 仍以 ~1s 頻率觸發，確保回到分頁時能追上進度
-            setTimeout(check, 200);
+            // rAF 提供前景高精度，setTimeout 作為背景後備
+            rafId = requestAnimationFrame(check);
+            timerId = setTimeout(check, 200);
         }
-        requestAnimationFrame(check);
+
+        rafId = requestAnimationFrame(check);
+        timerId = setTimeout(check, 200);
     });
 }
 
@@ -905,7 +894,6 @@ function renderLineEditor() {
     }
 
     const lines = text.split('\n');
-    const hasTimestamps = Object.keys(lyricsPerLineTimestamps).length > 0;
     editor.style.display = '';
 
     list.innerHTML = '';
@@ -1473,17 +1461,9 @@ function handleLyricsUpdate(data) {
             lyricsSyncOffset = data.syncOffset;
         }
 
-        // 設定同步過來的逐行數據
-        if (data.timestamps) {
-            lyricsPerLineTimestamps = data.timestamps;
-        } else {
-            lyricsPerLineTimestamps = {};
-        }
-        if (data.perLineSpeeds) {
-            lyricsPerLineSpeeds = data.perLineSpeeds;
-        } else {
-            lyricsPerLineSpeeds = {};
-        }
+        // 設定同步過來的逐行數據（複製避免污染來源物件）
+        lyricsPerLineTimestamps = data.timestamps ? { ...data.timestamps } : {};
+        lyricsPerLineSpeeds = data.perLineSpeeds ? { ...data.perLineSpeeds } : {};
 
         lyricsLiveSpeed = speed;
 

@@ -226,32 +226,53 @@ function createLyricsLineElement(side, localSlot) {
  */
 function typewriterLine(lineEl, text, charIntervalMs, signal) {
     return new Promise((resolve, reject) => {
-        let i = 0;
         const chars = Array.from(text); // 支援 Unicode 字符
+        if (chars.length === 0) { resolve(); return; }
 
-        function typeNext() {
+        let rendered = 0;
+        const startTime = performance.now();
+        // 記錄每個字元的預計出現時間（累計），支援播放中切換速度
+        const schedule = [0]; // 第 0 個字元在 t=0 出現
+        for (let k = 1; k < chars.length; k++) {
+            const spd = (lyricsLiveSpeed !== null) ? lyricsLiveSpeed : charIntervalMs;
+            schedule.push(schedule[k - 1] + spd);
+        }
+
+        function tick() {
             if (signal.aborted) {
                 reject(new DOMException('Aborted', 'AbortError'));
                 return;
             }
 
-            if (i >= chars.length) {
+            const elapsed = performance.now() - startTime;
+
+            // 根據已過時間，一次補齊所有應顯示的字元
+            while (rendered < chars.length && elapsed >= schedule[rendered]) {
+                const charSpan = document.createElement('span');
+                charSpan.className = 'resonance-char';
+                charSpan.textContent = chars[rendered];
+                lineEl.appendChild(charSpan);
+                rendered++;
+
+                // 動態更新後續字元的排程，支援播放中切速
+                if (rendered < chars.length) {
+                    const spd = (lyricsLiveSpeed !== null) ? lyricsLiveSpeed : charIntervalMs;
+                    schedule[rendered] = schedule[rendered - 1] + spd;
+                }
+            }
+
+            if (rendered >= chars.length) {
                 resolve();
                 return;
             }
 
-            const charSpan = document.createElement('span');
-            charSpan.className = 'resonance-char';
-            charSpan.textContent = chars[i];
-            lineEl.appendChild(charSpan);
-
-            i++;
-            // 即時讀取 lyricsLiveSpeed，支援播放中切換速度
-            const currentDelay = (lyricsLiveSpeed !== null) ? lyricsLiveSpeed : charIntervalMs;
-            setTimeout(typeNext, currentDelay);
+            // 計算到下個字元的剩餘等待時間
+            const nextCharTime = schedule[rendered];
+            const remaining = Math.max(0, nextCharTime - (performance.now() - startTime));
+            setTimeout(tick, remaining);
         }
 
-        typeNext();
+        tick();
     });
 }
 
@@ -749,16 +770,23 @@ function updateRecStatus(msg) {
  */
 function waitUntilRAF(conditionFn, signal) {
     return new Promise((resolve, reject) => {
+        let done = false;
         function check() {
+            if (done) return;
             if (signal.aborted) {
+                done = true;
                 reject(new DOMException('Aborted', 'AbortError'));
                 return;
             }
             if (conditionFn()) {
+                done = true;
                 resolve();
                 return;
             }
             requestAnimationFrame(check);
+            // setTimeout 作為後備：分頁不可見時 rAF 會完全停止，
+            // 但 setTimeout 仍以 ~1s 頻率觸發，確保回到分頁時能追上進度
+            setTimeout(check, 200);
         }
         requestAnimationFrame(check);
     });

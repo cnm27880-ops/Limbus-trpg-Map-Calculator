@@ -156,8 +156,10 @@ const STATUS_PRESETS = {
 const CONNECTION_CONFIG = {
     STORAGE_KEY: 'limbus_session',
     MAX_RECONNECT_ATTEMPTS: 10,
-    HEARTBEAT_INTERVAL: 5000,  // 5 秒
-    RECONNECT_DELAY: 2000      // 2 秒基礎延遲
+    HEARTBEAT_INTERVAL: 45000,  // 45 秒（Firebase 預設超時約 60 秒）
+    RECONNECT_DELAY: 2000,      // 2 秒基礎延遲
+    ACTIVITY_UPDATE_INTERVAL: 30000,  // 30 秒更新活動時間
+    OFFLINE_THRESHOLD: 5 * 60 * 1000  // 5 分鐘內視為在線
 };
 
 // ===== 地圖預設尺寸 =====

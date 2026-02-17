@@ -473,11 +473,9 @@ class MusicManager {
 
         container.innerHTML = this.playlist.map((item, index) => {
             const isPlaying = this.currentTrack && this.currentTrack.url === item.url && this.isPlaying;
-            const hasLyrics = (typeof hasLinkedLyrics === 'function') && hasLinkedLyrics(item.name);
-            const lyricsIcon = hasLyrics ? '<span class="bgm-lyrics-icon" title="有配對歌詞">🎤</span>' : '';
             return `
                 <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
-                    <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${lyricsIcon}${this.escapeHtml(item.name)}</span>
+                    <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${this.escapeHtml(item.name)}</span>
                     ${myRole === 'st' ? `<button class="bgm-item-remove" onclick="event.stopPropagation(); musicManager.removeFromPlaylist(${index})" title="移除">×</button>` : ''}
                 </div>
             `;
@@ -720,10 +718,6 @@ function switchMusic(url, name) {
             timestamp: Date.now()
         });
 
-        // 自動配對歌詞（ST 端）
-        if (typeof autoPlayLinkedLyrics === 'function') {
-            autoPlayLinkedLyrics(name);
-        }
     }
 }
 
@@ -766,10 +760,6 @@ function stStopMusic() {
             timestamp: Date.now()
         });
 
-        // 自動停止歌詞
-        if (typeof autoStopLinkedLyrics === 'function') {
-            autoStopLinkedLyrics();
-        }
     } else {
         showToast('只有 ST 可以停止音樂');
     }

@@ -415,9 +415,10 @@ async function fetchSheetTabs() {
         // Render tab buttons
         body.innerHTML = `
             <div class="sheet-tabs-grid">
-                ${characterSheets.map(name => `
-                    <button class="sheet-tab-btn" onclick="selectCharacterTab('${escapeHtml(name)}')">${escapeHtml(name)}</button>
-                `).join('')}
+                ${characterSheets.map(name => {
+                    const safeName = escapeHtml(name).replace(/'/g, '&#39;');
+                    return `<button class="sheet-tab-btn" onclick="selectCharacterTab('${safeName}')">${escapeHtml(name)}</button>`;
+                }).join('')}
             </div>
         `;
 
@@ -425,12 +426,6 @@ async function fetchSheetTabs() {
         console.error('Failed to fetch sheet tabs:', error);
         body.innerHTML = `<div class="sheet-import-error">載入失敗: ${error.message}</div>`;
     }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 async function selectCharacterTab(tabName) {
@@ -511,8 +506,14 @@ async function refreshHUDData() {
     const config = getHUDAPIConfig();
 
     if (!config.apiKey) {
-        if (typeof showToast === 'function') {
-            showToast('請先設定 Google API Key');
+        const body = document.getElementById('hud-body');
+        if (body) {
+            body.innerHTML = `
+                <div style="text-align:center;padding:30px;color:var(--hud-text-dim);">
+                    請先設定 Google API Key<br>
+                    <button class="hud-btn" style="margin-top:10px;width:auto;padding:8px 16px;" onclick="openHUDSettings()">前往設定</button>
+                </div>
+            `;
         }
         return;
     }
@@ -985,6 +986,16 @@ function toggleCombatHUD() {
         showCombatHUD();
         if (hudState.boundTab) {
             refreshHUDData();
+        } else {
+            const body = document.getElementById('hud-body');
+            if (body) {
+                body.innerHTML = `
+                    <div style="text-align:center;padding:30px;color:var(--hud-text-dim);">
+                        尚未綁定角色<br>
+                        <button class="hud-btn" style="margin-top:10px;width:auto;padding:8px 16px;" onclick="openImportModal()">匯入角色數據</button>
+                    </div>
+                `;
+            }
         }
     }
 }

@@ -42,10 +42,6 @@ let lyricsCachedMargins = null;         // 最後一次有效的 margin 數據
 let lyricsSyncOffset = -0.5;            // 全域同步偏移 (秒)，負值 = 歌詞提早出現
 const LYRICS_OFFSET_KEY = 'limbus_lyrics_sync_offset';
 
-// ===== 音樂歌詞聯動 =====
-let lyricsAutoSync = true;              // 是否自動配對歌詞
-const LYRICS_AUTOSYNC_KEY = 'limbus_lyrics_autosync';
-
 // ===== localStorage 鍵名 =====
 const LYRICS_STORAGE_KEY = 'limbus_lyrics_text';
 const LYRICS_SPEEDS_KEY = 'limbus_lyrics_perline';
@@ -427,11 +423,9 @@ function toggleLyricsPlayback() {
 
     const lines = text.split('\n');
     const pauseSlider = document.getElementById('lyrics-pause');
-    const loopCheckbox = document.getElementById('lyrics-loop');
 
     const speed = getCurrentSpeed();
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
-    const loop = loopCheckbox ? loopCheckbox.checked : false;
 
     // 設定即時速度（播放中可透過預設組切換改變）
     lyricsLiveSpeed = speed;
@@ -446,8 +440,8 @@ function toggleLyricsPlayback() {
     // 如果有時間戳數據，使用時間軸同步播放
     const hasTimestamps = Object.keys(lyricsPerLineTimestamps).length > 0;
     const playFn = hasTimestamps
-        ? playLyricsWithTimestamps(lines, { speed, loop })
-        : playLyrics(lines, { speed, linePause, loop });
+        ? playLyricsWithTimestamps(lines, { speed, loop: true })
+        : playLyrics(lines, { speed, linePause, loop: true });
 
     playFn.then(() => {
         updateLyricsPlayBtn(false);
@@ -1029,7 +1023,6 @@ function initLyricsUI() {
     loadLyricsTimestamps();
     loadLyricsTimeline();
     loadSyncOffset();
-    loadAutoSyncSetting();
 
     const speedSlider = document.getElementById('lyrics-speed');
     const speedVal = document.getElementById('lyrics-speed-val');
@@ -1138,14 +1131,6 @@ function saveLyricsToLibrary() {
 
     const speedSlider = document.getElementById('lyrics-speed');
     const pauseSlider = document.getElementById('lyrics-pause');
-    const loopCheckbox = document.getElementById('lyrics-loop');
-
-    // 自動記錄目前正在播放的音樂名稱（用於聯動配對）
-    let linkedMusic = null;
-    if (typeof musicManager !== 'undefined' && musicManager.currentTrack) {
-        linkedMusic = musicManager.currentTrack.name || null;
-    }
-
     const entry = {
         id: Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
         name: name,
@@ -1156,8 +1141,7 @@ function saveLyricsToLibrary() {
             ? { ...lyricsPerLineSpeeds } : null,
         speed: speedSlider ? parseInt(speedSlider.value) : LYRICS_DEFAULT_SPEED,
         linePause: pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS,
-        loop: loopCheckbox ? loopCheckbox.checked : false,
-        linkedMusic: linkedMusic,
+        loop: true,
         savedAt: Date.now()
     };
 
@@ -1210,12 +1194,6 @@ function loadLyricsFromLibrary(id) {
     if (pauseSlider && entry.linePause !== undefined) {
         pauseSlider.value = entry.linePause;
         if (pauseVal) pauseVal.textContent = (entry.linePause / 1000).toFixed(1) + 's';
-    }
-
-    // 恢復循環設定
-    const loopCheckbox = document.getElementById('lyrics-loop');
-    if (loopCheckbox) {
-        loopCheckbox.checked = entry.loop || false;
     }
 
     // 更新逐行編輯器
@@ -1294,95 +1272,106 @@ function loadSyncOffset() {
     } catch (e) {}
 }
 
-// ===== 自動配對設定 =====
-
-function loadAutoSyncSetting() {
-    try {
-        const saved = localStorage.getItem(LYRICS_AUTOSYNC_KEY);
-        if (saved !== null) lyricsAutoSync = saved === 'true';
-    } catch (e) {}
-}
-
-function saveAutoSyncSetting() {
-    try { localStorage.setItem(LYRICS_AUTOSYNC_KEY, lyricsAutoSync.toString()); } catch (e) {}
-}
-
-function toggleAutoSync() {
-    lyricsAutoSync = !lyricsAutoSync;
-    saveAutoSyncSetting();
-    updateAutoSyncUI();
-}
-
-function updateAutoSyncUI() {
-    const btn = document.getElementById('bgm-autosync-btn');
-    if (btn) {
-        btn.classList.toggle('active', lyricsAutoSync);
-        btn.title = lyricsAutoSync ? '歌詞聯動：開啟' : '歌詞聯動：關閉';
-    }
-}
-
-// ===== 音樂歌詞聯動 =====
+// ===== 手動歌詞選擇器 =====
 
 /**
- * 根據音樂名稱自動尋找匹配的歌詞並播放
- * @param {string} musicName - 音樂名稱
- * @returns {boolean} 是否成功找到並播放
+ * 切換歌詞選擇器下拉選單
  */
-function autoPlayLinkedLyrics(musicName) {
-    if (!lyricsAutoSync || !musicName) return false;
+function toggleLyricsPicker() {
+    const existing = document.getElementById('lyrics-picker-dropdown');
+    if (existing) {
+        existing.remove();
+        document.removeEventListener('click', closeLyricsPickerOutside);
+        return;
+    }
+
+    const btn = document.getElementById('bgm-lyrics-pick-btn');
+    if (!btn) return;
 
     const library = loadLyricsLibrary();
-    // 先找 linkedMusic 完全匹配的
-    let entry = library.find(e => e.linkedMusic && e.linkedMusic === musicName);
-    // 再找名稱包含音樂名的
-    if (!entry) {
-        entry = library.find(e => e.linkedMusic && musicName.includes(e.linkedMusic));
-    }
-    if (!entry) {
-        entry = library.find(e => e.name && musicName.includes(e.name));
-    }
-    if (!entry) return false;
+    const dropdown = document.createElement('div');
+    dropdown.id = 'lyrics-picker-dropdown';
+    dropdown.className = 'lyrics-picker-dropdown';
 
-    // 載入並播放
-    loadLyricsFromLibrary(entry.id);
+    if (library.length === 0) {
+        dropdown.innerHTML = '<div class="lyrics-picker-empty">尚無儲存的歌詞<br><span style="font-size:0.7rem;">請先到歌詞工具儲存歌詞</span></div>';
+    } else {
+        // 如果正在播放，顯示停止按鈕
+        let html = '';
+        if (lyricsActive) {
+            html += '<div class="lyrics-picker-item lyrics-picker-stop" onclick="pickerStopLyrics()">⏹ 停止歌詞</div>';
+            html += '<div class="lyrics-picker-divider"></div>';
+        }
+        html += library.map(entry => {
+            const hasTs = entry.timestamps && Object.keys(entry.timestamps).length > 0;
+            const badge = hasTs ? ' ⏱' : '';
+            return `<div class="lyrics-picker-item" onclick="pickerSelectLyrics('${entry.id}')">${escapeHtmlLyrics(entry.name)}${badge}</div>`;
+        }).join('');
+        dropdown.innerHTML = html;
+    }
 
-    // 等一幀確保 DOM 更新後再播放
+    // 定位在按鈕下方
+    const rect = btn.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+    dropdown.style.zIndex = '10000';
+
+    document.body.appendChild(dropdown);
+
+    // 點選外部關閉
+    setTimeout(() => {
+        document.addEventListener('click', closeLyricsPickerOutside);
+    }, 10);
+}
+
+function closeLyricsPickerOutside(e) {
+    const dropdown = document.getElementById('lyrics-picker-dropdown');
+    const btn = document.getElementById('bgm-lyrics-pick-btn');
+    if (dropdown && !dropdown.contains(e.target) && e.target !== btn) {
+        dropdown.remove();
+        document.removeEventListener('click', closeLyricsPickerOutside);
+    }
+}
+
+/**
+ * 從選擇器載入歌詞並播放
+ */
+function pickerSelectLyrics(id) {
+    const dropdown = document.getElementById('lyrics-picker-dropdown');
+    if (dropdown) dropdown.remove();
+    document.removeEventListener('click', closeLyricsPickerOutside);
+
+    // 停止現有播放
+    if (lyricsActive) {
+        stopLyrics();
+        updateLyricsPlayBtn(false);
+    }
+
+    // 載入歌詞
+    loadLyricsFromLibrary(id);
+
+    // 等一幀後播放
     requestAnimationFrame(() => {
         if (!lyricsActive) {
             toggleLyricsPlayback();
         }
     });
-
-    return true;
 }
 
 /**
- * 當音樂停止時自動停止歌詞
+ * 從選擇器停止歌詞
  */
-function autoStopLinkedLyrics() {
-    if (!lyricsAutoSync) return;
-    if (lyricsActive) {
-        stopLyrics();
-        updateLyricsPlayBtn(false);
-        if (typeof myRole !== 'undefined' && myRole === 'st') {
-            syncLyricsStop();
-        }
+function pickerStopLyrics() {
+    const dropdown = document.getElementById('lyrics-picker-dropdown');
+    if (dropdown) dropdown.remove();
+    document.removeEventListener('click', closeLyricsPickerOutside);
+
+    stopLyrics();
+    updateLyricsPlayBtn(false);
+    if (typeof myRole !== 'undefined' && myRole === 'st') {
+        syncLyricsStop();
     }
-}
-
-/**
- * 檢查播放清單中是否有配對的歌詞
- * @param {string} musicName - 音樂名稱
- * @returns {boolean}
- */
-function hasLinkedLyrics(musicName) {
-    if (!musicName) return false;
-    const library = loadLyricsLibrary();
-    return library.some(e =>
-        (e.linkedMusic && e.linkedMusic === musicName) ||
-        (e.linkedMusic && musicName.includes(e.linkedMusic)) ||
-        (e.name && musicName.includes(e.name))
-    );
 }
 
 // ===== Firebase 歌詞同步 (讓玩家也能看到歌詞) =====
@@ -1410,9 +1399,7 @@ function syncLyricsPlay() {
 
     const speed = getCurrentSpeed();
     const pauseSlider = document.getElementById('lyrics-pause');
-    const loopCheckbox = document.getElementById('lyrics-loop');
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
-    const loop = loopCheckbox ? loopCheckbox.checked : false;
     const hasTimestamps = Object.keys(lyricsPerLineTimestamps).length > 0;
 
     syncLyricsState({
@@ -1420,7 +1407,7 @@ function syncLyricsPlay() {
         text: text,
         speed: speed,
         linePause: linePause,
-        loop: loop,
+        loop: true,
         timestamps: hasTimestamps ? lyricsPerLineTimestamps : null,
         perLineSpeeds: Object.keys(lyricsPerLineSpeeds).length > 0 ? lyricsPerLineSpeeds : null,
         syncOffset: lyricsSyncOffset,

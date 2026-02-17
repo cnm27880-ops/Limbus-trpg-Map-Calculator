@@ -307,7 +307,7 @@
                 <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
                 <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="handleStopMusic()" title="停止">⏹</button>
                 <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
-                <button id="bgm-autosync-btn" class="music-ctrl-btn active" onclick="toggleAutoSync()" title="歌詞聯動：開啟">🎤</button>
+                <button id="bgm-lyrics-pick-btn" class="music-ctrl-btn" onclick="toggleLyricsPicker()" title="選擇歌詞">🎤</button>
                 <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
             </div>
             <div id="bgm-st-controls" class="music-st-section" style="display:none;">
@@ -347,7 +347,6 @@
                         <span id="lyrics-pause-val" class="lyrics-speed-val">0.6s</span>
                     </div>
                     <div class="lyrics-actions">
-                        <label class="lyrics-checkbox-label"><input type="checkbox" id="lyrics-loop"> 循環</label>
                         <button class="lyrics-play-btn" id="lyrics-play-btn" onclick="toggleLyricsPlayback()">▶ 播放</button>
                     </div>
                     <!-- 速度預設組 -->

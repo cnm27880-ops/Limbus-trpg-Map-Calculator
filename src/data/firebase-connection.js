@@ -610,19 +610,17 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('units').off('value', unitsListener));
 
-    // 監聽狀態變更
+    // 監聯狀態變更
     const stateListener = roomRef.child('state').on('value', snapshot => {
         if (snapshot.exists()) {
             const newState = snapshot.val();
             if (newState.mapW !== state.mapW || newState.mapH !== state.mapH) {
                 state.mapW = newState.mapW;
                 state.mapH = newState.mapH;
-                renderMap();
             }
             if (newState.themeId !== state.themeId) {
                 state.themeId = newState.themeId;
                 updateToolbar();
-                renderMap();
             }
             state.turnIdx = newState.turnIdx || 0;
             state.isCombatActive = newState.isCombatActive || false;
@@ -686,7 +684,7 @@ function setupRoomListeners() {
     // 定期更新活動時間（每 30 秒）
     const activityInterval = setInterval(() => {
         roomRef.child('info/lastActive').set(firebase.database.ServerValue.TIMESTAMP);
-    }, 30000);
+    }, CONNECTION_CONFIG.ACTIVITY_UPDATE_INTERVAL);
     unsubscribeListeners.push(() => clearInterval(activityInterval));
 
     // 設置連線監控和心跳機制
@@ -751,8 +749,7 @@ function startHeartbeat() {
     // 先停止現有的心跳
     stopHeartbeat();
 
-    // 心跳間隔設為 45 秒（Firebase 預設超時約 60 秒）
-    const HEARTBEAT_INTERVAL = 45000;
+    const HEARTBEAT_INTERVAL = CONNECTION_CONFIG.HEARTBEAT_INTERVAL;
 
     heartbeatInterval = setInterval(() => {
         if (roomRef && isConnected) {
@@ -844,7 +841,7 @@ function updateUserPresence() {
 function getOnlineUsers() {
     const users = [];
     const now = Date.now();
-    const OFFLINE_THRESHOLD = 5 * 60 * 1000; // 5 分鐘內視為在線
+    const OFFLINE_THRESHOLD = CONNECTION_CONFIG.OFFLINE_THRESHOLD;
 
     for (const [userId, userData] of Object.entries(roomUsers)) {
         // 過濾掉離線太久的使用者
@@ -1120,7 +1117,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 // ===== Session 管理 =====
-const SESSION_KEY = 'limbus_session';
+const SESSION_KEY = CONNECTION_CONFIG.STORAGE_KEY;
 
 /**
  * 儲存 Session 到 localStorage

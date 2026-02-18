@@ -55,13 +55,6 @@ function closeQABMenu() {
 }
 
 /**
- * 舊版相容函數
- */
-function toggleQuickActions() {
-    toggleQABMenu();
-}
-
-/**
  * 切換歌詞工具面板
  */
 function toggleLyricsPanel() {
@@ -103,23 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('Limbus Command v7.5 initialized');
 });
 
-// ===== 版本資訊 =====
-const APP_VERSION = '7.5';
-const APP_NAME = 'Limbus Command';
-
-/**
- * 取得版本資訊
- * @returns {Object}
- */
-function getAppInfo() {
-    return {
-        name: APP_NAME,
-        version: APP_VERSION,
-        buildDate: '2024'
-    };
-}
-
-// ===== 鍵盤控制邏輯 (新增) =====
+// ===== 鍵盤控制邏輯 =====
 function initKeyboardControls() {
     document.addEventListener('keydown', (e) => {
         // 如果正在輸入文字或沒有選取單位，則忽略

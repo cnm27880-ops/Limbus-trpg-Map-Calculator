@@ -1603,6 +1603,8 @@
     gap: 8px;
     padding: 12px 14px;
     border-bottom: 1px solid var(--border);
+    overflow: hidden;
+}
 }
 
 .music-ctrl-btn {
@@ -1674,6 +1676,7 @@
 
 .music-volume {
     flex: 1;
+    min-width: 0;
     height: 6px;
     -webkit-appearance: none;
     background: var(--bg-input);

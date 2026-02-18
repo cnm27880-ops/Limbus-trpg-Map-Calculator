@@ -439,7 +439,9 @@ function toggleLyricsPlayback() {
     const lines = text.split('\n');
     const pauseSlider = document.getElementById('lyrics-pause');
 
-    const speed = getCurrentSpeed();
+    // 優先使用滑桿值（可能被清單載入更新），否則使用預設組速度
+    const entrySpeedSlider = document.getElementById('lyrics-speed');
+    const speed = entrySpeedSlider ? parseInt(entrySpeedSlider.value) : getCurrentSpeed();
     const linePause = pauseSlider ? parseInt(pauseSlider.value) : LYRICS_LINE_PAUSE_MS;
 
     // 設定即時速度（播放中可透過預設組切換改變）
@@ -1478,7 +1480,7 @@ function toggleLyricsPicker() {
             const isDataKey = entry._source === 'lyrics_data';
             const escapedName = escapeHtmlLyrics(entry.name).replace(/'/g, "\\'");
             const action = isDataKey
-                ? `loadLyrics('${escapedName}'); this.closest('.lyrics-picker-dropdown').remove();`
+                ? `pickerSelectLyricsData('${escapedName}')`
                 : `pickerSelectLyrics('${entry.id}')`;
             return `<div class="lyrics-picker-item" onclick="${action}">${escapeHtmlLyrics(entry.name)}${badge}</div>`;
         }).join('');
@@ -1510,7 +1512,7 @@ function closeLyricsPickerOutside(e) {
 }
 
 /**
- * 從選擇器載入歌詞並播放
+ * 從選擇器載入歌詞並播放（舊版 library 格式）
  */
 function pickerSelectLyrics(id) {
     const dropdown = document.getElementById('lyrics-picker-dropdown');
@@ -1525,6 +1527,32 @@ function pickerSelectLyrics(id) {
 
     // 載入歌詞
     loadLyricsFromLibrary(id);
+
+    // 等一幀後播放
+    requestAnimationFrame(() => {
+        if (!lyricsActive) {
+            toggleLyricsPlayback();
+        }
+    });
+}
+
+/**
+ * 從選擇器載入 lyrics_data_* 格式歌詞並播放
+ * @param {string} name - 歌名
+ */
+function pickerSelectLyricsData(name) {
+    const dropdown = document.getElementById('lyrics-picker-dropdown');
+    if (dropdown) dropdown.remove();
+    document.removeEventListener('click', closeLyricsPickerOutside);
+
+    // 停止現有播放
+    if (lyricsActive) {
+        stopLyrics();
+        updateLyricsPlayBtn(false);
+    }
+
+    // 載入歌詞
+    loadLyrics(name);
 
     // 等一幀後播放
     requestAnimationFrame(() => {
@@ -1718,6 +1746,7 @@ window.loadLyrics = loadLyrics;
 window.deleteLyrics = deleteLyrics;
 window.getSavedLyricsList = getSavedLyricsList;
 window.pickerSelectLyrics = pickerSelectLyrics;
+window.pickerSelectLyricsData = pickerSelectLyricsData;
 window.pickerStopLyrics = pickerStopLyrics;
 window.importJsonTimeline = importJsonTimeline;
 window.toggleRecording = toggleRecording;

@@ -297,7 +297,8 @@ function loadUnitTemplate(templateId) {
         const preview = document.getElementById('template-avatar-preview');
         const img = document.getElementById('template-avatar-img');
         if (preview && img) {
-            img.style.backgroundImage = `url(${template.avatar})`;
+            const safeAvatarUrl = (template.avatar && template.avatar.startsWith('data:image/')) ? template.avatar : '';
+            img.style.backgroundImage = safeAvatarUrl ? `url(${safeAvatarUrl})` : 'none';
             preview.style.display = 'block';
         }
     } else {
@@ -421,8 +422,7 @@ function confirmAddUnit() {
 
         state.units.push(u);
         closeModal('modal-add-unit');
-        sendState();
-        renderAll();
+        broadcastState();
     } else {
         sendToHost({
             type: 'addUnit',
@@ -450,8 +450,8 @@ function confirmBatchAdd() {
 
     const prefix = document.getElementById('batch-prefix').value || 'Unit';
     const start = parseInt(document.getElementById('batch-start').value) || 1;
-    const count = parseInt(document.getElementById('batch-count').value) || 5;
-    const hp = parseInt(document.getElementById('batch-hp').value) || 10;
+    const count = Math.min(parseInt(document.getElementById('batch-count').value) || 5, 50); // 限制最多 50 個
+    const hp = Math.max(1, Math.min(parseInt(document.getElementById('batch-hp').value) || 10, 9999));
     const type = document.getElementById('batch-type').value;
     const size = parseInt(document.getElementById('batch-size').value) || 1;
 
@@ -460,8 +460,7 @@ function confirmBatchAdd() {
     }
 
     closeModal('modal-batch');
-    sendState();
-    renderAll();
+    broadcastState();
 }
 
 // ===== HP 修改 Modal =====
@@ -604,7 +603,7 @@ function openAssignOwnerModal(unitId) {
                 border-radius:8px;
                 cursor:pointer;
                 transition:all 0.2s;
-            " onclick="assignOwner('${unitId}', '${user.id}', '${escapeHtml(user.name)}')"
+            " onclick="assignOwner('${escapeHtml(unitId)}', '${escapeHtml(user.id)}', '${escapeHtml(user.name)}')"
             onmouseover="this.style.borderColor='var(--accent-yellow)'"
             onmouseout="this.style.borderColor='${isCurrentOwner ? 'var(--accent-green)' : 'var(--border)'}'">
                 <div>

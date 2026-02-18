@@ -34,9 +34,8 @@ function changeMapTheme(id) {
     }));
 
     updateToolbar();
-    sendState();
     if (typeof syncMapPalette === 'function') syncMapPalette();
-    renderAll();
+    broadcastState();
 }
 
 /**
@@ -167,8 +166,7 @@ function resizeMap() {
     state.mapW = w;
     state.mapH = h;
     state.mapData = newData;
-    sendState();
-    renderAll();
+    broadcastState();
 
     // 移除「套用」按鈕的變更狀態
     const applyBtn = document.querySelector('.apply-btn');
@@ -348,8 +346,7 @@ function renderMap() {
                             u.x = cellTargetX;
                             u.y = cellTargetY;
                             selectedUnitId = null;
-                            sendState();
-                            renderAll();
+                            broadcastState();
                         } else {
                             sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: cellTargetX, y: cellTargetY });
                             // 玩家端預先更新本地顯示
@@ -727,8 +724,7 @@ function recallUnit(id) {
     if (myRole === 'st') {
         u.x = -1;
         u.y = -1;
-        sendState();
-        renderAll();
+        broadcastState();
     } else {
         sendToHost({
             type: 'moveUnit',

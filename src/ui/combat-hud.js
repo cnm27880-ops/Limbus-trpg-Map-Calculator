@@ -770,7 +770,10 @@ function renderHUDContent() {
         `;
     }
 
+    // 保存捲動位置，避免重繪時跳回頂部
+    const scrollTop = body.scrollTop;
     body.innerHTML = html;
+    body.scrollTop = scrollTop;
 }
 
 function renderWillpower(wp) {
@@ -952,6 +955,15 @@ function renderAttacks(attacks) {
 function switchDefense(index) {
     hudState.activeDefenseIndex = index;
     saveHUDSettings();
+
+    // 局部更新防禦格子，避免全部重繪導致飄移
+    const items = document.querySelectorAll('.defense-grid-item');
+    if (items.length > 0 && hudState.data) {
+        items.forEach((item, idx) => {
+            item.classList.toggle('active', idx === index);
+        });
+        return;
+    }
     renderHUDContent();
 }
 
@@ -959,6 +971,47 @@ function switchDefense(index) {
 function switchAttack(index) {
     hudState.activeAttackIndex = index;
     saveHUDSettings();
+
+    // 局部更新攻擊區塊，避免全部重繪導致飄移
+    if (hudState.data && hudState.data.attacks.length > 0) {
+        const body = document.getElementById('hud-body');
+        if (!body) return;
+
+        // 保存捲動位置
+        const scrollTop = body.scrollTop;
+
+        // 只更新攻擊 tab 按鈕的 active 狀態
+        const tabs = document.querySelectorAll('.attack-tab-btn');
+        tabs.forEach((tab, idx) => {
+            tab.classList.toggle('active', idx === index);
+        });
+
+        // 更新攻擊卡片內容
+        const activeAtk = hudState.data.attacks[index];
+        if (activeAtk) {
+            const card = document.querySelector('.active-attack-card');
+            if (card) {
+                card.innerHTML = `
+                    <div class="attack-card-row">
+                        <div class="attack-card-name">${escapeHtml(activeAtk.name)}</div>
+                        <div class="attack-card-dp">${activeAtk.dp} + ${activeAtk.extra}</div>
+                    </div>
+                    <div class="attack-card-row">
+                        <div class="attack-card-tags">
+                            ${activeAtk.penVal > 0 ? `<span class="attack-tag pen">破甲 ${activeAtk.penVal}</span>` : ''}
+                            ${activeAtk.magicVal > 0 ? `<span class="attack-tag magic">破魔 ${activeAtk.magicVal}</span>` : ''}
+                            ${activeAtk.speedVal > 0 ? `<span class="attack-tag speed">高速 ${activeAtk.speedVal}</span>` : ''}
+                        </div>
+                        <div class="attack-card-limit">上限: ${activeAtk.limit}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // 恢復捲動位置
+        body.scrollTop = scrollTop;
+        return;
+    }
     renderHUDContent();
 }
 

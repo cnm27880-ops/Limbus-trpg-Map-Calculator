@@ -144,7 +144,16 @@
 }
 
 .combat-hud.collapsed .hud-body {
+    padding: 0;
+    gap: 0;
+}
+
+.combat-hud.collapsed .hud-body .hud-section {
     display: none;
+}
+
+.combat-hud.collapsed .hud-body .hud-minimized-bar {
+    display: flex;
 }
 
 /* ===== Resource Bars Section ===== */
@@ -393,7 +402,8 @@
     background: rgba(0, 0, 0, 0.3);
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.15s ease, color 0.15s ease;
+    touch-action: manipulation;
 }
 
 .defense-mini:hover {
@@ -470,12 +480,15 @@
     border-radius: 8px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 2px;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .defense-grid-item:hover {
@@ -576,7 +589,8 @@
     border-radius: 8px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    touch-action: manipulation;
 }
 
 .defense-card-small:hover {
@@ -618,7 +632,10 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .attack-tab-btn:hover {

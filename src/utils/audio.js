@@ -90,16 +90,30 @@ class MusicManager {
         url = url.trim();
 
         // Dropbox 處理
-        if (url.includes('www.dropbox.com')) {
-            // 替換為直連域名
-            url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com');
-            // 移除網址參數
-            const urlObj = new URL(url);
-            return urlObj.origin + urlObj.pathname;
+        // 新舊格式都支援：
+        //   舊: https://www.dropbox.com/s/FILE_ID/filename.mp3?dl=0
+        //   新: https://www.dropbox.com/scl/fi/HASH/filename.mp3?rlkey=KEY&st=ABC&dl=0
+        // 使用 raw=1 參數取得直接檔案內容（保留 rlkey 等必要參數）
+        if (url.includes('dropbox.com/') || url.includes('dropboxusercontent.com/')) {
+            try {
+                const urlObj = new URL(url);
+                // 將舊的 dl.dropboxusercontent.com 轉回 www.dropbox.com
+                if (urlObj.hostname === 'dl.dropboxusercontent.com') {
+                    urlObj.hostname = 'www.dropbox.com';
+                }
+                // 移除 dl 參數，加上 raw=1
+                urlObj.searchParams.delete('dl');
+                urlObj.searchParams.set('raw', '1');
+                return urlObj.toString();
+            } catch (e) {
+                // URL 解析失敗，嘗試簡單替換
+                return url.replace(/[?&]dl=\d/, '?raw=1');
+            }
         }
 
         // Google Drive 處理
-        if (url.includes('drive.google.com')) {
+        // drive.google.com/uc?export=download 已失效，改用 drive.usercontent.google.com
+        if (url.includes('drive.google.com/')) {
             // 提取文件 ID
             let fileId = null;
 
@@ -116,7 +130,7 @@ class MusicManager {
             }
 
             if (fileId) {
-                return `https://drive.google.com/uc?export=download&id=${fileId}`;
+                return `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`;
             }
         }
 
@@ -189,7 +203,7 @@ class MusicManager {
     }
 
     /**
-     * 停止音樂播放
+     * 停止音樂播放（重置到開頭，清除曲目資訊）
      */
     stopMusic() {
         if (!this.currentAudio) return;
@@ -197,7 +211,31 @@ class MusicManager {
         this.currentAudio.pause();
         this.currentAudio.currentTime = 0;
         this.currentTrack = null;
+        this.isPlaying = false;
         this.updateUI();
+    }
+
+    /**
+     * 暫停音樂（保留播放位置和曲目資訊）
+     */
+    pauseMusic() {
+        if (!this.currentAudio || this.currentAudio.paused) return;
+
+        this.currentAudio.pause();
+        // 不重置 currentTime 和 currentTrack，只暫停
+        this.updateUI();
+    }
+
+    /**
+     * 繼續播放音樂
+     */
+    resumeMusic() {
+        if (!this.currentAudio || !this.currentAudio.src) return;
+
+        this.currentAudio.play().catch(error => {
+            console.warn('BGM: 播放失敗', error);
+            this.showInteractionPrompt();
+        });
     }
 
     /**
@@ -207,12 +245,9 @@ class MusicManager {
         if (!this.currentAudio || !this.currentAudio.src) return;
 
         if (this.currentAudio.paused) {
-            this.currentAudio.play().catch(error => {
-                console.warn('BGM: 播放失敗', error);
-                this.showInteractionPrompt();
-            });
+            this.resumeMusic();
         } else {
-            this.currentAudio.pause();
+            this.pauseMusic();
         }
     }
 
@@ -439,7 +474,7 @@ class MusicManager {
         container.innerHTML = this.playlist.map((item, index) => {
             const isPlaying = this.currentTrack && this.currentTrack.url === item.url && this.isPlaying;
             return `
-                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="musicManager.playMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
+                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
                     <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${this.escapeHtml(item.name)}</span>
                     ${myRole === 'st' ? `<button class="bgm-item-remove" onclick="event.stopPropagation(); musicManager.removeFromPlaylist(${index})" title="移除">×</button>` : ''}
                 </div>
@@ -556,8 +591,12 @@ class MusicManager {
             if (state.isPlaying) {
                 this.playMusic(state.currentUrl, state.currentName);
             } else {
-                this.stopMusic();
+                // 有 URL 但 isPlaying 為 false = 暫停（保留播放位置）
+                this.pauseMusic();
             }
+        } else {
+            // 沒有 URL = 完全停止
+            this.stopMusic();
         }
     }
 }
@@ -667,7 +706,10 @@ function renderPlaylist() {
  * @param {string} name - 音樂名稱
  */
 function switchMusic(url, name) {
-    // 如果有 Firebase 同步，先更新 Firebase
+    // 播放音樂（本地端立即播放）
+    musicManager.playMusic(url, name);
+
+    // ST 模式：同步到 Firebase（讓所有玩家也聽到）
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
         syncMusicState({
             currentUrl: url,
@@ -675,9 +717,7 @@ function switchMusic(url, name) {
             isPlaying: true,
             timestamp: Date.now()
         });
-    } else {
-        // 否則直接播放
-        musicManager.playMusic(url, name);
+
     }
 }
 
@@ -685,24 +725,24 @@ function switchMusic(url, name) {
  * ST 控制：播放/暫停音樂（向後兼容）
  */
 function stTogglePlayback() {
+    const state = musicManager.getState();
+
+    if (!state.currentUrl) {
+        showToast('請先選擇要播放的音樂');
+        return;
+    }
+
+    // 先在本地切換暫停/播放
+    musicManager.togglePlayback();
+
     // ST 模式：同步到 Firebase
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
-        const state = musicManager.getState();
-
-        if (!state.currentUrl) {
-            showToast('請先選擇要播放的音樂');
-            return;
-        }
-
         syncMusicState({
             currentUrl: state.currentUrl,
             currentName: state.currentName,
             isPlaying: !state.isPlaying,
             timestamp: Date.now()
         });
-    } else {
-        // 玩家模式：本地控制
-        musicManager.togglePlayback();
     }
 }
 
@@ -710,16 +750,29 @@ function stTogglePlayback() {
  * ST 控制：停止音樂（向後兼容）
  */
 function stStopMusic() {
-    // ST 模式：同步到 Firebase
+    // ST 模式：本地停止 + 同步到 Firebase
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
+        musicManager.stopMusic();
         syncMusicState({
             currentUrl: '',
             currentName: '',
             isPlaying: false,
             timestamp: Date.now()
         });
+
     } else {
         showToast('只有 ST 可以停止音樂');
+    }
+}
+
+/**
+ * 停止音樂：ST 模式走同步，非 ST 模式本地停止
+ */
+function handleStopMusic() {
+    if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
+        stStopMusic();
+    } else {
+        musicManager.stopMusic();
     }
 }
 
@@ -795,14 +848,19 @@ function syncMusicPlaylist(playlist) {
  */
 function handleMusicUpdate(musicData) {
     if (!musicData) {
+        // ST 自己不需要接收同步（已經在本地操作）
+        if (typeof myRole !== 'undefined' && myRole === 'st') return;
         musicManager.stopMusic();
         return;
     }
 
+    // ST 自己不需要接收同步（已經在本地播放/暫停/停止）
+    if (typeof myRole !== 'undefined' && myRole === 'st') return;
+
     // 更新本地狀態
     window.musicState = musicData;
 
-    // 應用狀態
+    // 應用狀態（玩家端）
     musicManager.setState(musicData);
 }
 

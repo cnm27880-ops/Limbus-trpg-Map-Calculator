@@ -39,6 +39,11 @@ function openStatusModal(unitId) {
                                oninput="handleStatusSearch(this.value)">
                     </div>
 
+                    <!-- 最近使用 -->
+                    <div class="recent-status-bar" id="recent-status-bar">
+                        ${renderRecentStatusBar()}
+                    </div>
+
                     <!-- 目前狀態 -->
                     <div class="current-statuses-section">
                         <div class="section-title">目前狀態</div>
@@ -113,6 +118,9 @@ function renderCategoryTabs() {
         if (id === 'common') {
             // 常用分類顯示收藏數量
             count = favorites.length || STATUS_LIBRARY.common.length;
+        } else if (id === 'custom') {
+            // 自訂分類：從 state.customStatuses 取得
+            count = (state.customStatuses || []).length;
         } else if (STATUS_LIBRARY[id]) {
             count = STATUS_LIBRARY[id].length;
         }
@@ -143,11 +151,17 @@ function renderStatusGrid(category) {
         } else {
             statuses = STATUS_LIBRARY.common || [];
         }
+    } else if (category === 'custom') {
+        // 自訂分類：從 state.customStatuses 取得（房間共享）
+        statuses = getCustomStatuses();
     } else if (STATUS_LIBRARY[category]) {
         statuses = STATUS_LIBRARY[category];
     }
 
     if (statuses.length === 0) {
+        if (category === 'custom') {
+            return '<div class="no-statuses">尚無自訂狀態，點擊下方「✏️ 自訂狀態」建立</div>';
+        }
         return '<div class="no-statuses">此分類沒有狀態</div>';
     }
 
@@ -162,10 +176,16 @@ function renderStatusCard(status) {
     const categoryInfo = STATUS_CATEGORIES[getStatusCategory(status.id)] || {};
     const borderColor = categoryInfo.color || '#666';
 
+    // 自訂狀態才顯示刪除按鈕
+    const deleteBtn = status.isCustom
+        ? `<button class="status-card-delete" onclick="event.stopPropagation();confirmDeleteCustomStatus('${status.id}','${escapeHtml(status.name)}')" title="刪除此自訂狀態">×</button>`
+        : '';
+
     return `
         <div class="status-card" data-status-id="${status.id}"
              style="border-left-color:${borderColor}"
              onclick="selectStatus('${status.id}')">
+            ${deleteBtn}
             <div class="status-card-icon">${status.icon}</div>
             <div class="status-card-info">
                 <div class="status-card-name">${status.name}</div>
@@ -378,6 +398,7 @@ function addStatusToCurrentUnit(statusId) {
 
     // 記錄使用
     trackStatusUsage(statusId);
+    recordRecentStatus(statusId);
 
     // 刷新目前狀態列表
     const unit = findUnitById(currentStatusUnitId);
@@ -517,17 +538,13 @@ function syncUnitStatus(unitId) {
 
 // ===== 自訂狀態 =====
 
-const CUSTOM_STATUS_KEY = 'limbus-command-custom-statuses';
+const CUSTOM_STATUS_KEY = 'limbus-command-custom-statuses'; // 保留用於向後相容遷移
 
 /**
- * 獲取自訂狀態列表
+ * 獲取自訂狀態列表（從房間共享的 state.customStatuses 取得）
  */
 function getCustomStatuses() {
-    try {
-        return JSON.parse(localStorage.getItem(CUSTOM_STATUS_KEY)) || [];
-    } catch {
-        return [];
-    }
+    return state.customStatuses || [];
 }
 
 /**
@@ -632,8 +649,7 @@ function createCustomStatus() {
         return;
     }
 
-    // 儲存到 localStorage
-    const customs = getCustomStatuses();
+    // 建立自訂狀態物件
     const newStatus = {
         id: 'custom_' + Date.now(),
         name,
@@ -643,8 +659,11 @@ function createCustomStatus() {
         fullDesc: fullDesc || desc,
         isCustom: true
     };
-    customs.push(newStatus);
-    localStorage.setItem(CUSTOM_STATUS_KEY, JSON.stringify(customs));
+
+    // 透過 Firebase 同步到房間（所有人共享）
+    if (typeof addCustomStatusToRoom === 'function') {
+        addCustomStatusToRoom(newStatus);
+    }
 
     // 直接新增到當前單位
     if (currentStatusUnitId) {
@@ -657,6 +676,9 @@ function createCustomStatus() {
                 unit.status[name] = '';
             }
             syncUnitStatus(currentStatusUnitId);
+
+            // 記錄最近使用
+            recordRecentStatus(newStatus.id);
 
             // 刷新目前狀態列表
             const container = document.getElementById('current-statuses-list');
@@ -702,6 +724,175 @@ function onStatusTagClick(unitId, statusName) {
         if (statusDef) {
             alert(`${statusDef.icon} ${statusDef.name}\n\n${statusDef.fullDesc || statusDef.desc}`);
         }
+    }
+}
+
+// ===== 最近使用狀態 (Recent Usage - LRU) =====
+const RECENT_STATUS_KEY = 'limbus_recent_statuses';
+const RECENT_STATUS_MAX = 8;
+
+/**
+ * 取得最近使用的狀態 ID 列表
+ * @returns {string[]}
+ */
+function getRecentStatuses() {
+    try {
+        return JSON.parse(localStorage.getItem(RECENT_STATUS_KEY)) || [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * 記錄最近使用的狀態（LRU 演算法）
+ * @param {string} statusId - 狀態 ID
+ */
+function recordRecentStatus(statusId) {
+    let recent = getRecentStatuses();
+    // 移除已存在的（LRU：移到最前面）
+    recent = recent.filter(id => id !== statusId);
+    // 插入到最前面
+    recent.unshift(statusId);
+    // 限制最大數量
+    if (recent.length > RECENT_STATUS_MAX) {
+        recent = recent.slice(0, RECENT_STATUS_MAX);
+    }
+    localStorage.setItem(RECENT_STATUS_KEY, JSON.stringify(recent));
+}
+
+/**
+ * 渲染最近使用狀態列
+ * @returns {string} HTML
+ */
+function renderRecentStatusBar() {
+    const recent = getRecentStatuses();
+    if (recent.length === 0) {
+        return '<span style="color:var(--text-muted);font-size:0.8rem;padding:0 4px;">尚無最近使用紀錄</span>';
+    }
+
+    return recent.map(statusId => {
+        const status = getStatusById(statusId);
+        if (!status) return '';
+        const shortName = status.name.length > 4 ? status.name.slice(0, 4) + '…' : status.name;
+        return `<button class="recent-tag" onclick="quickAddRecentStatus('${statusId}')" title="${escapeHtml(status.name)}：${escapeHtml(status.desc)}">
+            ${status.icon} ${shortName}
+        </button>`;
+    }).filter(Boolean).join('');
+}
+
+/**
+ * 快速新增最近使用的狀態到當前單位
+ * @param {string} statusId - 狀態 ID
+ */
+function quickAddRecentStatus(statusId) {
+    if (!currentStatusUnitId) return;
+
+    const status = getStatusById(statusId);
+    if (!status) {
+        showToast('找不到該狀態');
+        return;
+    }
+
+    // 累積型預設 1 點
+    const stacks = status.type === 'stack' ? 1 : null;
+    addStatusToUnit(currentStatusUnitId, statusId, stacks);
+
+    // 記錄使用
+    trackStatusUsage(statusId);
+    recordRecentStatus(statusId);
+
+    // 刷新目前狀態列表
+    const unit = findUnitById(currentStatusUnitId);
+    if (unit) {
+        const container = document.getElementById('current-statuses-list');
+        if (container) {
+            container.innerHTML = renderCurrentStatuses(unit);
+        }
+    }
+
+    // 刷新最近使用列
+    const recentBar = document.getElementById('recent-status-bar');
+    if (recentBar) {
+        recentBar.innerHTML = renderRecentStatusBar();
+    }
+}
+
+// ===== 刪除自訂狀態 =====
+
+/**
+ * 顯示刪除自訂狀態的確認對話框
+ * @param {string} statusId - 狀態 ID
+ * @param {string} statusName - 狀態名稱（用於顯示）
+ */
+function confirmDeleteCustomStatus(statusId, statusName) {
+    const confirmHtml = `
+        <div class="status-detail-overlay" id="confirm-delete-overlay" onclick="closeConfirmDeleteOverlay(event)">
+            <div class="status-detail-panel" style="max-width:340px;" onclick="event.stopPropagation()">
+                <div class="detail-header" style="border-color:var(--accent-red)">
+                    <span class="detail-icon">⚠️</span>
+                    <span class="detail-name">確認刪除</span>
+                </div>
+                <div class="detail-body" style="text-align:center;">
+                    <p style="margin:0;color:var(--text-main);">確定要刪除自訂狀態<br><strong style="color:var(--accent-red);">${statusName}</strong>？</p>
+                    <p style="margin:8px 0 0;font-size:0.8rem;color:var(--text-dim);">此操作無法復原</p>
+                </div>
+                <div class="detail-footer" style="justify-content:center;">
+                    <button onclick="executeDeleteCustomStatus('${statusId}')" class="modal-btn" style="background:var(--accent-red);">
+                        確認刪除
+                    </button>
+                    <button onclick="closeConfirmDeleteOverlay()" class="modal-btn">取消</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const modal = document.getElementById('status-modal');
+    if (modal) {
+        // 移除舊的確認面板
+        const old = document.getElementById('confirm-delete-overlay');
+        if (old) old.remove();
+
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = confirmHtml;
+        modal.appendChild(wrapper.firstElementChild);
+    }
+}
+
+/**
+ * 關閉確認刪除 overlay
+ */
+function closeConfirmDeleteOverlay(event) {
+    if (event && event.target.id !== 'confirm-delete-overlay') return;
+    const overlay = document.getElementById('confirm-delete-overlay');
+    if (overlay) overlay.remove();
+}
+
+/**
+ * 執行刪除自訂狀態
+ * @param {string} statusId - 狀態 ID
+ */
+function executeDeleteCustomStatus(statusId) {
+    // 透過 Firebase 移除
+    if (typeof removeCustomStatusFromRoom === 'function') {
+        removeCustomStatusFromRoom(statusId);
+    } else {
+        // 本地移除
+        state.customStatuses = (state.customStatuses || []).filter(s => s.id !== statusId);
+    }
+
+    showToast('已刪除自訂狀態');
+    closeConfirmDeleteOverlay();
+
+    // 刷新狀態網格
+    const grid = document.getElementById('status-grid');
+    if (grid) {
+        grid.innerHTML = renderStatusGrid(currentStatusCategory);
+    }
+
+    // 刷新分類標籤數量
+    const tabs = document.getElementById('status-category-tabs');
+    if (tabs) {
+        tabs.innerHTML = renderCategoryTabs();
     }
 }
 

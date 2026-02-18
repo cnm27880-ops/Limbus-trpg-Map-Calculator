@@ -58,6 +58,12 @@ const STATUS_CATEGORIES = {
         name: '特殊狀態',
         icon: '✨',
         color: '#1abc9c'
+    },
+    custom: {
+        id: 'custom',
+        name: '自訂',
+        icon: '✏️',
+        color: '#8e24aa'  // 紫色，與 BOSS 單位的紫色調一致
     }
 };
 
@@ -924,9 +930,15 @@ const STATUS_LIBRARY = {
  * @returns {object|null} 狀態定義或 null
  */
 function getStatusById(statusId) {
+    // 先查詢預設狀態庫
     for (const category of Object.values(STATUS_LIBRARY)) {
         const status = category.find(s => s.id === statusId);
         if (status) return status;
+    }
+    // 再查詢房間共享的自訂狀態
+    if (typeof state !== 'undefined' && state.customStatuses) {
+        const custom = state.customStatuses.find(s => s.id === statusId);
+        if (custom) return custom;
     }
     return null;
 }
@@ -940,6 +952,12 @@ function getStatusCategory(statusId) {
     for (const [categoryId, statuses] of Object.entries(STATUS_LIBRARY)) {
         if (statuses.find(s => s.id === statusId)) {
             return categoryId;
+        }
+    }
+    // 檢查自訂狀態
+    if (typeof state !== 'undefined' && state.customStatuses) {
+        if (state.customStatuses.find(s => s.id === statusId)) {
+            return 'custom';
         }
     }
     return null;
@@ -968,6 +986,22 @@ function searchStatuses(query) {
                 results.push({
                     ...status,
                     category: categoryId
+                });
+            }
+        }
+    }
+
+    // 同時搜尋房間共享的自訂狀態
+    if (typeof state !== 'undefined' && state.customStatuses) {
+        for (const status of state.customStatuses) {
+            if (
+                status.name.toLowerCase().includes(lowerQuery) ||
+                status.desc.toLowerCase().includes(lowerQuery) ||
+                (status.fullDesc && status.fullDesc.toLowerCase().includes(lowerQuery))
+            ) {
+                results.push({
+                    ...status,
+                    category: 'custom'
                 });
             }
         }

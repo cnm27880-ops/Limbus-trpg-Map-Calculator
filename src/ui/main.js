@@ -55,10 +55,22 @@ function closeQABMenu() {
 }
 
 /**
- * 舊版相容函數
+ * 切換歌詞工具面板
  */
-function toggleQuickActions() {
-    toggleQABMenu();
+function toggleLyricsPanel() {
+    const panel = document.getElementById('lyrics-panel');
+    if (!panel) return;
+
+    const isOpen = panel.classList.contains('expanded');
+
+    if (!isOpen) {
+        // 開啟歌詞面板時，根據音樂面板是否開啟來調整位置
+        const musicPanel = document.getElementById('music-player-panel');
+        const musicOpen = musicPanel && musicPanel.classList.contains('expanded');
+        panel.style.right = musicOpen ? (musicPanel.offsetWidth + 10) + 'px' : '0px';
+    }
+
+    panel.classList.toggle('expanded', !isOpen);
 }
 
 // ===== 頁面載入初始化 =====
@@ -77,27 +89,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 初始化鍵盤控制 (新增功能)
     initKeyboardControls();
+
+    // 初始化測距尺事件 (Alt + 拖曳)
+    if (typeof initRulerEvents === 'function') initRulerEvents();
     
     console.log('Limbus Command v7.5 initialized');
 });
 
-// ===== 版本資訊 =====
-const APP_VERSION = '7.5';
-const APP_NAME = 'Limbus Command';
-
-/**
- * 取得版本資訊
- * @returns {Object}
- */
-function getAppInfo() {
-    return {
-        name: APP_NAME,
-        version: APP_VERSION,
-        buildDate: '2024'
-    };
-}
-
-// ===== 鍵盤控制邏輯 (新增) =====
+// ===== 鍵盤控制邏輯 =====
 function initKeyboardControls() {
     document.addEventListener('keydown', (e) => {
         // 如果正在輸入文字或沒有選取單位，則忽略

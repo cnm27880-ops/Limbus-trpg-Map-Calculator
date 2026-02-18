@@ -382,6 +382,7 @@ input[type="number"] {
     width: var(--grid-size);
     height: var(--grid-size);
     border: 1px solid rgba(255, 255, 255, 0.35);  /* 格線透明度 35% 與背景區分 */
+    background-color: #1a1a1f;  /* 深灰色地板，與純黑背景區分 */
     position: relative;
     touch-action: none;
 }
@@ -480,6 +481,125 @@ input[type="number"] {
 .toast.show {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
+}
+
+/* ===== 戰鬥模式 (Combat Mode) ===== */
+
+/* 戰鬥模式下覆蓋灰色背景 */
+body.combat-mode {
+    background: #000 !important;
+}
+
+/* 導覽列向上滑出 */
+.navbar {
+    transition: transform 0.5s ease;
+}
+
+body.combat-mode .navbar {
+    transform: translateY(-100%);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 300;
+}
+
+/* 戰鬥模式下暫時展開 navbar (hover/click peek) */
+body.combat-mode.navbar-peek .navbar {
+    transform: translateY(0);
+}
+
+/* Navbar peek 觸發按鈕（僅戰鬥模式顯示） */
+.combat-navbar-peek {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 350;
+    width: 48px;
+    height: 24px;
+    border-radius: 0 0 8px 8px;
+    background: rgba(30, 30, 35, 0.65);
+    border: 1px solid var(--border);
+    border-top: none;
+    color: var(--accent-yellow);
+    font-size: 0.65rem;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, opacity 0.3s;
+    opacity: 0.5;
+    backdrop-filter: blur(4px);
+    /* 防止快速點擊選取文字 */
+    user-select: none;
+    -webkit-user-select: none;
+    /* 消除行動裝置點擊延遲 */
+    touch-action: manipulation;
+}
+
+/* 擴大點擊熱區：偽元素提供至少 48x48 的觸控區域 */
+.combat-navbar-peek::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -12px;
+    right: -12px;
+    bottom: -20px;
+    min-width: 72px;
+    min-height: 48px;
+}
+
+.combat-navbar-peek:hover {
+    opacity: 1;
+    background: rgba(50, 50, 55, 0.9);
+}
+
+.combat-navbar-peek:active {
+    transform: translateX(-50%) scale(0.93);
+}
+
+.combat-navbar-peek.active {
+    opacity: 1;
+    background: var(--accent-yellow);
+    color: #000;
+}
+
+body.combat-mode .combat-navbar-peek {
+    display: flex;
+}
+
+/* peek 時 navbar 也要有 transition */
+body.combat-mode.navbar-peek .map-toolbar {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 地圖工具列向上隱藏 */
+.map-toolbar {
+    transition: transform 0.5s ease, opacity 0.5s ease;
+}
+
+body.combat-mode .map-toolbar {
+    transform: translateY(-120%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* 側邊欄按鈕保持可見 */
+.sidebar-toggle {
+    position: relative;
+    z-index: 200;
+}
+
+/* 戰鬥模式下，地圖視口擴展全螢幕 */
+body.combat-mode .main-wrapper {
+    height: 100vh;
+    height: 100dvh;
+    top: 0;
+    position: fixed;
+    inset: 0;
 }
 
 /* ===== Responsive ===== */

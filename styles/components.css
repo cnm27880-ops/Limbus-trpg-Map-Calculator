@@ -110,7 +110,7 @@
     height: 115%;
     top: -7.5%;
     left: -7.5%;
-    background-image: url('https://raw.githubusercontent.com/cnm27880-ops/Limbus-trpg-Map-Calculator/main/boss_frame.png');
+    background-image: url('../assets/images/boss_frame.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -146,6 +146,31 @@
     /* 保持相同比例 */
 }
 
+/* ===== Your Turn Indicator (旋轉符文) ===== */
+@keyframes rune-spin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes rune-pulse {
+    0%, 100% { opacity: 0.7; }
+    50%      { opacity: 1; }
+}
+
+.turn-indicator-rune {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+    animation: rune-spin 6s linear infinite, rune-pulse 2s ease-in-out infinite;
+}
+
+/* 符文用 SVG 繪製的圓形符文圖騰 */
+.turn-indicator-rune svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 6px rgba(253, 216, 53, 0.8));
+}
+
 /* ===== Units Page ===== */
 #page-units {
     flex-direction: column;
@@ -178,6 +203,38 @@
     font-weight: 600;
 }
 
+/* ===== Turn Controls (回合控制按鈕組) ===== */
+.turn-controls {
+    display: flex;
+    gap: 2px;
+}
+
+.turn-btn {
+    background: var(--accent-yellow);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    width: 36px;
+    height: 36px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.turn-btn:hover {
+    background: #ffe066;
+    transform: scale(1.05);
+}
+
+.turn-btn:active {
+    transform: scale(0.95);
+    background: #e6b800;
+}
+
 .units-list {
     flex: 1;
     overflow-y: auto;
@@ -189,13 +246,12 @@
 
 /* ===== Unit Card ===== */
 .unit-card {
+    position: relative;
     background: var(--bg-card);
     border-radius: 8px;
-    padding: 10px;
+    padding: 8px 10px;
     border-left: 4px solid var(--text-muted);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    margin-bottom: 4px;
 }
 
 .unit-card.enemy {
@@ -218,8 +274,66 @@
 
 .unit-header {
     display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+/* 左側資訊區 */
+.unit-info {
+    flex: 0 0 auto;
+    min-width: 0;
+    max-width: 100px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.unit-name {
+    font-weight: bold;
+    font-size: 1.1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.unit-hp-text {
+    display: none; /* 隱藏 HP 數字顯示 */
+}
+
+.unit-status {
+    font-size: 0.75rem;
+    margin-top: 2px;
+    font-weight: 600;
+}
+
+/* B、L、A 傷害狀態文字的顏色標記 */
+.unit-status .dmg-a { color: var(--accent-red); }
+.unit-status .dmg-l { color: var(--accent-orange); }
+.unit-status .dmg-b { color: var(--accent-blue); }
+
+/* 右側先攻區 */
+.unit-init-box {
+    flex: 0 0 auto;
+    display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid var(--accent-yellow);
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 40px;
+    min-height: 36px;
+    box-shadow: 0 0 8px rgba(253, 216, 53, 0.3);
+}
+
+.unit-init-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--accent-yellow);
+    text-shadow: 0 0 6px rgba(253, 216, 53, 0.5);
 }
 
 .unit-avatar {
@@ -284,6 +398,53 @@
 
 .hp-a {
     background: var(--accent-red);
+}
+
+/* ===== Tactical HP Bar (中間戰術血條) ===== */
+.hp-tactical-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    transform: skewX(-10deg);
+    min-height: 36px;
+    padding: 6px 4px;
+}
+
+.hp-tactical-segment {
+    width: 6px;
+    height: 24px;
+    border-radius: 2px;
+    transition: all 0.2s;
+    opacity: 0.95;
+    box-shadow: 0 0 6px currentColor;
+}
+
+.hp-tactical-segment.empty {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+    opacity: 0.5;
+}
+
+.hp-tactical-segment.hp-healthy {
+    background-color: var(--accent-green);
+    color: var(--accent-green);
+}
+
+.hp-tactical-segment.hp-b {
+    background-color: var(--accent-blue);
+    color: var(--accent-blue);
+}
+
+.hp-tactical-segment.hp-l {
+    background-color: var(--accent-orange);
+    color: var(--accent-orange);
+}
+
+.hp-tactical-segment.hp-a {
+    background-color: var(--accent-red);
+    color: var(--accent-red);
 }
 
 /* ===== Unit Actions ===== */
@@ -488,6 +649,55 @@
     outline: none;
 }
 
+/* ===== Recent Status Bar (最近使用快選) ===== */
+.recent-status-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+    scrollbar-width: thin;
+}
+
+.recent-status-bar::-webkit-scrollbar {
+    height: 4px;
+}
+
+.recent-status-bar::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.recent-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.08);
+    color: var(--accent-yellow);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.recent-tag:hover {
+    background: var(--accent-yellow);
+    color: #000;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(253, 216, 53, 0.3);
+}
+
+.recent-tag:active {
+    transform: scale(0.96);
+}
+
 .current-statuses-section {
     padding: 12px;
     border-bottom: 1px solid var(--border);
@@ -597,12 +807,44 @@
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
+    position: relative;
 }
 
 .status-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     border-color: var(--text-dim);
+}
+
+/* 自訂狀態刪除按鈕 */
+.status-card-delete {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-red);
+    color: #fff;
+    border: 2px solid var(--bg-card);
+    font-size: 0.75rem;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+    padding: 0;
+    transition: transform 0.1s;
+}
+
+.status-card:hover .status-card-delete {
+    display: flex;
+}
+
+.status-card-delete:hover {
+    transform: scale(1.2);
+    background: #c62828;
 }
 
 .status-card-icon {
@@ -933,6 +1175,7 @@
     pointer-events: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     min-width: 160px;
+    z-index: 170;
 }
 
 .qab-menu.show {
@@ -1258,6 +1501,7 @@
 /* ===== Music Player ===== */
 .music-panel {
     width: 300px;
+    max-height: calc(100vh - 80px);
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -1269,6 +1513,29 @@
 
 .music-panel.expanded {
     display: flex;
+}
+
+.music-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.music-panel-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.music-panel-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.music-panel-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.music-panel-body::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-yellow);
 }
 
 .music-header {
@@ -1357,6 +1624,52 @@
     background: var(--accent-yellow);
     color: #000;
     border-color: var(--accent-yellow);
+}
+
+.music-ctrl-btn.active {
+    background: rgba(33, 150, 243, 0.3);
+    border-color: #64b5f6;
+    color: #64b5f6;
+}
+
+.bgm-lyrics-icon {
+    font-size: 0.75rem;
+    margin-right: 2px;
+    opacity: 0.8;
+}
+
+/* 歌詞選擇器下拉選單 */
+.lyrics-picker-dropdown {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    max-height: 240px;
+    overflow-y: auto;
+    min-width: 180px;
+    max-width: 260px;
+}
+.lyrics-picker-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.1s;
+}
+.lyrics-picker-item:first-child { border-radius: 8px 8px 0 0; }
+.lyrics-picker-item:last-child { border-radius: 0 0 8px 8px; }
+.lyrics-picker-item:hover { background: var(--accent-yellow); color: #000; }
+.lyrics-picker-stop { color: var(--accent-red); }
+.lyrics-picker-stop:hover { background: var(--accent-red); color: #fff; }
+.lyrics-picker-divider { border-top: 1px solid var(--border); }
+.lyrics-picker-empty {
+    padding: 14px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.8rem;
 }
 
 .music-volume {
@@ -1495,6 +1808,546 @@
     background: rgba(229, 57, 53, 0.1);
 }
 
+/* ===== Lyrics Tool Panel (Standalone) ===== */
+.lyrics-tool-panel {
+    width: 320px;
+    max-height: calc(100vh - 80px);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.lyrics-tool-panel.expanded {
+    display: flex;
+}
+
+.lyrics-tool-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.lyrics-tool-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.lyrics-tool-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.lyrics-tool-body::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+/* ===== Recording Mode ===== */
+.rec-mode-desc {
+    font-size: 0.73rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+.rec-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.rec-start-from {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+.rec-start-input {
+    width: 50px;
+    padding: 4px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.rec-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-main);
+    transition: all 0.15s;
+}
+
+.rec-btn:hover {
+    border-color: var(--accent-yellow);
+}
+
+.rec-btn.recording {
+    background: rgba(229, 57, 53, 0.2);
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+    animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.rec-clear-btn {
+    flex: 0 0 auto;
+    width: 60px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px dashed var(--border);
+}
+
+.rec-clear-btn:hover {
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+
+.rec-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+    min-height: 1.2em;
+}
+
+.rec-status.active {
+    color: var(--accent-red);
+}
+
+/* ===== Lyrics Line Editor: Timestamp Column ===== */
+.lyrics-line-time-input {
+    width: 52px;
+    padding: 2px 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.lyrics-line-time-input:focus {
+    outline: none;
+    border-color: var(--accent-yellow);
+}
+
+/* ===== Lyrics Section ===== */
+.lyrics-section {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+}
+
+.lyrics-textarea {
+    width: 100%;
+    min-height: 80px;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 0.82rem;
+    font-family: inherit;
+    resize: vertical;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+.lyrics-textarea:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+}
+
+.lyrics-textarea::placeholder {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+}
+
+.lyrics-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.lyrics-speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lyrics-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    min-width: 28px;
+    flex-shrink: 0;
+}
+
+.lyrics-slider {
+    flex: 1;
+    height: 4px;
+    accent-color: var(--accent-yellow);
+    cursor: pointer;
+}
+
+.lyrics-speed-val {
+    font-size: 0.72rem;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    min-width: 36px;
+    text-align: right;
+}
+
+.lyrics-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.lyrics-checkbox-label {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.lyrics-checkbox-label input[type="checkbox"] {
+    accent-color: var(--accent-yellow);
+}
+
+.lyrics-play-btn {
+    padding: 6px 16px;
+    background: var(--accent-yellow);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+
+.lyrics-play-btn:hover {
+    filter: brightness(1.1);
+}
+
+.lyrics-play-btn.playing {
+    background: var(--accent-red);
+    color: #fff;
+}
+
+/* ===== Speed Presets ===== */
+.lyrics-speed-presets {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.speed-preset-btn {
+    padding: 4px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.speed-preset-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--text-main);
+}
+
+.speed-preset-btn.active {
+    background: rgba(253, 216, 53, 0.15);
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+    font-weight: 600;
+}
+
+.speed-preset-save-btn {
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-left: auto;
+}
+
+.speed-preset-save-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+.speed-preset-save-btn.saved {
+    border-style: solid;
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+/* ===== Lyrics Library ===== */
+.lyrics-library-save {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.lyrics-save-name-input {
+    flex: 1;
+    padding: 6px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-size: 0.8rem;
+}
+
+.lyrics-save-name-input:focus {
+    border-color: var(--accent-yellow);
+    outline: none;
+}
+
+.lyrics-save-btn {
+    padding: 6px 14px;
+    background: var(--accent-yellow);
+    border: none;
+    border-radius: 4px;
+    color: #000;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+}
+
+.lyrics-save-btn:hover {
+    opacity: 0.85;
+}
+
+.lyrics-library-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.lyrics-library-empty {
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.lyrics-library-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.lyrics-library-item:hover {
+    border-color: var(--accent-yellow);
+    background: rgba(255, 235, 59, 0.05);
+}
+
+.lyrics-lib-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.lyrics-lib-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lyrics-lib-meta {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lyrics-lib-badge {
+    display: inline-block;
+    padding: 0 4px;
+    background: rgba(76, 175, 80, 0.25);
+    border-radius: 3px;
+    color: #81c784;
+    font-size: 0.65rem;
+    font-weight: 600;
+    margin-left: 4px;
+}
+
+.lyrics-lib-badge.music {
+    background: rgba(33, 150, 243, 0.25);
+    color: #64b5f6;
+    font-size: 0.7rem;
+    margin-left: 0;
+    margin-right: 3px;
+}
+
+.lyrics-lib-delete {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+}
+
+.lyrics-lib-delete:hover {
+    border-color: #ef5350;
+    color: #ef5350;
+    background: rgba(239, 83, 80, 0.1);
+}
+
+/* ===== AI Import Button ===== */
+.lyrics-import-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(156, 39, 176, 0.2);
+    border: 1px solid rgba(156, 39, 176, 0.4);
+    border-radius: 6px;
+    color: #ce93d8;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.lyrics-import-btn:hover {
+    background: rgba(156, 39, 176, 0.35);
+    border-color: rgba(156, 39, 176, 0.6);
+}
+
+/* ===== Per-Line Speed Editor ===== */
+.lyrics-line-editor {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+}
+
+.lyrics-line-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.lyrics-line-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.lyrics-line-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}
+
+.lyrics-line-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 5px;
+    font-size: 0.73rem;
+}
+
+.lyrics-line-num {
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    min-width: 18px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.lyrics-line-text {
+    flex: 1;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.lyrics-line-speed-input {
+    width: 52px;
+    padding: 2px 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-yellow);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.lyrics-line-speed-input:focus {
+    outline: none;
+    border-color: var(--accent-yellow);
+}
+
+.lyrics-line-unit {
+    color: var(--text-dim);
+    font-size: 0.65rem;
+    flex-shrink: 0;
+}
+
 /* ===== Logout Button ===== */
 .logout-btn {
     width: 32px;
@@ -1515,6 +2368,347 @@
     color: var(--accent-red);
     border-color: var(--accent-red);
     background: rgba(229, 57, 53, 0.1);
+}
+
+/* ===== 地形編輯器 (Tile Editor) ===== */
+
+/* 工具列「+」按鈕 */
+.tool-btn-add {
+    border: 2px dashed var(--text-dim) !important;
+    background: transparent !important;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    font-weight: bold;
+    transition: all 0.15s;
+}
+
+.tool-btn-add:hover {
+    border-color: var(--accent-yellow) !important;
+    color: var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.1) !important;
+}
+
+/* 地形編輯 Modal */
+.tile-editor-modal {
+    max-width: 420px;
+    width: 100%;
+}
+
+.tile-editor-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.tile-editor-select {
+    flex: 1;
+    min-width: 0;
+}
+
+.tile-import-section {
+    padding: 12px;
+}
+
+.tile-editor-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0;
+}
+
+.tile-editor-form {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tile-editor-form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tile-editor-form textarea {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.tile-color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tile-color-picker {
+    width: 44px;
+    height: 36px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px;
+    cursor: pointer;
+    background: var(--bg-input);
+}
+
+.tile-color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.tile-color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.tile-color-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.tile-color-preview {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* ===== 測距尺 (Ruler) ===== */
+
+/* 測距尺 SVG 容器 */
+#ruler-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 100;
+    overflow: visible;
+}
+
+/* 測距線條 */
+.ruler-line {
+    stroke: var(--accent-yellow);
+    stroke-width: 3px;
+    stroke-dasharray: 8 4;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+    animation: ruler-dash 1s linear infinite;
+}
+
+@keyframes ruler-dash {
+    to { stroke-dashoffset: -12; }
+}
+
+/* 測距文字標籤 */
+.ruler-label {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: var(--accent-yellow);
+    border: 1px solid var(--accent-yellow);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: bold;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 101;
+    transform: translate(-50%, -120%);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+/* ===== BOSS HUD (魂系風格血條) ===== */
+
+/* BOSS 血條容器 - 預設在底部，戰鬥模式時滑到頂部 */
+.boss-hud-container {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    max-width: 85vw;
+    z-index: 200;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: top 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), bottom 0.5s ease, opacity 0.5s ease;
+}
+
+/* 戰鬥模式下，血條從頂部滑入至 navbar 原本位置 */
+body.combat-mode .boss-hud-container {
+    bottom: auto;
+    top: 20px;
+}
+
+.boss-hud-container.hidden {
+    display: none;
+}
+
+/* BOSS 名字 */
+.boss-hud-name {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 6px;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.8), 0 0 20px rgba(180,40,40,0.4);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: 'Noto Sans TC', sans-serif;
+}
+
+/* 血條外框 (金色邊框裝飾) */
+.boss-hud-bar-frame {
+    width: 100%;
+    height: 22px;
+    background: rgba(0, 0, 0, 0.85);
+    border: 2px solid #d4af37;
+    border-bottom: 2px solid #b8960c;
+    border-radius: 2px;
+    position: relative;
+    padding: 3px;
+    overflow: hidden;
+    box-shadow: 0 0 15px rgba(212, 175, 55, 0.3), 0 5px 20px rgba(0,0,0,0.5);
+}
+
+/* 裝飾性邊角 (金色) */
+.boss-hud-bar-frame::before, .boss-hud-bar-frame::after {
+    content: '';
+    position: absolute;
+    top: -4px; bottom: -4px;
+    width: 4px;
+    background: #d4af37;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.6);
+}
+.boss-hud-bar-frame::before { left: -2px; }
+.boss-hud-bar-frame::after { right: -2px; }
+
+/* 白色延遲殘影（底層） */
+.boss-hud-drain {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    height: calc(100% - 6px);
+    background: rgba(255, 255, 255, 0.45);
+    width: 100%;
+    transition: width 1.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+    z-index: 0;
+}
+
+/* 血條填充 (三段式漸層紅，在白色殘影之上) */
+.boss-hud-fill {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    height: calc(100% - 6px);
+    background: linear-gradient(90deg, #4a0000 0%, #b71c1c 60%, #ff5252 100%);
+    width: 100%;
+    transition: width 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    box-shadow: 0 0 10px rgba(211, 47, 47, 0.6);
+    z-index: 1;
+}
+
+/* ===== 戰鬥按鈕樣式 ===== */
+.combat-btn-start {
+    background: linear-gradient(135deg, var(--accent-green), #2e7d32) !important;
+    color: #fff !important;
+    font-weight: 600;
+}
+
+.combat-btn-start:hover {
+    filter: brightness(1.15);
+}
+
+.combat-btn-reset {
+    background: linear-gradient(135deg, var(--accent-red), #c62828) !important;
+    color: #fff !important;
+    font-weight: 600;
+}
+
+.combat-btn-reset:hover {
+    filter: brightness(1.15);
+}
+
+/* BOSS 切換按鈕 */
+.action-btn.boss-toggle {
+    color: var(--accent-purple);
+    font-size: 0.85rem;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-btn.boss-toggle.active {
+    background: var(--accent-purple);
+    color: #fff;
+}
+
+/* ===== 歌詞系統 (Resonance Lyrics) ===== */
+
+/* 顫抖動畫 - 微幅飄動效果 */
+@keyframes resonance-tremble {
+    0%   { transform: translate(-50%, -50%) translate(0, 0); }
+    20%  { transform: translate(-50%, -50%) translate(0.5px, -0.8px); }
+    40%  { transform: translate(-50%, -50%) translate(-0.7px, 0.3px); }
+    60%  { transform: translate(-50%, -50%) translate(0.3px, 0.6px); }
+    80%  { transform: translate(-50%, -50%) translate(-0.4px, -0.5px); }
+    100% { transform: translate(-50%, -50%) translate(0, 0); }
+}
+
+/* 單字淡入動畫 */
+@keyframes resonance-char-in {
+    from {
+        opacity: 0;
+        filter: blur(4px);
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0);
+    }
+}
+
+/* 歌詞行容器 */
+.resonance-line {
+    position: fixed;
+    opacity: 1;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 500;
+    font-family: 'Noto Serif TC', 'Georgia', 'Times New Roman', serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 2px;
+    text-shadow:
+        0 0 8px rgba(255, 255, 255, 0.9),
+        0 0 20px rgba(255, 255, 255, 0.5),
+        0 0 40px rgba(200, 200, 255, 0.3),
+        0 2px 4px rgba(0, 0, 0, 0.8);
+    transition: opacity 2s ease-out, filter 2s ease-out;
+    animation: resonance-tremble 3s ease-in-out infinite;
+}
+
+/* 淡出效果 */
+.resonance-line.fading-out {
+    opacity: 0;
+    filter: blur(10px);
+}
+
+/* 單字元素 */
+.resonance-char {
+    display: inline-block;
+    animation: resonance-char-in 0.3s ease-out forwards;
 }
 
 /* Mobile adjustments for quick action ball & music player */

@@ -341,6 +341,10 @@ function createRoom(roomCode) {
             const musicStControls = document.getElementById('bgm-st-controls');
             if (musicStControls) musicStControls.style.display = 'block';
 
+            // 顯示 ST 歌詞錄製/清單區塊
+            const lyricsStControls = document.getElementById('lyrics-st-controls');
+            if (lyricsStControls) lyricsStControls.style.display = 'block';
+
             // 初始化音樂播放器
             if (typeof initAudio === 'function') initAudio();
 
@@ -393,7 +397,9 @@ function initializeNewRoom() {
             mapW: state.mapW,
             mapH: state.mapH,
             themeId: state.themeId,
-            turnIdx: state.turnIdx
+            turnIdx: state.turnIdx,
+            isCombatActive: false,
+            activeBossId: null
         },
         mapData: state.mapData,
         units: {},
@@ -460,6 +466,9 @@ function joinRoom(roomCode, isST) {
                 // ST 的音樂控制區塊
                 const musicStControls = document.getElementById('bgm-st-controls');
                 if (musicStControls) musicStControls.style.display = 'block';
+                // ST 的歌詞錄製/清單區塊
+                const lyricsStControls = document.getElementById('lyrics-st-controls');
+                if (lyricsStControls) lyricsStControls.style.display = 'block';
             }
             document.getElementById('units-toolbar').style.display = 'flex';
             document.getElementById('my-id').innerText = roomCode;
@@ -508,6 +517,8 @@ function loadRoomData(data) {
         state.mapH = data.state.mapH || MAP_DEFAULTS.HEIGHT;
         state.themeId = data.state.themeId || 0;
         state.turnIdx = data.state.turnIdx || 0;
+        state.isCombatActive = data.state.isCombatActive || false;
+        state.activeBossId = data.state.activeBossId || null;
     }
 
     if (data.mapData) {
@@ -534,6 +545,20 @@ function loadRoomData(data) {
     } else {
         state.players = {};
     }
+
+    if (data.customStatuses) {
+        state.customStatuses = Object.values(data.customStatuses);
+    } else {
+        state.customStatuses = [];
+    }
+
+    // 載入調色盤
+    if (data.mapPalette) {
+        state.mapPalette = Array.isArray(data.mapPalette) ? data.mapPalette : Object.values(data.mapPalette);
+    } else {
+        state.mapPalette = [];
+        if (typeof initMapPalette === 'function') initMapPalette();
+    }
 }
 
 /**
@@ -548,6 +573,20 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('mapData').off('value', mapDataListener));
+
+    // 監聽調色盤變更
+    const paletteListener = roomRef.child('mapPalette').on('value', snapshot => {
+        if (snapshot.exists()) {
+            const val = snapshot.val();
+            state.mapPalette = Array.isArray(val) ? val : Object.values(val);
+        } else {
+            state.mapPalette = [];
+            if (typeof initMapPalette === 'function') initMapPalette();
+        }
+        updateToolbar();
+        renderMap();
+    });
+    unsubscribeListeners.push(() => roomRef.child('mapPalette').off('value', paletteListener));
 
     // 監聽單位變更
     const unitsListener = roomRef.child('units').on('value', snapshot => {
@@ -571,22 +610,24 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('units').off('value', unitsListener));
 
-    // 監聽狀態變更
+    // 監聯狀態變更
     const stateListener = roomRef.child('state').on('value', snapshot => {
         if (snapshot.exists()) {
             const newState = snapshot.val();
             if (newState.mapW !== state.mapW || newState.mapH !== state.mapH) {
                 state.mapW = newState.mapW;
                 state.mapH = newState.mapH;
-                renderMap();
             }
             if (newState.themeId !== state.themeId) {
                 state.themeId = newState.themeId;
                 updateToolbar();
-                renderMap();
             }
             state.turnIdx = newState.turnIdx || 0;
+            state.isCombatActive = newState.isCombatActive || false;
+            state.activeBossId = newState.activeBossId || null;
             renderUnitsList();
+            renderUnitsToolbar();
+            renderMap();
         }
     });
     unsubscribeListeners.push(() => roomRef.child('state').off('value', stateListener));
@@ -598,6 +639,21 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('players').off('value', playersListener));
+
+    // 監聽自訂狀態變更（房間共享）
+    const customStatusesListener = roomRef.child('customStatuses').on('value', snapshot => {
+        if (snapshot.exists()) {
+            state.customStatuses = Object.values(snapshot.val());
+        } else {
+            state.customStatuses = [];
+        }
+        // 如果狀態 Modal 正在開啟且在自訂分類，刷新網格
+        const statusGrid = document.getElementById('status-grid');
+        if (statusGrid && typeof currentStatusCategory !== 'undefined' && currentStatusCategory === 'custom') {
+            statusGrid.innerHTML = renderStatusGrid('custom');
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('customStatuses').off('value', customStatusesListener));
 
     // 監聽使用者在線列表（用於分配權限功能）
     const usersListener = roomRef.child('users').on('value', snapshot => {
@@ -617,10 +673,18 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('music').off('value', musicListener));
 
+    // 監聽歌詞狀態變更
+    const lyricsListener = roomRef.child('lyrics').on('value', snapshot => {
+        if (typeof handleLyricsUpdate === 'function') {
+            handleLyricsUpdate(snapshot.val());
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('lyrics').off('value', lyricsListener));
+
     // 定期更新活動時間（每 30 秒）
     const activityInterval = setInterval(() => {
         roomRef.child('info/lastActive').set(firebase.database.ServerValue.TIMESTAMP);
-    }, 30000);
+    }, CONNECTION_CONFIG.ACTIVITY_UPDATE_INTERVAL);
     unsubscribeListeners.push(() => clearInterval(activityInterval));
 
     // 設置連線監控和心跳機制
@@ -685,8 +749,7 @@ function startHeartbeat() {
     // 先停止現有的心跳
     stopHeartbeat();
 
-    // 心跳間隔設為 45 秒（Firebase 預設超時約 60 秒）
-    const HEARTBEAT_INTERVAL = 45000;
+    const HEARTBEAT_INTERVAL = CONNECTION_CONFIG.HEARTBEAT_INTERVAL;
 
     heartbeatInterval = setInterval(() => {
         if (roomRef && isConnected) {
@@ -778,7 +841,7 @@ function updateUserPresence() {
 function getOnlineUsers() {
     const users = [];
     const now = Date.now();
-    const OFFLINE_THRESHOLD = 5 * 60 * 1000; // 5 分鐘內視為在線
+    const OFFLINE_THRESHOLD = CONNECTION_CONFIG.OFFLINE_THRESHOLD;
 
     for (const [userId, userData] of Object.entries(roomUsers)) {
         // 過濾掉離線太久的使用者
@@ -829,6 +892,14 @@ function syncMapData() {
 }
 
 /**
+ * 更新調色盤到 Firebase
+ */
+function syncMapPalette() {
+    if (!roomRef) return;
+    roomRef.child('mapPalette').set(state.mapPalette || []);
+}
+
+/**
  * 更新單位到 Firebase
  * 注意：會自動為每個單位設定 sortOrder 以保持排序順序
  */
@@ -857,7 +928,9 @@ function syncState() {
         mapW: state.mapW,
         mapH: state.mapH,
         themeId: state.themeId,
-        turnIdx: state.turnIdx
+        turnIdx: state.turnIdx,
+        isCombatActive: state.isCombatActive || false,
+        activeBossId: state.activeBossId || null
     });
 }
 
@@ -867,6 +940,7 @@ function syncState() {
 function sendState() {
     if (myRole === 'st') {
         syncMapData();
+        syncMapPalette();
         syncUnits();
         syncState();
     }
@@ -879,6 +953,43 @@ function sendState() {
 function broadcastState() {
     sendState();
     renderAll();
+}
+
+// ===== 自訂狀態同步 =====
+
+/**
+ * 新增自訂狀態到房間（透過 Firebase 同步給所有人）
+ * @param {Object} statusObj - 自訂狀態物件
+ */
+function addCustomStatusToRoom(statusObj) {
+    if (!roomRef) return;
+
+    if (myRole === 'st') {
+        // ST 直接寫入 Firebase
+        if (!state.customStatuses) state.customStatuses = [];
+        state.customStatuses.push(statusObj);
+        roomRef.child('customStatuses/' + statusObj.id).set(statusObj);
+    } else {
+        // 玩家透過 sendToHost 請求
+        sendToHost({
+            type: 'addCustomStatus',
+            playerId: myPlayerId,
+            statusObj: statusObj
+        });
+    }
+}
+
+/**
+ * 從房間移除自訂狀態
+ * @param {string} statusId - 狀態 ID
+ */
+function removeCustomStatusFromRoom(statusId) {
+    if (!roomRef) return;
+
+    if (myRole === 'st') {
+        state.customStatuses = (state.customStatuses || []).filter(s => s.id !== statusId);
+        roomRef.child('customStatuses/' + statusId).remove();
+    }
 }
 
 // ===== 玩家操作函數 =====
@@ -917,6 +1028,27 @@ function sendToHost(message) {
             roomRef.child(`units/${message.unitId}/init`).set(message.init);
             break;
 
+        case 'modifyMaxHp':
+            const maxHpUnit = state.units.find(u => u.id === message.unitId);
+            if (maxHpUnit && message.newMaxHp >= 1) {
+                const oldMax = maxHpUnit.maxHp || maxHpUnit.hpArr.length;
+                const newMax = message.newMaxHp;
+                if (newMax > oldMax) {
+                    const diff = newMax - oldMax;
+                    for (let i = 0; i < diff; i++) {
+                        maxHpUnit.hpArr.push(0);
+                    }
+                } else if (newMax < oldMax) {
+                    maxHpUnit.hpArr.sort((a, b) => b - a);
+                    maxHpUnit.hpArr = maxHpUnit.hpArr.slice(0, newMax);
+                }
+                maxHpUnit.maxHp = newMax;
+                maxHpUnit.hpArr.sort((a, b) => b - a);
+                roomRef.child(`units/${message.unitId}/maxHp`).set(newMax);
+                roomRef.child(`units/${message.unitId}/hpArr`).set(maxHpUnit.hpArr);
+            }
+            break;
+
         case 'uploadAvatar':
             roomRef.child(`units/${message.unitId}/avatar`).set(message.avatar);
             break;
@@ -953,6 +1085,21 @@ function sendToHost(message) {
                 }
             }
             break;
+
+        case 'resetUnitHp':
+            const resetUnit = state.units.find(u => u.id === message.unitId);
+            if (resetUnit && resetUnit.hpArr) {
+                resetUnit.hpArr = resetUnit.hpArr.map(() => 0);
+                roomRef.child(`units/${message.unitId}/hpArr`).set(resetUnit.hpArr);
+            }
+            break;
+
+        case 'addCustomStatus':
+            // 玩家請求新增自訂狀態到房間
+            if (message.statusObj && message.statusObj.id) {
+                roomRef.child('customStatuses/' + message.statusObj.id).set(message.statusObj);
+            }
+            break;
     }
 }
 
@@ -970,7 +1117,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 // ===== Session 管理 =====
-const SESSION_KEY = 'limbus_session';
+const SESSION_KEY = CONNECTION_CONFIG.STORAGE_KEY;
 
 /**
  * 儲存 Session 到 localStorage

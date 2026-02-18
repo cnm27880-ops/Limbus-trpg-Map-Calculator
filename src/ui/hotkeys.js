@@ -157,6 +157,9 @@ function handleKeydown(e) {
     // 如果快捷鍵被禁用，直接返回
     if (!hotkeysEnabled) return;
 
+    // 如果正在錄製歌詞定點，空白鍵留給錄製模式
+    if (typeof recIsRecording !== 'undefined' && recIsRecording && e.key === ' ') return;
+
     // 如果正在輸入文字，不觸發快捷鍵
     const activeEl = document.activeElement;
     const isTyping = activeEl && (

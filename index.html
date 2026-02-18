@@ -75,6 +75,9 @@
     </div>
 </nav>
 
+<!-- 戰鬥模式：Navbar 暫開按鈕 -->
+<button class="combat-navbar-peek" id="combat-navbar-peek" title="顯示導覽列">▼</button>
+
 <!-- Main Content -->
 <div class="main-wrapper">
     <!-- Map Page -->
@@ -262,6 +265,8 @@
             <span class="qab-menu-text">音樂播放器</span>
         </div>
         <div class="qab-menu-item" onclick="toggleLyricsPanel(); closeQABMenu();">
+            <span class="qab-menu-icon">📝</span>
+            <span class="qab-menu-text">歌詞工具</span>
             <span class="qab-menu-icon">🎤</span>
             <span class="qab-menu-text">動態歌詞</span>
         </div>
@@ -295,26 +300,110 @@
             <span class="music-title">背景音樂</span>
             <button class="music-close-btn" onclick="toggleMusicPanel()">×</button>
         </div>
-        <div class="music-now-playing">
-            <span class="music-label">正在播放</span>
-            <span id="bgm-now-playing" class="music-track-name">無音樂</span>
-        </div>
-        <div class="music-controls">
-            <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
-            <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="stStopMusic()" title="停止">⏹</button>
-            <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
-            <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
-        </div>
-        <div id="bgm-st-controls" class="music-st-section" style="display:none;">
-            <div class="music-section-title">播放清單 (ST)</div>
-            <div class="music-add-form">
-                <input type="text" id="bgm-input-name" placeholder="音樂名稱" class="music-input">
-                <input type="text" id="bgm-input-url" placeholder="音樂 URL" class="music-input">
-                <button class="music-add-btn" onclick="addToPlaylist(document.getElementById('bgm-input-name').value, document.getElementById('bgm-input-url').value)">+ 新增</button>
+        <div class="music-panel-body">
+            <div class="music-now-playing">
+                <span class="music-label">正在播放</span>
+                <span id="bgm-now-playing" class="music-track-name">無音樂</span>
             </div>
-            <div id="bgm-playlist" class="music-playlist">
-                <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
+            <div class="music-controls">
+                <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
+                <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="handleStopMusic()" title="停止">⏹</button>
+                <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
+                <button id="bgm-lyrics-pick-btn" class="music-ctrl-btn" onclick="toggleLyricsPicker()" title="選擇歌詞">🎤</button>
+                <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
             </div>
+            <div id="bgm-st-controls" class="music-st-section" style="display:none;">
+                <div class="music-section-title">播放清單 (ST)</div>
+                <div class="music-add-form">
+                    <input type="text" id="bgm-input-name" placeholder="音樂名稱" class="music-input">
+                    <input type="text" id="bgm-input-url" placeholder="音樂 URL" class="music-input">
+                    <button class="music-add-btn" onclick="addToPlaylist(document.getElementById('bgm-input-name').value, document.getElementById('bgm-input-url').value)">+ 新增</button>
+                </div>
+                <div id="bgm-playlist" class="music-playlist">
+                    <div style="color:var(--text-dim);font-size:0.8rem;text-align:center;padding:10px;">播放清單為空</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 歌詞工具面板 (獨立) -->
+    <div id="lyrics-panel" class="qab-panel lyrics-tool-panel">
+        <div class="music-header">
+            <span class="music-title">歌詞工具</span>
+            <button class="music-close-btn" onclick="toggleLyricsPanel()">×</button>
+        </div>
+        <div class="lyrics-tool-body">
+            <!-- 歌詞輸入 -->
+            <div class="lyrics-section">
+                <div class="music-section-title">歌詞字幕</div>
+                <textarea id="lyrics-input" class="lyrics-textarea" placeholder="在此輸入歌詞，每行一句&#10;例如：&#10;在黑暗中前行&#10;尋找那道光芒&#10;即使世界崩塌"></textarea>
+                <div class="lyrics-controls">
+                    <div class="lyrics-speed-control">
+                        <label class="lyrics-label" for="lyrics-speed">速度</label>
+                        <input type="range" id="lyrics-speed" class="lyrics-slider" min="0" max="1000" value="80" step="5">
+                        <span id="lyrics-speed-val" class="lyrics-speed-val">80ms</span>
+                    </div>
+                    <div class="lyrics-speed-control">
+                        <label class="lyrics-label" for="lyrics-pause">行距</label>
+                        <input type="range" id="lyrics-pause" class="lyrics-slider" min="200" max="2000" value="600" step="100">
+                        <span id="lyrics-pause-val" class="lyrics-speed-val">0.6s</span>
+                    </div>
+                    <div class="lyrics-actions">
+                        <button class="lyrics-play-btn" id="lyrics-play-btn" onclick="toggleLyricsPlayback()">▶ 播放</button>
+                    </div>
+                    <!-- 速度預設組 -->
+                    <div class="lyrics-speed-presets">
+                        <span class="lyrics-label">預設</span>
+                        <button class="speed-preset-btn active" id="speed-preset-1" data-preset="1">A: 80ms</button>
+                        <button class="speed-preset-btn" id="speed-preset-2" data-preset="2">B: 80ms</button>
+                        <button class="speed-preset-save-btn" id="speed-preset-save" title="儲存目前速度到選中的預設">儲存</button>
+                    </div>
+                    <!-- 同步偏移微調 -->
+                    <div class="lyrics-speed-control">
+                        <label class="lyrics-label" for="lyrics-sync-offset">偏移</label>
+                        <input type="range" id="lyrics-sync-offset" class="lyrics-slider" min="-2" max="2" value="-0.5" step="0.1">
+                        <span id="lyrics-sync-offset-val" class="lyrics-speed-val">-0.5s</span>
+                    </div>
+                </div>
+            </div>
+            <!-- ST 專用區域：錄製、清單、匯入、逐行編輯 -->
+            <div id="lyrics-st-controls" class="lyrics-st-section" style="display:none;">
+            <!-- 錄製模式 -->
+            <div class="lyrics-section">
+                <div class="music-section-title">手動錄製定點</div>
+                <div class="rec-mode-desc">播放音樂後按「開始錄製」，在每句台詞開頭時按空白鍵定點。可從指定行數開始重錄，之前的定點會保留。</div>
+                <div class="rec-controls">
+                    <div class="rec-start-from">
+                        <label class="lyrics-label" for="rec-start-line">從第</label>
+                        <input type="number" id="rec-start-line" class="rec-start-input" min="1" value="1" step="1">
+                        <label class="lyrics-label">句開始</label>
+                    </div>
+                    <button class="rec-btn" id="rec-start-btn" onclick="toggleRecording()">⏺ 開始錄製</button>
+                    <button class="rec-btn rec-clear-btn" id="rec-clear-btn" onclick="clearRecording()">清除</button>
+                </div>
+                <div id="rec-status" class="rec-status"></div>
+            </div>
+            <!-- 匯入 -->
+            <div class="lyrics-section">
+                <button class="lyrics-import-btn" onclick="importJsonTimeline()">匯入 AI 分析數據 (JSON)</button>
+            </div>
+            <!-- 歌詞清單 -->
+            <div class="lyrics-section">
+                <div class="music-section-title">歌詞清單</div>
+                <div class="lyrics-library-save">
+                    <input type="text" id="lyrics-save-name" class="lyrics-save-name-input" placeholder="輸入歌詞名稱...">
+                    <button class="lyrics-save-btn" id="lyrics-save-btn" onclick="saveLyricsToLibrary()">儲存</button>
+                </div>
+                <div id="lyrics-library-list" class="lyrics-library-list">
+                    <div class="lyrics-library-empty">尚無儲存的歌詞</div>
+                </div>
+            </div>
+            <!-- 逐行微調編輯器 -->
+            <div id="lyrics-line-editor" class="lyrics-line-editor" style="display:none;">
+                <div class="music-section-title">逐行微調</div>
+                <div id="lyrics-line-list" class="lyrics-line-list"></div>
+            </div>
+            </div><!-- /lyrics-st-controls -->
         </div>
     </div>
 
@@ -384,6 +473,7 @@
 <script src="src/utils/audio.js"></script>
 <script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-hud.js"></script>
+<script src="src/ui/lyrics.js"></script>
 <script src="src/ui/main.js"></script>
 </body>
 </html>

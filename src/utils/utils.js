@@ -10,7 +10,8 @@
  * @returns {string} 轉義後的文字
  */
 function escapeHtml(text) {
-    if (!text) return text;
+    if (text === null || text === undefined) return '';
+    if (typeof text !== 'string') text = String(text);
     return text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")

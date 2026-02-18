@@ -551,14 +551,12 @@ class MusicManager {
     }
 
     /**
-     * HTML 轉義（防 XSS）
+     * HTML 轉義（防 XSS）- 使用全域 escapeHtml 函數
      * @param {string} text - 原始文字
      * @returns {string} 轉義後的文字
      */
     escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return typeof window.escapeHtml === 'function' ? window.escapeHtml(text) : String(text || '');
     }
 
     /**

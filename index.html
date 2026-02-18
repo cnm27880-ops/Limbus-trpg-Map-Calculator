@@ -5,11 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Limbus Command</title>
 
-    <!-- Firebase SDK (使用 Compat 版本以支援舊版語法) -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <!-- 安全標頭 -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
 
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <!-- Firebase SDK (使用 Compat 版本以支援舊版語法) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js" crossorigin="anonymous"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" crossorigin="anonymous">
     <!-- CSS 檔案 -->
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="styles/components.css">
@@ -455,6 +460,7 @@
 <script src="src/core/state.js"></script>
 
 <!-- 工具層 -->
+<script src="src/utils/security.js"></script>
 <script src="src/utils/utils.js"></script>
 
 <!-- 資料層 -->
@@ -473,7 +479,6 @@
 <script src="src/utils/audio.js"></script>
 <script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-hud.js"></script>
-<script src="src/ui/lyrics.js"></script>
 <script src="src/ui/main.js"></script>
 </body>
 </html>

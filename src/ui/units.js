@@ -24,8 +24,7 @@ function toggleCombat() {
         state.units.forEach(u => u.init = 0);
         state.turnIdx = -1;
         state.activeBossId = null;
-        sendState();
-        renderAll();
+        broadcastState();
         showToast('戰鬥已結束，先攻已歸零');
     } else {
         // 開始戰鬥：排序並設定第一回合
@@ -33,8 +32,7 @@ function toggleCombat() {
         // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
-        sendState();
-        renderAll();
+        broadcastState();
         showToast('戰鬥開始！');
     }
 }
@@ -49,8 +47,7 @@ function toggleActiveBoss(id) {
     } else {
         state.activeBossId = id;
     }
-    sendState();
-    renderAll();
+    broadcastState();
 }
 
 // ===== 渲染函數 =====
@@ -218,7 +215,8 @@ function renderUnitsList() {
             `;
         }
 
-        const avaStyle = u.avatar ? `background-image:url(${u.avatar});color:transparent;` : '';
+        const safeAvatar = (u.avatar && typeof u.avatar === 'string' && u.avatar.startsWith('data:image/')) ? u.avatar : '';
+        const avaStyle = safeAvatar ? `background-image:url(${safeAvatar});color:transparent;` : '';
         const initReadonly = !canControlUnit(u) ? 'readonly' : '';
         // 移除 inline style，使用 CSS 設定的樣式（width: 70px, height: 36px, font-size: 1.1rem）
         const initInput = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${initReadonly}>`;
@@ -414,8 +412,7 @@ function deleteUnit(id) {
 
     if (myRole === 'st') {
         state.units = state.units.filter(u => u.id !== id);
-        sendState();
-        renderAll();
+        broadcastState();
     } else {
         sendToHost({
             type: 'deleteUnit',
@@ -495,8 +492,7 @@ function updateInit(id, val) {
 
     if (myRole === 'st') {
         u.init = parseInt(val) || 0;
-        sendState();
-        renderAll();
+        broadcastState();
     } else {
         sendToHost({
             type: 'updateInit',

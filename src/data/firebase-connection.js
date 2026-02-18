@@ -160,7 +160,7 @@ function showRoomManager() {
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button onclick="enterRoomFromManager('${room.code}')" style="
+                            <button onclick="enterRoomFromManager('${escapeHtml(room.code)}')" style="
                                 background: var(--accent-green);
                                 color: #000;
                                 border: none;
@@ -169,7 +169,7 @@ function showRoomManager() {
                                 font-weight: bold;
                                 cursor: pointer;
                             ">進入</button>
-                            <button onclick="deleteRoomFromManager('${room.code}')" style="
+                            <button onclick="deleteRoomFromManager('${escapeHtml(room.code)}')" style="
                                 background: var(--accent-red);
                                 color: #000;
                                 border: none;
@@ -184,7 +184,7 @@ function showRoomManager() {
         })
         .catch(error => {
             console.error('載入房間列表失敗:', error);
-            container.innerHTML = `<div style="text-align:center;color:var(--accent-red);padding:20px;">載入失敗: ${error.message}</div>`;
+            container.innerHTML = `<div style="text-align:center;color:var(--accent-red);padding:20px;">載入失敗: ${escapeHtml(error.message)}</div>`;
         });
 }
 
@@ -568,7 +568,19 @@ function setupRoomListeners() {
     // 監聽地圖資料變更
     const mapDataListener = roomRef.child('mapData').on('value', snapshot => {
         if (snapshot.exists()) {
-            state.mapData = snapshot.val();
+            const raw = snapshot.val();
+            // 驗證地圖資料格式
+            if (typeof validateMapData === 'function') {
+                const validated = validateMapData(raw, 50, 50);
+                if (validated) {
+                    state.mapData = validated;
+                } else {
+                    console.warn('[Security] 地圖資料格式不正確，已忽略');
+                    return;
+                }
+            } else {
+                state.mapData = raw;
+            }
             renderMap();
         }
     });
@@ -591,8 +603,34 @@ function setupRoomListeners() {
     // 監聽單位變更
     const unitsListener = roomRef.child('units').on('value', snapshot => {
         if (snapshot.exists()) {
-            // 將物件轉換為陣列，並根據 sortOrder 排序以維持順序
-            const unitsArray = Object.values(snapshot.val());
+            const rawVal = snapshot.val();
+            if (!rawVal || typeof rawVal !== 'object') {
+                state.units = [];
+                return;
+            }
+            // 將物件轉換為陣列，過濾無效資料，並根據 sortOrder 排序以維持順序
+            const unitsArray = Object.values(rawVal).filter(u => u && typeof u === 'object' && u.id);
+            // 驗證每個單位的關鍵欄位
+            unitsArray.forEach(u => {
+                u.name = (typeof u.name === 'string') ? u.name.substring(0, 50) : 'Unknown';
+                u.maxHp = (typeof u.maxHp === 'number' && u.maxHp > 0 && u.maxHp <= 9999) ? u.maxHp : 10;
+                u.type = ['enemy', 'player', 'boss'].includes(u.type) ? u.type : 'enemy';
+                u.init = (typeof u.init === 'number') ? Math.max(-999, Math.min(999, Math.floor(u.init))) : 0;
+                u.size = [1, 2, 3].includes(u.size) ? u.size : 1;
+                u.avatar = (typeof u.avatar === 'string' && u.avatar.startsWith('data:image/') && u.avatar.length < 500000) ? u.avatar : (u.avatar || null);
+                if (u.status && typeof u.status === 'object') {
+                    // 過濾掉 __proto__ 等危險鍵
+                    const safeStatus = {};
+                    for (const key of Object.keys(u.status)) {
+                        if (key !== '__proto__' && key !== 'constructor' && key !== 'prototype') {
+                            safeStatus[key] = String(u.status[key] || '').substring(0, 100);
+                        }
+                    }
+                    u.status = safeStatus;
+                } else {
+                    u.status = {};
+                }
+            });
             unitsArray.sort((a, b) => {
                 // 如果有 sortOrder 就按照 sortOrder 排序
                 // 否則按照 id 排序（向後相容）
@@ -614,17 +652,22 @@ function setupRoomListeners() {
     const stateListener = roomRef.child('state').on('value', snapshot => {
         if (snapshot.exists()) {
             const newState = snapshot.val();
-            if (newState.mapW !== state.mapW || newState.mapH !== state.mapH) {
-                state.mapW = newState.mapW;
-                state.mapH = newState.mapH;
+            if (!newState || typeof newState !== 'object') return;
+            // 驗證地圖尺寸（限制在合理範圍）
+            const validW = (typeof newState.mapW === 'number') ? Math.max(5, Math.min(50, Math.floor(newState.mapW))) : state.mapW;
+            const validH = (typeof newState.mapH === 'number') ? Math.max(5, Math.min(50, Math.floor(newState.mapH))) : state.mapH;
+            if (validW !== state.mapW || validH !== state.mapH) {
+                state.mapW = validW;
+                state.mapH = validH;
             }
-            if (newState.themeId !== state.themeId) {
-                state.themeId = newState.themeId;
+            const validThemeId = (typeof newState.themeId === 'number') ? Math.max(0, Math.floor(newState.themeId)) : state.themeId;
+            if (validThemeId !== state.themeId) {
+                state.themeId = validThemeId;
                 updateToolbar();
             }
-            state.turnIdx = newState.turnIdx || 0;
-            state.isCombatActive = newState.isCombatActive || false;
-            state.activeBossId = newState.activeBossId || null;
+            state.turnIdx = (typeof newState.turnIdx === 'number') ? Math.max(-1, Math.floor(newState.turnIdx)) : 0;
+            state.isCombatActive = newState.isCombatActive === true;
+            state.activeBossId = (typeof newState.activeBossId === 'string') ? newState.activeBossId : null;
             renderUnitsList();
             renderUnitsToolbar();
             renderMap();
@@ -939,6 +982,11 @@ function syncState() {
  */
 function sendState() {
     if (myRole === 'st') {
+        // 速率限制：ST 每 10 秒最多 30 次同步
+        if (typeof RateLimiter !== 'undefined' && !RateLimiter.check('sendState', 30, 10000)) {
+            console.warn('[Security] sendState 操作過於頻繁，已節流');
+            return;
+        }
         syncMapData();
         syncMapPalette();
         syncUnits();
@@ -1000,6 +1048,12 @@ function removeCustomStatusFromRoom(statusId) {
 function sendToHost(message) {
     if (!roomRef) return;
 
+    // 速率限制：玩家每 10 秒最多 20 次操作
+    if (typeof RateLimiter !== 'undefined' && !RateLimiter.check('sendToHost', 20, 10000)) {
+        showToast('操作過於頻繁，請稍候再試');
+        return;
+    }
+
     switch (message.type) {
         case 'moveUnit':
             // 直接更新單位位置
@@ -1009,6 +1063,7 @@ function sendToHost(message) {
 
         case 'addUnit':
             const newUnit = createUnit(message.name, message.hp, message.unitType, message.playerId, message.playerName, message.size || 1);
+            if (message.avatar) newUnit.avatar = message.avatar;
             roomRef.child(`units/${newUnit.id}`).set(newUnit);
             break;
 

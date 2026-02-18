@@ -424,7 +424,7 @@ async function fetchSheetTabs() {
 
     } catch (error) {
         console.error('Failed to fetch sheet tabs:', error);
-        body.innerHTML = `<div class="sheet-import-error">載入失敗: ${error.message}</div>`;
+        body.innerHTML = `<div class="sheet-import-error">載入失敗: ${escapeHtml(error.message)}</div>`;
     }
 }
 

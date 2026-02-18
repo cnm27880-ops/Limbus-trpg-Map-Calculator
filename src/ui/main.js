@@ -135,8 +135,7 @@ function initKeyboardControls() {
         if (myRole === 'st') {
             u.x = newX;
             u.y = newY;
-            sendState();
-            renderAll();
+            broadcastState();
         } else {
             sendToHost({
                 type: 'moveUnit',

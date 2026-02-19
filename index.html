@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="styles/components.css">
     <link rel="stylesheet" href="styles/calculator.css">
     <link rel="stylesheet" href="styles/combat-hud.css">
+    <link rel="stylesheet" href="styles/st-skill-hud.css">
 </head>
 <body>
 <input type="file" id="file-upload" accept="image/*" style="display:none;">
@@ -285,6 +286,14 @@
             <span class="qab-menu-icon">🎯</span>
             <span class="qab-menu-text">戰鬥儀表板</span>
         </div>
+        <div class="qab-menu-item" onclick="toggleSkillHUD(); closeQABMenu();">
+            <span class="qab-menu-icon">🗡️</span>
+            <span class="qab-menu-text">怪物招式面板</span>
+        </div>
+        <div class="qab-menu-item" onclick="toggleCalcHUD(); closeQABMenu();">
+            <span class="qab-menu-icon">🎲</span>
+            <span class="qab-menu-text">懸浮計算器</span>
+        </div>
         <div class="qab-menu-divider"></div>
         <div class="qab-menu-item" onclick="openHUDSettings(); closeQABMenu();">
             <span class="qab-menu-icon">⚙️</span>
@@ -477,6 +486,7 @@
 <script src="src/utils/audio.js"></script>
 <script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-hud.js"></script>
+<script src="src/ui/st-skill-hud.js"></script>
 <script src="src/ui/main.js"></script>
 </body>
 </html>

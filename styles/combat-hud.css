@@ -700,6 +700,24 @@
     text-align: right;
 }
 
+/* Fill Calculator Button */
+.hud-calc-fill-btn {
+    width: 100%;
+    padding: 5px 8px;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    background: rgba(0, 229, 255, 0.08);
+    color: var(--hud-highlight);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.hud-calc-fill-btn:hover {
+    background: rgba(0, 229, 255, 0.2);
+    border-color: var(--hud-highlight);
+}
+
 /* ===== Attack Presets (Legacy - Keep for compatibility) ===== */
 .attack-presets {
     display: grid;

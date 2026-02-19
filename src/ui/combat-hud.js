@@ -947,6 +947,7 @@ function renderAttacks(attacks) {
                 </div>
                 <div class="attack-card-limit">上限: ${activeAtk.limit}</div>
             </div>
+            ${typeof applyAttackToCalc === 'function' ? `<button class="hud-calc-fill-btn" onclick="applyAttackToCalc(${activeAtk.dp}, ${activeAtk.penVal}, ${activeAtk.speedVal}, ${activeAtk.magicVal}, '${escapeHtml(activeAtk.name).replace(/'/g, "\\'")}')">填入計算器</button>` : ''}
         </div>
     `;
 }
@@ -1004,6 +1005,7 @@ function switchAttack(index) {
                         </div>
                         <div class="attack-card-limit">上限: ${activeAtk.limit}</div>
                     </div>
+                    ${typeof applyAttackToCalc === 'function' ? `<button class="hud-calc-fill-btn" onclick="applyAttackToCalc(${activeAtk.dp}, ${activeAtk.penVal}, ${activeAtk.speedVal}, ${activeAtk.magicVal}, '${escapeHtml(activeAtk.name).replace(/'/g, "\\'")}')">填入計算器</button>` : ''}
                 `;
             }
         }

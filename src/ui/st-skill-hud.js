@@ -31,6 +31,16 @@ let calcHudState = {
     position: { x: 400, y: 80 }
 };
 
+// ===== Editing State for Status Tags =====
+let editingStatuses = [];  // [{id, stacks}] - temp state for skill edit form
+
+// Normalize old (statusId) and new (statuses[]) format
+function normalizeSkillStatuses(skill) {
+    if (skill.statuses && Array.isArray(skill.statuses)) return skill.statuses;
+    if (skill.statusId) return [{ id: skill.statusId, stacks: skill.statusStacks || 0 }];
+    return [];
+}
+
 // ===== Skill Data CRUD =====
 
 function loadSkillLibrary() {
@@ -64,8 +74,7 @@ function addSkill(skillData) {
         pen: parseInt(skillData.pen) || 0,
         speed: parseInt(skillData.speed) || 0,
         magic: parseInt(skillData.magic) || 0,
-        statusId: skillData.statusId || '',
-        statusStacks: parseInt(skillData.statusStacks) || 0
+        statuses: skillData.statuses || []
     };
     skills.push(skill);
     saveSkillLibrary(skills);
@@ -423,15 +432,17 @@ function renderSkillBattleMode(body) {
 }
 
 function renderSkillCard(skill) {
-    const statusName = getStatusName(skill.statusId);
+    const statuses = normalizeSkillStatuses(skill);
     let statsHtml = `<span class="skill-stat dp">DP ${skill.dp}</span>`;
     if (skill.pen > 0) statsHtml += `<span class="skill-stat pen">破甲 ${skill.pen}</span>`;
     if (skill.speed > 0) statsHtml += `<span class="skill-stat speed">高速 ${skill.speed}</span>`;
     if (skill.magic > 0) statsHtml += `<span class="skill-stat magic">破魔 ${skill.magic}</span>`;
-    if (skill.statusId && statusName) {
-        statsHtml += `<span class="skill-stat status">${statusName}${skill.statusStacks > 0 ? ' x' + skill.statusStacks : ''}</span>`;
-    }
+    statuses.forEach(s => {
+        const name = getStatusName(s.id);
+        if (name) statsHtml += `<span class="skill-stat status">${name}${s.stacks > 0 ? ' x' + s.stacks : ''}</span>`;
+    });
 
+    const hasStatus = statuses.length > 0;
     return `<div class="skill-card">
         <div class="skill-card-top">
             <span class="skill-card-name">${escapeHtml(skill.name)}</span>
@@ -439,7 +450,7 @@ function renderSkillCard(skill) {
         <div class="skill-card-stats">${statsHtml}</div>
         <div class="skill-card-actions">
             <button class="skill-action-btn calc-fill" onclick="applySkillToCalc('${skill.id}')">填入計算器</button>
-            ${skill.statusId ? `<button class="skill-action-btn status-apply" onclick="applySkillStatus('${skill.id}')">套用狀態</button>` : ''}
+            ${hasStatus ? `<button class="skill-action-btn status-apply" onclick="applySkillStatus('${skill.id}')">套用狀態</button>` : ''}
             <button class="skill-action-btn" onclick="startEditSkill('${skill.id}')">編輯</button>
         </div>
     </div>`;
@@ -452,11 +463,15 @@ function renderSkillEditMode(body) {
     if (skillHudState.editingId) {
         const skill = skills.find(s => s.id === skillHudState.editingId);
         if (skill) {
+            editingStatuses = normalizeSkillStatuses(skill).map(s => ({...s}));
             html += renderSkillEditForm(skill);
             body.innerHTML = html;
             return;
         }
     }
+
+    // New form: reset editingStatuses
+    editingStatuses = [];
 
     // Show list with edit buttons + add new form
     skills.forEach(s => {
@@ -475,7 +490,20 @@ function renderSkillEditMode(body) {
 function renderSkillEditForm(skill) {
     const isNew = !skill;
     const id = skill ? skill.id : 'new';
-    const statusOptions = buildStatusOptions(skill ? skill.statusId : '');
+
+    // Build selected statuses HTML from editingStatuses
+    const selectedHtml = editingStatuses.length > 0
+        ? editingStatuses.map((s, idx) => {
+            const name = getStatusName(s.id);
+            return `<div class="status-tag">
+                <span class="status-tag-name">${name || s.id}</span>
+                <label class="status-tag-stacks-label">x</label>
+                <input type="number" class="status-tag-stacks" value="${s.stacks}" min="0"
+                    onchange="updateEditingStatusStacks(${idx}, parseInt(this.value)||0)">
+                <button class="status-tag-remove" onclick="removeEditingStatus(${idx})" title="移除">×</button>
+            </div>`;
+        }).join('')
+        : '<div style="font-size:0.75rem;color:var(--text-dim);">尚未選擇狀態</div>';
 
     return `<div class="skill-edit-form" id="skill-form-${id}">
         <div style="font-weight:bold;font-size:0.85rem;color:var(--accent-red);margin-bottom:4px;">
@@ -501,13 +529,16 @@ function renderSkillEditForm(skill) {
             <label>破魔</label>
             <input type="number" id="sf-magic-${id}" value="${skill ? skill.magic : 0}" min="0">
         </div>
-        <div class="skill-edit-row">
-            <label>狀態</label>
-            <select id="sf-status-${id}">${statusOptions}</select>
-        </div>
-        <div class="skill-edit-row">
-            <label>層數</label>
-            <input type="number" id="sf-stacks-${id}" value="${skill ? skill.statusStacks : 0}" min="0">
+        <div class="skill-status-section">
+            <label style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;display:block;">狀態效果</label>
+            <div class="skill-status-search-wrap">
+                <input type="text" id="sf-status-search-${id}" class="skill-status-search"
+                    placeholder="輸入關鍵字搜尋狀態..." oninput="filterSkillStatuses(this.value, '${id}')">
+                <div class="skill-status-suggestions" id="status-suggest-${id}"></div>
+            </div>
+            <div class="skill-status-selected" id="status-selected-${id}">
+                ${selectedHtml}
+            </div>
         </div>
         <div class="skill-edit-btns">
             <button class="skill-save-btn" onclick="saveSkillForm('${id}')">
@@ -519,21 +550,85 @@ function renderSkillEditForm(skill) {
     </div>`;
 }
 
-function buildStatusOptions(selectedId) {
-    let opts = '<option value="">-- 無 --</option>';
-    if (typeof STATUS_LIBRARY === 'undefined') return opts;
+// ===== Status Fuzzy Search + Tag Selection =====
+
+function filterSkillStatuses(query, formId) {
+    const suggestBox = document.getElementById('status-suggest-' + formId);
+    if (!suggestBox) return;
+    if (!query || !query.trim() || typeof STATUS_LIBRARY === 'undefined') {
+        suggestBox.innerHTML = '';
+        return;
+    }
+    const q = query.toLowerCase().trim();
+    const results = [];
+    const alreadyIds = new Set(editingStatuses.map(s => s.id));
 
     Object.keys(STATUS_LIBRARY).forEach(catKey => {
         const cat = STATUS_LIBRARY[catKey];
         if (!cat || !cat.statuses) return;
-        opts += `<optgroup label="${cat.name || catKey}">`;
         cat.statuses.forEach(s => {
-            const sel = s.id === selectedId ? ' selected' : '';
-            opts += `<option value="${s.id}"${sel}>${s.icon || ''} ${s.name}</option>`;
+            if (alreadyIds.has(s.id)) return; // skip already selected
+            if (s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) {
+                results.push(s);
+            }
         });
-        opts += '</optgroup>';
     });
-    return opts;
+
+    suggestBox.innerHTML = results.slice(0, 8).map(s =>
+        `<div class="status-suggest-item" onclick="selectSkillStatus('${s.id}', '${formId}')">
+            ${s.icon || ''} ${escapeHtml(s.name)}
+            <span style="font-size:0.65rem;color:var(--text-dim);margin-left:auto;">${s.type === 'stack' ? '可疊加' : '二元'}</span>
+        </div>`
+    ).join('');
+
+    if (results.length === 0) {
+        suggestBox.innerHTML = '<div class="status-suggest-empty">找不到符合的狀態</div>';
+    }
+}
+
+function selectSkillStatus(statusId, formId) {
+    if (editingStatuses.some(s => s.id === statusId)) return;
+    editingStatuses.push({ id: statusId, stacks: 0 });
+    renderSelectedStatuses(formId);
+    // Clear search
+    const searchInput = document.getElementById('sf-status-search-' + formId);
+    if (searchInput) searchInput.value = '';
+    const suggestBox = document.getElementById('status-suggest-' + formId);
+    if (suggestBox) suggestBox.innerHTML = '';
+}
+
+function removeEditingStatus(index) {
+    editingStatuses.splice(index, 1);
+    // Re-render: find the visible form
+    const formId = skillHudState.editingId || 'new';
+    renderSelectedStatuses(formId);
+}
+
+function updateEditingStatusStacks(index, stacks) {
+    if (editingStatuses[index]) {
+        editingStatuses[index].stacks = stacks;
+    }
+}
+
+function renderSelectedStatuses(formId) {
+    const container = document.getElementById('status-selected-' + formId);
+    if (!container) return;
+
+    if (editingStatuses.length === 0) {
+        container.innerHTML = '<div style="font-size:0.75rem;color:var(--text-dim);">尚未選擇狀態</div>';
+        return;
+    }
+
+    container.innerHTML = editingStatuses.map((s, idx) => {
+        const name = getStatusName(s.id);
+        return `<div class="status-tag">
+            <span class="status-tag-name">${name || s.id}</span>
+            <label class="status-tag-stacks-label">x</label>
+            <input type="number" class="status-tag-stacks" value="${s.stacks}" min="0"
+                onchange="updateEditingStatusStacks(${idx}, parseInt(this.value)||0)">
+            <button class="status-tag-remove" onclick="removeEditingStatus(${idx})" title="移除">×</button>
+        </div>`;
+    }).join('');
 }
 
 function getStatusName(statusId) {
@@ -573,8 +668,6 @@ function saveSkillForm(id) {
     const pen = document.getElementById('sf-pen-' + id);
     const speed = document.getElementById('sf-speed-' + id);
     const magic = document.getElementById('sf-magic-' + id);
-    const status = document.getElementById('sf-status-' + id);
-    const stacks = document.getElementById('sf-stacks-' + id);
 
     if (!name || !name.value.trim()) {
         if (typeof showToast === 'function') showToast('請輸入招式名稱');
@@ -588,8 +681,7 @@ function saveSkillForm(id) {
         pen: pen ? parseInt(pen.value) || 0 : 0,
         speed: speed ? parseInt(speed.value) || 0 : 0,
         magic: magic ? parseInt(magic.value) || 0 : 0,
-        statusId: status ? status.value : '',
-        statusStacks: stacks ? parseInt(stacks.value) || 0 : 0
+        statuses: editingStatuses.map(s => ({...s}))
     };
 
     if (id === 'new') {
@@ -659,7 +751,10 @@ function applySkillToCalc(skillId) {
 function applySkillStatus(skillId) {
     const skills = loadSkillLibrary();
     const skill = skills.find(s => s.id === skillId);
-    if (!skill || !skill.statusId) return;
+    if (!skill) return;
+
+    const statuses = normalizeSkillStatuses(skill);
+    if (statuses.length === 0) return;
 
     // Check for selected unit
     if (typeof selectedUnitId === 'undefined' || !selectedUnitId) {
@@ -674,17 +769,20 @@ function applySkillStatus(skillId) {
         if (unit) unitName = unit.name || unit.id;
     }
 
-    const statusDisplayName = getStatusDisplayName(skill.statusId);
-
     // Use existing status manager
-    if (typeof addStatusToUnit === 'function') {
-        addStatusToUnit(selectedUnitId, skill.statusId, skill.statusStacks > 0 ? skill.statusStacks : null);
-        if (typeof showToast === 'function') {
-            showToast('已對 ' + unitName + ' 施加 ' + statusDisplayName +
-                (skill.statusStacks > 0 ? ' x' + skill.statusStacks : ''));
-        }
-    } else {
+    if (typeof addStatusToUnit !== 'function') {
         if (typeof showToast === 'function') showToast('狀態管理器未載入');
+        return;
+    }
+
+    const appliedNames = [];
+    statuses.forEach(s => {
+        addStatusToUnit(selectedUnitId, s.id, s.stacks > 0 ? s.stacks : null);
+        appliedNames.push(getStatusDisplayName(s.id) + (s.stacks > 0 ? ' x' + s.stacks : ''));
+    });
+
+    if (typeof showToast === 'function') {
+        showToast('已對 ' + unitName + ' 施加 ' + appliedNames.join(', '));
     }
 }
 
@@ -749,6 +847,10 @@ window.confirmDeleteSkill = confirmDeleteSkill;
 window.applyDefenseToCalc = applyDefenseToCalc;
 window.applyAttackToCalc = applyAttackToCalc;
 window.renderSkillHudContent = renderSkillHudContent;
+window.filterSkillStatuses = filterSkillStatuses;
+window.selectSkillStatus = selectSkillStatus;
+window.removeEditingStatus = removeEditingStatus;
+window.updateEditingStatusStacks = updateEditingStatusStacks;
 
 // ===== Init =====
 function initSkillHUD() {

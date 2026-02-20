@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="styles/components.css">
     <link rel="stylesheet" href="styles/calculator.css">
     <link rel="stylesheet" href="styles/combat-hud.css">
+    <link rel="stylesheet" href="styles/st-skill-hud.css">
 </head>
 <body>
 <input type="file" id="file-upload" accept="image/*" style="display:none;">
@@ -272,8 +273,6 @@
         <div class="qab-menu-item" onclick="toggleLyricsPanel(); closeQABMenu();">
             <span class="qab-menu-icon">📝</span>
             <span class="qab-menu-text">歌詞工具</span>
-            <span class="qab-menu-icon">🎤</span>
-            <span class="qab-menu-text">動態歌詞</span>
         </div>
         <div class="qab-menu-item" onclick="toggleHotkeyHelp(); closeQABMenu();">
             <span class="qab-menu-icon">⌨</span>
@@ -286,6 +285,14 @@
         <div class="qab-menu-item" onclick="toggleCombatHUD(); closeQABMenu();">
             <span class="qab-menu-icon">🎯</span>
             <span class="qab-menu-text">戰鬥儀表板</span>
+        </div>
+        <div class="qab-menu-item" onclick="toggleSkillHUD(); closeQABMenu();">
+            <span class="qab-menu-icon">🗡️</span>
+            <span class="qab-menu-text">怪物招式面板</span>
+        </div>
+        <div class="qab-menu-item" onclick="toggleCalcHUD(); closeQABMenu();">
+            <span class="qab-menu-icon">🎲</span>
+            <span class="qab-menu-text">懸浮計算器</span>
         </div>
         <div class="qab-menu-divider"></div>
         <div class="qab-menu-item" onclick="openHUDSettings(); closeQABMenu();">
@@ -479,6 +486,7 @@
 <script src="src/utils/audio.js"></script>
 <script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-hud.js"></script>
+<script src="src/ui/st-skill-hud.js"></script>
 <script src="src/ui/main.js"></script>
 </body>
 </html>

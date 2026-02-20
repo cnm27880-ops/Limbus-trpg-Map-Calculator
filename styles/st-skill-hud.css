@@ -1,0 +1,302 @@
+/* ===== ST Skill Macro HUD ===== */
+.skill-hud {
+    position: fixed;
+    z-index: 9998;
+    font-family: 'Noto Sans TC', sans-serif;
+    border-radius: 14px;
+    border: 2px solid var(--border);
+    background: var(--bg-panel);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    width: 340px;
+    max-height: 70vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.skill-hud.collapsed { max-height: none; }
+.skill-hud.collapsed .skill-hud-body { display: none; }
+.skill-hud.dragging { transition: none !important; user-select: none; }
+.skill-hud.hidden { display: none !important; }
+
+/* Header */
+.skill-hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, var(--bg-card), rgba(229, 57, 53, 0.15));
+    border-bottom: 1px solid var(--border);
+    cursor: grab;
+    user-select: none;
+}
+.skill-hud-header:active { cursor: grabbing; }
+.skill-hud-title { font-weight: bold; color: var(--accent-red); font-size: 0.9rem; }
+.skill-hud-controls { display: flex; gap: 6px; }
+.skill-hud-btn {
+    width: 26px; height: 26px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+}
+.skill-hud-btn:hover { background: rgba(229,57,53,0.2); color: var(--accent-red); }
+
+/* Body */
+.skill-hud-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    min-height: 0;
+}
+.skill-hud-body::-webkit-scrollbar { width: 4px; }
+.skill-hud-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Mode Tabs */
+.skill-mode-tabs {
+    display: flex; gap: 4px; margin-bottom: 10px;
+}
+.skill-mode-tab {
+    flex: 1; padding: 6px; text-align: center;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer;
+    font-size: 0.8rem; color: var(--text-dim);
+    transition: all 0.15s;
+}
+.skill-mode-tab.active {
+    background: rgba(229,57,53,0.15); color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+
+/* Category Group */
+.skill-category {
+    margin-bottom: 10px;
+}
+.skill-category-header {
+    font-size: 0.8rem; font-weight: bold;
+    color: var(--accent-yellow);
+    padding: 4px 8px;
+    background: rgba(253,216,53,0.08);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+}
+.skill-category-header .cat-toggle { font-size: 0.6rem; transition: transform 0.2s; }
+.skill-category.collapsed-cat .cat-toggle { transform: rotate(-90deg); }
+.skill-category.collapsed-cat .skill-card-list { display: none; }
+
+/* Skill Card */
+.skill-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    transition: border-color 0.15s;
+}
+.skill-card:hover { border-color: var(--accent-red); }
+.skill-card-top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 4px;
+}
+.skill-card-name { font-weight: bold; font-size: 0.85rem; color: var(--text-main); }
+.skill-card-stats {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    font-size: 0.75rem; color: var(--text-dim);
+}
+.skill-stat { padding: 2px 6px; background: var(--bg-input); border-radius: 4px; }
+.skill-stat.dp { color: var(--accent-red); }
+.skill-stat.pen { color: var(--accent-orange); }
+.skill-stat.speed { color: var(--accent-blue, #42a5f5); }
+.skill-stat.magic { color: var(--accent-purple); }
+.skill-stat.status { color: var(--accent-yellow); }
+.skill-card-actions {
+    display: flex; gap: 4px; margin-top: 6px;
+}
+.skill-action-btn {
+    flex: 1; padding: 4px 6px;
+    font-size: 0.7rem; border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-dim);
+    cursor: pointer; transition: all 0.15s;
+    text-align: center;
+}
+.skill-action-btn:hover { background: rgba(229,57,53,0.15); color: var(--accent-red); }
+.skill-action-btn.calc-fill { border-color: rgba(229,57,53,0.3); }
+.skill-action-btn.calc-fill:hover { background: rgba(229,57,53,0.2); }
+.skill-action-btn.status-apply { border-color: rgba(253,216,53,0.3); }
+.skill-action-btn.status-apply:hover { background: rgba(253,216,53,0.15); color: var(--accent-yellow); }
+
+/* Edit Form */
+.skill-edit-form {
+    display: flex; flex-direction: column; gap: 8px;
+}
+.skill-edit-row {
+    display: flex; gap: 6px; align-items: center;
+}
+.skill-edit-row label {
+    font-size: 0.75rem; color: var(--text-dim);
+    min-width: 55px; text-align: right;
+}
+.skill-edit-row input, .skill-edit-row select {
+    flex: 1; padding: 5px 8px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-main);
+    font-size: 0.8rem;
+}
+.skill-edit-row input[type="number"] { width: 60px; flex: none; }
+.skill-edit-btns {
+    display: flex; gap: 6px; margin-top: 4px;
+}
+.skill-edit-btns button {
+    flex: 1; padding: 6px;
+    border-radius: 6px; border: 1px solid var(--border);
+    cursor: pointer; font-size: 0.8rem;
+    transition: all 0.15s;
+}
+.skill-save-btn {
+    background: rgba(229,57,53,0.2); color: var(--accent-red);
+    border-color: var(--accent-red) !important;
+}
+.skill-save-btn:hover { background: rgba(229,57,53,0.35); }
+.skill-cancel-btn { background: var(--bg-input); color: var(--text-dim); }
+.skill-cancel-btn:hover { background: var(--bg-card); }
+.skill-delete-btn { background: rgba(229,57,53,0.1); color: #e57373; border-color: #e57373 !important; }
+.skill-delete-btn:hover { background: rgba(229,57,53,0.25); }
+.skill-add-btn {
+    width: 100%; padding: 8px;
+    background: var(--bg-input); border: 1px dashed var(--border);
+    border-radius: 8px; color: var(--text-dim);
+    cursor: pointer; font-size: 0.8rem;
+    transition: all 0.15s;
+}
+.skill-add-btn:hover { border-color: var(--accent-red); color: var(--accent-red); }
+
+/* Status Fuzzy Search + Tag List */
+.skill-status-section {
+    display: flex; flex-direction: column; gap: 6px;
+}
+.skill-status-search-wrap {
+    position: relative;
+}
+.skill-status-search {
+    width: 100%; padding: 6px 10px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text-main);
+    font-size: 0.8rem; box-sizing: border-box;
+}
+.skill-status-search:focus { border-color: var(--accent-yellow); outline: none; }
+.skill-status-suggestions {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-top: none; border-radius: 0 0 6px 6px;
+    max-height: 160px; overflow-y: auto; z-index: 20;
+}
+.skill-status-suggestions:empty { display: none; }
+.status-suggest-item {
+    padding: 6px 10px; font-size: 0.8rem;
+    cursor: pointer; color: var(--text-main);
+    display: flex; align-items: center; gap: 6px;
+    transition: background 0.1s;
+}
+.status-suggest-item:hover { background: rgba(253,216,53,0.12); }
+.status-suggest-empty {
+    padding: 8px 10px; font-size: 0.75rem;
+    color: var(--text-dim); text-align: center;
+}
+.skill-status-selected {
+    display: flex; flex-direction: column; gap: 4px;
+}
+.status-tag {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px; background: rgba(253,216,53,0.06);
+    border: 1px solid rgba(253,216,53,0.2);
+    border-radius: 6px; font-size: 0.8rem; color: var(--accent-yellow);
+}
+.status-tag-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-tag-stacks-label { font-size: 0.7rem; color: var(--text-dim); }
+.status-tag-stacks {
+    width: 48px; padding: 2px 4px; text-align: center;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-main); font-size: 0.75rem;
+    flex: none;
+}
+.status-tag-remove {
+    background: none; border: none; color: var(--text-dim);
+    cursor: pointer; font-size: 1.1rem; padding: 0 2px;
+    flex: none; line-height: 1;
+    transition: color 0.15s;
+}
+.status-tag-remove:hover { color: var(--accent-red); }
+
+/* Empty State */
+.skill-empty {
+    text-align: center; padding: 20px;
+    color: var(--text-dim); font-size: 0.85rem;
+}
+
+/* Minimized bar */
+.skill-mini-bar {
+    display: flex; align-items: center; gap: 8px;
+    flex: 1;
+}
+.skill-mini-bar span { font-size: 0.8rem; color: var(--text-dim); }
+
+/* ===== Floating Calculator HUD ===== */
+.calc-hud {
+    position: fixed;
+    z-index: 9997;
+    font-family: 'Noto Sans TC', sans-serif;
+    border-radius: 14px;
+    border: 2px solid var(--border);
+    background: var(--bg-panel);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    width: 360px;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.calc-hud.collapsed { max-height: none; }
+.calc-hud.collapsed .calc-hud-body { display: none; }
+.calc-hud.dragging { transition: none !important; user-select: none; }
+.calc-hud.hidden { display: none !important; }
+
+.calc-hud-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, var(--bg-card), rgba(76, 175, 80, 0.12));
+    border-bottom: 1px solid var(--border);
+    cursor: grab; user-select: none;
+}
+.calc-hud-header:active { cursor: grabbing; }
+.calc-hud-title { font-weight: bold; color: var(--accent-green); font-size: 0.9rem; }
+.calc-hud-controls { display: flex; gap: 6px; }
+
+.calc-hud-body {
+    flex: 1; overflow-y: auto; padding: 10px; min-height: 0;
+}
+.calc-hud-body::-webkit-scrollbar { width: 4px; }
+.calc-hud-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Re-style calc sections for floating panel */
+.calc-hud-body .calc-container { max-width: 100%; overflow: hidden; }
+.calc-hud-body .calc-section { margin-bottom: 8px; padding: 10px; overflow: hidden; }
+.calc-hud-body .calc-section-title { font-size: 0.85rem; }
+.calc-hud-body .calc-grid { gap: 6px; }
+.calc-hud-body .calc-field { gap: 2px; min-width: 0; overflow: hidden; }
+.calc-hud-body .calc-label { font-size: 0.7rem; }
+.calc-hud-body .calc-buttons { gap: 6px; margin-top: 6px; }
+.calc-hud-body input,
+.calc-hud-body select {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}

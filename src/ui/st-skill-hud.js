@@ -284,14 +284,6 @@ function createSkillHUD() {
 function createCalcHUD() {
     if (document.getElementById('calc-hud')) return;
 
-    // Grab calc content from the page-calc tab
-    const pageCalc = document.getElementById('page-calc');
-    let calcInnerHTML = '';
-    if (pageCalc) {
-        const container = pageCalc.querySelector('.calc-container');
-        if (container) calcInnerHTML = container.innerHTML;
-    }
-
     const hud = document.createElement('div');
     hud.id = 'calc-hud';
     hud.className = 'calc-hud hidden';
@@ -302,9 +294,7 @@ function createCalcHUD() {
                 <button class="skill-hud-btn" onclick="closeCalcHUD()" title="關閉">×</button>
             </div>
         </div>
-        <div class="calc-hud-body" id="calc-hud-body">
-            <div class="calc-container">${calcInnerHTML}</div>
-        </div>
+        <div class="calc-hud-body" id="calc-hud-body"></div>
     `;
     document.body.appendChild(hud);
     hud.style.left = calcHudState.position.x + 'px';
@@ -314,27 +304,27 @@ function createCalcHUD() {
 
     setupPanelDrag('calc-hud', 'calc-hud-header', calcHudState, saveCalcHudSettings);
     setupPanelCollapse('calc-hud-header', calcHudState, 'calc-hud', saveCalcHudSettings);
-
-    // Re-initialize the calculator inputs inside the floating panel
-    initCalcHudInputs();
 }
 
-function initCalcHudInputs() {
-    const body = document.getElementById('calc-hud-body');
-    if (!body) return;
-
-    // Init def tags & inputs if initCalculator exists
-    const defTagsContainer = body.querySelector('#def-tags');
-    const defInputsContainer = body.querySelector('#def-inputs');
-    if (defTagsContainer && typeof DEF_TYPES !== 'undefined') {
-        defTagsContainer.innerHTML = DEF_TYPES.map(d =>
-            `<span class="def-tag ${d.type}" data-def="${d.id}" onclick="toggleDefTag('${d.id}')">${d.name}</span>`
-        ).join('');
+// Move .calc-container from #page-calc into the floating panel (avoids duplicate IDs)
+function moveCalcToHUD() {
+    const pageCalc = document.getElementById('page-calc');
+    const hudBody = document.getElementById('calc-hud-body');
+    if (!pageCalc || !hudBody) return;
+    const container = pageCalc.querySelector('.calc-container');
+    if (container && !hudBody.contains(container)) {
+        hudBody.appendChild(container);
     }
-    if (defInputsContainer && typeof DEF_TYPES !== 'undefined') {
-        defInputsContainer.innerHTML = DEF_TYPES.map(d =>
-            `<div class="def-input-row" id="def-${d.id}"><span style="width:50px;font-size:0.8rem;">${d.name}</span><input type="number" data-def="${d.id}" value="0"></div>`
-        ).join('');
+}
+
+// Move .calc-container back to #page-calc when floating panel closes
+function moveCalcBack() {
+    const pageCalc = document.getElementById('page-calc');
+    const hudBody = document.getElementById('calc-hud-body');
+    if (!pageCalc || !hudBody) return;
+    const container = hudBody.querySelector('.calc-container');
+    if (container) {
+        pageCalc.appendChild(container);
     }
 }
 
@@ -367,9 +357,11 @@ function showCalcHUD() {
     if (hud) hud.classList.remove('hidden');
     calcHudState.isVisible = true;
     saveCalcHudSettings();
+    moveCalcToHUD();
 }
 
 function closeCalcHUD() {
+    moveCalcBack();
     const hud = document.getElementById('calc-hud');
     if (hud) hud.classList.add('hidden');
     calcHudState.isVisible = false;
@@ -415,7 +407,8 @@ function renderSkillBattleMode(body) {
 
     let html = '';
     catNames.forEach(cat => {
-        html += `<div class="skill-category" id="skill-cat-${cat.replace(/\s/g, '_')}">`;
+        const safeCatId = encodeURIComponent(cat).replace(/%/g, '_');
+        html += `<div class="skill-category" id="skill-cat-${safeCatId}">`;
         html += `<div class="skill-category-header" onclick="this.parentElement.classList.toggle('collapsed-cat')">
                     <span class="cat-toggle">▼</span> ${escapeHtml(cat)} (${groups[cat].length})
                  </div>`;
@@ -755,6 +748,7 @@ window.saveSkillForm = saveSkillForm;
 window.confirmDeleteSkill = confirmDeleteSkill;
 window.applyDefenseToCalc = applyDefenseToCalc;
 window.applyAttackToCalc = applyAttackToCalc;
+window.renderSkillHudContent = renderSkillHudContent;
 
 // ===== Init =====
 function initSkillHUD() {

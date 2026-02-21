@@ -2700,6 +2700,9 @@ body.combat-mode .boss-hud-container {
         0 2px 4px rgba(0, 0, 0, 0.8);
     transition: opacity 2s ease-out, filter 2s ease-out;
     animation: resonance-tremble 3s ease-in-out infinite;
+    /* 行動裝置 GPU 加速：提示瀏覽器預先分配合成層 */
+    will-change: opacity, transform, filter;
+    contain: layout style;
 }
 
 /* 淡出效果 */
@@ -2712,6 +2715,32 @@ body.combat-mode .boss-hud-container {
 .resonance-char {
     display: inline-block;
     animation: resonance-char-in 0.3s ease-out forwards;
+}
+
+/* 行動裝置歌詞優化：簡化動畫降低 GPU 負擔 */
+@media (max-width: 1023px) {
+    .resonance-line {
+        /* 手機上停用顫抖動畫，減少持續性 GPU 運算 */
+        animation: none;
+        /* 簡化 text-shadow 層數 */
+        text-shadow:
+            0 0 8px rgba(255, 255, 255, 0.9),
+            0 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    .resonance-char {
+        /* 手機上使用更輕量的淡入（去除 blur） */
+        animation: resonance-char-in-mobile 0.2s ease-out forwards;
+    }
+
+    @keyframes resonance-char-in-mobile {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
 }
 
 /* Mobile adjustments for quick action ball & music player */

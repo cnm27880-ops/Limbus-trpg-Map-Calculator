@@ -195,10 +195,12 @@ class MusicManager {
 
             this.updateUI();
         } catch (error) {
-            console.warn('BGM: 播放失敗', error);
+            console.warn('BGM: 播放失敗，嘗試在下次互動時播放', error);
             this.pendingPlayUrl = processedUrl;
             this.pendingPlayName = name;
-            this.showInteractionPrompt();
+
+            // 行動裝置：重新註冊一次性互動監聽器，在下次觸摸時播放
+            this._setupRetryOnInteraction();
         }
     }
 
@@ -521,12 +523,18 @@ class MusicManager {
 
     /**
      * 設置自動播放政策處理
+     * 在行動裝置上，必須在使用者手勢事件中「解鎖」音頻元素，
+     * 否則後續由 Firebase 回調觸發的 audio.play() 會被瀏覽器阻擋。
      */
     setupAutoplayHandler() {
         const handleInteraction = () => {
             if (!this.userInteracted) {
                 this.userInteracted = true;
-                console.log('BGM: 用戶已互動，可以播放音樂');
+                console.log('BGM: 用戶已互動，解鎖音頻播放');
+
+                // 解鎖音頻元素：在使用者手勢中播放靜音音頻
+                // 這讓後續程式化呼叫 play() 不再被瀏覽器阻擋
+                this._unlockAudio();
 
                 // 如果有等待播放的音樂
                 if (this.pendingPlayUrl) {
@@ -537,10 +545,64 @@ class MusicManager {
             }
         };
 
-        // 監聽各種用戶互動事件
+        // 監聽各種用戶互動事件（不使用 once，確保多次互動都能觸發解鎖）
         ['click', 'touchstart', 'keydown'].forEach(event => {
-            document.addEventListener(event, handleInteraction, { once: true, passive: true });
+            document.addEventListener(event, handleInteraction, { passive: true });
         });
+    }
+
+    /**
+     * 解鎖音頻元素（行動裝置必要）
+     * 在使用者手勢上下文中播放一段極短的靜音音頻，
+     * 讓瀏覽器將此 Audio 元素標記為「已被用戶啟動」。
+     */
+    _unlockAudio() {
+        if (this._audioUnlocked) return;
+
+        const audio = this.currentAudio;
+        if (!audio) return;
+
+        // 記住原始狀態
+        const origSrc = audio.src;
+        const origMuted = audio.muted;
+
+        // 播放極短的靜音 WAV（44 bytes）來解鎖音頻元素
+        const silentWav = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+        audio.muted = true;
+        audio.src = silentWav;
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                audio.pause();
+                audio.muted = origMuted;
+                audio.currentTime = 0;
+                // 恢復原始來源（如果有的話）
+                if (origSrc && origSrc !== silentWav) {
+                    audio.src = origSrc;
+                } else {
+                    audio.removeAttribute('src');
+                }
+                this._audioUnlocked = true;
+                console.log('BGM: 音頻元素已解鎖（行動裝置）');
+            }).catch(() => {
+                // 解鎖失敗，恢復原始狀態
+                audio.muted = origMuted;
+                if (origSrc) audio.src = origSrc;
+                console.warn('BGM: 音頻解鎖失敗，將在下次互動重試');
+            });
+        }
+
+        // 同時嘗試解鎖 AudioContext（部分瀏覽器需要）
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+                const ctx = new AudioCtx();
+                ctx.resume().then(() => ctx.close()).catch(() => {});
+            }
+        } catch (e) {
+            // AudioContext 不可用，忽略
+        }
     }
 
     /**
@@ -548,6 +610,46 @@ class MusicManager {
      */
     showInteractionPrompt() {
         showToast('請點擊頁面任意處以啟用音樂播放');
+    }
+
+    /**
+     * 行動裝置：在下次使用者互動時重試播放
+     * 當 play() 因為不在使用者手勢上下文而失敗時使用
+     */
+    _setupRetryOnInteraction() {
+        if (this._retryListenerActive) return;
+        this._retryListenerActive = true;
+
+        const retryPlay = () => {
+            this._retryListenerActive = false;
+
+            // 先嘗試解鎖
+            this._unlockAudio();
+
+            // 重試播放等待中的音樂
+            if (this.pendingPlayUrl) {
+                const url = this.pendingPlayUrl;
+                const name = this.pendingPlayName;
+                this.pendingPlayUrl = null;
+                this.pendingPlayName = null;
+
+                // 短暫延遲讓解鎖完成
+                setTimeout(() => {
+                    this.playMusic(url, name, true);
+                }, 100);
+            }
+
+            // 移除監聽器
+            ['click', 'touchstart'].forEach(event => {
+                document.removeEventListener(event, retryPlay);
+            });
+        };
+
+        ['click', 'touchstart'].forEach(event => {
+            document.addEventListener(event, retryPlay, { once: true, passive: true });
+        });
+
+        this.showInteractionPrompt();
     }
 
     /**
@@ -587,7 +689,8 @@ class MusicManager {
         // 更新播放狀態
         if (state.currentUrl) {
             if (state.isPlaying) {
-                this.playMusic(state.currentUrl, state.currentName);
+                // 使用 force=true，因為這是 ST 同步過來的明確指令
+                this.playMusic(state.currentUrl, state.currentName, true);
             } else {
                 // 有 URL 但 isPlaying 為 false = 暫停（保留播放位置）
                 this.pauseMusic();

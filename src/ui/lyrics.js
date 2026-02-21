@@ -220,6 +220,8 @@ function createLyricsLineElement(side, localSlot) {
 
 /**
  * 以打字機效果逐字顯示一行歌詞
+ * 行動裝置優化：使用 requestAnimationFrame 取代 setTimeout 避免計時器節流，
+ * 並批次更新 DOM 減少重繪次數。
  * @param {HTMLElement} lineEl - 歌詞行容器
  * @param {string} text - 歌詞文字
  * @param {number} charIntervalMs - 每個字的間隔 (ms)
@@ -237,6 +239,7 @@ function typewriterLine(lineEl, text, charIntervalMs, signal) {
         // 僅預設第 0 個，後續由 tick 內動態計算（支援播放中即時切速）
         const schedule = [0];
 
+        // 使用 DocumentFragment 批量新增 DOM 元素，減少重繪
         function tick() {
             if (signal.aborted) {
                 reject(new DOMException('Aborted', 'AbortError'));
@@ -244,13 +247,16 @@ function typewriterLine(lineEl, text, charIntervalMs, signal) {
             }
 
             const elapsed = performance.now() - startTime;
+            const fragment = document.createDocumentFragment();
+            let added = false;
 
             // 根據已過時間，一次補齊所有應顯示的字元
             while (rendered < chars.length && elapsed >= schedule[rendered]) {
                 const charSpan = document.createElement('span');
                 charSpan.className = 'resonance-char';
                 charSpan.textContent = chars[rendered];
-                lineEl.appendChild(charSpan);
+                fragment.appendChild(charSpan);
+                added = true;
                 rendered++;
 
                 // 動態更新後續字元的排程，支援播放中切速
@@ -260,18 +266,21 @@ function typewriterLine(lineEl, text, charIntervalMs, signal) {
                 }
             }
 
+            // 批次插入 DOM（一次重繪）
+            if (added) {
+                lineEl.appendChild(fragment);
+            }
+
             if (rendered >= chars.length) {
                 resolve();
                 return;
             }
 
-            // 計算到下個字元的剩餘等待時間
-            const nextCharTime = schedule[rendered];
-            const remaining = Math.max(0, nextCharTime - (performance.now() - startTime));
-            setTimeout(tick, remaining);
+            // 使用 rAF 取代 setTimeout，行動裝置上更穩定
+            requestAnimationFrame(tick);
         }
 
-        tick();
+        requestAnimationFrame(tick);
     });
 }
 
@@ -760,20 +769,19 @@ function updateRecStatus(msg) {
 
 /**
  * 使用 requestAnimationFrame 高精度等待，直到條件成立
+ * 行動裝置優化：使用單一計時器避免重複排程，降低 CPU 負擔
  * @param {function} conditionFn - 返回 true 表示條件已滿足
  * @param {AbortSignal} signal - 中斷信號
  * @returns {Promise<void>}
  */
 function waitUntilRAF(conditionFn, signal) {
     return new Promise((resolve, reject) => {
-        let rafId = 0;
-        let timerId = 0;
+        if (signal.aborted) {
+            reject(new DOMException('Aborted', 'AbortError'));
+            return;
+        }
 
         function check() {
-            // 先取消另一個待執行的回調，避免回調數量倍增
-            cancelAnimationFrame(rafId);
-            clearTimeout(timerId);
-
             if (signal.aborted) {
                 reject(new DOMException('Aborted', 'AbortError'));
                 return;
@@ -782,13 +790,12 @@ function waitUntilRAF(conditionFn, signal) {
                 resolve();
                 return;
             }
-            // rAF 提供前景高精度，setTimeout 作為背景後備
-            rafId = requestAnimationFrame(check);
-            timerId = setTimeout(check, 200);
+            // 使用 rAF 提供前景高精度（~16ms）
+            // 行動裝置在背景時 rAF 會暫停，但歌詞在背景也不需要播放
+            requestAnimationFrame(check);
         }
 
-        rafId = requestAnimationFrame(check);
-        timerId = setTimeout(check, 200);
+        requestAnimationFrame(check);
     });
 }
 
@@ -797,6 +804,9 @@ function waitUntilRAF(conditionFn, signal) {
 /**
  * 使用時間戳播放歌詞（與音樂同步）
  * 使用 requestAnimationFrame 高精度同步（~16ms），並套用 syncOffset 補償延遲
+ *
+ * 行動裝置修正：當音樂未播放時（例如因自動播放限制），
+ * 自動降級為 wall-clock 計時，避免歌詞卡死。
  */
 async function playLyricsWithTimestamps(lines, options = {}) {
     if (lyricsActive) {
@@ -819,22 +829,46 @@ async function playLyricsWithTimestamps(lines, options = {}) {
     const audio = (typeof musicManager !== 'undefined' && musicManager.currentAudio)
         ? musicManager.currentAudio : null;
 
+    /**
+     * 判斷音樂是否正在播放
+     * 行動裝置上 audio.play() 可能因自動播放限制失敗
+     */
+    const isAudioPlaying = () => {
+        return audio && !audio.paused && audio.readyState >= 2 && audio.currentTime > 0;
+    };
+
     try {
         do {
-            // 每輪循環開始時記錄基準時間，用於計算相對偏移
+            // 每輪循環開始時記錄基準時間
             let loopBaseAudioTime = audio ? audio.currentTime : 0;
             let loopBaseWallTime = Date.now();
+            // 追蹤是否已切換到 wall-clock 模式
+            let usingWallClock = !isAudioPlaying();
+
+            if (usingWallClock) {
+                console.warn('Lyrics: 音樂未播放，使用 wall-clock 計時模式');
+            }
 
             const getElapsed = () => {
-                if (audio) {
+                // 如果音樂正在播放，使用 audio.currentTime（高精度）
+                if (!usingWallClock && isAudioPlaying()) {
                     let elapsed = audio.currentTime - loopBaseAudioTime;
                     if (elapsed < -1) {
+                        // 音樂回到開頭（循環或重播）
                         loopBaseAudioTime = audio.currentTime;
                         loopBaseWallTime = Date.now();
                         elapsed = 0;
                     }
                     return elapsed;
                 }
+
+                // 如果剛從音樂模式切換到 wall-clock（音樂中途停止）
+                if (!usingWallClock) {
+                    usingWallClock = true;
+                    console.warn('Lyrics: 音樂停止，切換到 wall-clock 計時');
+                }
+
+                // Wall-clock 計時（行動裝置後備方案）
                 return (Date.now() - loopBaseWallTime) / 1000;
             };
 
@@ -867,15 +901,31 @@ async function playLyricsWithTimestamps(lines, options = {}) {
             }
 
             // 循環模式：等待音樂回到起點再開始下一輪
-            if (loop && !signal.aborted && audio) {
+            if (loop && !signal.aborted) {
                 lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
                 lyricsActiveLines = [];
 
-                const lastTime = audio.currentTime;
-                await waitUntilRAF(() => {
-                    if (signal.aborted) return true;
-                    return audio.currentTime < lastTime - 0.5;
-                }, signal);
+                if (isAudioPlaying()) {
+                    // 音樂播放中：等待音樂循環回起點
+                    const lastTime = audio.currentTime;
+                    await waitUntilRAF(() => {
+                        if (signal.aborted) return true;
+                        return audio.currentTime < lastTime - 0.5;
+                    }, signal);
+                } else {
+                    // 無音樂：估算最後時間戳後等待一段時間再重新開始
+                    const lastTimestamp = Math.max(...Object.values(lyricsPerLineTimestamps).map(Number).filter(n => !isNaN(n)), 0);
+                    const elapsed = getElapsed();
+                    const remaining = Math.max(0, (lastTimestamp + 3) - elapsed);
+                    if (remaining > 0) {
+                        await delay(remaining * 1000, signal);
+                    }
+                    // 重置 wall-clock 基準
+                    loopBaseWallTime = Date.now();
+                    usingWallClock = true;
+                }
+
+                lyricsCurrentSlot = 0;
             }
         } while (loop && !signal.aborted);
     } catch (e) {

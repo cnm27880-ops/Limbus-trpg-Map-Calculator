@@ -104,6 +104,8 @@ function renderUnitsList() {
 
     list.innerHTML = state.units.map((u, idx) => {
         const isTurn = idx === state.turnIdx;
+        // 隱形棋子：非 ST 玩家完全看不到
+        if (myRole !== 'st' && u.hidden === true) return '';
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
         const a = hpArr.filter(x => x === 3).length;
@@ -116,6 +118,9 @@ function renderUnitsList() {
         const isMyUnit = u.ownerId === myPlayerId;
         const hideDetails = isEnemy && !isSt && !isMyUnit;
         const isBoss = u.isBoss || u.type === 'boss';
+        const isHidden = u.hidden === true;
+        // ST 才會看到的隱藏標籤
+        const hiddenBadge = (isSt && isHidden) ? ' <span style="font-size:0.7rem;color:var(--text-dim);">👁️‍🗨️ (已隱藏)</span>' : '';
 
         const canEdit = canControlUnit(u);
         const maxHpLabel = canEdit
@@ -199,6 +204,11 @@ function renderUnitsList() {
                 ? `<button class="action-btn boss-toggle${state.activeBossId === u.id ? ' active' : ''}" onclick="toggleActiveBoss('${u.id}')" title="顯示/隱藏 BOSS 血條">👑</button>`
                 : '';
 
+            // ST 專屬的隱藏/現身切換按鈕
+            const visibilityBtn = isSt
+                ? `<button class="action-btn" onclick="toggleUnitVisibility('${u.id}')" title="切換隱藏/現身">👁️ ${isHidden ? '現身' : '隱藏'}</button>`
+                : '';
+
             actions = `
                 <div class="unit-actions">
                     <button class="action-btn dmg-b" onclick="modifyHP('${u.id}','b',1)" title="按住Shift開啟數量輸入">+B</button>
@@ -210,6 +220,7 @@ function renderUnitsList() {
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${assignBtn}
+                    ${visibilityBtn}
                     <button class="action-btn" onclick="deleteUnit('${u.id}')">✕</button>
                 </div>
             `;
@@ -222,8 +233,8 @@ function renderUnitsList() {
         const initInput = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${initReadonly}>`;
         const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
-        // 使用者自己的單位有特殊邊框
-        const myUnitStyle = isMyUnit ? 'border-left-width:6px;' : '';
+        // 使用者自己的單位有特殊邊框；ST 看到隱藏單位時降低透明度
+        const myUnitStyle = (isMyUnit ? 'border-left-width:6px;' : '') + (isSt && isHidden ? 'opacity:0.6;' : '');
         
         // 單位卡片類別
         const cardClasses = [
@@ -245,7 +256,7 @@ function renderUnitsList() {
                 <div class="unit-header">
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
-                        <div style="font-weight:600;">${escapeHtml(u.name)}${ownerTag}</div>
+                        <div style="font-weight:600;">${escapeHtml(u.name)}${hiddenBadge}${ownerTag}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
@@ -272,9 +283,12 @@ function renderSidebarUnits() {
     
     c.innerHTML = state.units.map((u, idx) => {
         const isTurn = idx === state.turnIdx;
+        // 隱形棋子：非 ST 玩家完全看不到
+        if (myRole !== 'st' && u.hidden === true) return '';
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
         const isBoss = u.isBoss || u.type === 'boss';
+        const isHidden = u.hidden === true;
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
         const currentHp = maxHp - hpArr.filter(x => x > 0).length;
@@ -288,6 +302,9 @@ function renderSidebarUnits() {
             : `<span class="dmg-b">${bCount}B</span> <span class="dmg-l">${lCount}L</span> <span class="dmg-a">${aCount}A</span>`;
 
         const unitName = u.name || 'Unknown';
+        // ST 看到隱藏單位時的視覺提示
+        const sidebarHiddenStyle = (isSt && isHidden) ? 'opacity:0.6;' : '';
+        const hiddenSidebarBadge = (isSt && isHidden) ? ' 👁️' : '';
 
         // 單位卡片類別
         const cardClasses = [
@@ -321,10 +338,10 @@ function renderSidebarUnits() {
 
         // 三欄佈局：左名-中血-右速
         return `
-            <div class="${cardClasses}">
+            <div class="${cardClasses}" style="${sidebarHiddenStyle}">
                 <div class="unit-header">
                     <div class="unit-info">
-                        <div class="unit-name">${escapeHtml(unitName)}</div>
+                        <div class="unit-name">${escapeHtml(unitName)}${hiddenSidebarBadge}</div>
                         <div class="unit-status">${statusTxt}</div>
                     </div>
                     <div class="hp-tactical-container">${tacticalSegments}</div>
@@ -564,6 +581,20 @@ function prevTurn() {
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 100);
     }
+}
+
+/**
+ * 切換單位隱藏狀態（ST 專用）
+ * 隱藏的單位在玩家畫面上完全不可見，ST 則以半透明方式顯示
+ * @param {string} id - 單位 ID
+ */
+function toggleUnitVisibility(id) {
+    if (myRole !== 'st') return;
+    const u = findUnitById(id);
+    if (!u) return;
+    u.hidden = !u.hidden;
+    broadcastState();
+    renderAll();
 }
 
 // ===== 頭像上傳 =====

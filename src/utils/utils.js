@@ -240,7 +240,8 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1) 
         ownerId: ownerId,
         ownerName: ownerName,
         size: size,  // 單位大小：1=普通, 2=大型, 3=巨型
-        status: {}   // 單位狀態標籤 (例如: {"燃燒": "3", "流血": "2"})
+        status: {},  // 單位狀態標籤 (例如: {"燃燒": "3", "流血": "2"})
+        hidden: false  // 是否對玩家隱藏（ST 可見，玩家看不到）
     };
 }
 

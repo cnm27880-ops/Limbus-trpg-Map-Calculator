@@ -808,10 +808,12 @@ function waitUntilRAF(conditionFn, signal) {
 
 /**
  * 使用時間戳播放歌詞（與音樂同步）
- * 使用 requestAnimationFrame 高精度同步（~16ms），並套用 syncOffset 補償延遲
  *
- * 行動裝置修正：當音樂未播放時（例如因自動播放限制），
- * 自動降級為 wall-clock 計時，避免歌詞卡死。
+ * 核心設計：
+ * - 時間戳是錄製時的「絕對歌曲時間」（audio.currentTime），直接與 audio.currentTime 比對
+ * - 不再使用 loopBaseAudioTime 做相對計算，消除每次播放/每圈之間的計時飄移
+ * - 音樂不在播放時（行動裝置限制、使用者暫停），改用 wall-clock 從已知位置繼續估算
+ * - 分頁切換返回後：在 waitUntilRAF 前後都檢查，跳過所有過期歌詞直到當前位置
  */
 async function playLyricsWithTimestamps(lines, options = {}) {
     if (lyricsActive) {
@@ -830,52 +832,43 @@ async function playLyricsWithTimestamps(lines, options = {}) {
     lyricsCurrentSlot = 0;
 
     const signal = lyricsAbortController.signal;
-    // 取得音樂的當前播放時間作為同步基準
     const audio = (typeof musicManager !== 'undefined' && musicManager.currentAudio)
         ? musicManager.currentAudio : null;
 
+    const isAudioPlaying = () =>
+        audio && !audio.paused && audio.readyState >= 2 && audio.currentTime > 0;
+
+    // 追蹤最後已知的音樂時間（用於音樂暫停/不可用時的 wall-clock 補償）
+    let lastKnownAudioTime = audio ? audio.currentTime : 0;
+    let wallClockAtLastAudio = Date.now();
+
     /**
-     * 判斷音樂是否正在播放
-     * 行動裝置上 audio.play() 可能因自動播放限制失敗
+     * 取得當前「歌曲時間」（秒，絕對值）
+     *
+     * - 音樂播放中：直接回傳 audio.currentTime（與錄製時間戳完全一致）
+     * - 音樂暫停/不可用：從最後已知位置以 wall-clock 繼續估算
+     *
+     * 使用絕對時間而非相對時間，確保每次播放、每圈循環的計時邏輯都相同，
+     * 消除因歌詞與音樂啟動時機不同步導致的整體偏移。
      */
-    const isAudioPlaying = () => {
-        return audio && !audio.paused && audio.readyState >= 2 && audio.currentTime > 0;
+    const getSongTime = () => {
+        if (isAudioPlaying()) {
+            lastKnownAudioTime = audio.currentTime;
+            wallClockAtLastAudio = Date.now();
+            return audio.currentTime;
+        }
+        // 音樂不在播放：從最後已知位置繼續以 wall-clock 計時
+        return lastKnownAudioTime + (Date.now() - wallClockAtLastAudio) / 1000;
     };
 
     try {
         do {
-            // 每輪循環開始時記錄基準時間
-            let loopBaseAudioTime = audio ? audio.currentTime : 0;
-            let loopBaseWallTime = Date.now();
-            // 追蹤是否已切換到 wall-clock 模式
-            let usingWallClock = !isAudioPlaying();
-
-            if (usingWallClock) {
+            // 循環開始時，若無音訊則以 wall-clock 從 0 開始計時
+            if (!isAudioPlaying()) {
+                lastKnownAudioTime = 0;
+                wallClockAtLastAudio = Date.now();
                 console.warn('Lyrics: 音樂未播放，使用 wall-clock 計時模式');
             }
-
-            const getElapsed = () => {
-                // 如果音樂正在播放，使用 audio.currentTime（高精度）
-                if (!usingWallClock && isAudioPlaying()) {
-                    let elapsed = audio.currentTime - loopBaseAudioTime;
-                    if (elapsed < -1) {
-                        // 音樂回到開頭（循環或重播）
-                        loopBaseAudioTime = audio.currentTime;
-                        loopBaseWallTime = Date.now();
-                        elapsed = 0;
-                    }
-                    return elapsed;
-                }
-
-                // 如果剛從音樂模式切換到 wall-clock（音樂中途停止）
-                if (!usingWallClock) {
-                    usingWallClock = true;
-                    console.warn('Lyrics: 音樂停止，切換到 wall-clock 計時');
-                }
-
-                // Wall-clock 計時（行動裝置後備方案）
-                return (Date.now() - loopBaseWallTime) / 1000;
-            };
 
             for (let i = 0; i < lines.length; i++) {
                 if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -891,20 +884,26 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                 if (targetTime !== undefined) {
                     const adjustedTarget = targetTime + lyricsSyncOffset;
 
-                    // 分頁切換返回後：若此行時間戳已遠在過去，直接跳過（不快速補播）
-                    if (lyricsPageReturnedFromHidden && getElapsed() > adjustedTarget + 0.1) {
+                    // ① 分頁切換返回後 - waitUntilRAF 前：若已過期則跳過
+                    if (lyricsPageReturnedFromHidden && getSongTime() > adjustedTarget + 0.1) {
                         lyricsCurrentSlot++;
                         continue;
                     }
 
-                    await waitUntilRAF(() => getElapsed() >= adjustedTarget, signal);
+                    await waitUntilRAF(() => getSongTime() >= adjustedTarget, signal);
+
+                    // ② 分頁切換返回後 - waitUntilRAF 後：等待期間發生切換，再次檢查
+                    if (lyricsPageReturnedFromHidden && getSongTime() > adjustedTarget + 0.1) {
+                        lyricsCurrentSlot++;
+                        continue;
+                    }
                 } else if (lyricsPageReturnedFromHidden) {
-                    // 無時間戳的行：返回後也跳過，直到定位到當前時間位置
+                    // 無時間戳的行：分頁返回後也跳過，直到找到當前位置
                     lyricsCurrentSlot++;
                     continue;
                 }
 
-                // 此行會實際顯示，重置分頁返回旗標
+                // 此行即將顯示，重置分頁返回旗標
                 lyricsPageReturnedFromHidden = false;
 
                 const { side, localSlot } = resolveSlot(lyricsCurrentSlot);
@@ -933,15 +932,16 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                     }, signal);
                 } else {
                     // 無音樂：估算最後時間戳後等待一段時間再重新開始
-                    const lastTimestamp = Math.max(...Object.values(lyricsPerLineTimestamps).map(Number).filter(n => !isNaN(n)), 0);
-                    const elapsed = getElapsed();
-                    const remaining = Math.max(0, (lastTimestamp + 3) - elapsed);
+                    const lastTimestamp = Math.max(
+                        ...Object.values(lyricsPerLineTimestamps).map(Number).filter(n => !isNaN(n)), 0
+                    );
+                    const remaining = Math.max(0, (lastTimestamp + 3) - getSongTime());
                     if (remaining > 0) {
                         await delay(remaining * 1000, signal);
                     }
-                    // 重置 wall-clock 基準
-                    loopBaseWallTime = Date.now();
-                    usingWallClock = true;
+                    // 重置 wall-clock 基準，讓下一圈從 0 開始
+                    lastKnownAudioTime = 0;
+                    wallClockAtLastAudio = Date.now();
                 }
 
                 lyricsCurrentSlot = 0;

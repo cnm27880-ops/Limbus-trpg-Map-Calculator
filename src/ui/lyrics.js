@@ -38,6 +38,10 @@ let recTimestamps = [];                 // 錄製的時間戳
 // ===== 座標快取（防止分頁切換導致位移）=====
 let lyricsCachedMargins = null;         // 最後一次有效的 margin 數據
 
+// ===== 分頁切換偵測 =====
+// 切換回分頁時設為 true，讓播放迴圈跳過時間戳已過去的歌詞行，直接同步到當前歌曲位置
+let lyricsPageReturnedFromHidden = false;
+
 // ===== 延遲補償 =====
 let lyricsSyncOffset = -0.5;            // 全域同步偏移 (秒)，負值 = 歌詞提早出現
 const LYRICS_OFFSET_KEY = 'limbus_lyrics_sync_offset';
@@ -378,6 +382,7 @@ function stopLyrics() {
 
     lyricsActive = false;
     lyricsLiveSpeed = null;
+    lyricsPageReturnedFromHidden = false;
 
     // 淡出所有現存歌詞行
     lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
@@ -885,8 +890,22 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                 const targetTime = lyricsPerLineTimestamps[i];
                 if (targetTime !== undefined) {
                     const adjustedTarget = targetTime + lyricsSyncOffset;
+
+                    // 分頁切換返回後：若此行時間戳已遠在過去，直接跳過（不快速補播）
+                    if (lyricsPageReturnedFromHidden && getElapsed() > adjustedTarget + 0.1) {
+                        lyricsCurrentSlot++;
+                        continue;
+                    }
+
                     await waitUntilRAF(() => getElapsed() >= adjustedTarget, signal);
+                } else if (lyricsPageReturnedFromHidden) {
+                    // 無時間戳的行：返回後也跳過，直到定位到當前時間位置
+                    lyricsCurrentSlot++;
+                    continue;
                 }
+
+                // 此行會實際顯示，重置分頁返回旗標
+                lyricsPageReturnedFromHidden = false;
 
                 const { side, localSlot } = resolveSlot(lyricsCurrentSlot);
                 const lineEl = createLyricsLineElement(side, localSlot);
@@ -1006,6 +1025,35 @@ function renderLineEditor() {
         item.appendChild(textEl);
         list.appendChild(item);
     });
+}
+
+// ===== 全域時間戳位移 =====
+
+/**
+ * 將所有逐行時間戳統一增加或減少指定秒數
+ * @param {number} direction - +1 = 增加, -1 = 減少
+ */
+function shiftAllTimestamps(direction) {
+    const input = document.getElementById('lyrics-bulk-shift');
+    const delta = parseFloat(input ? input.value : '0.5') * direction;
+    if (isNaN(delta) || delta === 0) return;
+
+    const keys = Object.keys(lyricsPerLineTimestamps);
+    if (keys.length === 0) {
+        if (typeof showToast === 'function') showToast('尚未設定任何時間戳');
+        return;
+    }
+
+    keys.forEach(k => {
+        const newVal = parseFloat((lyricsPerLineTimestamps[k] + delta).toFixed(2));
+        lyricsPerLineTimestamps[k] = Math.max(0, newVal);
+    });
+
+    saveLyricsTimestamps();
+    renderLineEditor();
+    if (typeof showToast === 'function') {
+        showToast(`全部時間戳 ${delta > 0 ? '+' : ''}${delta.toFixed(1)}s`);
+    }
 }
 
 // ===== localStorage 持久化 =====
@@ -1153,6 +1201,13 @@ function initLyricsUI() {
     updatePresetBtnsUI();
     renderLineEditor();
     renderLyricsLibrary();
+
+    // 分頁切換偵測：返回時標記，讓播放迴圈跳過時間戳已過去的歌詞，直接定位到當前位置
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && lyricsActive) {
+            lyricsPageReturnedFromHidden = true;
+        }
+    });
 }
 
 // ===== 歌詞清單 (Library) =====

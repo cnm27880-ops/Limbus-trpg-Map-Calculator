@@ -385,6 +385,9 @@ function renderMap() {
     });
 
     sortedUnits.forEach((u, idx) => {
+        // 隱形棋子：非 ST 玩家看不到，直接跳過不加入 DOM
+        if (myRole !== 'st' && u.hidden === true) return;
+
         const t = document.createElement('div');
         const unitSize = u.size || 1;  // 預設為 1x1
         const isBoss = u.isBoss || u.type === 'boss';
@@ -410,6 +413,11 @@ function renderMap() {
 
         // GPU 加速，提升渲染清晰度
         t.style.transform = 'translateZ(0)';
+
+        // ST 看到隱藏單位時顯示半透明
+        if (myRole === 'st' && u.hidden === true) {
+            t.style.opacity = '0.5';
+        }
 
         // 大型單位 z-index 較低，小型單位較高
         // BOSS 有更高的 z-index

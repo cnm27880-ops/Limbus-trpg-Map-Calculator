@@ -413,6 +413,15 @@
             <!-- 逐行微調編輯器 -->
             <div id="lyrics-line-editor" class="lyrics-line-editor" style="display:none;">
                 <div class="music-section-title">逐行微調</div>
+                <!-- 全域時間戳位移 -->
+                <div class="lyrics-speed-control" style="margin-bottom:6px;">
+                    <label class="lyrics-label">全移</label>
+                    <input type="number" id="lyrics-bulk-shift" class="lyrics-line-time-input"
+                           step="0.1" min="0.1" value="0.5" style="width:58px;" title="每次增減的秒數">
+                    <span class="lyrics-speed-val">s</span>
+                    <button class="action-btn" onclick="shiftAllTimestamps(-1)" title="所有時間戳減少">−</button>
+                    <button class="action-btn" onclick="shiftAllTimestamps(1)" title="所有時間戳增加">+</button>
+                </div>
                 <div id="lyrics-line-list" class="lyrics-line-list"></div>
             </div>
             </div><!-- /lyrics-st-controls -->

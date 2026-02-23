@@ -617,6 +617,7 @@ function setupRoomListeners() {
                 u.type = ['enemy', 'player', 'boss'].includes(u.type) ? u.type : 'enemy';
                 u.init = (typeof u.init === 'number') ? Math.max(-999, Math.min(999, Math.floor(u.init))) : 0;
                 u.size = [1, 2, 3].includes(u.size) ? u.size : 1;
+                u.hidden = u.hidden === true;  // 確保 hidden 永遠是 boolean（舊單位沒有此欄位時為 false）
                 u.avatar = (typeof u.avatar === 'string' && u.avatar.startsWith('data:image/') && u.avatar.length < 500000) ? u.avatar : (u.avatar || null);
                 if (u.status && typeof u.status === 'object') {
                     // 過濾掉 __proto__ 等危險鍵

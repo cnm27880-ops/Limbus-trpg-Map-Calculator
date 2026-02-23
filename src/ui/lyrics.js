@@ -863,6 +863,11 @@ async function playLyricsWithTimestamps(lines, options = {}) {
 
     try {
         do {
+            // 每次迴圈開始都標記「需要跳過已過期行」：
+            // - 首次播放時音樂可能已在中途，需跳過過去的時間戳才能定位到當前位置
+            // - 每圈循環後音訊回到開頭（~0s），此時各行目標均在未來，跳過條件不成立，正常等待
+            lyricsPageReturnedFromHidden = true;
+
             // 循環開始時，若無音訊則以 wall-clock 從 0 開始計時
             if (!isAudioPlaying()) {
                 lastKnownAudioTime = 0;

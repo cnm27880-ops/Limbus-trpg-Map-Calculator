@@ -42,6 +42,10 @@ let lyricsCachedMargins = null;         // 最後一次有效的 margin 數據
 // 切換回分頁時設為 true，讓播放迴圈跳過時間戳已過去的歌詞行，直接同步到當前歌曲位置
 let lyricsPageReturnedFromHidden = false;
 
+// ===== 自然結束標記 =====
+// 用於區分「手動停止」（立即清空）與「音樂自然結束」（延遲淡出）
+let lyricsNaturalEnd = false;
+
 // ===== 延遲補償 =====
 let lyricsSyncOffset = -0.5;            // 全域同步偏移 (秒)，負值 = 歌詞提早出現
 const LYRICS_OFFSET_KEY = 'limbus_lyrics_sync_offset';
@@ -160,9 +164,21 @@ function resolveSlot(globalSlot) {
 
 /**
  * 將歌詞行加入畫面，若超過上限則淡出最早的行
+ * 同時強制限制 DOM 數量，防止分頁切換時 setTimeout 被限流導致殘留
  * @param {HTMLElement} lineEl - 歌詞行 DOM 元素
  */
 function enqueueLyricsLine(lineEl) {
+    // DOM 數量強制限制：防止分頁切換時 setTimeout 被瀏覽器限流，
+    // 導致 fadeOutLyricsLine 的移除計時器延遲執行，舊歌詞殘留在畫面上。
+    // 直接檢查 DOM 中現有的歌詞行數，超過上限就強制移除最舊的元素。
+    const existingLines = document.querySelectorAll('.resonance-line:not(.fading-out)');
+    if (existingLines.length >= LYRICS_MAX_VISIBLE_LINES) {
+        // 強制移除最舊的，不依賴 setTimeout
+        for (let j = 0; j <= existingLines.length - LYRICS_MAX_VISIBLE_LINES; j++) {
+            existingLines[j].remove();
+        }
+    }
+
     lyricsActiveLines.push(lineEl);
 
     // 如果超過最大顯示行數，淡出最早的一行
@@ -359,6 +375,12 @@ async function playLyrics(lines, options = {}) {
                 lyricsCurrentSlot++;
             }
         } while (loop && !signal.aborted);
+
+        // 非循環模式自然播完：不立即清空，讓最後一句自然淡出
+        if (!loop && !signal.aborted) {
+            stopLyrics(true);
+            return;
+        }
     } catch (e) {
         if (e.name !== 'AbortError') {
             console.error('Lyrics: 播放錯誤', e);
@@ -372,8 +394,9 @@ async function playLyrics(lines, options = {}) {
 
 /**
  * 停止歌詞播放並清理畫面
+ * @param {boolean} [natural=false] - 是否為自然結束（非手動停止）
  */
-function stopLyrics() {
+function stopLyrics(natural = false) {
     // 中斷播放
     if (lyricsAbortController) {
         lyricsAbortController.abort();
@@ -384,14 +407,28 @@ function stopLyrics() {
     lyricsLiveSpeed = null;
     lyricsPageReturnedFromHidden = false;
 
-    // 淡出所有現存歌詞行
-    lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
-    lyricsActiveLines = [];
+    if (natural) {
+        // 自然結束：讓最後的歌詞順著 CSS 動畫淡出，延遲 2 秒後才清理
+        // 不立刻清空畫面，給最後一句歌詞足夠的顯示時間
+        setTimeout(() => {
+            lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
+            lyricsActiveLines = [];
+        }, 2000);
 
-    // 清理所有殘留的 resonance-line 元素
-    setTimeout(() => {
-        document.querySelectorAll('.resonance-line').forEach(el => el.remove());
-    }, LYRICS_FADE_DURATION_MS + 200);
+        // 最終安全清理（2 秒等待 + 淡出動畫時長 + 緩衝）
+        setTimeout(() => {
+            document.querySelectorAll('.resonance-line').forEach(el => el.remove());
+        }, 2000 + LYRICS_FADE_DURATION_MS + 200);
+    } else {
+        // 手動停止：立即淡出所有現存歌詞行
+        lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
+        lyricsActiveLines = [];
+
+        // 清理所有殘留的 resonance-line 元素
+        setTimeout(() => {
+            document.querySelectorAll('.resonance-line').forEach(el => el.remove());
+        }, LYRICS_FADE_DURATION_MS + 200);
+    }
 
     lyricsCurrentSlot = 0;
 }
@@ -878,6 +915,15 @@ async function playLyricsWithTimestamps(lines, options = {}) {
             for (let i = 0; i < lines.length; i++) {
                 if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
+                // 防呆：只有當音樂確實正在播放時，才依據時間軸彈出歌詞
+                if (audio && !musicManager.isPlaying && audio.paused) {
+                    // 音樂未播放，等待音樂開始
+                    await waitUntilRAF(() => {
+                        if (signal.aborted) return true;
+                        return musicManager.isPlaying && !audio.paused;
+                    }, signal);
+                }
+
                 const text = lines[i];
                 if (!text || text.trim() === '') {
                     lyricsCurrentSlot++;
@@ -952,6 +998,12 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                 lyricsCurrentSlot = 0;
             }
         } while (loop && !signal.aborted);
+
+        // 非循環模式自然播完：不立即清空，讓最後一句自然淡出
+        if (!loop && !signal.aborted) {
+            stopLyrics(true);
+            return;
+        }
     } catch (e) {
         if (e.name !== 'AbortError') console.error('Lyrics: 播放錯誤', e);
     } finally {
@@ -1207,10 +1259,14 @@ function initLyricsUI() {
     renderLineEditor();
     renderLyricsLibrary();
 
-    // 分頁切換偵測：返回時標記，讓播放迴圈跳過時間戳已過去的歌詞，直接定位到當前位置
+    // 分頁切換偵測：返回時清除殘留歌詞並標記，讓播放迴圈跳過時間戳已過去的歌詞
     document.addEventListener('visibilitychange', () => {
-        if (!document.hidden && lyricsActive) {
+        if (document.visibilityState === 'visible' && lyricsActive) {
             lyricsPageReturnedFromHidden = true;
+
+            // 清空畫面上所有殘留的歌詞行，防止 setTimeout 被限流導致的殘留
+            document.querySelectorAll('.resonance-line').forEach(el => el.remove());
+            lyricsActiveLines = [];
         }
     });
 }
@@ -1635,15 +1691,10 @@ function pickerSelectLyrics(id) {
         updateLyricsPlayBtn(false);
     }
 
-    // 載入歌詞
+    // 載入歌詞（僅解析存入，不自動播放）
     loadLyricsFromLibrary(id);
 
-    // 等一幀後播放
-    requestAnimationFrame(() => {
-        if (!lyricsActive) {
-            toggleLyricsPlayback();
-        }
-    });
+    if (typeof showToast === 'function') showToast('歌詞已載入，按播放開始');
 }
 
 /**
@@ -1661,15 +1712,8 @@ function pickerSelectLyricsData(name) {
         updateLyricsPlayBtn(false);
     }
 
-    // 載入歌詞
+    // 載入歌詞（僅解析存入，不自動播放）
     loadLyrics(name);
-
-    // 等一幀後播放
-    requestAnimationFrame(() => {
-        if (!lyricsActive) {
-            toggleLyricsPlayback();
-        }
-    });
 }
 
 /**

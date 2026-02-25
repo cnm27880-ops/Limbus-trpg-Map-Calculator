@@ -669,6 +669,7 @@ class MusicManager {
             currentUrl: this.currentTrack ? this.currentTrack.url : '',
             currentName: this.currentTrack ? this.currentTrack.name : '',
             isPlaying: this.isPlaying,
+            playbackTime: this.currentAudio ? this.currentAudio.currentTime : 0,
             playlist: this.playlist
         };
     }
@@ -689,10 +690,36 @@ class MusicManager {
         // 更新播放狀態
         if (state.currentUrl) {
             if (state.isPlaying) {
+                // 計算補償時間：考慮網路延遲，讓玩家端同步到 ST 的實際播放進度
+                let targetTime = 0;
+                if (state.playbackTime !== undefined && state.timestamp) {
+                    const offset = (Date.now() - state.timestamp) / 1000;
+                    targetTime = state.playbackTime + offset;
+                }
+
                 // 使用 force=true，因為這是 ST 同步過來的明確指令
-                this.playMusic(state.currentUrl, state.currentName, true);
+                const processedUrl = this.processAudioUrl(state.currentUrl);
+                const isSameTrack = this.currentAudio && this.currentAudio.src === processedUrl;
+
+                if (isSameTrack && !this.currentAudio.paused) {
+                    // 同一首歌已在播放，僅校正進度
+                    if (targetTime > 0) {
+                        this.currentAudio.currentTime = targetTime;
+                    }
+                } else {
+                    // 播放新歌曲或從暫停恢復
+                    this.playMusic(state.currentUrl, state.currentName, true).then(() => {
+                        if (targetTime > 0 && this.currentAudio) {
+                            this.currentAudio.currentTime = targetTime;
+                        }
+                    });
+                }
             } else {
                 // 有 URL 但 isPlaying 為 false = 暫停（保留播放位置）
+                // 同步暫停位置
+                if (state.playbackTime !== undefined && this.currentAudio) {
+                    this.currentAudio.currentTime = state.playbackTime;
+                }
                 this.pauseMusic();
             }
         } else {
@@ -816,6 +843,7 @@ function switchMusic(url, name) {
             currentUrl: url,
             currentName: name,
             isPlaying: true,
+            playbackTime: 0,
             timestamp: Date.now()
         });
 
@@ -836,12 +864,13 @@ function stTogglePlayback() {
     // 先在本地切換暫停/播放
     musicManager.togglePlayback();
 
-    // ST 模式：同步到 Firebase
+    // ST 模式：同步到 Firebase（含播放進度供玩家端同步）
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
         syncMusicState({
             currentUrl: state.currentUrl,
             currentName: state.currentName,
             isPlaying: !state.isPlaying,
+            playbackTime: musicManager.currentAudio ? musicManager.currentAudio.currentTime : 0,
             timestamp: Date.now()
         });
     }
@@ -858,6 +887,7 @@ function stStopMusic() {
             currentUrl: '',
             currentName: '',
             isPlaying: false,
+            playbackTime: 0,
             timestamp: Date.now()
         });
 
@@ -930,7 +960,8 @@ function syncMusicState(musicState) {
         currentUrl: musicState.currentUrl || '',
         currentName: musicState.currentName || '',
         isPlaying: musicState.isPlaying || false,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
+        playbackTime: musicState.playbackTime || 0,
+        timestamp: musicState.timestamp || Date.now()
     });
 }
 

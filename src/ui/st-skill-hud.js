@@ -74,6 +74,8 @@ function addSkill(skillData) {
         pen: parseInt(skillData.pen) || 0,
         speed: parseInt(skillData.speed) || 0,
         magic: parseInt(skillData.magic) || 0,
+        successBonus: parseInt(skillData.successBonus) || 0,
+        trigger: skillData.trigger || '',
         statuses: skillData.statuses || []
     };
     skills.push(skill);
@@ -437,6 +439,8 @@ function renderSkillCard(skill) {
     if (skill.pen > 0) statsHtml += `<span class="skill-stat pen">破甲 ${skill.pen}</span>`;
     if (skill.speed > 0) statsHtml += `<span class="skill-stat speed">高速 ${skill.speed}</span>`;
     if (skill.magic > 0) statsHtml += `<span class="skill-stat magic">破魔 ${skill.magic}</span>`;
+    if (skill.successBonus > 0) statsHtml += `<span class="skill-stat success-bonus">附加成功 ${skill.successBonus}</span>`;
+    if (skill.trigger) statsHtml += `<span class="skill-stat trigger">${escapeHtml(skill.trigger)}</span>`;
     statuses.forEach(s => {
         const name = getStatusName(s.id);
         if (name) statsHtml += `<span class="skill-stat status">${name}${s.stacks > 0 ? ' x' + s.stacks : ''}</span>`;
@@ -529,6 +533,25 @@ function renderSkillEditForm(skill) {
             <label>破魔</label>
             <input type="number" id="sf-magic-${id}" value="${skill ? skill.magic : 0}" min="0">
         </div>
+        <div class="skill-edit-row">
+            <label>附加成功</label>
+            <input type="number" id="sf-success-${id}" value="${skill ? (skill.successBonus || 0) : 0}" min="0">
+        </div>
+        <div class="skill-edit-row">
+            <label>觸發時機</label>
+            <select id="sf-trigger-${id}">
+                <option value=""${!skill || !skill.trigger ? ' selected' : ''}>（無）</option>
+                <option value="攻擊後"${skill && skill.trigger === '攻擊後' ? ' selected' : ''}>攻擊後</option>
+                <option value="造成傷害後"${skill && skill.trigger === '造成傷害後' ? ' selected' : ''}>造成傷害後</option>
+                <option value="命中後"${skill && skill.trigger === '命中後' ? ' selected' : ''}>命中後</option>
+                <option value="被攻擊時"${skill && skill.trigger === '被攻擊時' ? ' selected' : ''}>被攻擊時</option>
+                <option value="被命中時"${skill && skill.trigger === '被命中時' ? ' selected' : ''}>被命中時</option>
+                <option value="受傷時"${skill && skill.trigger === '受傷時' ? ' selected' : ''}>受傷時</option>
+                <option value="回合開始"${skill && skill.trigger === '回合開始' ? ' selected' : ''}>回合開始</option>
+                <option value="回合結束"${skill && skill.trigger === '回合結束' ? ' selected' : ''}>回合結束</option>
+                <option value="持續"${skill && skill.trigger === '持續' ? ' selected' : ''}>持續</option>
+            </select>
+        </div>
         <div class="skill-status-section">
             <label style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;display:block;">狀態效果</label>
             <div class="skill-status-search-wrap">
@@ -565,8 +588,8 @@ function filterSkillStatuses(query, formId) {
 
     Object.keys(STATUS_LIBRARY).forEach(catKey => {
         const cat = STATUS_LIBRARY[catKey];
-        if (!cat || !cat.statuses) return;
-        cat.statuses.forEach(s => {
+        if (!cat || !Array.isArray(cat)) return;
+        cat.forEach(s => {
             if (alreadyIds.has(s.id)) return; // skip already selected
             if (s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) {
                 results.push(s);
@@ -635,8 +658,8 @@ function getStatusName(statusId) {
     if (!statusId || typeof STATUS_LIBRARY === 'undefined') return '';
     for (const catKey of Object.keys(STATUS_LIBRARY)) {
         const cat = STATUS_LIBRARY[catKey];
-        if (!cat || !cat.statuses) continue;
-        const found = cat.statuses.find(s => s.id === statusId);
+        if (!cat || !Array.isArray(cat)) continue;
+        const found = cat.find(s => s.id === statusId);
         if (found) return (found.icon || '') + ' ' + found.name;
     }
     return statusId;
@@ -646,8 +669,8 @@ function getStatusDisplayName(statusId) {
     if (!statusId || typeof STATUS_LIBRARY === 'undefined') return statusId;
     for (const catKey of Object.keys(STATUS_LIBRARY)) {
         const cat = STATUS_LIBRARY[catKey];
-        if (!cat || !cat.statuses) continue;
-        const found = cat.statuses.find(s => s.id === statusId);
+        if (!cat || !Array.isArray(cat)) continue;
+        const found = cat.find(s => s.id === statusId);
         if (found) return found.name;
     }
     return statusId;
@@ -668,6 +691,8 @@ function saveSkillForm(id) {
     const pen = document.getElementById('sf-pen-' + id);
     const speed = document.getElementById('sf-speed-' + id);
     const magic = document.getElementById('sf-magic-' + id);
+    const successEl = document.getElementById('sf-success-' + id);
+    const triggerEl = document.getElementById('sf-trigger-' + id);
 
     if (!name || !name.value.trim()) {
         if (typeof showToast === 'function') showToast('請輸入招式名稱');
@@ -681,6 +706,8 @@ function saveSkillForm(id) {
         pen: pen ? parseInt(pen.value) || 0 : 0,
         speed: speed ? parseInt(speed.value) || 0 : 0,
         magic: magic ? parseInt(magic.value) || 0 : 0,
+        successBonus: successEl ? parseInt(successEl.value) || 0 : 0,
+        trigger: triggerEl ? triggerEl.value : '',
         statuses: editingStatuses.map(s => ({...s}))
     };
 

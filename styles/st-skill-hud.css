@@ -115,6 +115,8 @@
 .skill-stat.speed { color: var(--accent-blue, #42a5f5); }
 .skill-stat.magic { color: var(--accent-purple); }
 .skill-stat.status { color: var(--accent-yellow); }
+.skill-stat.success-bonus { color: var(--accent-green, #66bb6a); }
+.skill-stat.trigger { color: var(--accent-cyan, #4dd0e1); font-style: italic; }
 .skill-card-actions {
     display: flex; gap: 4px; margin-top: 6px;
 }

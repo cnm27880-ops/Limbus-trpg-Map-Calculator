@@ -42,6 +42,9 @@ let lyricsCachedMargins = null;         // 最後一次有效的 margin 數據
 // 切換回分頁時設為 true，讓播放迴圈跳過時間戳已過去的歌詞行，直接同步到當前歌曲位置
 let lyricsPageReturnedFromHidden = false;
 
+// ===== 當前播放歌詞參考（供分頁切換回填使用）=====
+let lyricsCurrentPlayingLines = null;
+
 // ===== 延遲補償 =====
 let lyricsSyncOffset = -0.5;            // 全域同步偏移 (秒)，負值 = 歌詞提早出現
 const LYRICS_OFFSET_KEY = 'limbus_lyrics_sync_offset';
@@ -316,6 +319,62 @@ function fillLineInstant(lineEl, text) {
     lineEl.appendChild(fragment);
 }
 
+/**
+ * 估算當前歌曲播放時間（秒），用於分頁切換回填
+ * 優先使用實際音訊時間，其次 Firebase 音樂狀態，最後回傳 0
+ * @returns {number} 估算的歌曲秒數
+ */
+function getCurrentSongTimeEstimate() {
+    const audio = (typeof musicManager !== 'undefined') ? musicManager.currentAudio : null;
+    if (audio && !audio.paused && audio.readyState >= 2 && audio.currentTime > 0) {
+        return audio.currentTime;
+    }
+    if (window.musicState && window.musicState.isPlaying &&
+        window.musicState.playbackTime !== undefined && window.musicState.timestamp) {
+        return window.musicState.playbackTime + (Date.now() - window.musicState.timestamp) / 1000;
+    }
+    return 0;
+}
+
+/**
+ * 根據當前歌曲時間，立即回填最近的歌詞行到畫面上
+ * 在分頁切換返回時由 visibilitychange 呼叫，確保畫面不會空白
+ */
+function backfillLyricsAtTime() {
+    const lines = lyricsCurrentPlayingLines;
+    if (!lines || Object.keys(lyricsPerLineTimestamps).length === 0) return;
+
+    const currentTime = getCurrentSongTimeEstimate();
+
+    // 收集所有時間戳已過期的非空行
+    const candidates = [];
+    let slot = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const text = lines[i];
+        if (!text || text.trim() === '') { slot++; continue; }
+
+        const ts = lyricsPerLineTimestamps[i];
+        if (ts === undefined) { slot++; continue; }
+
+        const adjusted = Number(ts) + lyricsSyncOffset;
+        if (adjusted <= currentTime + 0.1) {
+            candidates.push({ text, slot });
+        }
+        slot++;
+    }
+
+    // 取最後 N 行進行回填
+    const toRender = candidates.slice(-LYRICS_MAX_VISIBLE_LINES);
+    for (const item of toRender) {
+        const { side, localSlot } = resolveSlot(item.slot);
+        const lineEl = createLyricsLineElement(side, localSlot);
+        if (lineEl) {
+            enqueueLyricsLine(lineEl);
+            fillLineInstant(lineEl, item.text);
+        }
+    }
+}
+
 // ===== 主要播放函式 =====
 
 /**
@@ -418,6 +477,7 @@ function stopLyrics(natural = false) {
     lyricsActive = false;
     lyricsLiveSpeed = null;
     lyricsPageReturnedFromHidden = false;
+    lyricsCurrentPlayingLines = null;
 
     if (natural) {
         // 自然結束：讓最後的歌詞順著 CSS 動畫淡出，延遲 2 秒後才清理
@@ -881,71 +941,89 @@ async function playLyricsWithTimestamps(lines, options = {}) {
     lyricsAbortController = new AbortController();
     lyricsActiveLines = [];
     lyricsCurrentSlot = 0;
+    lyricsCurrentPlayingLines = lines;
 
     const signal = lyricsAbortController.signal;
-    const audio = (typeof musicManager !== 'undefined' && musicManager.currentAudio)
-        ? musicManager.currentAudio : null;
 
-    const isAudioPlaying = () =>
-        audio && !audio.paused && audio.readyState >= 2 && audio.currentTime > 0;
+    // 動態取得音訊元素（不在函式開頭捕獲，確保始終使用最新參考）
+    const getAudio = () =>
+        (typeof musicManager !== 'undefined') ? musicManager.currentAudio : null;
+
+    const isAudioReady = () => {
+        const a = getAudio();
+        return a && !a.paused && a.readyState >= 2 && a.currentTime > 0;
+    };
 
     // 追蹤最後已知的音樂時間（用於音樂暫停/不可用時的 wall-clock 補償）
-    let lastKnownAudioTime = audio ? audio.currentTime : 0;
+    let lastKnownAudioTime = 0;
     let wallClockAtLastAudio = Date.now();
 
     /**
      * 取得當前「歌曲時間」（秒，絕對值）
-     *
-     * - 音樂播放中：直接回傳 audio.currentTime（與錄製時間戳完全一致）
-     * - 音樂暫停/不可用：從最後已知位置以 wall-clock 繼續估算
-     *
-     * 使用絕對時間而非相對時間，確保每次播放、每圈循環的計時邏輯都相同，
-     * 消除因歌詞與音樂啟動時機不同步導致的整體偏移。
+     * - 音樂播放中：直接回傳 audio.currentTime
+     * - 音樂不可用：從最後已知位置以 wall-clock 繼續估算
      */
     const getSongTime = () => {
-        if (isAudioPlaying()) {
-            lastKnownAudioTime = audio.currentTime;
+        if (isAudioReady()) {
+            const a = getAudio();
+            lastKnownAudioTime = a.currentTime;
             wallClockAtLastAudio = Date.now();
-            return audio.currentTime;
+            return a.currentTime;
         }
-        // 音樂不在播放：從最後已知位置繼續以 wall-clock 計時
         return lastKnownAudioTime + (Date.now() - wallClockAtLastAudio) / 1000;
     };
 
-    try {
-        // 一次性音樂等待旗標：僅在 ST 端首次進入時等待音樂開始播放
-        let waitedForMusic = false;
+    /**
+     * 初始化計時基準：優先用音訊，其次 Firebase 狀態，最後從 0 開始
+     * @returns {boolean} 是否成功從音訊或 Firebase 取得初始位置
+     */
+    const initTiming = () => {
+        if (isAudioReady()) {
+            const a = getAudio();
+            lastKnownAudioTime = a.currentTime;
+            wallClockAtLastAudio = Date.now();
+            return true;
+        }
+        // 嘗試從 Firebase 音樂狀態估算（玩家端或 ST 端音樂尚未就緒時）
+        if (window.musicState && window.musicState.isPlaying &&
+            window.musicState.playbackTime !== undefined && window.musicState.timestamp) {
+            const elapsed = (Date.now() - window.musicState.timestamp) / 1000;
+            lastKnownAudioTime = window.musicState.playbackTime + elapsed;
+            wallClockAtLastAudio = Date.now();
+            console.log('Lyrics: 從 Firebase 音樂狀態估算位置:', lastKnownAudioTime.toFixed(2) + 's');
+            return true;
+        }
+        lastKnownAudioTime = 0;
+        wallClockAtLastAudio = Date.now();
+        return false;
+    };
 
+    try {
         do {
-            // 每次迴圈開始都標記「需要跳過已過期行」：
-            // - 首次播放時音樂可能已在中途，需跳過過去的時間戳才能定位到當前位置
-            // - 每圈循環後音訊回到開頭（~0s），此時各行目標均在未來，跳過條件不成立，正常等待
             lyricsPageReturnedFromHidden = true;
 
-            // 循環開始時，若無音訊則估算初始播放位置
-            if (!isAudioPlaying()) {
-                // 玩家端：嘗試從 Firebase 音樂狀態估算當前播放位置
-                if (window.musicState && window.musicState.isPlaying &&
-                    window.musicState.playbackTime !== undefined && window.musicState.timestamp) {
-                    const elapsed = (Date.now() - window.musicState.timestamp) / 1000;
-                    lastKnownAudioTime = window.musicState.playbackTime + elapsed;
-                    wallClockAtLastAudio = Date.now();
-                    console.log('Lyrics: 從 Firebase 音樂狀態估算位置:', lastKnownAudioTime.toFixed(2) + 's');
-                } else {
-                    lastKnownAudioTime = 0;
-                    wallClockAtLastAudio = Date.now();
-                    console.warn('Lyrics: 音樂未播放，使用 wall-clock 計時模式');
-                }
-            }
+            // 初始化計時基準
+            const hasTimingSource = initTiming();
 
-            // ST 端首次進入：等待音樂開始播放（僅一次，避免 autoplay 限制導致永久阻塞）
-            const isST = typeof myRole !== 'undefined' && myRole === 'st';
-            if (!waitedForMusic && isST && audio && !musicManager.isPlaying && audio.paused) {
-                waitedForMusic = true;
-                await waitUntilRAF(() => {
-                    if (signal.aborted) return true;
-                    return musicManager.isPlaying && !audio.paused;
-                }, signal);
+            // 等待音樂開始播放（首次進入時）
+            // 適用於 ST 端先按歌詞播放、再按音樂播放的情境
+            if (!hasTimingSource && typeof musicManager !== 'undefined') {
+                const a = getAudio();
+                if (a && a.paused) {
+                    console.log('Lyrics: 等待音樂開始播放...');
+                    // 等待音樂開始，最多 30 秒後改用 wall-clock
+                    const waitStart = Date.now();
+                    await waitUntilRAF(() => {
+                        if (signal.aborted) return true;
+                        if (isAudioReady()) return true;
+                        // 超時：改用 wall-clock（避免永久阻塞）
+                        if (Date.now() - waitStart > 30000) return true;
+                        return false;
+                    }, signal);
+
+                    // 等待結束後重新初始化計時
+                    initTiming();
+                }
             }
 
             // 跳過階段收集的歌詞行（用於回填）
@@ -960,20 +1038,19 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                     continue;
                 }
 
-                // 等到這一行的時間戳（套用 syncOffset 補償）
                 const targetTime = lyricsPerLineTimestamps[i];
                 if (targetTime !== undefined) {
                     const adjustedTarget = targetTime + lyricsSyncOffset;
 
-                    // ① 分頁切換返回後 / 首次定位：若已過期則收集到回填佇列
+                    // ① 已過期行：收集到回填佇列
                     if (lyricsPageReturnedFromHidden && getSongTime() > adjustedTarget + 0.1) {
                         skippedLines.push({ index: i, text, slot: lyricsCurrentSlot });
                         lyricsCurrentSlot++;
                         continue;
                     }
 
-                    // ② 到達第一個未過期的行：回填最近的歌詞行
-                    if (lyricsPageReturnedFromHidden && skippedLines.length > 0) {
+                    // ② 到達第一個未過期的行：回填最近的歌詞行（如果畫面上沒有內容）
+                    if (lyricsPageReturnedFromHidden && skippedLines.length > 0 && lyricsActiveLines.length === 0) {
                         const backfillLines = skippedLines.slice(-LYRICS_MAX_VISIBLE_LINES);
                         for (const bl of backfillLines) {
                             const { side: bSide, localSlot: bSlot } = resolveSlot(bl.slot);
@@ -996,7 +1073,6 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                         continue;
                     }
                 } else if (lyricsPageReturnedFromHidden) {
-                    // 無時間戳的行：分頁返回後也收集，直到找到當前位置
                     skippedLines.push({ index: i, text, slot: lyricsCurrentSlot });
                     lyricsCurrentSlot++;
                     continue;
@@ -1017,7 +1093,7 @@ async function playLyricsWithTimestamps(lines, options = {}) {
             }
 
             // 所有行都已過期（全部被跳過）：回填最後幾行
-            if (skippedLines.length > 0) {
+            if (skippedLines.length > 0 && lyricsActiveLines.length === 0) {
                 const backfillLines = skippedLines.slice(-LYRICS_MAX_VISIBLE_LINES);
                 for (const bl of backfillLines) {
                     const { side: bSide, localSlot: bSlot } = resolveSlot(bl.slot);
@@ -1027,7 +1103,6 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                         fillLineInstant(bLineEl, bl.text);
                     }
                 }
-                skippedLines = [];
                 lyricsPageReturnedFromHidden = false;
             }
 
@@ -1036,15 +1111,15 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                 lyricsActiveLines.forEach(el => fadeOutLyricsLine(el));
                 lyricsActiveLines = [];
 
-                if (isAudioPlaying()) {
-                    // 音樂播放中：等待音樂循環回起點
-                    const lastTime = audio.currentTime;
+                if (isAudioReady()) {
+                    const a = getAudio();
+                    const lastTime = a.currentTime;
                     await waitUntilRAF(() => {
                         if (signal.aborted) return true;
-                        return audio.currentTime < lastTime - 0.5;
+                        const cur = getAudio();
+                        return cur && cur.currentTime < lastTime - 0.5;
                     }, signal);
                 } else {
-                    // 無音樂：估算最後時間戳後等待一段時間再重新開始
                     const lastTimestamp = Math.max(
                         ...Object.values(lyricsPerLineTimestamps).map(Number).filter(n => !isNaN(n)), 0
                     );
@@ -1052,7 +1127,6 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                     if (remaining > 0) {
                         await delay(remaining * 1000, signal);
                     }
-                    // 重置 wall-clock 基準，讓下一圈從 0 開始
                     lastKnownAudioTime = 0;
                     wallClockAtLastAudio = Date.now();
                 }
@@ -1061,7 +1135,6 @@ async function playLyricsWithTimestamps(lines, options = {}) {
             }
         } while (loop && !signal.aborted);
 
-        // 非循環模式自然播完：不立即清空，讓最後一句自然淡出
         if (!loop && !signal.aborted) {
             stopLyrics(true);
             return;
@@ -1329,6 +1402,10 @@ function initLyricsUI() {
             // 清空畫面上所有殘留的歌詞行，防止 setTimeout 被限流導致的殘留
             document.querySelectorAll('.resonance-line').forEach(el => el.remove());
             lyricsActiveLines = [];
+
+            // 立即回填當前位置的歌詞行，避免畫面空白
+            // 這在 async 播放迴圈恢復之前就執行，確保使用者切回時立刻看到歌詞
+            backfillLyricsAtTime();
         }
     });
 }
@@ -1753,10 +1830,10 @@ function pickerSelectLyrics(id) {
         updateLyricsPlayBtn(false);
     }
 
-    // 載入歌詞（僅解析存入，不自動播放）
+    // 載入歌詞並自動開始播放（會自動等待音樂同步）
     loadLyricsFromLibrary(id);
-
-    if (typeof showToast === 'function') showToast('歌詞已載入，按播放開始');
+    // 短延遲確保 textarea 和時間戳資料已寫入
+    setTimeout(() => toggleLyricsPlayback(), 50);
 }
 
 /**
@@ -1774,8 +1851,10 @@ function pickerSelectLyricsData(name) {
         updateLyricsPlayBtn(false);
     }
 
-    // 載入歌詞（僅解析存入，不自動播放）
+    // 載入歌詞並自動開始播放（會自動等待音樂同步）
     loadLyrics(name);
+    // 短延遲確保 textarea 和時間戳資料已寫入
+    setTimeout(() => toggleLyricsPlayback(), 50);
 }
 
 /**

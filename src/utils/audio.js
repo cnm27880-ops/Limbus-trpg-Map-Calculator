@@ -701,16 +701,24 @@ class MusicManager {
                 const processedUrl = this.processAudioUrl(state.currentUrl);
                 const isSameTrack = this.currentAudio && this.currentAudio.src === processedUrl;
 
+                // 對循環音樂做 duration 取模，避免 targetTime 超出範圍
+                const applyModulo = (audio, time) => {
+                    if (time > 0 && audio && audio.duration && isFinite(audio.duration) && time > audio.duration) {
+                        return time % audio.duration;
+                    }
+                    return time;
+                };
+
                 if (isSameTrack && !this.currentAudio.paused) {
                     // 同一首歌已在播放，僅校正進度
                     if (targetTime > 0) {
-                        this.currentAudio.currentTime = targetTime;
+                        this.currentAudio.currentTime = applyModulo(this.currentAudio, targetTime);
                     }
                 } else {
                     // 播放新歌曲或從暫停恢復
                     this.playMusic(state.currentUrl, state.currentName, true).then(() => {
                         if (targetTime > 0 && this.currentAudio) {
-                            this.currentAudio.currentTime = targetTime;
+                            this.currentAudio.currentTime = applyModulo(this.currentAudio, targetTime);
                         }
                     });
                 }

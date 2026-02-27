@@ -1010,19 +1010,26 @@ async function playLyricsWithTimestamps(lines, options = {}) {
 
                 // 等待音樂開始播放（首次進入時）
                 // 適用於 ST 端先按歌詞播放、再按音樂播放的情境
-                if (!hasTimingSource && typeof musicManager !== 'undefined') {
-                    const a = getAudio();
-                    if (a && a.paused) {
-                        console.log('Lyrics: 等待音樂開始播放...');
-                        const waitStart = Date.now();
-                        await waitUntilRAF(() => {
-                            if (signal.aborted) return true;
-                            if (isAudioReady()) return true;
-                            if (Date.now() - waitStart > 30000) return true;
-                            return false;
-                        }, signal);
-                        initTiming();
-                    }
+                if (!hasTimingSource) {
+                    // 等待音樂開始播放 或 Firebase 狀態到達
+                    // 玩家端：handleLyricsUpdate 可能比 handleMusicUpdate 先觸發
+                    // 此時 window.musicState 尚未存在，需等它到達後才有計時基準
+                    console.log('Lyrics: 等待音樂或 Firebase 狀態...');
+                    const waitStart = Date.now();
+                    await waitUntilRAF(() => {
+                        if (signal.aborted) return true;
+                        // 本機音訊已開始播放
+                        if (isAudioReady()) return true;
+                        // Firebase 音樂狀態已到達（玩家端）
+                        if (window.musicState && window.musicState.isPlaying &&
+                            window.musicState.playbackTime !== undefined &&
+                            window.musicState.timestamp) return true;
+                        // 超時保護
+                        if (Date.now() - waitStart > 30000) return true;
+                        return false;
+                    }, signal);
+                    // 重新嘗試取得計時基準（可能是 Firebase 狀態到達了）
+                    initTiming();
                 }
             } else {
                 // 循環重播：若音訊可用則同步到音訊時間，否則沿用 wall-clock（已在上一輪結尾重置為 0）

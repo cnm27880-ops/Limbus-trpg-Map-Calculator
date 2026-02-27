@@ -195,12 +195,26 @@ class MusicManager {
 
             this.updateUI();
         } catch (error) {
-            console.warn('BGM: 播放失敗，嘗試在下次互動時播放', error);
-            this.pendingPlayUrl = processedUrl;
-            this.pendingPlayName = name;
+            console.warn('BGM: 正常播放被阻擋，嘗試靜音播放', error);
 
-            // 行動裝置：重新註冊一次性互動監聽器，在下次觸摸時播放
-            this._setupRetryOnInteraction();
+            // 瀏覽器 autoplay 政策阻擋了有聲播放
+            // 靜音播放通常被允許（不需要使用者互動）
+            // 這樣音訊實際在跑（可供歌詞同步使用 currentTime），使用者點擊後才取消靜音
+            try {
+                this.currentAudio.muted = true;
+                this.currentAudio.volume = this.volume;
+                await this.currentAudio.play();
+                console.log('BGM: 靜音播放成功，等待用戶互動後取消靜音');
+                this.updateUI();
+                this._setupUnmuteOnInteraction();
+            } catch (mutedError) {
+                // 連靜音都無法播放（極罕見情境）
+                console.warn('BGM: 靜音播放也失敗，等待用戶互動', mutedError);
+                this.currentAudio.muted = false;
+                this.pendingPlayUrl = processedUrl;
+                this.pendingPlayName = name;
+                this._setupRetryOnInteraction();
+            }
         }
     }
 
@@ -650,6 +664,36 @@ class MusicManager {
         });
 
         this.showInteractionPrompt();
+    }
+
+    /**
+     * 設置使用者互動後取消靜音
+     * 當瀏覽器因 autoplay 政策阻擋有聲播放時，
+     * 先以靜音模式播放，等使用者首次互動後自動取消靜音
+     */
+    _setupUnmuteOnInteraction() {
+        if (this._unmuteListenerActive) return;
+        this._unmuteListenerActive = true;
+
+        const unmute = () => {
+            this._unmuteListenerActive = false;
+            if (this.currentAudio && !this.currentAudio.paused) {
+                this.currentAudio.muted = false;
+                this.currentAudio.volume = this.volume;
+                console.log('BGM: 用戶互動，已取消靜音');
+            }
+            ['click', 'touchstart', 'keydown'].forEach(e =>
+                document.removeEventListener(e, unmute)
+            );
+        };
+
+        ['click', 'touchstart', 'keydown'].forEach(e =>
+            document.addEventListener(e, unmute, { once: true, passive: true })
+        );
+
+        if (typeof showToast === 'function') {
+            showToast('點擊頁面任意處以開啟音樂聲音');
+        }
     }
 
     /**

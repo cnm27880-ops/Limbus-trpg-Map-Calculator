@@ -167,23 +167,21 @@ function resolveSlot(globalSlot) {
  * @param {HTMLElement} lineEl - 歌詞行 DOM 元素
  */
 function enqueueLyricsLine(lineEl) {
-    // DOM 數量強制限制：防止分頁切換時 setTimeout 被瀏覽器限流，
-    // 導致 fadeOutLyricsLine 的移除計時器延遲執行，舊歌詞殘留在畫面上。
-    // 直接檢查 DOM 中現有的歌詞行數，超過上限就強制移除最舊的元素。
-    const existingLines = document.querySelectorAll('.resonance-line:not(.fading-out)');
-    if (existingLines.length >= LYRICS_MAX_VISIBLE_LINES) {
-        // 強制移除最舊的，不依賴 setTimeout
-        for (let j = 0; j <= existingLines.length - LYRICS_MAX_VISIBLE_LINES; j++) {
-            existingLines[j].remove();
-        }
-    }
-
     lyricsActiveLines.push(lineEl);
 
-    // 如果超過最大顯示行數，淡出最早的一行
+    // 如果超過最大顯示行數，淡出最早的一行（保留 CSS 動畫效果）
     while (lyricsActiveLines.length > LYRICS_MAX_VISIBLE_LINES) {
         const oldest = lyricsActiveLines.shift();
         fadeOutLyricsLine(oldest);
+    }
+
+    // 安全網：如果 DOM 上累積了過多非淡出元素（分頁切換殘留），強制清理
+    // 使用較高門檻以避免干擾正常的淡出動畫流程
+    const existingLines = document.querySelectorAll('.resonance-line:not(.fading-out)');
+    if (existingLines.length > LYRICS_MAX_VISIBLE_LINES + 2) {
+        for (let j = 0; j <= existingLines.length - LYRICS_MAX_VISIBLE_LINES - 1; j++) {
+            existingLines[j].remove();
+        }
     }
 }
 
@@ -999,30 +997,39 @@ async function playLyricsWithTimestamps(lines, options = {}) {
     };
 
     try {
+        let isFirstIteration = true;
+
         do {
             lyricsPageReturnedFromHidden = true;
 
-            // 初始化計時基準
-            const hasTimingSource = initTiming();
+            if (isFirstIteration) {
+                isFirstIteration = false;
 
-            // 等待音樂開始播放（首次進入時）
-            // 適用於 ST 端先按歌詞播放、再按音樂播放的情境
-            if (!hasTimingSource && typeof musicManager !== 'undefined') {
-                const a = getAudio();
-                if (a && a.paused) {
-                    console.log('Lyrics: 等待音樂開始播放...');
-                    // 等待音樂開始，最多 30 秒後改用 wall-clock
-                    const waitStart = Date.now();
-                    await waitUntilRAF(() => {
-                        if (signal.aborted) return true;
-                        if (isAudioReady()) return true;
-                        // 超時：改用 wall-clock（避免永久阻塞）
-                        if (Date.now() - waitStart > 30000) return true;
-                        return false;
-                    }, signal);
+                // 首次進入：初始化計時基準
+                const hasTimingSource = initTiming();
 
-                    // 等待結束後重新初始化計時
-                    initTiming();
+                // 等待音樂開始播放（首次進入時）
+                // 適用於 ST 端先按歌詞播放、再按音樂播放的情境
+                if (!hasTimingSource && typeof musicManager !== 'undefined') {
+                    const a = getAudio();
+                    if (a && a.paused) {
+                        console.log('Lyrics: 等待音樂開始播放...');
+                        const waitStart = Date.now();
+                        await waitUntilRAF(() => {
+                            if (signal.aborted) return true;
+                            if (isAudioReady()) return true;
+                            if (Date.now() - waitStart > 30000) return true;
+                            return false;
+                        }, signal);
+                        initTiming();
+                    }
+                }
+            } else {
+                // 循環重播：若音訊可用則同步到音訊時間，否則沿用 wall-clock（已在上一輪結尾重置為 0）
+                if (isAudioReady()) {
+                    const a = getAudio();
+                    lastKnownAudioTime = a.currentTime;
+                    wallClockAtLastAudio = Date.now();
                 }
             }
 
@@ -1123,10 +1130,9 @@ async function playLyricsWithTimestamps(lines, options = {}) {
                     const lastTimestamp = Math.max(
                         ...Object.values(lyricsPerLineTimestamps).map(Number).filter(n => !isNaN(n)), 0
                     );
-                    const remaining = Math.max(0, (lastTimestamp + 3) - getSongTime());
-                    if (remaining > 0) {
-                        await delay(remaining * 1000, signal);
-                    }
+                    // 至少等待 1 秒，防止無音訊時形成同步無限迴圈凍結主線程
+                    const remaining = Math.max(1, (lastTimestamp + 3) - getSongTime());
+                    await delay(remaining * 1000, signal);
                     lastKnownAudioTime = 0;
                     wallClockAtLastAudio = Date.now();
                 }

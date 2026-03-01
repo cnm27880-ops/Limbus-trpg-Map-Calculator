@@ -195,12 +195,26 @@ class MusicManager {
 
             this.updateUI();
         } catch (error) {
-            console.warn('BGM: 播放失敗，嘗試在下次互動時播放', error);
-            this.pendingPlayUrl = processedUrl;
-            this.pendingPlayName = name;
+            console.warn('BGM: 正常播放被阻擋，嘗試靜音播放', error);
 
-            // 行動裝置：重新註冊一次性互動監聽器，在下次觸摸時播放
-            this._setupRetryOnInteraction();
+            // 瀏覽器 autoplay 政策阻擋了有聲播放
+            // 靜音播放通常被允許（不需要使用者互動）
+            // 這樣音訊實際在跑（可供歌詞同步使用 currentTime），使用者點擊後才取消靜音
+            try {
+                this.currentAudio.muted = true;
+                this.currentAudio.volume = this.volume;
+                await this.currentAudio.play();
+                console.log('BGM: 靜音播放成功，等待用戶互動後取消靜音');
+                this.updateUI();
+                this._setupUnmuteOnInteraction();
+            } catch (mutedError) {
+                // 連靜音都無法播放（極罕見情境）
+                console.warn('BGM: 靜音播放也失敗，等待用戶互動', mutedError);
+                this.currentAudio.muted = false;
+                this.pendingPlayUrl = processedUrl;
+                this.pendingPlayName = name;
+                this._setupRetryOnInteraction();
+            }
         }
     }
 
@@ -653,6 +667,36 @@ class MusicManager {
     }
 
     /**
+     * 設置使用者互動後取消靜音
+     * 當瀏覽器因 autoplay 政策阻擋有聲播放時，
+     * 先以靜音模式播放，等使用者首次互動後自動取消靜音
+     */
+    _setupUnmuteOnInteraction() {
+        if (this._unmuteListenerActive) return;
+        this._unmuteListenerActive = true;
+
+        const unmute = () => {
+            this._unmuteListenerActive = false;
+            if (this.currentAudio && !this.currentAudio.paused) {
+                this.currentAudio.muted = false;
+                this.currentAudio.volume = this.volume;
+                console.log('BGM: 用戶互動，已取消靜音');
+            }
+            ['click', 'touchstart', 'keydown'].forEach(e =>
+                document.removeEventListener(e, unmute)
+            );
+        };
+
+        ['click', 'touchstart', 'keydown'].forEach(e =>
+            document.addEventListener(e, unmute, { once: true, passive: true })
+        );
+
+        if (typeof showToast === 'function') {
+            showToast('點擊頁面任意處以開啟音樂聲音');
+        }
+    }
+
+    /**
      * HTML 轉義（防 XSS）- 使用全域 escapeHtml 函數
      * @param {string} text - 原始文字
      * @returns {string} 轉義後的文字
@@ -669,6 +713,7 @@ class MusicManager {
             currentUrl: this.currentTrack ? this.currentTrack.url : '',
             currentName: this.currentTrack ? this.currentTrack.name : '',
             isPlaying: this.isPlaying,
+            playbackTime: this.currentAudio ? this.currentAudio.currentTime : 0,
             playlist: this.playlist
         };
     }
@@ -689,10 +734,44 @@ class MusicManager {
         // 更新播放狀態
         if (state.currentUrl) {
             if (state.isPlaying) {
+                // 計算補償時間：考慮網路延遲，讓玩家端同步到 ST 的實際播放進度
+                let targetTime = 0;
+                if (state.playbackTime !== undefined && state.timestamp) {
+                    const offset = (Date.now() - state.timestamp) / 1000;
+                    targetTime = state.playbackTime + offset;
+                }
+
                 // 使用 force=true，因為這是 ST 同步過來的明確指令
-                this.playMusic(state.currentUrl, state.currentName, true);
+                const processedUrl = this.processAudioUrl(state.currentUrl);
+                const isSameTrack = this.currentAudio && this.currentAudio.src === processedUrl;
+
+                // 對循環音樂做 duration 取模，避免 targetTime 超出範圍
+                const applyModulo = (audio, time) => {
+                    if (time > 0 && audio && audio.duration && isFinite(audio.duration) && time > audio.duration) {
+                        return time % audio.duration;
+                    }
+                    return time;
+                };
+
+                if (isSameTrack && !this.currentAudio.paused) {
+                    // 同一首歌已在播放，僅校正進度
+                    if (targetTime > 0) {
+                        this.currentAudio.currentTime = applyModulo(this.currentAudio, targetTime);
+                    }
+                } else {
+                    // 播放新歌曲或從暫停恢復
+                    this.playMusic(state.currentUrl, state.currentName, true).then(() => {
+                        if (targetTime > 0 && this.currentAudio) {
+                            this.currentAudio.currentTime = applyModulo(this.currentAudio, targetTime);
+                        }
+                    });
+                }
             } else {
                 // 有 URL 但 isPlaying 為 false = 暫停（保留播放位置）
+                // 同步暫停位置
+                if (state.playbackTime !== undefined && this.currentAudio) {
+                    this.currentAudio.currentTime = state.playbackTime;
+                }
                 this.pauseMusic();
             }
         } else {
@@ -816,6 +895,7 @@ function switchMusic(url, name) {
             currentUrl: url,
             currentName: name,
             isPlaying: true,
+            playbackTime: 0,
             timestamp: Date.now()
         });
 
@@ -836,12 +916,13 @@ function stTogglePlayback() {
     // 先在本地切換暫停/播放
     musicManager.togglePlayback();
 
-    // ST 模式：同步到 Firebase
+    // ST 模式：同步到 Firebase（含播放進度供玩家端同步）
     if (typeof myRole !== 'undefined' && myRole === 'st' && typeof syncMusicState === 'function') {
         syncMusicState({
             currentUrl: state.currentUrl,
             currentName: state.currentName,
             isPlaying: !state.isPlaying,
+            playbackTime: musicManager.currentAudio ? musicManager.currentAudio.currentTime : 0,
             timestamp: Date.now()
         });
     }
@@ -858,6 +939,7 @@ function stStopMusic() {
             currentUrl: '',
             currentName: '',
             isPlaying: false,
+            playbackTime: 0,
             timestamp: Date.now()
         });
 
@@ -930,7 +1012,8 @@ function syncMusicState(musicState) {
         currentUrl: musicState.currentUrl || '',
         currentName: musicState.currentName || '',
         isPlaying: musicState.isPlaying || false,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
+        playbackTime: musicState.playbackTime || 0,
+        timestamp: musicState.timestamp || Date.now()
     });
 }
 

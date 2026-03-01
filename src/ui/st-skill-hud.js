@@ -15,14 +15,16 @@ const SKILL_HUD_POS_KEY = 'limbus_skill_hud_pos';
 const SKILL_HUD_STATE_KEY = 'limbus_skill_hud_state';
 const CALC_HUD_POS_KEY = 'limbus_calc_hud_pos';
 const CALC_HUD_STATE_KEY = 'limbus_calc_hud_state';
+const MONSTER_META_STORAGE = 'limbus_st_monster_meta';
 
 // ===== State =====
 let skillHudState = {
     isVisible: false,
     isCollapsed: false,
     position: { x: 20, y: 300 },
-    editingId: null,  // currently editing skill id
-    mode: 'battle'    // 'battle' or 'edit'
+    editingId: null,       // currently editing skill id
+    editingMonster: null,  // currently editing monster category name
+    mode: 'battle'         // 'battle' or 'edit'
 };
 
 let calcHudState = {
@@ -33,6 +35,7 @@ let calcHudState = {
 
 // ===== Editing State for Status Tags =====
 let editingStatuses = [];  // [{id, stacks}] - temp state for skill edit form
+let editingPassives = [];  // [{name, desc}] - temp state for monster edit form
 
 // Normalize old (statusId) and new (statuses[]) format
 function normalizeSkillStatuses(skill) {
@@ -76,6 +79,7 @@ function addSkill(skillData) {
         magic: parseInt(skillData.magic) || 0,
         successBonus: parseInt(skillData.successBonus) || 0,
         trigger: skillData.trigger || '',
+        description: skillData.description || '',
         statuses: skillData.statuses || []
     };
     skills.push(skill);
@@ -105,6 +109,39 @@ function getSkillsByCategory() {
         groups[cat].push(s);
     });
     return groups;
+}
+
+// ===== Monster Meta CRUD =====
+
+function loadMonsterMeta() {
+    try {
+        const saved = localStorage.getItem(MONSTER_META_STORAGE);
+        if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+}
+
+function saveMonsterMeta(meta) {
+    try {
+        localStorage.setItem(MONSTER_META_STORAGE, JSON.stringify(meta));
+    } catch (e) {}
+}
+
+function getMonsterInfo(category) {
+    const meta = loadMonsterMeta();
+    return meta[category] || null;
+}
+
+function updateMonsterInfo(category, data) {
+    const meta = loadMonsterMeta();
+    meta[category] = data;
+    saveMonsterMeta(meta);
+}
+
+function deleteMonsterInfo(category) {
+    const meta = loadMonsterMeta();
+    delete meta[category];
+    saveMonsterMeta(meta);
 }
 
 // ===== Skill HUD Persistence =====
@@ -396,7 +433,9 @@ function renderSkillHudContent() {
     const body = document.getElementById('skill-hud-body');
     if (!body) return;
 
-    if (skillHudState.mode === 'edit') {
+    if (skillHudState.editingMonster) {
+        renderMonsterEditMode(body, skillHudState.editingMonster);
+    } else if (skillHudState.mode === 'edit') {
         renderSkillEditMode(body);
     } else {
         renderSkillBattleMode(body);
@@ -419,10 +458,14 @@ function renderSkillBattleMode(body) {
     let html = '';
     catNames.forEach(cat => {
         const safeCatId = encodeURIComponent(cat).replace(/%/g, '_');
+        const monsterInfo = getMonsterInfo(cat);
         html += `<div class="skill-category" id="skill-cat-${safeCatId}">`;
-        html += `<div class="skill-category-header" onclick="this.parentElement.classList.toggle('collapsed-cat')">
-                    <span class="cat-toggle">▼</span> ${escapeHtml(cat)} (${groups[cat].length})
+        html += `<div class="skill-category-header">
+                    <span class="cat-toggle" onclick="this.parentElement.parentElement.classList.toggle('collapsed-cat')">▼</span>
+                    <span class="cat-name" onclick="this.parentElement.parentElement.classList.toggle('collapsed-cat')">${escapeHtml(cat)} (${groups[cat].length})</span>
+                    <button class="cat-edit-btn" onclick="event.stopPropagation(); startEditMonster(decodeURIComponent('${encodeURIComponent(cat)}'))" title="編輯怪物資訊">&#9998;</button>
                  </div>`;
+        if (monsterInfo) html += renderMonsterInfoSection(monsterInfo);
         html += '<div class="skill-card-list">';
         groups[cat].forEach(skill => {
             html += renderSkillCard(skill);
@@ -447,17 +490,161 @@ function renderSkillCard(skill) {
     });
 
     const hasStatus = statuses.length > 0;
+    const descHtml = skill.description ? `<div class="skill-card-desc">${escapeHtml(skill.description)}</div>` : '';
     return `<div class="skill-card">
         <div class="skill-card-top">
             <span class="skill-card-name">${escapeHtml(skill.name)}</span>
         </div>
         <div class="skill-card-stats">${statsHtml}</div>
+        ${descHtml}
         <div class="skill-card-actions">
             <button class="skill-action-btn calc-fill" onclick="applySkillToCalc('${skill.id}')">填入計算器</button>
             ${hasStatus ? `<button class="skill-action-btn status-apply" onclick="applySkillStatus('${skill.id}')">套用狀態</button>` : ''}
             <button class="skill-action-btn" onclick="startEditSkill('${skill.id}')">編輯</button>
         </div>
     </div>`;
+}
+
+// ===== Monster Info Rendering =====
+
+function renderMonsterInfoSection(info) {
+    let badges = '';
+
+    if (info.hp) badges += `<span class="monster-stat hp">HP ${info.hp}</span>`;
+    if (info.initiative) badges += `<span class="monster-stat init">先攻 ${info.initiative}</span>`;
+    if (info.defenseBase) {
+        badges += `<span class="monster-stat def">防禦 ${info.defenseBase}${info.defenseBonus ? '+' + info.defenseBonus : ''}</span>`;
+    }
+    if (info.allAttr) {
+        badges += `<span class="monster-stat attr">全屬性 ${info.allAttr}${info.allAttrBonus ? '(+' + info.allAttrBonus + ')' : ''}</span>`;
+    }
+    if (info.allSkill) {
+        badges += `<span class="monster-stat skill-val">全技能 ${info.allSkill}${info.allSkillBonus ? '(+' + info.allSkillBonus + ')' : ''}</span>`;
+    }
+    if (info.savesBase) {
+        badges += `<span class="monster-stat save">三豁免 ${info.savesBase}${info.savesBonus ? '+' + info.savesBonus : ''}</span>`;
+    }
+    if (info.defaultSpeed) badges += `<span class="monster-stat spd">高速 ${info.defaultSpeed}</span>`;
+    if (info.defaultPen) badges += `<span class="monster-stat pen-val">破甲 ${info.defaultPen}</span>`;
+
+    let passiveHtml = '';
+    if (info.passives && info.passives.length > 0) {
+        passiveHtml = '<div class="monster-passives">';
+        info.passives.forEach(p => {
+            passiveHtml += `<div class="monster-passive-item"><span class="passive-name">${escapeHtml(p.name)}</span>：${escapeHtml(p.desc)}</div>`;
+        });
+        passiveHtml += '</div>';
+    }
+
+    if (!badges && !passiveHtml) return '';
+
+    return `<div class="monster-info-section">
+        ${badges ? '<div class="monster-info-stats">' + badges + '</div>' : ''}
+        ${passiveHtml}
+    </div>`;
+}
+
+function startEditMonster(category) {
+    skillHudState.editingMonster = category;
+    const info = getMonsterInfo(category);
+    editingPassives = (info && info.passives) ? info.passives.map(p => ({...p})) : [];
+    renderSkillHudContent();
+}
+
+function renderMonsterEditMode(body, category) {
+    const info = getMonsterInfo(category) || {};
+    const safeCat = escapeHtml(category);
+    const encodedCat = encodeURIComponent(category);
+
+    const passivesHtml = editingPassives.length > 0
+        ? editingPassives.map((p, idx) =>
+            `<div class="passive-edit-row">
+                <input type="text" class="passive-name-input" value="${escapeHtml(p.name)}" placeholder="名稱"
+                    onchange="updateEditingPassive(${idx},'name',this.value)">
+                <input type="text" class="passive-desc-input" value="${escapeHtml(p.desc)}" placeholder="效果描述"
+                    onchange="updateEditingPassive(${idx},'desc',this.value)">
+                <button class="status-tag-remove" onclick="removeEditingPassive(${idx})" title="移除">×</button>
+            </div>`
+        ).join('')
+        : '<div style="font-size:0.75rem;color:var(--text-dim);">尚未新增被動</div>';
+
+    body.innerHTML = `
+        <div class="monster-edit-form">
+            <div style="font-weight:bold;font-size:0.85rem;color:var(--accent-yellow);margin-bottom:8px;">
+                編輯怪物資訊：${safeCat}
+            </div>
+            <div class="skill-edit-row">
+                <label>HP</label>
+                <input type="number" id="mf-hp" value="${info.hp || 0}" min="0">
+                <label>先攻</label>
+                <input type="number" id="mf-init" value="${info.initiative || 0}" min="0">
+            </div>
+            <div class="skill-edit-row">
+                <label>全屬性</label>
+                <input type="number" id="mf-attr" value="${info.allAttr || 0}" min="0">
+                <label>附加</label>
+                <input type="number" id="mf-attr-bonus" value="${info.allAttrBonus || 0}" min="0">
+            </div>
+            <div class="skill-edit-row">
+                <label>全技能</label>
+                <input type="number" id="mf-skill" value="${info.allSkill || 0}" min="0">
+                <label>附加</label>
+                <input type="number" id="mf-skill-bonus" value="${info.allSkillBonus || 0}" min="0">
+            </div>
+            <div class="skill-edit-row">
+                <label>三豁免</label>
+                <input type="number" id="mf-saves" value="${info.savesBase || 0}" min="0">
+                <label>加值</label>
+                <input type="number" id="mf-saves-bonus" value="${info.savesBonus || 0}" min="0">
+            </div>
+            <div class="skill-edit-row">
+                <label>防禦</label>
+                <input type="number" id="mf-def" value="${info.defenseBase || 0}" min="0">
+                <label>加值</label>
+                <input type="number" id="mf-def-bonus" value="${info.defenseBonus || 0}" min="0">
+            </div>
+            <div class="skill-edit-row">
+                <label>高速</label>
+                <input type="number" id="mf-speed" value="${info.defaultSpeed || 0}" min="0">
+                <label>破甲</label>
+                <input type="number" id="mf-pen" value="${info.defaultPen || 0}" min="0">
+            </div>
+            <div class="skill-status-section">
+                <label style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;display:block;">被動能力</label>
+                <div id="monster-passives-list">
+                    ${passivesHtml}
+                </div>
+                <button class="skill-add-btn" style="margin-top:4px;padding:4px;" onclick="addEditingPassive()">+ 新增被動</button>
+            </div>
+            <div class="skill-edit-btns">
+                <button class="skill-save-btn" onclick="saveMonsterForm(decodeURIComponent('${encodedCat}'))">儲存</button>
+                <button class="skill-delete-btn" onclick="if(confirm('確定清除此怪物資訊？')){deleteMonsterInfo(decodeURIComponent('${encodedCat}')); skillHudState.editingMonster=null; renderSkillHudContent();}">清除</button>
+                <button class="skill-cancel-btn" onclick="skillHudState.editingMonster=null; renderSkillHudContent();">取消</button>
+            </div>
+        </div>`;
+}
+
+function saveMonsterForm(category) {
+    const data = {
+        hp: parseInt(document.getElementById('mf-hp')?.value) || 0,
+        initiative: parseInt(document.getElementById('mf-init')?.value) || 0,
+        allAttr: parseInt(document.getElementById('mf-attr')?.value) || 0,
+        allAttrBonus: parseInt(document.getElementById('mf-attr-bonus')?.value) || 0,
+        allSkill: parseInt(document.getElementById('mf-skill')?.value) || 0,
+        allSkillBonus: parseInt(document.getElementById('mf-skill-bonus')?.value) || 0,
+        savesBase: parseInt(document.getElementById('mf-saves')?.value) || 0,
+        savesBonus: parseInt(document.getElementById('mf-saves-bonus')?.value) || 0,
+        defenseBase: parseInt(document.getElementById('mf-def')?.value) || 0,
+        defenseBonus: parseInt(document.getElementById('mf-def-bonus')?.value) || 0,
+        defaultSpeed: parseInt(document.getElementById('mf-speed')?.value) || 0,
+        defaultPen: parseInt(document.getElementById('mf-pen')?.value) || 0,
+        passives: editingPassives.filter(p => p.name.trim() || p.desc.trim())
+    };
+
+    updateMonsterInfo(category, data);
+    skillHudState.editingMonster = null;
+    renderSkillHudContent();
+    if (typeof showToast === 'function') showToast('已儲存怪物資訊：' + category);
 }
 
 function renderSkillEditMode(body) {
@@ -536,6 +723,10 @@ function renderSkillEditForm(skill) {
         <div class="skill-edit-row">
             <label>附加成功</label>
             <input type="number" id="sf-success-${id}" value="${skill ? (skill.successBonus || 0) : 0}" min="0">
+        </div>
+        <div class="skill-edit-row">
+            <label>效果描述</label>
+            <textarea id="sf-desc-${id}" rows="2" placeholder="例：目標意志力扣除10點" style="flex:1;padding:5px 8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;color:var(--text-main);font-size:0.8rem;resize:vertical;font-family:inherit;">${skill && skill.description ? escapeHtml(skill.description) : ''}</textarea>
         </div>
         <div class="skill-edit-row">
             <label>觸發時機</label>
@@ -665,6 +856,24 @@ function getStatusName(statusId) {
     return statusId;
 }
 
+// ===== Passive Editing Helpers =====
+
+function addEditingPassive() {
+    editingPassives.push({ name: '', desc: '' });
+    renderSkillHudContent();
+}
+
+function removeEditingPassive(index) {
+    editingPassives.splice(index, 1);
+    renderSkillHudContent();
+}
+
+function updateEditingPassive(index, field, value) {
+    if (editingPassives[index]) {
+        editingPassives[index][field] = value;
+    }
+}
+
 function getStatusDisplayName(statusId) {
     if (!statusId || typeof STATUS_LIBRARY === 'undefined') return statusId;
     for (const catKey of Object.keys(STATUS_LIBRARY)) {
@@ -699,6 +908,8 @@ function saveSkillForm(id) {
         return;
     }
 
+    const descEl = document.getElementById('sf-desc-' + id);
+
     const data = {
         category: cat ? cat.value.trim() || '未分類' : '未分類',
         name: name.value.trim(),
@@ -707,6 +918,7 @@ function saveSkillForm(id) {
         speed: speed ? parseInt(speed.value) || 0 : 0,
         magic: magic ? parseInt(magic.value) || 0 : 0,
         successBonus: successEl ? parseInt(successEl.value) || 0 : 0,
+        description: descEl ? descEl.value.trim() : '',
         trigger: triggerEl ? triggerEl.value : '',
         statuses: editingStatuses.map(s => ({...s}))
     };
@@ -878,6 +1090,12 @@ window.filterSkillStatuses = filterSkillStatuses;
 window.selectSkillStatus = selectSkillStatus;
 window.removeEditingStatus = removeEditingStatus;
 window.updateEditingStatusStacks = updateEditingStatusStacks;
+window.startEditMonster = startEditMonster;
+window.saveMonsterForm = saveMonsterForm;
+window.deleteMonsterInfo = deleteMonsterInfo;
+window.addEditingPassive = addEditingPassive;
+window.removeEditingPassive = removeEditingPassive;
+window.updateEditingPassive = updateEditingPassive;
 
 // ===== Init =====
 function initSkillHUD() {

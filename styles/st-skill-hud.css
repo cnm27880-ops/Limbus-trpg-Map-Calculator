@@ -237,6 +237,117 @@
 }
 .status-tag-remove:hover { color: var(--accent-red); }
 
+/* Category Header Edit Button */
+.skill-category-header {
+    position: relative;
+}
+.cat-name {
+    flex: 1;
+    cursor: pointer;
+}
+.cat-edit-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0 4px;
+    opacity: 0.5;
+    transition: opacity 0.15s, color 0.15s;
+    flex: none;
+}
+.cat-edit-btn:hover {
+    opacity: 1;
+    color: var(--accent-yellow);
+}
+
+/* Monster Info Section */
+.monster-info-section {
+    background: rgba(253, 216, 53, 0.04);
+    border: 1px solid rgba(253, 216, 53, 0.12);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+}
+.monster-info-stats {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+}
+.monster-stat {
+    padding: 1px 5px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.monster-stat.hp { color: var(--accent-red); }
+.monster-stat.init { color: var(--accent-cyan, #4dd0e1); }
+.monster-stat.def { color: var(--accent-orange); }
+.monster-stat.attr { color: var(--accent-green, #66bb6a); }
+.monster-stat.skill-val { color: var(--accent-blue, #42a5f5); }
+.monster-stat.save { color: var(--accent-purple); }
+.monster-stat.spd { color: var(--accent-blue, #42a5f5); }
+.monster-stat.pen-val { color: var(--accent-orange); }
+
+/* Monster Passives */
+.monster-passives {
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+.monster-passive-item {
+    padding: 1px 0;
+    line-height: 1.3;
+}
+.monster-passive-item .passive-name {
+    color: var(--accent-yellow);
+    font-weight: bold;
+}
+
+/* Passive Edit Row */
+.passive-edit-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.passive-name-input {
+    width: 70px;
+    flex: none;
+    padding: 4px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--accent-yellow);
+    font-size: 0.75rem;
+}
+.passive-desc-input {
+    flex: 1;
+    padding: 4px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-size: 0.75rem;
+}
+
+/* Skill Card Description */
+.skill-card-desc {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-style: italic;
+    padding: 2px 0;
+    line-height: 1.3;
+}
+
+/* Monster Edit Form */
+.monster-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 /* Empty State */
 .skill-empty {
     text-align: center; padding: 20px;

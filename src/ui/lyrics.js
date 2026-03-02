@@ -1944,6 +1944,8 @@ function handleLyricsUpdate(data) {
     if (!data) return;
     // ST 自己不需要接收同步（已經在本地播放）
     if (typeof myRole !== 'undefined' && myRole === 'st') return;
+    // 玩家端不顯示歌詞（歌詞由 ST 統一控制顯示）
+    if (typeof myRole !== 'undefined' && myRole === 'player') return;
 
     if (data.action === 'play') {
         // 停止當前播放

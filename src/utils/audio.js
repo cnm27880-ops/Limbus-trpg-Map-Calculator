@@ -205,6 +205,10 @@ class MusicManager {
                 this.currentAudio.volume = this.volume;
                 await this.currentAudio.play();
                 console.log('BGM: 靜音播放成功，等待用戶互動後取消靜音');
+                // 標記為已互動+已解鎖，防止 setupAutoplayHandler 的 _unlockAudio
+                // 破壞正在靜音播放的音訊（_unlockAudio 會更改 audio.src）
+                this.userInteracted = true;
+                this._audioUnlocked = true;
                 this.updateUI();
                 this._setupUnmuteOnInteraction();
             } catch (mutedError) {
@@ -675,20 +679,29 @@ class MusicManager {
         if (this._unmuteListenerActive) return;
         this._unmuteListenerActive = true;
 
-        const unmute = () => {
-            this._unmuteListenerActive = false;
-            if (this.currentAudio && !this.currentAudio.paused) {
-                this.currentAudio.muted = false;
-                this.currentAudio.volume = this.volume;
-                console.log('BGM: 用戶互動，已取消靜音');
+        const self = this;
+        const unmute = (e) => {
+            // 如果點擊的是靜音按鈕，讓 toggleMute 自己處理，不做自動取消靜音
+            const muteBtn = document.getElementById('bgm-mute-btn');
+            if (muteBtn && e && e.target && (e.target === muteBtn || muteBtn.contains(e.target))) {
+                return; // 不消費事件，讓 toggleMute 正常處理
             }
-            ['click', 'touchstart', 'keydown'].forEach(e =>
-                document.removeEventListener(e, unmute)
+
+            self._unmuteListenerActive = false;
+            if (self.currentAudio && !self.currentAudio.paused) {
+                self.currentAudio.muted = false;
+                self.muted = false;
+                self.currentAudio.volume = self.volume;
+                console.log('BGM: 用戶互動，已取消靜音');
+                self.updateUI();
+            }
+            ['click', 'touchstart', 'keydown'].forEach(ev =>
+                document.removeEventListener(ev, unmute)
             );
         };
 
         ['click', 'touchstart', 'keydown'].forEach(e =>
-            document.addEventListener(e, unmute, { once: true, passive: true })
+            document.addEventListener(e, unmute, { passive: true })
         );
 
         if (typeof showToast === 'function') {

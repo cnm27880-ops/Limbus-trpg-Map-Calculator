@@ -462,6 +462,20 @@ function joinRoom(roomCode, isST) {
             // 顯示 UI
             if (!isST) {
                 document.getElementById('st-map-controls').style.display = 'none';
+
+                // 玩家端隱藏音樂播放/暫停/停止按鈕（由 ST 統一控制）
+                const playBtn = document.getElementById('bgm-play-btn');
+                const stopBtn = document.getElementById('bgm-stop-btn');
+                if (playBtn) playBtn.style.display = 'none';
+                if (stopBtn) stopBtn.style.display = 'none';
+
+                // 玩家端隱藏歌詞功能（歌詞選擇器、歌詞工具選單、歌詞面板）
+                const lyricPickBtn = document.getElementById('bgm-lyrics-pick-btn');
+                if (lyricPickBtn) lyricPickBtn.style.display = 'none';
+                const lyricsMenuItem = document.getElementById('qab-lyrics-item');
+                if (lyricsMenuItem) lyricsMenuItem.style.display = 'none';
+                const lyricsPanel = document.getElementById('lyrics-panel');
+                if (lyricsPanel) lyricsPanel.style.display = 'none';
             } else {
                 // ST 的音樂控制區塊
                 const musicStControls = document.getElementById('bgm-st-controls');

@@ -286,40 +286,21 @@ function createHUDElement() {
 
     // Setup collapse/expand interactions
     const header = document.getElementById('hud-header');
-    let collapseClickTimer = null;
-    let justExpanded = false;
 
     // Double-click to collapse (only when expanded)
     header.addEventListener('dblclick', (e) => {
         if (e.target.closest('.hud-btn') || e.target.closest('button')) return;
-        // Clear any pending single-click expand
-        if (collapseClickTimer) {
-            clearTimeout(collapseClickTimer);
-            collapseClickTimer = null;
-        }
-        // Only collapse if currently expanded (not just expanded by click)
-        if (!hudState.isCollapsed && !justExpanded) {
+        if (!hudState.isCollapsed) {
             toggleHUDCollapse();
         }
-        justExpanded = false;
     });
 
-    // Single click on collapsed header to expand (with delay to distinguish from dblclick)
+    // Single click on collapsed header to expand
     header.addEventListener('click', (e) => {
-        if (!hudState.isCollapsed) return;
         if (e.target.closest('.hud-btn') || e.target.closest('button')) return;
-
-        // Use a short delay to distinguish from double-click
-        if (collapseClickTimer) clearTimeout(collapseClickTimer);
-        collapseClickTimer = setTimeout(() => {
-            collapseClickTimer = null;
-            if (hudState.isCollapsed) {
-                justExpanded = true;
-                toggleHUDCollapse();
-                // Reset justExpanded after dblclick window passes
-                setTimeout(() => { justExpanded = false; }, 400);
-            }
-        }, 250);
+        if (hudState.isCollapsed) {
+            toggleHUDCollapse();
+        }
     });
 }
 

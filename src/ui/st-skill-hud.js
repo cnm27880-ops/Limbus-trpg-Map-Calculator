@@ -264,35 +264,26 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
     const header = document.getElementById(headerId);
     if (!header) return;
 
-    let collapseTimer = null, justExpanded = false;
-
+    // Double-click to collapse
     header.addEventListener('dblclick', (e) => {
         if (e.target.closest('button')) return;
-        if (collapseTimer) { clearTimeout(collapseTimer); collapseTimer = null; }
-        if (!stateObj.isCollapsed && !justExpanded) {
+        if (!stateObj.isCollapsed) {
             stateObj.isCollapsed = true;
             document.getElementById(panelId).classList.add('collapsed');
             saveFn();
             if (renderCollapsed) renderCollapsed();
         }
-        justExpanded = false;
     });
 
+    // Single click to expand
     header.addEventListener('click', (e) => {
         if (!stateObj.isCollapsed) return;
         if (e.target.closest('button')) return;
-        if (collapseTimer) clearTimeout(collapseTimer);
-        collapseTimer = setTimeout(() => {
-            collapseTimer = null;
-            if (stateObj.isCollapsed) {
-                justExpanded = true;
-                stateObj.isCollapsed = false;
-                document.getElementById(panelId).classList.remove('collapsed');
-                saveFn();
-                if (renderExpanded) renderExpanded();
-                setTimeout(() => { justExpanded = false; }, 400);
-            }
-        }, 250);
+
+        stateObj.isCollapsed = false;
+        document.getElementById(panelId).classList.remove('collapsed');
+        saveFn();
+        if (renderExpanded) renderExpanded();
     });
 }
 

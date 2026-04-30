@@ -266,6 +266,7 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
 
     // Double-click to toggle collapse/expand
     header.addEventListener('dblclick', (e) => {
+        console.log('[Debug] 面板雙擊事件觸發！', { headerId, isCollapsed: stateObj.isCollapsed });
         if (e.target.closest('button')) return;
         const panel = document.getElementById(panelId);
         if (stateObj.isCollapsed) {

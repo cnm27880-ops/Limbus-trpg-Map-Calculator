@@ -299,6 +299,29 @@ function createSkillHUD() {
                 <button class="skill-hud-btn" onclick="closeSkillHUD()" title="關閉">×</button>
             </div>
         </div>
+
+        <!-- AOE 群體操作區塊 -->
+        <div class="skill-hud-aoe-section" id="skill-hud-aoe" style="padding:8px; border-bottom:1px solid var(--border); background:var(--bg-dark); display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleStAoePanel()">
+                <span style="font-weight:bold; color:var(--accent-red);">💥 群體操作 (AOE)</span>
+                <span id="st-aoe-toggle-icon">▼</span>
+            </div>
+            <div id="st-aoe-panel-content" style="display:none; margin-top:8px;">
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <button class="skill-action-btn" style="flex:1;" onclick="stAoeSelect('players')">全選玩家</button>
+                    <button class="skill-action-btn" style="flex:1;" onclick="stAoeSelect('enemies')">全選敵人</button>
+                    <button class="skill-action-btn" style="flex:1;" onclick="stAoeSelect('invert')">反選</button>
+                </div>
+                <div id="st-aoe-target-list" style="max-height:100px; overflow-y:auto; border:1px solid var(--border); padding:5px; margin-bottom:5px; font-size:0.8rem;">
+                    <!-- Checkbox list of units injected via JS -->
+                </div>
+                <div style="display:flex; gap:5px;">
+                    <button class="skill-action-btn" style="flex:2; background:var(--accent-red); color:#fff;" onclick="executeStAoe()">執行 AOE (依計算器或狀態)</button>
+                    <button class="skill-action-btn" style="flex:1; background:#555; color:#fff;" onclick="undoStAoe()">復原</button>
+                </div>
+            </div>
+        </div>
+
         <div class="skill-hud-body" id="skill-hud-body"></div>
     `;
     document.body.appendChild(hud);
@@ -430,6 +453,11 @@ function renderSkillHudContent() {
 }
 
 function renderSkillBattleMode(body) {
+    // 每次進入 Battle Mode 時重新渲染 AOE 清單並顯示區塊
+    const aoeSection = document.getElementById('skill-hud-aoe');
+    if (aoeSection) aoeSection.style.display = 'block';
+    renderStAoeTargetList();
+
     const groups = getSkillsByCategory();
     const catNames = Object.keys(groups);
 
@@ -635,6 +663,9 @@ function saveMonsterForm(category) {
 }
 
 function renderSkillEditMode(body) {
+    const aoeSection = document.getElementById('skill-hud-aoe');
+    if (aoeSection) aoeSection.style.display = 'none';
+
     const skills = loadSkillLibrary();
     let html = '<div style="margin-bottom:8px;font-size:0.8rem;color:var(--text-dim);">編輯模式 — 新增或修改招式</div>';
 
@@ -1101,3 +1132,116 @@ if (document.readyState === 'loading') {
 }
 
 console.log('ST Skill Macro HUD + Floating Calculator loaded');
+
+// ===== ST AOE Manager =====
+
+let stAoePanelOpen = false;
+
+function toggleStAoePanel() {
+    const content = document.getElementById('st-aoe-panel-content');
+    const icon = document.getElementById('st-aoe-toggle-icon');
+    if (!content || !icon) return;
+
+    stAoePanelOpen = !stAoePanelOpen;
+    if (stAoePanelOpen) {
+        content.style.display = 'block';
+        icon.innerText = '▲';
+        renderStAoeTargetList();
+    } else {
+        content.style.display = 'none';
+        icon.innerText = '▼';
+    }
+}
+
+function renderStAoeTargetList() {
+    const listContainer = document.getElementById('st-aoe-target-list');
+    if (!listContainer) return;
+    listContainer.innerHTML = '';
+
+    if (!state.units || state.units.length === 0) {
+        listContainer.innerHTML = '<div style="color:var(--text-dim);">場上無單位</div>';
+        return;
+    }
+
+    state.units.forEach(u => {
+        const item = document.createElement('label');
+        item.style.display = 'flex';
+        item.style.alignItems = 'center';
+        item.style.padding = '2px 0';
+        item.style.cursor = 'pointer';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'st-aoe-unit-checkbox';
+        cb.value = u.id;
+        cb.dataset.type = u.type || 'enemy'; // 'player', 'enemy', 'boss'
+
+        const nameSpan = document.createElement('span');
+        nameSpan.innerText = `${u.name || '未命名'} (${u.type === 'player' ? '玩家' : '敵人'})`;
+        nameSpan.style.marginLeft = '5px';
+
+        item.appendChild(cb);
+        item.appendChild(nameSpan);
+        listContainer.appendChild(item);
+    });
+}
+
+function stAoeSelect(mode) {
+    const checkboxes = document.querySelectorAll('.st-aoe-unit-checkbox');
+    checkboxes.forEach(cb => {
+        if (mode === 'players') {
+            cb.checked = (cb.dataset.type === 'player');
+        } else if (mode === 'enemies') {
+            cb.checked = (cb.dataset.type === 'enemy' || cb.dataset.type === 'boss');
+        } else if (mode === 'invert') {
+            cb.checked = !cb.checked;
+        }
+    });
+}
+
+function executeStAoe() {
+    const checkboxes = document.querySelectorAll('.st-aoe-unit-checkbox:checked');
+    const unitIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (unitIds.length === 0) {
+        if (typeof showToast === 'function') showToast('請先勾選目標單位');
+        return;
+    }
+
+    // 判斷當前要執行的動作：優先看計算器的結果（如果有開啟），或者如果我們有一個專門的設計
+    // 在這份需求中，用戶提到「點擊後對勾選的目標套用目前面板上設定的傷害或狀態」
+    // ST HUD 有一個「懸浮計算器」。如果計算器是開啟的，且最後結果為有效數字，則作為傷害
+
+    // 我們可以從 DOM 中取得剛剛透過 ST HUD 填入或計算的傷害 (這通常存在 c-final-result 裡)
+    const resultDiv = document.getElementById('c-final-result');
+    let actionData = null;
+
+    if (resultDiv && resultDiv.innerText && resultDiv.innerText !== '---' && !isNaN(parseInt(resultDiv.innerText))) {
+        const damageVal = parseInt(resultDiv.innerText);
+        if (damageVal > 0) {
+            actionData = { type: 'damage', value: damageVal };
+        }
+    }
+
+    if (!actionData) {
+        if (typeof showToast === 'function') showToast('請先在計算器中計算出傷害值 (DP 計算器需有結果)');
+        return;
+    }
+
+    if (typeof applyBatchAction === 'function') {
+        applyBatchAction(unitIds, actionData);
+        if (typeof showToast === 'function') showToast(`對 ${unitIds.length} 個目標造成 ${actionData.value} 點傷害`);
+
+        if (typeof renderMap === 'function') renderMap();
+        if (typeof updateSidebarUnits === 'function') updateSidebarUnits();
+    }
+}
+
+function undoStAoe() {
+    if (typeof undoLastBatch === 'function') {
+        undoLastBatch();
+        if (typeof showToast === 'function') showToast('已復原上一步 AOE 操作');
+        if (typeof renderMap === 'function') renderMap();
+        if (typeof updateSidebarUnits === 'function') updateSidebarUnits();
+    }
+}

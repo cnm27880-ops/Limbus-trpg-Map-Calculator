@@ -529,28 +529,36 @@ function renderMap() {
             }
         }
 
-        // ===== 微型狀態標記 (Status Badges) =====
+        // ===== 懸浮狀態提示框 (Tooltip) =====
         if (u.status && typeof u.status === 'object' && Object.keys(u.status).length > 0) {
-            console.log('[Debug] 偵測到帶有狀態的單位：', u.name, u.status);
             const statusKeys = Object.keys(u.status);
-            const badges = [];
+            let hasValidStatus = false;
+            let tooltipContent = '';
+
             statusKeys.forEach(key => {
                 if (!key) return;
                 const val = parseInt(u.status[key]);
-                const firstChar = key.charAt(0);
-                const label = (val > 1) ? firstChar + val : firstChar;
-                badges.push(label);
+                if (val > 0) {
+                    hasValidStatus = true;
+                    // 呼叫 getStatusById 取得中文名稱和圖示 (定義於 status-config.js)
+                    const statusDef = typeof getStatusById === 'function' ? getStatusById(key) : null;
+                    const statusName = statusDef ? `${statusDef.icon || ''} ${statusDef.name}` : key;
+                    tooltipContent += `<div>${statusName}: ${val}</div>`;
+                }
             });
-            if (badges.length > 0) {
-                const statusContainer = document.createElement('div');
-                statusContainer.className = 'token-status-container';
-                badges.forEach(label => {
-                    const badge = document.createElement('div');
-                    badge.className = 'token-status-badge';
-                    badge.innerText = label;
-                    statusContainer.appendChild(badge);
+
+            if (hasValidStatus) {
+                t.classList.add('token-has-status');
+                const tooltip = document.createElement('div');
+                tooltip.className = 'token-tooltip';
+                tooltip.innerHTML = tooltipContent;
+                t.appendChild(tooltip);
+
+                // 手機端支援：長按/右鍵切換顯示 tooltip
+                t.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    t.classList.toggle('show-tooltip');
                 });
-                t.appendChild(statusContainer);
             }
         }
 

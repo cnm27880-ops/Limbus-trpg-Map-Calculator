@@ -15,7 +15,8 @@ let state = {
     players: {},
     customStatuses: [],  // 房間共享的自訂狀態（透過 Firebase 同步）
     isCombatActive: false,      // 是否處於戰鬥狀態
-    activeBossId: null          // 當前顯示大血條的 BOSS 單位 ID
+    activeBossId: null,         // 當前顯示大血條的 BOSS 單位 ID
+    lastBatchState: null        // 用於 AOE 的備份狀態
 };
 
 // ===== 連線狀態 =====
@@ -136,4 +137,73 @@ function findUnitById(id) {
 function canControlUnit(unit) {
     if (myRole === 'st') return true;
     return unit.ownerId === myPlayerId;
+}
+
+// ===== AOE 批次處理邏輯 =====
+
+/**
+ * 儲存當前單位狀態作為備份 (AOE Undo 功能)
+ */
+function saveBatchState() {
+    state.lastBatchState = JSON.parse(JSON.stringify(state.units));
+}
+
+/**
+ * 還原上一次的單位狀態
+ */
+function undoLastBatch() {
+    if (state.lastBatchState) {
+        state.units = JSON.parse(JSON.stringify(state.lastBatchState));
+        state.lastBatchState = null;
+        broadcastState(); // 同步回所有玩家並重新渲染
+    }
+}
+
+/**
+ * 批次套用動作到選定的單位集合
+ * @param {Array} unitIds
+ * @param {Object} actionData - { type: 'damage'|'heal'|'status', value: number, statusId: string }
+ */
+function applyBatchAction(unitIds, actionData) {
+    if (!unitIds || unitIds.length === 0) return;
+    saveBatchState();
+
+    unitIds.forEach(id => {
+        const u = findUnitById(id);
+        if (!u) return;
+
+        if (actionData.type === 'damage') {
+            const val = parseInt(actionData.value) || 0;
+            if (u.shield && u.shield > 0) {
+                if (val <= u.shield) {
+                    u.shield -= val;
+                } else {
+                    const remain = val - u.shield;
+                    u.shield = 0;
+                    u.hp = Math.max(0, u.hp - remain);
+                }
+            } else {
+                u.hp = Math.max(0, u.hp - val);
+            }
+        } else if (actionData.type === 'heal') {
+            const val = parseInt(actionData.value) || 0;
+            u.hp = Math.min(u.maxHp, u.hp + val);
+        } else if (actionData.type === 'status') {
+            if (typeof updateUnitStatus === 'function') {
+                // 如果需要增減狀態，呼叫既有邏輯（需確保 updateUnitStatus 支援該參數結構）
+                // 這裡實作簡單直接改物件
+                if (!u.status) u.status = {};
+                const current = u.status[actionData.statusId] || 0;
+                const change = parseInt(actionData.value) || 0;
+                const newVal = current + change;
+                if (newVal <= 0) {
+                    delete u.status[actionData.statusId];
+                } else {
+                    u.status[actionData.statusId] = newVal;
+                }
+            }
+        }
+    });
+
+    broadcastState();
 }

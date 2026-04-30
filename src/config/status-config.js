@@ -5,66 +5,10 @@
 
 // ===== 狀態分類 =====
 const STATUS_CATEGORIES = {
-    common: {
-        id: 'common',
-        name: '常用',
-        icon: '⭐',
-        color: '#f39c12'
-    },
-    severe: {
-        id: 'severe',
-        name: '重度失能',
-        icon: '💀',
-        color: '#e74c3c'
-    },
-    sensory: {
-        id: 'sensory',
-        name: '感官障礙',
-        icon: '👁️',
-        color: '#9b59b6'
-    },
-    movement: {
-        id: 'movement',
-        name: '移動限制',
-        icon: '🔗',
-        color: '#3498db'
-    },
-    dot: {
-        id: 'dot',
-        name: '持續傷害',
-        icon: '🔥',
-        color: '#e67e22'
-    },
-    physical: {
-        id: 'physical',
-        name: '身體負面',
-        icon: '💪',
-        color: '#95a5a6'
-    },
-    emotion: {
-        id: 'emotion',
-        name: '情緒異常',
-        icon: '😰',
-        color: '#f1c40f'
-    },
-    mental: {
-        id: 'mental',
-        name: '心智控制',
-        icon: '🧠',
-        color: '#9b59b6'
-    },
-    special: {
-        id: 'special',
-        name: '特殊狀態',
-        icon: '✨',
-        color: '#1abc9c'
-    },
-    custom: {
-        id: 'custom',
-        name: '自訂',
-        icon: '✏️',
-        color: '#8e24aa'  // 紫色，與 BOSS 單位的紫色調一致
-    }
+    common: { id: 'common', name: '常用狀態', icon: '⭐', color: '#f39c12' },
+    debuff: { id: 'debuff', name: '負面與失能', icon: '💀', color: '#e74c3c' },
+    mental: { id: 'mental', name: '精神與心智', icon: '🧠', color: '#9b59b6' },
+    custom: { id: 'custom', name: '自訂', icon: '✏️', color: '#8e24aa' }
 };
 
 // ===== 完整狀態庫 =====
@@ -107,7 +51,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '受到的傷害增加',
             fullDesc: '受到的所有傷害增加，具體數值由 GM 判定。',
-            keyResist: ['耐力', '決心'],
+            keyResist: ['耐力','決心'],
             effects: {
                 light: '受到傷害增加',
                 heavy: null,
@@ -121,7 +65,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '頭暈眼花，影響行動',
             fullDesc: '每點暈眩點數使攻擊、運動、感知檢定失去 1DP，基礎速度 -1m。重度：昏迷。',
-            keyResist: ['耐力', '決心'],
+            keyResist: ['耐力','決心'],
             effects: {
                 light: '攻擊/運動/感知 -1DP/點，速度 -1m/點',
                 heavy: '昏迷（失去意識）',
@@ -135,7 +79,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '身體失去行動能力',
             fullDesc: '每點麻痺點數使攻擊、運動檢定、速度 -1DP，防禦依序 -1。重度：定身。',
-            keyResist: ['耐力', '決心'],
+            keyResist: ['耐力','決心'],
             effects: {
                 light: '攻擊/運動/速度 -1DP/點，防禦 -1/點',
                 heavy: '定身（無法移動，速度 0，失去防禦）',
@@ -149,7 +93,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '身體機能受低溫影響',
             fullDesc: '每點凍結點數使生理檢定 -1DP，速度 -1m，防禦依序 -1。重度：冰封。與燃燒互相抵銷。',
-            keyResist: ['力量', '敏捷'],
+            keyResist: ['力量','敏捷'],
             canCounter: ['burn'],
             effects: {
                 light: '生理檢定 -1DP/點，速度 -1m/點，防禦 -1/點',
@@ -164,7 +108,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '被外力阻礙行動',
             fullDesc: '被繩索、膠水、力場等困住。每點使攻擊、運動檢定 -1DP，速度 -1m，防禦依序 -1。重度：定身。',
-            keyResist: ['力量', '敏捷'],
+            keyResist: ['力量','敏捷'],
             effects: {
                 light: '攻擊/運動 -1DP/點，速度 -1m/點，防禦 -1/點',
                 heavy: '定身（無法移動）',
@@ -172,23 +116,233 @@ const STATUS_LIBRARY = {
             }
         },
         {
-            id: 'fear',
-            name: '恐懼',
-            icon: '😱',
-            type: 'stack',
-            desc: '回避恐懼來源',
-            fullDesc: '對恐懼目標的互動/心智檢定 -1DP/點。恐懼目標在場時，攻擊其他目標防禦 -1/點。重度：驚懼（必須逃離）。',
-            keyResist: ['決心', '沉著'],
+            id: 'invisible',
+            name: '隱身',
+            icon: '👻',
+            type: 'binary',
+            desc: '無法被看見',
+            fullDesc: '視覺上無法被偵測。攻擊獲得隱身加成，敵人失去對你的閃避防禦。',
+            keyResist: null,
             effects: {
-                light: '對恐懼目標檢定 -1DP/點，攻擊他人防禦 -1/點',
-                heavy: '驚懼（必須全力逃離恐懼對象）',
-                destruction: '獲得精神異常'
+                light: '視覺隱形，攻擊優勢',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'haste',
+            name: '加速',
+            icon: '⚡',
+            type: 'binary',
+            desc: '行動速度加快',
+            fullDesc: '速度翻倍，獲得額外動作。',
+            keyResist: null,
+            effects: {
+                light: '速度 x2，額外動作',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'regenerate',
+            name: '再生',
+            icon: '💚',
+            type: 'stack',
+            desc: '持續恢復生命',
+            fullDesc: '每回合回復等於再生點數的 HP。',
+            keyResist: null,
+            effects: {
+                light: '每回合回復 HP',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'shield',
+            name: '人民之盾',
+            icon: '🛡️',
+            type: 'stack',
+            desc: '額外防護層',
+            fullDesc: '吸收等於護盾點數的傷害。',
+            keyResist: null,
+            effects: {
+                light: '吸收傷害',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'marked',
+            name: '標記',
+            icon: '🎯',
+            type: 'binary',
+            desc: '被鎖定為目標',
+            fullDesc: '被標記的目標更容易被命中，攻擊該目標獲得加成。',
+            keyResist: null,
+            effects: {
+                light: '易被命中',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'strength',
+            name: '強壯',
+            icon: '💪',
+            type: 'stack',
+            desc: '物理力量增加',
+            fullDesc: '提升物理攻擊傷害。',
+            keyResist: null,
+            effects: {
+                light: '傷害提升',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'endurance',
+            name: '不屈',
+            icon: '🌟',
+            type: 'stack',
+            desc: '韌性增強',
+            fullDesc: '受到的傷害降低。',
+            keyResist: null,
+            effects: {
+                light: '減免傷害',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'command_target',
+            name: '指令對象',
+            icon: '🔮',
+            type: 'binary',
+            desc: '受到指令鎖定',
+            fullDesc: '被指令鎖定，特定技能會對其產生額外效果。',
+            keyResist: null,
+            effects: {
+                light: '受到特殊效果影響',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'karma',
+            name: '業',
+            icon: '⚖️',
+            type: 'stack',
+            desc: '業力累積',
+            fullDesc: '累積業力，達到一定層數引發特殊效果。',
+            keyResist: null,
+            effects: {
+                light: '業力累積',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'command_protect',
+            name: '指令加護',
+            icon: '✨',
+            type: 'stack',
+            desc: '受到指令保護',
+            fullDesc: '獲得護盾或其他防禦增益。',
+            keyResist: null,
+            effects: {
+                light: '提升防禦力',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'tremor',
+            name: '震顫',
+            icon: '🔔',
+            type: 'stack',
+            desc: '震顫累積',
+            fullDesc: '受到震顫爆發時增加暈眩點數。',
+            keyResist: null,
+            effects: {
+                light: '被震顫爆發引爆',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'poise',
+            name: '呼吸法',
+            icon: '💨',
+            type: 'stack',
+            desc: '調整呼吸',
+            fullDesc: '增加暴擊機率。',
+            keyResist: null,
+            effects: {
+                light: '暴擊率提升',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'flaw',
+            name: '破綻',
+            icon: '🎯',
+            type: 'stack',
+            desc: '露出破綻',
+            fullDesc: '被攻擊時更容易受到暴擊。',
+            keyResist: null,
+            effects: {
+                light: '易受暴擊',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'weakness',
+            name: '弱點',
+            icon: '👁️',
+            type: 'stack',
+            desc: '被看穿弱點',
+            fullDesc: '受到特定傷害增加。',
+            keyResist: null,
+            effects: {
+                light: '承受特定屬性傷害增加',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'nails',
+            name: '尖釘',
+            icon: '📍',
+            type: 'stack',
+            desc: '被釘入尖釘',
+            fullDesc: '回合結束時受到流血，並增加麻痺。',
+            keyResist: null,
+            effects: {
+                light: '流血與麻痺累積',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'gale',
+            name: '疾風',
+            icon: '🌪️',
+            type: 'stack',
+            desc: '風之加護',
+            fullDesc: '提升速度或閃避機率。',
+            keyResist: null,
+            effects: {
+                light: '速度或閃避提升',
+                heavy: null,
+                destruction: null
             }
         }
     ],
 
-    // ========== 重度失能狀態 ==========
-    severe: [
+    // ========== 負面與失能 ==========
+    debuff: [
         {
             id: 'helpless',
             name: '無助',
@@ -215,20 +369,6 @@ const STATUS_LIBRARY = {
                 light: '失去意識 + 無助',
                 heavy: null,
                 destruction: null
-            }
-        },
-        {
-            id: 'petrify',
-            name: '石化',
-            icon: '🗿',
-            type: 'binary',
-            desc: '變成石頭',
-            fullDesc: '失去所有動作和防禦，獲得構裝體特性，體重 x3，獲得耐力值的裝甲和生理附加成功總和的硬度（最低 3）。',
-            keyResist: ['決心', '沉著'],
-            effects: {
-                light: '變為石像，失去行動但獲得高額防禦',
-                heavy: null,
-                destruction: '永久石化'
             }
         },
         {
@@ -260,20 +400,6 @@ const STATUS_LIBRARY = {
             }
         },
         {
-            id: 'nauseated',
-            name: '反胃',
-            icon: '🤢',
-            type: 'binary',
-            desc: '消化系統痛苦',
-            fullDesc: '每輪只有一個移動動作，失去基礎防禦和閃避防禦。',
-            keyResist: null,
-            effects: {
-                light: '動作限制，防禦降低',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
             id: 'sleep',
             name: '睡眠',
             icon: '💤',
@@ -300,11 +426,7 @@ const STATUS_LIBRARY = {
                 heavy: null,
                 destruction: null
             }
-        }
-    ],
-
-    // ========== 感官障礙 ==========
-    sensory: [
+        },
         {
             id: 'blind',
             name: '目盲',
@@ -340,7 +462,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '眼花看不清',
             fullDesc: '視覺偵察、閱讀、攻擊受減值，精密操作受一半減值。重度：目盲。',
-            keyResist: ['耐力', '感知'],
+            keyResist: ['耐力','感知'],
             effects: {
                 light: '視覺相關檢定受減值',
                 heavy: '目盲',
@@ -354,17 +476,13 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '聽覺產生障礙',
             fullDesc: '聆聽檢定受減值。重度：耳聾。',
-            keyResist: ['耐力', '感知'],
+            keyResist: ['耐力','感知'],
             effects: {
                 light: '聆聽檢定受減值',
                 heavy: '耳聾',
                 destruction: '永久耳聾'
             }
-        }
-    ],
-
-    // ========== 移動限制 ==========
-    movement: [
+        },
         {
             id: 'airborne',
             name: '浮空',
@@ -414,24 +532,10 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '基礎速度減少',
             fullDesc: '每點失速使基礎速度 -1m（影響所有衍生速度）。重度：速度降為 0，飛行則墜落進入浮空。',
-            keyResist: ['力量', '敏捷'],
+            keyResist: ['力量','敏捷'],
             effects: {
                 light: '速度 -1m/點',
                 heavy: '速度歸零，飛行墜落',
-                destruction: null
-            }
-        },
-        {
-            id: 'mental_bind',
-            name: '精神束縛',
-            icon: '🧠',
-            type: 'stack',
-            desc: '精神影響移動',
-            fullDesc: '影響心靈。每點使心智檢定 -1DP，速度 -1m，防禦依序 -1。重度：定身。',
-            keyResist: ['決心', '沉著'],
-            effects: {
-                light: '心智檢定 -1DP/點，速度 -1m/點，防禦 -1/點',
-                heavy: '定身',
                 destruction: null
             }
         },
@@ -442,49 +546,13 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '肢體難以使用',
             fullDesc: '該肢體的力量/敏捷/手藝檢定 -1DP/點。用於移動的肢體陸行速度 -1m/點。重度：肢體殘障（完全無法使用）。',
-            keyResist: ['力量', '敏捷', '耐力'],
+            keyResist: ['力量','敏捷','耐力'],
             effects: {
                 light: '該肢體相關檢定 -1DP/點',
                 heavy: '肢體殘障（完全失能）',
                 destruction: '永久殘障'
             }
-        }
-    ],
-
-    // ========== 持續傷害 ==========
-    dot: [
-        {
-            id: 'poison',
-            name: '中毒',
-            icon: '☠️',
-            type: 'stack',
-            desc: '毒素侵蝕身體',
-            fullDesc: '每回合受到等於中毒點數的毒素傷害。可用耐力檢定抵抗（每成功數-1點）。',
-            keyResist: ['耐力'],
-            effects: {
-                light: '每回合受到毒素傷害',
-                heavy: null,
-                destruction: null
-            }
         },
-        {
-            id: 'corrode',
-            name: '腐蝕',
-            icon: '🧪',
-            type: 'stack',
-            desc: '被酸液侵蝕',
-            fullDesc: '每回合受到等於腐蝕點數的酸蝕傷害，同時降低護甲值。',
-            keyResist: ['耐力'],
-            effects: {
-                light: '每回合受到酸蝕傷害，護甲降低',
-                heavy: null,
-                destruction: null
-            }
-        }
-    ],
-
-    // ========== 身體負面 ==========
-    physical: [
         {
             id: 'fatigue',
             name: '疲乏',
@@ -492,7 +560,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '身體過度勞累',
             fullDesc: '力量/敏捷檢定 -1DP/點，速度 -1m/點。重度：力竭。',
-            keyResist: ['耐力', '力量'],
+            keyResist: ['耐力','力量'],
             effects: {
                 light: '力敏檢定 -1DP/點，速度 -1m/點',
                 heavy: '力竭',
@@ -506,81 +574,11 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '巨大痛楚影響判斷',
             fullDesc: '互動/心智/意志檢定 -1DP/點，防禦依序 -1。重度：昏迷。',
-            keyResist: ['耐力', '決心'],
+            keyResist: ['耐力','決心'],
             effects: {
                 light: '互動/心智/意志 -1DP/點，防禦 -1/點',
                 heavy: '昏迷',
                 destruction: '耐決沉屬性永久受損'
-            }
-        },
-        {
-            id: 'nausea',
-            name: '惡心',
-            icon: '🤮',
-            type: 'stack',
-            desc: '消化系統不適',
-            fullDesc: '攻擊/技能/招式/法術檢定 -1DP/點。重度：反胃。',
-            keyResist: ['耐力', '決心'],
-            effects: {
-                light: '攻擊和能力檢定 -1DP/點',
-                heavy: '反胃',
-                destruction: null
-            }
-        },
-        {
-            id: 'crystallize',
-            name: '晶化',
-            icon: '💎',
-            type: 'stack',
-            desc: '身體逐漸石化',
-            fullDesc: '生理檢定 -1DP/點，速度 -1m/點，防禦依序 -1。重度：石化。',
-            keyResist: ['決心', '沉著'],
-            effects: {
-                light: '生理檢定 -1DP/點，速度 -1m/點，防禦 -1/點',
-                heavy: '石化',
-                destruction: '永久石化'
-            }
-        },
-        {
-            id: 'suffocate',
-            name: '窒息',
-            icon: '😵‍💫',
-            type: 'binary',
-            desc: '無法呼吸',
-            fullDesc: '需要呼吸的生物會受影響。持續窒息會導致死亡。',
-            keyResist: null,
-            effects: {
-                light: '無法呼吸，持續傷害',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'hunger',
-            name: '饑渴',
-            icon: '🥵',
-            type: 'binary',
-            desc: '缺乏食物和水',
-            fullDesc: '12 小時沒有充足的水和食物就會陷入饑渴狀態。持續會導致虛弱甚至死亡。',
-            keyResist: null,
-            effects: {
-                light: '缺乏營養，能力下降',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'tired',
-            name: '疲憊',
-            icon: '🥱',
-            type: 'binary',
-            desc: '缺乏睡眠',
-            fullDesc: '24 小時一個週期，需耐力檢定，失敗數=疲乏點數。',
-            keyResist: null,
-            effects: {
-                light: '睡眠不足，累積疲乏點數',
-                heavy: null,
-                destruction: null
             }
         },
         {
@@ -596,11 +594,81 @@ const STATUS_LIBRARY = {
                 heavy: '無法進行劇烈活動',
                 destruction: null
             }
+        },
+        {
+            id: 'banish',
+            name: '放逐',
+            icon: '🌀',
+            type: 'binary',
+            desc: '暫時放逐到空間狹縫',
+            fullDesc: '失去所有動作和防禦，不受任何能力影響（包括傷害、增減益），但能被觀測。身上原有能力持續時間照常計算。',
+            keyResist: null,
+            effects: {
+                light: '暫時脫離戰場',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'frozen_solid',
+            name: '冰封',
+            icon: '🧊',
+            type: 'binary',
+            desc: '被冰凍住',
+            fullDesc: '無法移動（速度 0），失去基礎/閃避/格擋防禦，需要姿勢/動作的能力失敗，無法攻擊，生理檢定失敗。',
+            keyResist: null,
+            effects: {
+                light: '完全被冰封鎖',
+                heavy: null,
+                destruction: null
+            }
+        },
+        {
+            id: 'limb_disabled',
+            name: '肢體殘障',
+            icon: '🦾',
+            type: 'binary',
+            desc: '肢體完全無法使用',
+            fullDesc: '殘障肢體完全失能。只能影響四肢，不能影響頭部等。',
+            keyResist: null,
+            effects: {
+                light: '該肢體完全失能',
+                heavy: null,
+                destruction: null
+            }
         }
     ],
 
-    // ========== 情緒異常 ==========
-    emotion: [
+    // ========== 精神與心智 ==========
+    mental: [
+        {
+            id: 'fear',
+            name: '恐懼',
+            icon: '😱',
+            type: 'stack',
+            desc: '回避恐懼來源',
+            fullDesc: '對恐懼目標的互動/心智檢定 -1DP/點。恐懼目標在場時，攻擊其他目標防禦 -1/點。重度：驚懼（必須逃離）。',
+            keyResist: ['決心','沉著'],
+            effects: {
+                light: '對恐懼目標檢定 -1DP/點，攻擊他人防禦 -1/點',
+                heavy: '驚懼（必須全力逃離恐懼對象）',
+                destruction: '獲得精神異常'
+            }
+        },
+        {
+            id: 'mental_bind',
+            name: '精神束縛',
+            icon: '🧠',
+            type: 'stack',
+            desc: '精神影響移動',
+            fullDesc: '影響心靈。每點使心智檢定 -1DP，速度 -1m，防禦依序 -1。重度：定身。',
+            keyResist: ['決心','沉著'],
+            effects: {
+                light: '心智檢定 -1DP/點，速度 -1m/點，防禦 -1/點',
+                heavy: '定身',
+                destruction: null
+            }
+        },
         {
             id: 'depression',
             name: '沮喪',
@@ -608,7 +676,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '對世界失去幹勁',
             fullDesc: '影響心靈。攻擊/技能/延長動作檢定 -1DP/點。重度：厭世。與亢奮互相抵銷。',
-            keyResist: ['決心', '沉著'],
+            keyResist: ['決心','沉著'],
             canCounter: ['excitement'],
             effects: {
                 light: '攻擊和技能檢定 -1DP/點',
@@ -623,7 +691,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '毛躁和衝動',
             fullDesc: '影響心靈。先攻/互動/延長動作檢定 -1DP/點，防禦依序 -1。重度：狂躁。與沮喪互相抵銷。',
-            keyResist: ['決心', '沉著'],
+            keyResist: ['決心','沉著'],
             canCounter: ['depression'],
             effects: {
                 light: '先攻/互動/延長動作 -1DP/點，防禦 -1/點',
@@ -632,87 +700,13 @@ const STATUS_LIBRARY = {
             }
         },
         {
-            id: 'sleepy',
-            name: '欲眠',
-            icon: '😪',
-            type: 'stack',
-            desc: '昏昏欲睡',
-            fullDesc: '影響心靈。攻擊/運動/感知檢定 -1DP/點，速度 -1m/點。重度：睡眠。',
-            keyResist: ['決心', '沉著'],
-            effects: {
-                light: '攻擊/運動/感知 -1DP/點，速度 -1m/點',
-                heavy: '睡眠',
-                destruction: null
-            }
-        },
-        {
-            id: 'despair',
-            name: '厭世',
-            icon: '😞',
-            type: 'binary',
-            desc: '質疑存在意義',
-            fullDesc: '對自己和世界產生質疑，無法提起幹勁。',
-            keyResist: null,
-            effects: {
-                light: '喪失行動動力',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'frenzy',
-            name: '狂躁',
-            icon: '😡',
-            type: 'binary',
-            desc: '無法自制的毛躁',
-            fullDesc: '無法靜下來，無法進行需要呆在某處靜心的動作。',
-            keyResist: null,
-            effects: {
-                light: '無法專注和靜止',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'panicked',
-            name: '驚懼',
-            icon: '😨',
-            type: 'binary',
-            desc: '最大限度回避恐懼源',
-            fullDesc: '會用最有效的移動手段全力逃離恐懼對象，直至感受不到為止。',
-            keyResist: null,
-            effects: {
-                light: '必須逃離恐懼源',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'rage',
-            name: '狂怒',
-            icon: '🔥',
-            type: 'stack',
-            desc: '失去理智的憤怒',
-            fullDesc: '攻擊力增加但防禦降低。每點 +1 攻擊傷害，-1 防禦。重度：失控攻擊最近目標。',
-            keyResist: ['決心', '沉著'],
-            effects: {
-                light: '+1 攻擊傷害/點，-1 防禦/點',
-                heavy: '失控攻擊',
-                destruction: null
-            }
-        }
-    ],
-
-    // ========== 心智控制 ==========
-    mental: [
-        {
             id: 'charmed',
             name: '魅惑',
             icon: '💖',
             type: 'stack',
             desc: '沉迷於特定目標',
             fullDesc: '影響心靈。對沉迷目標的互動檢定 -1DP/點，對抗其能力的意志豁免 -1DP/點。重度：迷情。',
-            keyResist: ['決心', '風度'],
+            keyResist: ['決心','風度'],
             effects: {
                 light: '對目標互動/意志 -1DP/點',
                 heavy: '迷情（服從命令）',
@@ -782,7 +776,7 @@ const STATUS_LIBRARY = {
             type: 'stack',
             desc: '思緒混亂',
             fullDesc: '心智檢定 -1DP/點。重度：隨機行動。',
-            keyResist: ['決心', '沉著'],
+            keyResist: ['決心','沉著'],
             effects: {
                 light: '心智檢定 -1DP/點',
                 heavy: '隨機行動',
@@ -799,122 +793,6 @@ const STATUS_LIBRARY = {
             keyResist: null,
             effects: {
                 light: '執行支配者命令',
-                heavy: null,
-                destruction: null
-            }
-        }
-    ],
-
-    // ========== 特殊狀態 ==========
-    special: [
-        {
-            id: 'banish',
-            name: '放逐',
-            icon: '🌀',
-            type: 'binary',
-            desc: '暫時放逐到空間狹縫',
-            fullDesc: '失去所有動作和防禦，不受任何能力影響（包括傷害、增減益），但能被觀測。身上原有能力持續時間照常計算。',
-            keyResist: null,
-            effects: {
-                light: '暫時脫離戰場',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'frozen_solid',
-            name: '冰封',
-            icon: '🧊',
-            type: 'binary',
-            desc: '被冰凍住',
-            fullDesc: '無法移動（速度 0），失去基礎/閃避/格擋防禦，需要姿勢/動作的能力失敗，無法攻擊，生理檢定失敗。',
-            keyResist: null,
-            effects: {
-                light: '完全被冰封鎖',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'limb_disabled',
-            name: '肢體殘障',
-            icon: '🦾',
-            type: 'binary',
-            desc: '肢體完全無法使用',
-            fullDesc: '殘障肢體完全失能。只能影響四肢，不能影響頭部等。',
-            keyResist: null,
-            effects: {
-                light: '該肢體完全失能',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'invisible',
-            name: '隱身',
-            icon: '👻',
-            type: 'binary',
-            desc: '無法被看見',
-            fullDesc: '視覺上無法被偵測。攻擊獲得隱身加成，敵人失去對你的閃避防禦。',
-            keyResist: null,
-            effects: {
-                light: '視覺隱形，攻擊優勢',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'haste',
-            name: '加速',
-            icon: '⚡',
-            type: 'binary',
-            desc: '行動速度加快',
-            fullDesc: '速度翻倍，獲得額外動作。',
-            keyResist: null,
-            effects: {
-                light: '速度 x2，額外動作',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'regenerate',
-            name: '再生',
-            icon: '💚',
-            type: 'stack',
-            desc: '持續恢復生命',
-            fullDesc: '每回合回復等於再生點數的 HP。',
-            keyResist: null,
-            effects: {
-                light: '每回合回復 HP',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'shield',
-            name: '護盾',
-            icon: '🛡️',
-            type: 'stack',
-            desc: '額外防護層',
-            fullDesc: '吸收等於護盾點數的傷害。',
-            keyResist: null,
-            effects: {
-                light: '吸收傷害',
-                heavy: null,
-                destruction: null
-            }
-        },
-        {
-            id: 'marked',
-            name: '標記',
-            icon: '🎯',
-            type: 'binary',
-            desc: '被鎖定為目標',
-            fullDesc: '被標記的目標更容易被命中，攻擊該目標獲得加成。',
-            keyResist: null,
-            effects: {
-                light: '易被命中',
                 heavy: null,
                 destruction: null
             }

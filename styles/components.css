@@ -20,8 +20,12 @@
     cursor: grab;
     transition: transform 0.1s, left 0.15s, top 0.15s;
     touch-action: none;
-    /* 確保圖片被裁切成圓形 */
-    overflow: hidden;
+    /*
+     * 不使用 overflow:hidden，否則右上 / 右下的徽章 (token-number-badge / token-status-container)
+     * 會被裁切看不見。background-image 仍會因為 border-radius:50% 而被瀏覽器裁切成圓形，
+     * 文字首字以 flex 置中也不會溢出，因此可安全使用 visible。
+     */
+    overflow: visible;
 }
 
 .token:active {

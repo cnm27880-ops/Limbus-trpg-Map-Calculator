@@ -521,6 +521,7 @@ function renderMap() {
         if (u.name) {
             const numMatch = u.name.match(/\d+$/);
             if (numMatch) {
+                console.log('[Debug] 偵測到數字結尾單位：', u.name);
                 const numBadge = document.createElement('div');
                 numBadge.className = 'token-number-badge';
                 numBadge.innerText = numMatch[0];
@@ -529,7 +530,8 @@ function renderMap() {
         }
 
         // ===== 微型狀態標記 (Status Badges) =====
-        if (u.status && typeof u.status === 'object') {
+        if (u.status && typeof u.status === 'object' && Object.keys(u.status).length > 0) {
+            console.log('[Debug] 偵測到帶有狀態的單位：', u.name, u.status);
             const statusKeys = Object.keys(u.status);
             const badges = [];
             statusKeys.forEach(key => {

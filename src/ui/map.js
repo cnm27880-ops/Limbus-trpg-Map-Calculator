@@ -517,6 +517,41 @@ function renderMap() {
             tokenClickStartY = null;
         };
 
+        // ===== 數字編號標記 (Number Badge) =====
+        if (u.name) {
+            const numMatch = u.name.match(/\d+$/);
+            if (numMatch) {
+                const numBadge = document.createElement('div');
+                numBadge.className = 'token-number-badge';
+                numBadge.innerText = numMatch[0];
+                t.appendChild(numBadge);
+            }
+        }
+
+        // ===== 微型狀態標記 (Status Badges) =====
+        if (u.status && typeof u.status === 'object') {
+            const statusKeys = Object.keys(u.status);
+            const badges = [];
+            statusKeys.forEach(key => {
+                if (!key) return;
+                const val = parseInt(u.status[key]);
+                const firstChar = key.charAt(0);
+                const label = (val > 1) ? firstChar + val : firstChar;
+                badges.push(label);
+            });
+            if (badges.length > 0) {
+                const statusContainer = document.createElement('div');
+                statusContainer.className = 'token-status-container';
+                badges.forEach(label => {
+                    const badge = document.createElement('div');
+                    badge.className = 'token-status-badge';
+                    badge.innerText = label;
+                    statusContainer.appendChild(badge);
+                });
+                t.appendChild(statusContainer);
+            }
+        }
+
         grid.appendChild(t);
 
         // ===== Your Turn 旋轉符文指示器 =====

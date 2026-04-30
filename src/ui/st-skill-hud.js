@@ -264,26 +264,21 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
     const header = document.getElementById(headerId);
     if (!header) return;
 
-    // Double-click to collapse
+    // Double-click to toggle collapse/expand
     header.addEventListener('dblclick', (e) => {
         if (e.target.closest('button')) return;
-        if (!stateObj.isCollapsed) {
+        const panel = document.getElementById(panelId);
+        if (stateObj.isCollapsed) {
+            stateObj.isCollapsed = false;
+            if (panel) panel.classList.remove('collapsed');
+            saveFn();
+            if (renderExpanded) renderExpanded();
+        } else {
             stateObj.isCollapsed = true;
-            document.getElementById(panelId).classList.add('collapsed');
+            if (panel) panel.classList.add('collapsed');
             saveFn();
             if (renderCollapsed) renderCollapsed();
         }
-    });
-
-    // Single click to expand
-    header.addEventListener('click', (e) => {
-        if (!stateObj.isCollapsed) return;
-        if (e.target.closest('button')) return;
-
-        stateObj.isCollapsed = false;
-        document.getElementById(panelId).classList.remove('collapsed');
-        saveFn();
-        if (renderExpanded) renderExpanded();
     });
 }
 

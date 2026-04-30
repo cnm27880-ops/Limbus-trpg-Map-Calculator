@@ -3004,3 +3004,51 @@ body.combat-mode .boss-hud-container {
     word-break: break-all;
     display: none;
 }
+
+/* Token Number Badge - 小怪尾數編號 */
+.token-number-badge {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background: var(--accent-red);
+    color: #fff;
+    font-size: 10px;
+    font-weight: bold;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 60;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+/* Token Status Container - 狀態標籤容器 */
+.token-status-container {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-end;
+    z-index: 60;
+    pointer-events: none;
+}
+
+/* Token Status Badge - 微型狀態標籤 */
+.token-status-badge {
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid var(--accent-yellow);
+    color: var(--accent-yellow);
+    font-size: 9px;
+    font-weight: bold;
+    padding: 1px 3px;
+    border-radius: 3px;
+    white-space: nowrap;
+    line-height: 1.2;
+}

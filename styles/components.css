@@ -3060,3 +3060,112 @@ body.combat-mode .boss-hud-container {
     opacity: 1;
 }
 
+/* Player Stats Memo */
+.player-memo-section {
+    padding: 8px 10px;
+}
+
+.player-memo-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-dark);
+    color: var(--text-light);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: bold;
+}
+
+.player-memo-toggle:hover {
+    background: var(--accent-blue);
+}
+
+.player-memo-container {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.player-memo-add {
+    align-self: flex-start;
+    padding: 4px 10px;
+    background: var(--accent-green);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.player-memo-add:hover {
+    filter: brightness(1.15);
+}
+
+.player-memo-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.player-memo-item {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 4px;
+    flex-wrap: nowrap;
+}
+
+.player-memo-item input[type="text"].pm-name {
+    flex: 1 1 auto;
+    min-width: 60px;
+    padding: 3px 5px;
+    font-size: 0.78rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-light);
+}
+
+.player-memo-item input[type="number"].pm-num {
+    flex: 0 0 42px;
+    width: 42px;
+    padding: 3px 4px;
+    font-size: 0.78rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-light);
+    text-align: center;
+    -moz-appearance: textfield;
+}
+
+.player-memo-item input[type="number"].pm-num::-webkit-outer-spin-button,
+.player-memo-item input[type="number"].pm-num::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.player-memo-item .pm-btn {
+    flex: 0 0 auto;
+    padding: 2px 5px;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    color: var(--text-light);
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1.2;
+}
+
+.player-memo-item .pm-btn:hover {
+    background: var(--accent-blue);
+}
+
+.player-memo-item .pm-btn.pm-del:hover {
+    background: var(--accent-red);
+}
+

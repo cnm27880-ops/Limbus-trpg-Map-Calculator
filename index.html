@@ -155,6 +155,18 @@
     <!-- Calculator Page -->
     <div id="page-calc" class="page">
         <div class="calc-container">
+            <!-- Player Stats Memo Section -->
+            <div id="player-stats-memo-section" class="calc-section player-memo-section">
+                <button id="toggle-player-memo-btn" type="button" class="player-memo-toggle" onclick="togglePlayerMemo()">
+                    <span>👥 玩家數值備忘錄</span>
+                    <span id="player-memo-toggle-icon">▼</span>
+                </button>
+                <div id="player-memo-container" class="hidden player-memo-container">
+                    <button type="button" class="player-memo-add" onclick="addPlayerMemo()">+ 新增玩家</button>
+                    <div id="player-memo-list" class="player-memo-list"></div>
+                </div>
+            </div>
+
             <!-- Boss Mode Section -->
             <div class="calc-section">
                 <label class="boss-toggle">

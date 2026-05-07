@@ -397,3 +397,195 @@ function updateBossSummary() {
 
     content.innerHTML = html;
 }
+
+// ===== 玩家數值備忘錄 =====
+const MEMO_STORAGE_KEY = 'limbus-player-memo-stats';
+let playerMemoData = loadMemoData();
+
+function loadMemoData() {
+    try {
+        const raw = localStorage.getItem(MEMO_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveMemoData() {
+    try {
+        localStorage.setItem(MEMO_STORAGE_KEY, JSON.stringify(playerMemoData));
+    } catch (e) { /* quota or disabled storage */ }
+}
+
+function togglePlayerMemo() {
+    const container = document.getElementById('player-memo-container');
+    const icon = document.getElementById('player-memo-toggle-icon');
+    if (!container) return;
+    const isOpen = !container.classList.contains('hidden');
+    if (isOpen) {
+        container.classList.add('hidden');
+        if (icon) icon.innerText = '▼';
+    } else {
+        container.classList.remove('hidden');
+        if (icon) icon.innerText = '▲';
+        renderPlayerMemo();
+    }
+}
+
+function addPlayerMemo() {
+    playerMemoData.push({ name: '', dp: 0, def: 0 });
+    saveMemoData();
+    renderPlayerMemo();
+}
+
+function deletePlayerMemo(index) {
+    if (index < 0 || index >= playerMemoData.length) return;
+    playerMemoData.splice(index, 1);
+    saveMemoData();
+    renderPlayerMemo();
+}
+
+function updatePlayerMemoField(index, field, value) {
+    if (index < 0 || index >= playerMemoData.length) return;
+    if (field === 'name') {
+        playerMemoData[index].name = String(value);
+    } else {
+        const num = parseInt(value);
+        playerMemoData[index][field] = isNaN(num) ? 0 : num;
+    }
+    saveMemoData();
+}
+
+function fireInputChange(el) {
+    if (!el) return;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function applyMemoToAttack(index) {
+    const data = playerMemoData[index];
+    if (!data) return;
+    const atkInput = document.getElementById('c-atk');
+    if (atkInput) {
+        atkInput.value = data.dp;
+        fireInputChange(atkInput);
+    }
+    if (typeof showToast === 'function') {
+        showToast(`已套用 ${data.name || '玩家'} 的 DP (${data.dp}) 至攻擊方`);
+    }
+    if (typeof calculateDP === 'function') calculateDP();
+}
+
+function applyMemoToDefense(index) {
+    const data = playerMemoData[index];
+    if (!data) return;
+
+    const atkInput = document.getElementById('c-atk');
+    if (atkInput) {
+        atkInput.value = data.dp;
+        fireInputChange(atkInput);
+    }
+
+    const baseTag = document.querySelector('.def-tag[data-def="base"]');
+    const baseRow = document.getElementById('def-base');
+    if (baseTag && !baseTag.classList.contains('active')) {
+        baseTag.classList.add('active');
+    }
+    if (baseRow && !baseRow.classList.contains('show')) {
+        baseRow.classList.add('show');
+    }
+    const baseInput = document.querySelector('input[data-def="base"]');
+    if (baseInput) {
+        baseInput.value = data.def;
+        fireInputChange(baseInput);
+    }
+
+    if (typeof showToast === 'function') {
+        showToast(`已套用 ${data.name || '玩家'}：DP ${data.dp} → 攻擊、防禦 ${data.def} → 基礎`);
+    }
+    if (typeof calculateDP === 'function') calculateDP();
+}
+
+function renderPlayerMemo() {
+    const list = document.getElementById('player-memo-list');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (playerMemoData.length === 0) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'font-size:0.75rem;color:var(--text-dim);padding:4px 0;';
+        empty.innerText = '尚無玩家，點上方「+ 新增玩家」開始記錄';
+        list.appendChild(empty);
+        return;
+    }
+
+    playerMemoData.forEach((p, idx) => {
+        const item = document.createElement('div');
+        item.className = 'player-memo-item';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.className = 'pm-name';
+        nameInput.placeholder = '名稱';
+        nameInput.value = p.name || '';
+        nameInput.addEventListener('input', e => updatePlayerMemoField(idx, 'name', e.target.value));
+        nameInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'name', e.target.value));
+
+        const dpInput = document.createElement('input');
+        dpInput.type = 'number';
+        dpInput.className = 'pm-num';
+        dpInput.title = 'DP';
+        dpInput.placeholder = 'DP';
+        dpInput.value = p.dp ?? 0;
+        dpInput.addEventListener('change', e => updatePlayerMemoField(idx, 'dp', e.target.value));
+        dpInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'dp', e.target.value));
+
+        const defInput = document.createElement('input');
+        defInput.type = 'number';
+        defInput.className = 'pm-num';
+        defInput.title = '防禦';
+        defInput.placeholder = '防禦';
+        defInput.value = p.def ?? 0;
+        defInput.addEventListener('change', e => updatePlayerMemoField(idx, 'def', e.target.value));
+        defInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'def', e.target.value));
+
+        const atkBtn = document.createElement('button');
+        atkBtn.type = 'button';
+        atkBtn.className = 'pm-btn pm-atk';
+        atkBtn.title = '套用至攻擊';
+        atkBtn.innerText = '⚔️';
+        atkBtn.addEventListener('click', () => applyMemoToAttack(idx));
+
+        const defBtn = document.createElement('button');
+        defBtn.type = 'button';
+        defBtn.className = 'pm-btn pm-def';
+        defBtn.title = '套用至防禦 (DP→攻擊、防禦→基礎)';
+        defBtn.innerText = '🛡️';
+        defBtn.addEventListener('click', () => applyMemoToDefense(idx));
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'pm-btn pm-del';
+        delBtn.title = '刪除';
+        delBtn.innerText = '❌';
+        delBtn.addEventListener('click', () => deletePlayerMemo(idx));
+
+        item.appendChild(nameInput);
+        item.appendChild(dpInput);
+        item.appendChild(defInput);
+        item.appendChild(atkBtn);
+        item.appendChild(defBtn);
+        item.appendChild(delBtn);
+        list.appendChild(item);
+    });
+}
+
+if (typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderPlayerMemo);
+    } else {
+        renderPlayerMemo();
+    }
+}

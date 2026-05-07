@@ -301,7 +301,7 @@ function createSkillHUD() {
         </div>
 
         <!-- AOE 群體操作區塊 -->
-        <div class="skill-hud-aoe-section" id="skill-hud-aoe" style="padding:8px; border-bottom:1px solid var(--border); background:var(--bg-dark); display:none;">
+        <div class="skill-hud-aoe-section" id="skill-hud-aoe" style="padding:8px; border-bottom:1px solid var(--border); background:var(--bg-panel); display:none;">
             <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleStAoePanel()">
                 <span style="font-weight:bold; color:var(--accent-red);">💥 群體操作 (AOE)</span>
                 <span id="st-aoe-toggle-icon">▼</span>

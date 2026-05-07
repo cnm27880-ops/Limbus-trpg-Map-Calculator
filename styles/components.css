@@ -3070,8 +3070,8 @@ body.combat-mode .boss-hud-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg-dark);
-    color: var(--text-light);
+    background: var(--bg-panel);
+    color: var(--text-main);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 6px 10px;
@@ -3127,7 +3127,7 @@ body.combat-mode .boss-hud-container {
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 3px;
-    color: var(--text-light);
+    color: var(--text-main);
 }
 
 .player-memo-item input[type="number"].pm-num {
@@ -3138,7 +3138,7 @@ body.combat-mode .boss-hud-container {
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: 3px;
-    color: var(--text-light);
+    color: var(--text-main);
     text-align: center;
     -moz-appearance: textfield;
 }
@@ -3152,9 +3152,9 @@ body.combat-mode .boss-hud-container {
 .player-memo-item .pm-btn {
     flex: 0 0 auto;
     padding: 2px 5px;
-    background: var(--bg-dark);
+    background: var(--bg-panel);
     border: 1px solid var(--border);
-    color: var(--text-light);
+    color: var(--text-main);
     border-radius: 3px;
     cursor: pointer;
     font-size: 0.8rem;

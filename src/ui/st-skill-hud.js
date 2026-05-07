@@ -307,17 +307,29 @@ function createSkillHUD() {
                 <span id="st-aoe-toggle-icon">▼</span>
             </div>
             <div id="st-aoe-panel-content" style="display:none; margin-top:8px;">
-                <div style="display:flex; gap:5px; margin-bottom:5px;">
-                    <button class="skill-action-btn" style="flex:1;" onclick="stAoeSelect('players')">全選玩家</button>
-                    <button class="skill-action-btn" style="flex:1;" onclick="stAoeSelect('enemies')">全選敵人</button>
-                    <button class="skill-action-btn" style="flex:1;" onclick="stAoeSelect('invert')">反選</button>
+                <div style="display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap;">
+                    <button class="skill-action-btn" style="flex:1; min-width:70px;" onclick="stAoeSelect('players')">全選玩家</button>
+                    <button class="skill-action-btn" style="flex:1; min-width:70px;" onclick="stAoeSelect('enemies')">全選敵人</button>
+                    <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('all')">全選</button>
+                    <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('none')">取消全選</button>
+                    <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('invert')">反選</button>
                 </div>
                 <div id="st-aoe-target-list" style="max-height:100px; overflow-y:auto; border:1px solid var(--border); padding:5px; margin-bottom:5px; font-size:0.8rem;">
                     <!-- Checkbox list of units injected via JS -->
                 </div>
+                <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
+                    <label style="font-size:0.8rem; color:var(--text-dim); flex-shrink:0;">數值</label>
+                    <input type="number" id="st-aoe-value-input" value="10" style="flex:1; min-width:0; padding:4px;">
+                    <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-red); color:#fff;" onclick="executeStAoeAction('damage')">傷害</button>
+                    <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-green); color:#fff;" onclick="executeStAoeAction('heal')">治癒</button>
+                </div>
+                <div style="display:flex; gap:5px; margin-bottom:5px;">
+                    <input type="text" id="st-aoe-status-id" placeholder="狀態 ID (如 bleed)" style="flex:2; min-width:0; padding:4px;">
+                    <input type="number" id="st-aoe-status-val" value="1" placeholder="層數" style="flex:1; min-width:0; padding:4px;">
+                    <button class="skill-action-btn" style="flex:0 0 auto;" onclick="executeStAoeAction('status')">套用狀態</button>
+                </div>
                 <div style="display:flex; gap:5px;">
-                    <button class="skill-action-btn" style="flex:2; background:var(--accent-red); color:#fff;" onclick="executeStAoe()">執行 AOE (依計算器或狀態)</button>
-                    <button class="skill-action-btn" style="flex:1; background:#555; color:#fff;" onclick="undoStAoe()">復原</button>
+                    <button class="skill-action-btn" style="flex:1; background:#555; color:#fff;" onclick="undoStAoe()">復原上一步</button>
                 </div>
             </div>
         </div>
@@ -1193,13 +1205,17 @@ function stAoeSelect(mode) {
             cb.checked = (cb.dataset.type === 'player');
         } else if (mode === 'enemies') {
             cb.checked = (cb.dataset.type === 'enemy' || cb.dataset.type === 'boss');
+        } else if (mode === 'all') {
+            cb.checked = true;
+        } else if (mode === 'none') {
+            cb.checked = false;
         } else if (mode === 'invert') {
             cb.checked = !cb.checked;
         }
     });
 }
 
-function executeStAoe() {
+function executeStAoeAction(type) {
     const checkboxes = document.querySelectorAll('.st-aoe-unit-checkbox:checked');
     const unitIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
 
@@ -1208,29 +1224,33 @@ function executeStAoe() {
         return;
     }
 
-    // 判斷當前要執行的動作：優先看計算器的結果（如果有開啟），或者如果我們有一個專門的設計
-    // 在這份需求中，用戶提到「點擊後對勾選的目標套用目前面板上設定的傷害或狀態」
-    // ST HUD 有一個「懸浮計算器」。如果計算器是開啟的，且最後結果為有效數字，則作為傷害
+    let actionData = { type };
 
-    // 我們可以從 DOM 中取得剛剛透過 ST HUD 填入或計算的傷害 (這通常存在 c-final-result 裡)
-    const resultDiv = document.getElementById('c-final-result');
-    let actionData = null;
-
-    if (resultDiv && resultDiv.innerText && resultDiv.innerText !== '---' && !isNaN(parseInt(resultDiv.innerText))) {
-        const damageVal = parseInt(resultDiv.innerText);
-        if (damageVal > 0) {
-            actionData = { type: 'damage', value: damageVal };
+    if (type === 'damage' || type === 'heal') {
+        const val = parseInt(document.getElementById('st-aoe-value-input').value);
+        if (isNaN(val)) {
+            if (typeof showToast === 'function') showToast('請輸入有效數值');
+            return;
         }
-    }
-
-    if (!actionData) {
-        if (typeof showToast === 'function') showToast('請先在計算器中計算出傷害值 (DP 計算器需有結果)');
-        return;
+        actionData.value = val;
+    } else if (type === 'status') {
+        const statusId = document.getElementById('st-aoe-status-id').value.trim();
+        const val = parseInt(document.getElementById('st-aoe-status-val').value) || 0;
+        if (!statusId) {
+            if (typeof showToast === 'function') showToast('請輸入狀態 ID');
+            return;
+        }
+        actionData.statusId = statusId;
+        actionData.value = val;
     }
 
     if (typeof applyBatchAction === 'function') {
         applyBatchAction(unitIds, actionData);
-        if (typeof showToast === 'function') showToast(`對 ${unitIds.length} 個目標造成 ${actionData.value} 點傷害`);
+        if (typeof showToast === 'function') {
+            if (type === 'damage') showToast(`對 ${unitIds.length} 個目標造成 ${actionData.value} 點傷害`);
+            else if (type === 'heal') showToast(`為 ${unitIds.length} 個目標治癒 ${actionData.value} 點`);
+            else if (type === 'status') showToast(`對 ${unitIds.length} 個目標套用狀態 ${actionData.statusId}`);
+        }
 
         if (typeof renderMap === 'function') renderMap();
         if (typeof updateSidebarUnits === 'function') updateSidebarUnits();

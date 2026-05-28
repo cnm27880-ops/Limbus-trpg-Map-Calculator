@@ -8,6 +8,78 @@ let isMeasuring = false;
 let rulerPoints = [];       // 所有折點的格子座標 [{x, y}, ...]
 let rulerCurrentPos = null; // 目前游標的格子座標
 
+// ===== 地圖背景圖 =====
+
+function triggerMapBgUpload() {
+    document.getElementById('map-bg-upload').click();
+}
+
+function handleMapBgUpload(input) {
+    const file = input.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > 10 * 1024 * 1024) {
+        if (typeof showToast === 'function') showToast('圖片過大（上限 10MB）');
+        input.value = '';
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        state.mapBgImage = e.target.result;
+        applyMapBg();
+        saveMapBgToStorage();
+        renderMap();
+        if (typeof showToast === 'function') showToast('背景圖已設定');
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function clearMapBg() {
+    state.mapBgImage = null;
+    applyMapBg();
+    saveMapBgToStorage();
+    renderMap();
+    if (typeof showToast === 'function') showToast('背景圖已清除');
+}
+
+function applyMapBg() {
+    const grid = document.getElementById('battle-map');
+    const clearBtn = document.getElementById('clear-map-bg-btn');
+    if (!grid) return;
+    if (state.mapBgImage) {
+        grid.style.backgroundImage = `url(${state.mapBgImage})`;
+        grid.classList.add('has-map-bg');
+        if (clearBtn) clearBtn.style.display = '';
+    } else {
+        grid.style.backgroundImage = '';
+        grid.classList.remove('has-map-bg');
+        if (clearBtn) clearBtn.style.display = 'none';
+    }
+}
+
+function saveMapBgToStorage() {
+    try {
+        if (state.mapBgImage) {
+            localStorage.setItem('limbus_map_bg', state.mapBgImage);
+        } else {
+            localStorage.removeItem('limbus_map_bg');
+        }
+    } catch(e) {
+        if (typeof showToast === 'function') showToast('背景圖儲存失敗（容量不足）');
+    }
+}
+
+function loadMapBgFromStorage() {
+    try {
+        const saved = localStorage.getItem('limbus_map_bg');
+        if (saved) {
+            state.mapBgImage = saved;
+        }
+    } catch(e) {
+        console.error('Failed to load map background:', e);
+    }
+}
+
 // ===== 地圖初始化 =====
 /**
  * 初始化地圖資料
@@ -211,7 +283,10 @@ function renderMap() {
 
     grid.style.gridTemplateColumns = `repeat(${state.mapW}, var(--grid-size))`;
     grid.innerHTML = '';
-    
+
+    // 套用背景圖
+    applyMapBg();
+
     // 設定容器尺寸
     const pxW = state.mapW * gridSize;
     const pxH = state.mapH * gridSize;

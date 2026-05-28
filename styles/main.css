@@ -378,6 +378,17 @@ input[type="number"] {
     box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
 }
 
+/* 背景圖模式：圖片填滿地圖，地板格透明透視 */
+#battle-map.has-map-bg {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#battle-map.has-map-bg .cell {
+    background-color: transparent;
+}
+
 .cell {
     width: var(--grid-size);
     height: var(--grid-size);

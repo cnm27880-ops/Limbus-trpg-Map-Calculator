@@ -83,7 +83,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 初始化檔案上傳
     if (typeof initFileUpload === 'function') initFileUpload();
-    
+
+    // 載入地圖背景圖（本機儲存）
+    if (typeof loadMapBgFromStorage === 'function') loadMapBgFromStorage();
+
     // 檢查現有 Session
     if (typeof checkExistingSession === 'function') checkExistingSession();
     

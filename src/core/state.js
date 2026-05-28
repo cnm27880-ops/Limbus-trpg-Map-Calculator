@@ -12,6 +12,7 @@ let state = {
     mapData: [],
     themeId: 0,
     mapPalette: [],             // 自訂調色盤（混用地形）
+    mapBgImage: null,           // 地圖背景圖（base64，僅本機儲存）
     players: {},
     customStatuses: [],  // 房間共享的自訂狀態（透過 Firebase 同步）
     isCombatActive: false,      // 是否處於戰鬥狀態
@@ -65,6 +66,7 @@ function resetState() {
         mapData: [],
         themeId: 0,
         mapPalette: [],
+        mapBgImage: null,
         players: {},
         customStatuses: [],
         isCombatActive: false,

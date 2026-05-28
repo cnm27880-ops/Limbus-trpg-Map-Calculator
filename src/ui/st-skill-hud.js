@@ -1217,7 +1217,7 @@ function stAoeSelect(mode) {
 
 function executeStAoeAction(type) {
     const checkboxes = document.querySelectorAll('.st-aoe-unit-checkbox:checked');
-    const unitIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    const unitIds = Array.from(checkboxes).map(cb => cb.value);
 
     if (unitIds.length === 0) {
         if (typeof showToast === 'function') showToast('請先勾選目標單位');

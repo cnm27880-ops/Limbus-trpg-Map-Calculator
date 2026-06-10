@@ -657,6 +657,11 @@ function setupRoomListeners() {
                 u.init = (typeof u.init === 'number') ? Math.max(-999, Math.min(999, Math.floor(u.init))) : 0;
                 u.size = [1, 2, 3].includes(u.size) ? u.size : 1;
                 u.hidden = u.hidden === true;  // 確保 hidden 永遠是 boolean（舊單位沒有此欄位時為 false）
+                // 護盾欄位消毒（0~999 的整數）
+                const clampShield = v => (typeof v === 'number' && v > 0) ? Math.min(999, Math.floor(v)) : 0;
+                u.shieldAutoMax = clampShield(u.shieldAutoMax);
+                u.shieldAuto = clampShield(u.shieldAuto);
+                u.shieldTemp = clampShield(u.shieldTemp);
                 u.avatar = (typeof u.avatar === 'string' && u.avatar.startsWith('data:image/') && u.avatar.length < 500000) ? u.avatar : (u.avatar || null);
                 if (u.status && typeof u.status === 'object') {
                     // 過濾掉 __proto__ 等危險鍵
@@ -1124,6 +1129,22 @@ function sendToHost(message) {
             if (unit) {
                 modifyHPInternal(unit, message.dmgType, message.amount);
                 roomRef.child(`units/${message.unitId}/hpArr`).set(unit.hpArr);
+                // 護盾可能在 modifyHPInternal 中被消耗，一併同步
+                roomRef.child(`units/${message.unitId}/shieldTemp`).set(unit.shieldTemp || 0);
+                roomRef.child(`units/${message.unitId}/shieldAuto`).set(unit.shieldAuto || 0);
+            }
+            break;
+
+        case 'updateShield':
+            const shieldUnit = state.units.find(u => u.id === message.unitId);
+            if (shieldUnit) {
+                const clampShieldVal = v => Math.max(0, Math.min(999, parseInt(v) || 0));
+                shieldUnit.shieldAutoMax = clampShieldVal(message.shieldAutoMax);
+                shieldUnit.shieldAuto = clampShieldVal(message.shieldAuto);
+                shieldUnit.shieldTemp = clampShieldVal(message.shieldTemp);
+                roomRef.child(`units/${message.unitId}/shieldAutoMax`).set(shieldUnit.shieldAutoMax);
+                roomRef.child(`units/${message.unitId}/shieldAuto`).set(shieldUnit.shieldAuto);
+                roomRef.child(`units/${message.unitId}/shieldTemp`).set(shieldUnit.shieldTemp);
             }
             break;
 

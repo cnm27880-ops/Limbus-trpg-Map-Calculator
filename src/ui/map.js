@@ -589,6 +589,13 @@ function renderMap() {
         let tokenClickStartX = null;
         let tokenClickStartY = null;
 
+        // 右鍵開啟快速操作選單
+        t.oncontextmenu = (e) => {
+            if (typeof openUnitContextMenu === 'function') {
+                openUnitContextMenu(e, u.id);
+            }
+        };
+
         t.onpointerdown = (e) => {
             if (currentTool !== 'cursor') return;
 
@@ -644,7 +651,6 @@ function renderMap() {
         if (u.name) {
             const numMatch = u.name.match(/\d+$/);
             if (numMatch) {
-                console.log('[Debug] 偵測到數字結尾單位：', u.name);
                 const numBadge = document.createElement('div');
                 numBadge.className = 'token-number-badge';
                 numBadge.innerText = numMatch[0];

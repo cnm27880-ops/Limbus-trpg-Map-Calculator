@@ -1220,10 +1220,18 @@ function setupHUDDrag() {
 function updateHUDPosition() {
     const hud = document.getElementById('combat-hud');
     if (hud) {
+        // 夾限座標，避免儲存的位置在視窗縮小後落到螢幕外
+        const w = hud.offsetWidth || 320;
+        hudState.position.x = Math.max(-w + 100, Math.min(window.innerWidth - 100, hudState.position.x));
+        hudState.position.y = Math.max(0, Math.min(window.innerHeight - 50, hudState.position.y));
         hud.style.left = hudState.position.x + 'px';
         hud.style.top = hudState.position.y + 'px';
     }
 }
+
+window.addEventListener('resize', () => {
+    if (document.getElementById('combat-hud')) updateHUDPosition();
+});
 
 // ===== Unbind Character =====
 function unbindHUDCharacter() {

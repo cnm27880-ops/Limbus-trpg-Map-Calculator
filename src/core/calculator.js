@@ -232,17 +232,19 @@ function resetCalc() {
 // ===== BOSS 血條加權計算 =====
 /**
  * 計算加權 HP 百分比（無限恐怖規則）
- * 每滴血視為 3 分（B=1, L=2, A=3），受傷越重百分比越低
+ * 每滴血視為 4 分（B=1, L=2, A=4）：
+ * 全 B 時血條剩 3/4、全 L 時剩 1/2、全 A 時歸零
  * @param {Object} unit - 單位物件
  * @returns {number} 0~100 的百分比
  */
 function calculateWeightedHpPercent(unit) {
     const maxHp = unit.maxHp || (unit.hpArr ? unit.hpArr.length : 1);
-    const totalPotential = maxHp * 3;
+    const totalPotential = maxHp * 4;
     if (totalPotential <= 0) return 100;
 
+    const DMG_WEIGHT = [0, 1, 2, 4];  // index: 0=完好, 1=B, 2=L, 3=A
     const hpArr = unit.hpArr || [];
-    const currentDamage = hpArr.reduce((sum, val) => sum + val, 0);
+    const currentDamage = hpArr.reduce((sum, val) => sum + (DMG_WEIGHT[val] || 0), 0);
     const remainingPoints = totalPotential - currentDamage;
     return Math.max(0, (remainingPoints / totalPotential) * 100);
 }

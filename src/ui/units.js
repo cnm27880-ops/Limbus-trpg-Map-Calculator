@@ -32,6 +32,10 @@ function toggleCombat() {
         // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
+        // 戰鬥開始時所有自動護盾回滿
+        state.units.forEach(u => {
+            if ((u.shieldAutoMax || 0) > 0) u.shieldAuto = u.shieldAutoMax;
+        });
         broadcastState();
         showToast('戰鬥開始！');
     }
@@ -116,8 +120,9 @@ function renderUnitsList() {
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
         const isMyUnit = u.ownerId === myPlayerId;
-        const hideDetails = isEnemy && !isSt && !isMyUnit;
         const isBoss = u.isBoss || u.type === 'boss';
+        // 玩家看敵方單位（含 BOSS）時隱藏 B/L/A 明細，只顯示剩餘百分比
+        const hideDetails = (isEnemy || isBoss) && !isSt && !isMyUnit;
         const isHidden = u.hidden === true;
         // ST 才會看到的隱藏標籤
         const hiddenBadge = (isSt && isHidden) ? ' <span style="font-size:0.7rem;color:var(--text-dim);">👁️‍🗨️ (已隱藏)</span>' : '';
@@ -127,8 +132,12 @@ function renderUnitsList() {
             ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限" style="cursor:pointer;text-decoration:underline dotted;color:var(--accent-yellow);margin-left:4px;">[HP:${maxHp}]</span>`
             : `<span style="margin-left:4px;color:var(--text-muted);">[HP:${maxHp}]</span>`;
 
+        const hpPercent = (typeof calculateWeightedHpPercent === 'function')
+            ? Math.round(calculateWeightedHpPercent(u))
+            : 100;
+
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
-        if (hideDetails) statusText = `狀態: ${getVagueStatus(u)}`;
+        if (hideDetails) statusText = `剩餘 ${hpPercent}%`;
 
         // 擁有者標籤
         let ownerTag = '';
@@ -137,14 +146,29 @@ function renderUnitsList() {
             ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
         }
 
-        // HP 條
-        const bar = hpArr.map(h => {
-            let cls = 'hp-empty';
-            if (h === 1) cls = 'hp-b';
-            if (h === 2) cls = 'hp-l';
-            if (h === 3) cls = 'hp-a';
-            return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
-        }).join('');
+        // HP 條：玩家看敵方單位時改用單色百分比條（不洩漏 B/L/A 明細）
+        let bar;
+        if (hideDetails) {
+            const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
+            bar = `<div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div>`;
+        } else {
+            bar = hpArr.map(h => {
+                let cls = 'hp-empty';
+                if (h === 1) cls = 'hp-b';
+                if (h === 2) cls = 'hp-l';
+                if (h === 3) cls = 'hp-a';
+                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
+            }).join('');
+        }
+
+        // 護盾徽章（所有人可見）
+        let shieldBadges = '';
+        if ((u.shieldAuto || 0) > 0 || (u.shieldAutoMax || 0) > 0) {
+            shieldBadges += `<span class="shield-badge shield-auto" title="自動護盾（每回合回滿）">🛡 ${u.shieldAuto || 0}/${u.shieldAutoMax || 0}</span>`;
+        }
+        if ((u.shieldTemp || 0) > 0) {
+            shieldBadges += `<span class="shield-badge shield-temp" title="一次性護盾">🛡 ${u.shieldTemp}</span>`;
+        }
 
         // 部署按鈕
         const deployBtn = u.x >= 0
@@ -173,11 +197,12 @@ function renderUnitsList() {
                 }
 
                 const escapedName = escapeHtml(statusName);
+                const encodedName = encodeURIComponent(statusName).replace(/'/g, '%27');
                 const displayValue = statusValue ? ` ${escapeHtml(statusValue)}` : '';
                 return `<span class="status-badge"
                              data-tooltip="${escapedName}"
                              style="--badge-color: ${color}"
-                             onclick="onStatusTagClick('${u.id}', '${escapedName}')">
+                             onclick="event.stopPropagation();onStatusTagClick(event, '${u.id}', '${encodedName}')">
                     ${icon}${displayValue}
                 </span>`;
             }).join('');
@@ -217,6 +242,7 @@ function renderUnitsList() {
                     <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
                     <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
                     <button class="action-btn heal" onclick="resetUnitHp('${u.id}')" title="清除所有傷害，重置血條">♻</button>
+                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="設定護盾">🛡</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${assignBtn}
@@ -252,11 +278,11 @@ function renderUnitsList() {
         ].filter(Boolean).join(' ');
 
         return `
-            <div class="${cardClasses}" style="${myUnitStyle}">
+            <div class="${cardClasses}" style="${myUnitStyle}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
                 <div class="unit-header">
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;">
-                        <div style="font-weight:600;">${escapeHtml(u.name)}${hiddenBadge}${ownerTag}</div>
+                        <div style="font-weight:600;">${escapeHtml(u.name)}${hiddenBadge}${ownerTag}${shieldBadges}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
@@ -288,17 +314,23 @@ function renderSidebarUnits() {
         const isEnemy = u.type === 'enemy';
         const isSt = myRole === 'st';
         const isBoss = u.isBoss || u.type === 'boss';
+        const isMyUnit = u.ownerId === myPlayerId;
         const isHidden = u.hidden === true;
         const hpArr = u.hpArr || [];
         const maxHp = u.maxHp || hpArr.length || 1;
-        const currentHp = maxHp - hpArr.filter(x => x > 0).length;
+
+        // 玩家看敵方單位（含 BOSS）時隱藏 B/L/A 明細，只顯示剩餘百分比
+        const hideDetails = (isEnemy || isBoss) && !isSt && !isMyUnit;
+        const hpPercent = (typeof calculateWeightedHpPercent === 'function')
+            ? Math.round(calculateWeightedHpPercent(u))
+            : 100;
 
         // 簡潔的傷害狀態文字（帶顏色標記）
         const aCount = hpArr.filter(x => x === 3).length;
         const lCount = hpArr.filter(x => x === 2).length;
         const bCount = hpArr.filter(x => x === 1).length;
-        let statusTxt = isEnemy && !isSt
-            ? getVagueStatus(u)
+        let statusTxt = hideDetails
+            ? `剩餘 ${hpPercent}%`
             : `<span class="dmg-b">${bCount}B</span> <span class="dmg-l">${lCount}L</span> <span class="dmg-a">${aCount}A</span>`;
 
         const unitName = u.name || 'Unknown';
@@ -314,37 +346,44 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
-        // 生成戰術血條（10 格方塊）
-        const segmentCount = 10;
-        let tacticalSegments = '';
-        for (let i = 0; i < segmentCount; i++) {
-            // 計算此格對應的 hpArr 索引
-            const hpIndex = Math.floor((i / segmentCount) * maxHp);
-            const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
+        // 生成戰術血條：玩家看敵方時改用百分比填充條，否則用 10 格 B/L/A 方塊
+        let tacticalBar;
+        if (hideDetails) {
+            const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
+            tacticalBar = `<div class="hp-tactical-percent"><div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div></div>`;
+        } else {
+            const segmentCount = 10;
+            let tacticalSegments = '';
+            for (let i = 0; i < segmentCount; i++) {
+                // 計算此格對應的 hpArr 索引
+                const hpIndex = Math.floor((i / segmentCount) * maxHp);
+                const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
 
-            let segmentClass = 'hp-tactical-segment';
-            if (hpValue === 0) {
-                segmentClass += ' hp-healthy';  // 完好 = 綠色
-            } else if (hpValue === 1) {
-                segmentClass += ' hp-b';  // B傷 = 藍色
-            } else if (hpValue === 2) {
-                segmentClass += ' hp-l';  // L傷 = 橙色
-            } else if (hpValue === 3) {
-                segmentClass += ' hp-a';  // A傷 = 紅色
+                let segmentClass = 'hp-tactical-segment';
+                if (hpValue === 0) {
+                    segmentClass += ' hp-healthy';  // 完好 = 綠色
+                } else if (hpValue === 1) {
+                    segmentClass += ' hp-b';  // B傷 = 藍色
+                } else if (hpValue === 2) {
+                    segmentClass += ' hp-l';  // L傷 = 橙色
+                } else if (hpValue === 3) {
+                    segmentClass += ' hp-a';  // A傷 = 紅色
+                }
+
+                tacticalSegments += `<div class="${segmentClass}"></div>`;
             }
-
-            tacticalSegments += `<div class="${segmentClass}"></div>`;
+            tacticalBar = tacticalSegments;
         }
 
         // 三欄佈局：左名-中血-右速
         return `
-            <div class="${cardClasses}" style="${sidebarHiddenStyle}">
+            <div class="${cardClasses}" style="${sidebarHiddenStyle}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
                 <div class="unit-header">
                     <div class="unit-info">
                         <div class="unit-name">${escapeHtml(unitName)}${hiddenSidebarBadge}</div>
                         <div class="unit-status">${statusTxt}</div>
                     </div>
-                    <div class="hp-tactical-container">${tacticalSegments}</div>
+                    <div class="hp-tactical-container">${tacticalBar}</div>
                     <div class="unit-init-box">
                         <span class="unit-init-value">${u.init || 0}</span>
                     </div>
@@ -553,8 +592,22 @@ function nextTurn() {
         return;
     }
     if (state.units.length) {
+        // 記下剛結束回合的單位（用於狀態結算提醒）
+        const endingUnit = state.units[state.turnIdx];
+
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
+
+        // 輪到的單位自動護盾回滿
+        const activeUnit = state.units[state.turnIdx];
+        if (activeUnit && (activeUnit.shieldAutoMax || 0) > 0 && (activeUnit.shieldAuto || 0) < activeUnit.shieldAutoMax) {
+            activeUnit.shieldAuto = activeUnit.shieldAutoMax;
+            showToast(`🛡 ${activeUnit.name || '單位'} 的自動護盾已回滿（${activeUnit.shieldAutoMax}）`);
+        }
+
         broadcastState();
+
+        // 回合結束狀態結算提醒（燃燒/流血/再生等）
+        if (endingUnit) showTurnEndSettlement(endingUnit);
 
         setTimeout(() => {
             const el = document.querySelector('.unit-card.active-turn');
@@ -713,4 +766,292 @@ function initFileUpload() {
         // 清除 input 以便再次選擇相同檔案
         e.target.value = '';
     });
+}
+
+// ===== 護盾系統 =====
+/**
+ * 開啟護盾設定視窗
+ * 護盾分兩種：自動護盾（每回合輪到該單位時回滿）與一次性護盾
+ * 傷害優先消耗一次性護盾 → 自動護盾 → 才扣血（見 modifyHPInternal）
+ * @param {string} unitId - 單位 ID
+ */
+function openShieldModal(unitId) {
+    const u = findUnitById(unitId);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    const existing = document.getElementById('shield-modal');
+    if (existing) existing.remove();
+
+    const html = `
+        <div class="modal-overlay show" id="shield-modal" onclick="if(event.target.id==='shield-modal')closeShieldModal()">
+            <div class="modal" style="max-width:380px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">🛡 護盾設定 - ${escapeHtml(u.name || '單位')}</span>
+                    <button onclick="closeShieldModal()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>自動護盾上限（輪到該單位時自動回滿，0 = 不啟用）</label>
+                        <input type="number" id="shield-auto-max" value="${u.shieldAutoMax || 0}" min="0" max="999">
+                    </div>
+                    <div class="form-group">
+                        <label>目前自動護盾</label>
+                        <input type="number" id="shield-auto-cur" value="${u.shieldAuto || 0}" min="0" max="999">
+                    </div>
+                    <div class="form-group">
+                        <label>一次性護盾（耗盡即消失，不會回復）</label>
+                        <input type="number" id="shield-temp" value="${u.shieldTemp || 0}" min="0" max="999">
+                    </div>
+                    <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
+                        每 1 點傷害消耗 1 點護盾；優先消耗一次性護盾，再消耗自動護盾，最後才會扣血。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="clearUnitShield('${u.id}')" style="background:var(--accent-red);margin-right:auto;">清除護盾</button>
+                    <button class="modal-btn" onclick="closeShieldModal()" style="background:var(--bg-card);">取消</button>
+                    <button class="modal-btn" onclick="saveUnitShield('${u.id}')" style="background:var(--accent-green);color:#000;">儲存</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
+}
+
+function closeShieldModal() {
+    const modal = document.getElementById('shield-modal');
+    if (modal) modal.remove();
+}
+
+function saveUnitShield(unitId) {
+    const clampShield = v => Math.max(0, Math.min(999, parseInt(v) || 0));
+    const autoMax = clampShield(document.getElementById('shield-auto-max')?.value);
+    const autoCur = Math.min(clampShield(document.getElementById('shield-auto-cur')?.value), autoMax);
+    const temp = clampShield(document.getElementById('shield-temp')?.value);
+    applyShieldChange(unitId, autoMax, autoCur, temp);
+    closeShieldModal();
+}
+
+function clearUnitShield(unitId) {
+    applyShieldChange(unitId, 0, 0, 0);
+    closeShieldModal();
+}
+
+function applyShieldChange(unitId, autoMax, autoCur, temp) {
+    const u = findUnitById(unitId);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    u.shieldAutoMax = autoMax;
+    u.shieldAuto = autoCur;
+    u.shieldTemp = temp;
+
+    if (myRole === 'st') {
+        broadcastState();
+    } else {
+        sendToHost({
+            type: 'updateShield',
+            playerId: myPlayerId,
+            unitId: unitId,
+            shieldAutoMax: autoMax,
+            shieldAuto: autoCur,
+            shieldTemp: temp
+        });
+        renderAll();
+    }
+    showToast('🛡 護盾已更新');
+}
+
+// ===== 回合結束狀態結算提醒 =====
+/**
+ * 可自動結算的狀態規則（key = 狀態名稱，與 unit.status 的 key 對應）
+ */
+const TURN_END_RULES = {
+    '燃燒': { kind: 'damage', dmgType: 'l', desc: pts => `受到 ${pts} 點 L 傷（火焰）` },
+    '流血': { kind: 'damage', dmgType: 'l', desc: pts => `受到 ${pts} 點 L 傷（物理）` },
+    '再生': { kind: 'heal', desc: pts => `回復 ${pts} 點傷害` },
+    '尖釘': { kind: 'remind', desc: () => '回合結束受到流血，並增加麻痺點數（請手動處理）' }
+};
+
+/**
+ * 顯示回合結束狀態結算提醒（僅 ST，nextTurn 時觸發）
+ * @param {Object} unit - 剛結束回合的單位
+ */
+function showTurnEndSettlement(unit) {
+    if (myRole !== 'st' || !unit || !unit.status) return;
+
+    const items = [];
+    for (const [name, rule] of Object.entries(TURN_END_RULES)) {
+        if (unit.status[name] === undefined) continue;
+        const pts = parseInt(unit.status[name]) || 0;
+        if (rule.kind !== 'remind' && pts <= 0) continue;
+        items.push({ name, rule, pts });
+    }
+    if (items.length === 0) return;
+
+    closeTurnSettlement();
+
+    const itemsHtml = items.map(item => {
+        const statusDef = (typeof getStatusByName === 'function') ? getStatusByName(item.name) : null;
+        const icon = statusDef?.icon || '📌';
+        const actionBtn = item.rule.kind === 'remind'
+            ? ''
+            : `<button class="settlement-apply-btn" id="settle-btn-${encodeURIComponent(item.name)}"
+                   onclick="applyTurnEndItem('${unit.id}', '${encodeURIComponent(item.name)}')">套用</button>`;
+        return `
+            <div class="settlement-item">
+                <span class="settlement-label">${icon} ${escapeHtml(item.name)} ${item.pts || ''}：${escapeHtml(item.rule.desc(item.pts))}</span>
+                ${actionBtn}
+            </div>
+        `;
+    }).join('');
+
+    const hasApplicable = items.some(i => i.rule.kind !== 'remind');
+
+    const panel = document.createElement('div');
+    panel.id = 'turn-settlement-panel';
+    panel.className = 'turn-settlement-panel';
+    panel.innerHTML = `
+        <div class="settlement-header">
+            <span>⏳ 回合結束結算 — ${escapeHtml(unit.name || '單位')}</span>
+            <button class="settlement-close" onclick="closeTurnSettlement()">×</button>
+        </div>
+        <div class="settlement-body">${itemsHtml}</div>
+        <div class="settlement-footer">
+            ${hasApplicable ? `<button class="settlement-apply-all-btn" onclick="applyAllTurnEndItems('${unit.id}')">全部套用</button>` : ''}
+            <button class="settlement-skip-btn" onclick="closeTurnSettlement()">略過</button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+}
+
+function closeTurnSettlement() {
+    const panel = document.getElementById('turn-settlement-panel');
+    if (panel) panel.remove();
+}
+
+/**
+ * 套用單一回合結算項目
+ * @param {string} unitId - 單位 ID
+ * @param {string} encodedName - 編碼後的狀態名稱
+ */
+function applyTurnEndItem(unitId, encodedName) {
+    const name = decodeURIComponent(encodedName);
+    const u = findUnitById(unitId);
+    const rule = TURN_END_RULES[name];
+    if (!u || !rule || !u.status || u.status[name] === undefined) return;
+
+    const pts = parseInt(u.status[name]) || 0;
+    if (pts <= 0) return;
+
+    if (rule.kind === 'damage') {
+        modifyHPInternal(u, rule.dmgType, pts);
+        showToast(`${u.name || '單位'} 因 ${name} 受到 ${pts} 點 L 傷`);
+    } else if (rule.kind === 'heal') {
+        modifyHPInternal(u, 'heal', pts);
+        showToast(`${u.name || '單位'} 因 ${name} 回復 ${pts} 點傷害`);
+    }
+
+    broadcastState();
+
+    // 標記按鈕為已套用
+    const btn = document.getElementById('settle-btn-' + encodedName);
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = '✓ 已套用';
+        btn.classList.add('applied');
+    }
+}
+
+/**
+ * 套用全部可結算項目
+ * @param {string} unitId - 單位 ID
+ */
+function applyAllTurnEndItems(unitId) {
+    const panel = document.getElementById('turn-settlement-panel');
+    if (!panel) return;
+    panel.querySelectorAll('.settlement-apply-btn:not(.applied)').forEach(btn => btn.click());
+}
+
+// ===== 單位右鍵快速選單 =====
+/**
+ * 開啟單位快速操作選單（單位卡或地圖 token 按右鍵）
+ * @param {Event} event - contextmenu 事件
+ * @param {string} unitId - 單位 ID
+ */
+function openUnitContextMenu(event, unitId) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeUnitContextMenu();
+
+    const u = findUnitById(unitId);
+    if (!u) return;
+    // 無權限的單位不顯示選單（保留瀏覽器預設右鍵行為已被 preventDefault 擋掉也無妨）
+    if (typeof canControlUnit === 'function' && !canControlUnit(u)) return;
+
+    const isSt = myRole === 'st';
+    const isBoss = u.isBoss || u.type === 'boss';
+    const deployed = u.x >= 0;
+
+    const items = [
+        { icon: '⚔', label: '傷害面板', fn: `openHpModal('${u.id}','damage')` },
+        { icon: '💚', label: '治療面板', fn: `openHpModal('${u.id}','heal')` },
+        { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
+        { icon: '🛡', label: '設定護盾', fn: `openShieldModal('${u.id}')` },
+        { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` },
+        { icon: '♻', label: '重置血量', fn: `resetUnitHp('${u.id}')` }
+    ];
+    if (isSt) {
+        items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
+        if (isBoss) {
+            items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
+        }
+    }
+    items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
+
+    const menu = document.createElement('div');
+    menu.id = 'unit-context-menu';
+    menu.className = 'unit-context-menu';
+    menu.innerHTML = `
+        <div class="ucm-title">${escapeHtml(u.name || '單位')}</div>
+        ${items.map(it => `
+            <div class="ucm-item ${it.cls || ''}" onclick="closeUnitContextMenu();${it.fn}">
+                <span class="ucm-icon">${it.icon}</span>${it.label}
+            </div>
+        `).join('')}
+    `;
+    document.body.appendChild(menu);
+
+    // 定位在游標附近並夾限在視窗內
+    const W = menu.offsetWidth || 170;
+    const H = menu.offsetHeight || 280;
+    let x = event.clientX;
+    let y = event.clientY;
+    if (x + W > window.innerWidth - 8) x = window.innerWidth - W - 8;
+    if (y + H > window.innerHeight - 8) y = window.innerHeight - H - 8;
+    menu.style.left = Math.max(8, x) + 'px';
+    menu.style.top = Math.max(8, y) + 'px';
+
+    setTimeout(() => {
+        document.addEventListener('pointerdown', handleUcmOutsideClick, true);
+    }, 0);
+}
+
+function handleUcmOutsideClick(e) {
+    const menu = document.getElementById('unit-context-menu');
+    if (menu && !menu.contains(e.target)) closeUnitContextMenu();
+}
+
+function closeUnitContextMenu() {
+    const menu = document.getElementById('unit-context-menu');
+    if (menu) menu.remove();
+    document.removeEventListener('pointerdown', handleUcmOutsideClick, true);
 }

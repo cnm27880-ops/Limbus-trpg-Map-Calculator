@@ -268,6 +268,15 @@ function modifyHPInternal(unit, type, amount) {
             const idx = unit.hpArr.findIndex(x => x === 1);
             if (idx !== -1) unit.hpArr[idx] = 0;
         } else {
+            // 護盾先吸收傷害（每點傷害消耗 1 點護盾；一次性護盾優先消耗）
+            if ((unit.shieldTemp || 0) > 0) {
+                unit.shieldTemp--;
+                continue;
+            }
+            if ((unit.shieldAuto || 0) > 0) {
+                unit.shieldAuto--;
+                continue;
+            }
             // 造成傷害
             const val = type === 'b' ? 1 : type === 'l' ? 2 : 3;
             const emptyIdx = unit.hpArr.findIndex(x => x === 0);

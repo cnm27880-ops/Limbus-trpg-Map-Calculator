@@ -198,6 +198,25 @@ function saveCalcHudSettings() {
     } catch (e) {}
 }
 
+// ===== Position Clamping =====
+// 儲存的座標可能來自更大的視窗（例如從桌機換到筆電），
+// 開啟時若不夾限會整個面板落在螢幕外，看起來像「面板消失」
+function clampHudPosition(stateObj, panelId) {
+    const panel = document.getElementById(panelId);
+    const w = (panel && panel.offsetWidth) || 340;
+    stateObj.position.x = Math.max(-w + 100, Math.min(window.innerWidth - 100, stateObj.position.x));
+    stateObj.position.y = Math.max(0, Math.min(window.innerHeight - 50, stateObj.position.y));
+    if (panel) {
+        panel.style.left = stateObj.position.x + 'px';
+        panel.style.top = stateObj.position.y + 'px';
+    }
+}
+
+window.addEventListener('resize', () => {
+    if (skillHudState.isVisible) clampHudPosition(skillHudState, 'st-skill-hud');
+    if (calcHudState.isVisible) clampHudPosition(calcHudState, 'calc-hud');
+});
+
 // ===== Generic Draggable Panel Setup =====
 
 function setupPanelDrag(panelId, headerId, stateObj, saveFn) {
@@ -266,7 +285,6 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
 
     // Double-click to toggle collapse/expand
     header.addEventListener('dblclick', (e) => {
-        console.log('[Debug] 面板雙擊事件觸發！', { headerId, isCollapsed: stateObj.isCollapsed });
         if (e.target.closest('button')) return;
         const panel = document.getElementById(panelId);
         if (stateObj.isCollapsed) {
@@ -319,13 +337,18 @@ function createSkillHUD() {
                 </div>
                 <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
                     <label style="font-size:0.8rem; color:var(--text-dim); flex-shrink:0;">數值</label>
-                    <input type="number" id="st-aoe-value-input" value="10" style="flex:1; min-width:0; padding:4px;">
+                    <input type="number" id="st-aoe-value-input" value="1" min="1" style="flex:1; min-width:0; padding:4px;">
+                    <select id="st-aoe-dmg-type" style="flex:0 0 auto; padding:4px;" title="傷害類型">
+                        <option value="b">B傷</option>
+                        <option value="l" selected>L傷</option>
+                        <option value="a">A傷</option>
+                    </select>
                     <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-red); color:#fff;" onclick="executeStAoeAction('damage')">傷害</button>
                     <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-green); color:#fff;" onclick="executeStAoeAction('heal')">治癒</button>
                 </div>
                 <div style="display:flex; gap:5px; margin-bottom:5px;">
-                    <input type="text" id="st-aoe-status-id" placeholder="狀態 ID (如 bleed)" style="flex:2; min-width:0; padding:4px;">
-                    <input type="number" id="st-aoe-status-val" value="1" placeholder="層數" style="flex:1; min-width:0; padding:4px;">
+                    <input type="text" id="st-aoe-status-id" list="st-aoe-status-options" placeholder="狀態名稱（例：流血）" style="flex:2; min-width:0; padding:4px;">
+                    <input type="number" id="st-aoe-status-val" value="1" placeholder="層數" title="層數（負數可減層）" style="flex:1; min-width:0; padding:4px;">
                     <button class="skill-action-btn" style="flex:0 0 auto;" onclick="executeStAoeAction('status')">套用狀態</button>
                 </div>
                 <div style="display:flex; gap:5px;">
@@ -404,6 +427,7 @@ function showSkillHUD() {
     createSkillHUD();
     const hud = document.getElementById('st-skill-hud');
     if (hud) hud.classList.remove('hidden');
+    clampHudPosition(skillHudState, 'st-skill-hud');
     skillHudState.isVisible = true;
     saveSkillHudSettings();
     renderSkillHudContent();
@@ -425,6 +449,7 @@ function showCalcHUD() {
     createCalcHUD();
     const hud = document.getElementById('calc-hud');
     if (hud) hud.classList.remove('hidden');
+    clampHudPosition(calcHudState, 'calc-hud');
     calcHudState.isVisible = true;
     saveCalcHudSettings();
     moveCalcToHUD();
@@ -818,6 +843,16 @@ function filterSkillStatuses(query, formId) {
         });
     });
 
+    // 自訂狀態（房間共享）也納入搜尋
+    if (typeof state !== 'undefined' && Array.isArray(state.customStatuses)) {
+        state.customStatuses.forEach(s => {
+            if (!s || !s.id || alreadyIds.has(s.id)) return;
+            if ((s.name || '').toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) {
+                results.push(s);
+            }
+        });
+    }
+
     suggestBox.innerHTML = results.slice(0, 8).map(s =>
         `<div class="status-suggest-item" onclick="selectSkillStatus('${s.id}', '${formId}')">
             ${s.icon || ''} ${escapeHtml(s.name)}
@@ -876,11 +911,10 @@ function renderSelectedStatuses(formId) {
 }
 
 function getStatusName(statusId) {
-    if (!statusId || typeof STATUS_LIBRARY === 'undefined') return '';
-    for (const catKey of Object.keys(STATUS_LIBRARY)) {
-        const cat = STATUS_LIBRARY[catKey];
-        if (!cat || !Array.isArray(cat)) continue;
-        const found = cat.find(s => s.id === statusId);
+    if (!statusId) return '';
+    // getStatusById（status-config.js）涵蓋預設庫與自訂狀態
+    if (typeof getStatusById === 'function') {
+        const found = getStatusById(statusId);
         if (found) return (found.icon || '') + ' ' + found.name;
     }
     return statusId;
@@ -905,11 +939,9 @@ function updateEditingPassive(index, field, value) {
 }
 
 function getStatusDisplayName(statusId) {
-    if (!statusId || typeof STATUS_LIBRARY === 'undefined') return statusId;
-    for (const catKey of Object.keys(STATUS_LIBRARY)) {
-        const cat = STATUS_LIBRARY[catKey];
-        if (!cat || !Array.isArray(cat)) continue;
-        const found = cat.find(s => s.id === statusId);
+    if (!statusId) return statusId;
+    if (typeof getStatusById === 'function') {
+        const found = getStatusById(statusId);
         if (found) return found.name;
     }
     return statusId;
@@ -1165,10 +1197,31 @@ function toggleStAoePanel() {
     }
 }
 
+/**
+ * 建立 AOE 狀態名稱自動補全清單（含自訂狀態）
+ */
+function buildStAoeStatusDatalist() {
+    let dl = document.getElementById('st-aoe-status-options');
+    if (!dl) {
+        dl = document.createElement('datalist');
+        dl.id = 'st-aoe-status-options';
+        document.body.appendChild(dl);
+    }
+    const names = [];
+    if (typeof getAllStatuses === 'function') {
+        getAllStatuses().forEach(s => names.push(s.name));
+    }
+    if (typeof state !== 'undefined' && Array.isArray(state.customStatuses)) {
+        state.customStatuses.forEach(s => { if (s && s.name) names.push(s.name); });
+    }
+    dl.innerHTML = [...new Set(names)].map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+}
+
 function renderStAoeTargetList() {
     const listContainer = document.getElementById('st-aoe-target-list');
     if (!listContainer) return;
     listContainer.innerHTML = '';
+    buildStAoeStatusDatalist();
 
     if (!state.units || state.units.length === 0) {
         listContainer.innerHTML = '<div style="color:var(--text-dim);">場上無單位</div>';
@@ -1228,16 +1281,19 @@ function executeStAoeAction(type) {
 
     if (type === 'damage' || type === 'heal') {
         const val = parseInt(document.getElementById('st-aoe-value-input').value);
-        if (isNaN(val)) {
+        if (isNaN(val) || val <= 0) {
             if (typeof showToast === 'function') showToast('請輸入有效數值');
             return;
         }
         actionData.value = val;
+        if (type === 'damage') {
+            actionData.dmgType = document.getElementById('st-aoe-dmg-type')?.value || 'l';
+        }
     } else if (type === 'status') {
         const statusId = document.getElementById('st-aoe-status-id').value.trim();
         const val = parseInt(document.getElementById('st-aoe-status-val').value) || 0;
         if (!statusId) {
-            if (typeof showToast === 'function') showToast('請輸入狀態 ID');
+            if (typeof showToast === 'function') showToast('請輸入狀態名稱');
             return;
         }
         actionData.statusId = statusId;
@@ -1247,7 +1303,10 @@ function executeStAoeAction(type) {
     if (typeof applyBatchAction === 'function') {
         applyBatchAction(unitIds, actionData);
         if (typeof showToast === 'function') {
-            if (type === 'damage') showToast(`對 ${unitIds.length} 個目標造成 ${actionData.value} 點傷害`);
+            if (type === 'damage') {
+                const typeLabel = { b: 'B', l: 'L', a: 'A' }[actionData.dmgType] || '';
+                showToast(`對 ${unitIds.length} 個目標造成 ${actionData.value} 點 ${typeLabel} 傷`);
+            }
             else if (type === 'heal') showToast(`為 ${unitIds.length} 個目標治癒 ${actionData.value} 點`);
             else if (type === 'status') showToast(`對 ${unitIds.length} 個目標套用狀態 ${actionData.statusId}`);
         }

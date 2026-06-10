@@ -566,6 +566,11 @@ function loadRoomData(data) {
         state.customStatuses = [];
     }
 
+    // 載入地圖背景圖（房間共享）
+    if (typeof data.mapBg === 'string' && data.mapBg.startsWith('data:image/')) {
+        state.mapBgImage = data.mapBg;
+    }
+
     // 載入調色盤
     if (data.mapPalette) {
         state.mapPalette = Array.isArray(data.mapPalette) ? data.mapPalette : Object.values(data.mapPalette);
@@ -614,6 +619,26 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('mapPalette').off('value', paletteListener));
 
+    // 監聽地圖背景圖變更（ST 上傳後同步給所有玩家）
+    const mapBgListener = roomRef.child('mapBg').on('value', snapshot => {
+        const val = snapshot.exists() ? snapshot.val() : null;
+        if (typeof val === 'string' && val.startsWith('data:image/') && val.length < 3000000) {
+            state.mapBgImage = val;
+        } else if (!val) {
+            // 節點不存在：若 ST 本機留有舊版背景圖（更新前只存 localStorage），補同步到房間
+            if (myRole === 'st' && state.mapBgImage) {
+                roomRef.child('mapBg').set(state.mapBgImage);
+                return; // 寫入後監聽器會再次觸發
+            }
+            state.mapBgImage = null;
+        } else {
+            console.warn('[Security] 背景圖資料格式不正確，已忽略');
+            return;
+        }
+        if (typeof applyMapBg === 'function') applyMapBg();
+    });
+    unsubscribeListeners.push(() => roomRef.child('mapBg').off('value', mapBgListener));
+
     // 監聽單位變更
     const unitsListener = roomRef.child('units').on('value', snapshot => {
         if (snapshot.exists()) {
@@ -632,6 +657,11 @@ function setupRoomListeners() {
                 u.init = (typeof u.init === 'number') ? Math.max(-999, Math.min(999, Math.floor(u.init))) : 0;
                 u.size = [1, 2, 3].includes(u.size) ? u.size : 1;
                 u.hidden = u.hidden === true;  // 確保 hidden 永遠是 boolean（舊單位沒有此欄位時為 false）
+                // 護盾欄位消毒（0~999 的整數）
+                const clampShield = v => (typeof v === 'number' && v > 0) ? Math.min(999, Math.floor(v)) : 0;
+                u.shieldAutoMax = clampShield(u.shieldAutoMax);
+                u.shieldAuto = clampShield(u.shieldAuto);
+                u.shieldTemp = clampShield(u.shieldTemp);
                 u.avatar = (typeof u.avatar === 'string' && u.avatar.startsWith('data:image/') && u.avatar.length < 500000) ? u.avatar : (u.avatar || null);
                 if (u.status && typeof u.status === 'object') {
                     // 過濾掉 __proto__ 等危險鍵
@@ -958,6 +988,14 @@ function syncMapPalette() {
 }
 
 /**
+ * 更新地圖背景圖到 Firebase（僅 ST，上傳/清除時呼叫）
+ */
+function syncMapBg() {
+    if (!roomRef || myRole !== 'st') return;
+    roomRef.child('mapBg').set(state.mapBgImage || null);
+}
+
+/**
  * 更新單位到 Firebase
  * 注意：會自動為每個單位設定 sortOrder 以保持排序順序
  */
@@ -1091,6 +1129,22 @@ function sendToHost(message) {
             if (unit) {
                 modifyHPInternal(unit, message.dmgType, message.amount);
                 roomRef.child(`units/${message.unitId}/hpArr`).set(unit.hpArr);
+                // 護盾可能在 modifyHPInternal 中被消耗，一併同步
+                roomRef.child(`units/${message.unitId}/shieldTemp`).set(unit.shieldTemp || 0);
+                roomRef.child(`units/${message.unitId}/shieldAuto`).set(unit.shieldAuto || 0);
+            }
+            break;
+
+        case 'updateShield':
+            const shieldUnit = state.units.find(u => u.id === message.unitId);
+            if (shieldUnit) {
+                const clampShieldVal = v => Math.max(0, Math.min(999, parseInt(v) || 0));
+                shieldUnit.shieldAutoMax = clampShieldVal(message.shieldAutoMax);
+                shieldUnit.shieldAuto = clampShieldVal(message.shieldAuto);
+                shieldUnit.shieldTemp = clampShieldVal(message.shieldTemp);
+                roomRef.child(`units/${message.unitId}/shieldAutoMax`).set(shieldUnit.shieldAutoMax);
+                roomRef.child(`units/${message.unitId}/shieldAuto`).set(shieldUnit.shieldAuto);
+                roomRef.child(`units/${message.unitId}/shieldTemp`).set(shieldUnit.shieldTemp);
             }
             break;
 

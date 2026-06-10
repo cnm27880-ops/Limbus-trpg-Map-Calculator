@@ -900,6 +900,184 @@
     font-style: italic;
 }
 
+/* 狀態網格操作提示 */
+.status-grid-hint {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    padding: 0 2px 8px;
+}
+
+/* 狀態卡右側（類型標籤 + 詳情按鈕） */
+.status-card-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.status-card-info-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.status-card-info-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+/* 目前狀態的 −/+ 快速調層 */
+.stack-adjust-btn {
+    width: 18px;
+    height: 18px;
+    margin: 0 1px;
+    border-radius: 4px;
+    border: 1px solid var(--status-color, #666);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--status-color, var(--text-main));
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.stack-adjust-btn:hover {
+    background: var(--status-color, #666);
+    color: #000;
+}
+
+.stack-value {
+    min-width: 16px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* ===== 狀態快速調整浮窗 ===== */
+.status-quick-popover {
+    position: fixed;
+    z-index: 3000;
+    width: 250px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    animation: popoverIn 0.12s ease-out;
+}
+
+@keyframes popoverIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.status-quick-popover .popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    font-weight: bold;
+    font-size: 0.85rem;
+    color: var(--text-main);
+}
+
+.status-quick-popover .popover-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.status-quick-popover .popover-close:hover {
+    color: var(--accent-red);
+}
+
+.status-quick-popover .popover-desc {
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    max-height: 90px;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--border);
+}
+
+.status-quick-popover .popover-stack-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 10px;
+}
+
+.status-quick-popover .popover-stack-btn {
+    flex: 0 0 auto;
+    min-width: 32px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.1s;
+}
+
+.status-quick-popover .popover-stack-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+.status-quick-popover .popover-stack-btn:active {
+    transform: scale(0.94);
+}
+
+.status-quick-popover #popover-stack-input {
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+    text-align: center;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.status-quick-popover .popover-footer {
+    padding: 0 10px 10px;
+}
+
+.status-quick-popover .popover-remove-btn {
+    width: 100%;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-red);
+    background: rgba(244, 67, 54, 0.1);
+    color: var(--accent-red);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.status-quick-popover .popover-remove-btn:hover {
+    background: var(--accent-red);
+    color: #000;
+}
+
 /* Status Detail Overlay */
 .status-detail-overlay {
     position: fixed;
@@ -3169,3 +3347,202 @@ body.combat-mode .boss-hud-container {
     background: var(--accent-red);
 }
 
+
+/* ===== 玩家視角百分比血條 ===== */
+.hp-percent-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+.hp-percent-fill.pct-high { background: linear-gradient(90deg, #2e7d32, #66bb6a); }
+.hp-percent-fill.pct-mid { background: linear-gradient(90deg, #f9a825, #fdd835); }
+.hp-percent-fill.pct-low { background: linear-gradient(90deg, #b71c1c, #ef5350); }
+
+/* 側欄先攻列表的百分比血條容器 */
+.hp-tactical-percent {
+    flex: 1;
+    height: 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+/* ===== 護盾徽章 ===== */
+.shield-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.shield-badge.shield-auto {
+    border: 1px solid #29b6f6;
+    color: #29b6f6;
+    background: rgba(41, 182, 246, 0.1);
+}
+
+.shield-badge.shield-temp {
+    border: 1px solid #b0bec5;
+    color: #b0bec5;
+    background: rgba(176, 190, 197, 0.1);
+}
+
+/* ===== 回合結束結算提醒面板 ===== */
+.turn-settlement-panel {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2500;
+    width: 340px;
+    max-width: 92vw;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent-yellow);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    animation: popoverIn 0.15s ease-out;
+}
+
+.turn-settlement-panel .settlement-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(253, 216, 53, 0.1);
+    border-bottom: 1px solid var(--border);
+    font-weight: bold;
+    font-size: 0.85rem;
+    color: var(--accent-yellow);
+}
+
+.turn-settlement-panel .settlement-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.turn-settlement-panel .settlement-body {
+    padding: 8px 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.settlement-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.8rem;
+    color: var(--text-main);
+}
+
+.settlement-item:last-child { border-bottom: none; }
+
+.settlement-apply-btn {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-green);
+    background: rgba(0, 230, 118, 0.1);
+    color: var(--accent-green);
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.settlement-apply-btn:hover { background: var(--accent-green); color: #000; }
+
+.settlement-apply-btn.applied,
+.settlement-apply-btn:disabled {
+    border-color: var(--border);
+    background: var(--bg-input);
+    color: var(--text-dim);
+    cursor: default;
+}
+
+.turn-settlement-panel .settlement-footer {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+}
+
+.settlement-apply-all-btn {
+    flex: 1;
+    padding: 6px;
+    border-radius: 6px;
+    border: none;
+    background: var(--accent-green);
+    color: #000;
+    font-weight: bold;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.settlement-skip-btn {
+    flex: 1;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+/* ===== 單位右鍵快速選單 ===== */
+.unit-context-menu {
+    position: fixed;
+    z-index: 3000;
+    min-width: 160px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    animation: popoverIn 0.12s ease-out;
+    padding-bottom: 4px;
+}
+
+.unit-context-menu .ucm-title {
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    font-weight: bold;
+    font-size: 0.8rem;
+    color: var(--accent-yellow);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.unit-context-menu .ucm-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    font-size: 0.82rem;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.unit-context-menu .ucm-item:hover { background: var(--bg-input); }
+
+.unit-context-menu .ucm-item.danger { color: var(--accent-red); }
+
+.unit-context-menu .ucm-icon {
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}

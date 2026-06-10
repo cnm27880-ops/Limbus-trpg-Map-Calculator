@@ -59,6 +59,7 @@ function openStatusModal(unitId) {
 
                     <!-- 狀態網格 -->
                     <div class="status-grid-container">
+                        <div class="status-grid-hint">💡 點一下狀態卡＝立即套用（累積型每次 +1、開關型可切換）；點 ℹ 可查看詳情或指定層數</div>
                         <div class="status-grid" id="status-grid">
                             ${renderStatusGrid('common')}
                         </div>
@@ -184,16 +185,58 @@ function renderStatusCard(status) {
     return `
         <div class="status-card" data-status-id="${status.id}"
              style="border-left-color:${borderColor}"
-             onclick="selectStatus('${status.id}')">
+             onclick="quickApplyStatus('${status.id}')">
             ${deleteBtn}
             <div class="status-card-icon">${status.icon}</div>
             <div class="status-card-info">
                 <div class="status-card-name">${status.name}</div>
                 <div class="status-card-desc">${status.desc}</div>
             </div>
-            <div class="status-card-type ${status.type}">${status.type === 'stack' ? '累積' : '開關'}</div>
+            <div class="status-card-side">
+                <div class="status-card-type ${status.type}">${status.type === 'stack' ? '累積' : '開關'}</div>
+                <button class="status-card-info-btn" onclick="event.stopPropagation();selectStatus('${status.id}')" title="查看詳情／指定層數">ℹ</button>
+            </div>
         </div>
     `;
+}
+
+/**
+ * 一鍵套用狀態到當前單位（點擊狀態卡直接生效）
+ * 累積型：每次點擊 +1 層；開關型：已存在則移除（切換）
+ * @param {string} statusId - 狀態 ID
+ */
+function quickApplyStatus(statusId) {
+    if (!currentStatusUnitId) return;
+
+    const status = getStatusById(statusId);
+    if (!status) return;
+
+    const unit = findUnitById(currentStatusUnitId);
+    if (!unit) return;
+
+    if (status.type === 'binary' && unit.status && unit.status[status.name] !== undefined) {
+        removeStatusFromUnit(currentStatusUnitId, status.name);
+    } else {
+        addStatusToUnit(currentStatusUnitId, statusId, status.type === 'stack' ? 1 : null);
+        trackStatusUsage(statusId);
+        recordRecentStatus(statusId);
+    }
+
+    refreshStatusModalViews();
+}
+
+/**
+ * 刷新狀態 Modal 內的「目前狀態」與「最近使用」區塊
+ */
+function refreshStatusModalViews() {
+    if (!currentStatusUnitId) return;
+    const unit = findUnitById(currentStatusUnitId);
+    if (unit) {
+        const container = document.getElementById('current-statuses-list');
+        if (container) container.innerHTML = renderCurrentStatuses(unit);
+    }
+    const recentBar = document.getElementById('recent-status-bar');
+    if (recentBar) recentBar.innerHTML = renderRecentStatusBar();
 }
 
 /**
@@ -213,15 +256,47 @@ function renderCurrentStatuses(unit) {
         const statusDef = getStatusByName(name);
         const icon = statusDef?.icon || '📌';
         const color = statusDef ? (STATUS_CATEGORIES[getStatusCategory(statusDef.id)]?.color || '#666') : '#666';
+        const enc = encodeStatusArg(name);
+
+        // 累積型（或值看起來是數字的自訂狀態）顯示 −/+ 快速調整
+        const isStack = statusDef ? statusDef.type === 'stack' : (value !== '' && !isNaN(parseInt(value)));
+        const valueHtml = isStack
+            ? `<button class="stack-adjust-btn" onclick="event.stopPropagation();adjustCurrentStatusStacks('${enc}',-1)" title="減 1 層">−</button><span class="stack-value">${escapeHtml(value || '0')}</span><button class="stack-adjust-btn" onclick="event.stopPropagation();adjustCurrentStatusStacks('${enc}',1)" title="加 1 層">+</button>`
+            : (value ? ` (${escapeHtml(value)})` : '');
 
         return `
             <span class="current-status-tag" style="--status-color:${color}">
-                ${icon} ${name}${value ? ` (${value})` : ''}
-                <button class="remove-status-btn" onclick="event.stopPropagation();removeStatusFromUnit('${currentStatusUnitId}','${name}')"
+                ${icon} ${escapeHtml(name)}${valueHtml}
+                <button class="remove-status-btn" onclick="event.stopPropagation();removeStatusFromUnit('${currentStatusUnitId}',decodeURIComponent('${enc}'))"
                         title="移除此狀態">×</button>
             </span>
         `;
     }).join('');
+}
+
+/**
+ * 將狀態名稱編碼為可安全嵌入 onclick 屬性的字串
+ * （encodeURIComponent 不會處理單引號，需額外取代）
+ * @param {string} name - 狀態名稱
+ */
+function encodeStatusArg(name) {
+    return encodeURIComponent(name).replace(/'/g, '%27');
+}
+
+/**
+ * 在狀態 Modal 中快速增減目前狀態的層數
+ * @param {string} encodedName - 編碼後的狀態名稱
+ * @param {number} delta - 增減量
+ */
+function adjustCurrentStatusStacks(encodedName, delta) {
+    if (!currentStatusUnitId) return;
+    const name = decodeURIComponent(encodedName);
+    const unit = findUnitById(currentStatusUnitId);
+    if (!unit || !unit.status || unit.status[name] === undefined) return;
+
+    const current = parseInt(unit.status[name]) || 0;
+    updateStatusStacks(currentStatusUnitId, name, current + delta);
+    refreshStatusModalViews();
 }
 
 /**
@@ -400,14 +475,8 @@ function addStatusToCurrentUnit(statusId) {
     trackStatusUsage(statusId);
     recordRecentStatus(statusId);
 
-    // 刷新目前狀態列表
-    const unit = findUnitById(currentStatusUnitId);
-    if (unit) {
-        const container = document.getElementById('current-statuses-list');
-        if (container) {
-            container.innerHTML = renderCurrentStatuses(unit);
-        }
-    }
+    // 刷新目前狀態與最近使用列表
+    refreshStatusModalViews();
 }
 
 /**
@@ -461,11 +530,11 @@ function addStatusToUnit(unitId, statusId, stacks = null) {
     if (status.type === 'stack') {
         const existing = parseInt(unit.status[status.name]) || 0;
         unit.status[status.name] = (existing + (stacks || 1)).toString();
+        showToast(`已新增 ${status.name}（共 ${unit.status[status.name]} 層）`);
     } else {
         unit.status[status.name] = '';
+        showToast(`已新增 ${status.name}`);
     }
-
-    showToast(`已新增 ${status.name}`);
     syncUnitStatus(unitId);
     renderUnitsList();
     renderSidebarUnits();
@@ -698,33 +767,144 @@ function createCustomStatus() {
 // ===== 快速操作（用於單位卡片上的狀態標籤） =====
 
 /**
- * 點擊狀態標籤（增減數值或顯示詳情）
+ * 點擊單位卡上的狀態標籤 → 開啟快速調整浮窗
+ * （取代原本的 prompt 輸入框，可直接 −/+ 調層、移除、查看說明）
+ * @param {Event} event - 點擊事件（用於定位浮窗）
  * @param {string} unitId - 單位 ID
- * @param {string} statusName - 狀態名稱
+ * @param {string} encodedName - 編碼後的狀態名稱
  */
-function onStatusTagClick(unitId, statusName) {
+function onStatusTagClick(event, unitId, encodedName) {
+    const statusName = decodeURIComponent(encodedName);
     const unit = findUnitById(unitId);
-    if (!unit || !unit.status) return;
+    if (!unit || !unit.status || unit.status[statusName] === undefined) return;
 
     const statusDef = getStatusByName(statusName);
 
-    if (statusDef && statusDef.type === 'stack') {
-        // 累積型：顯示調整面板
-        const currentValue = parseInt(unit.status[statusName]) || 1;
-        const newValue = prompt(`調整 ${statusName} 數值（目前：${currentValue}）：`, currentValue);
-
-        if (newValue !== null) {
-            const parsed = parseInt(newValue);
-            if (!isNaN(parsed)) {
-                updateStatusStacks(unitId, statusName, parsed);
-            }
-        }
-    } else {
-        // 開關型或自訂：顯示說明
+    // 無權限：只顯示說明
+    if (typeof canControlUnit === 'function' && !canControlUnit(unit)) {
         if (statusDef) {
             alert(`${statusDef.icon} ${statusDef.name}\n\n${statusDef.fullDesc || statusDef.desc}`);
         }
+        return;
     }
+
+    openStatusQuickPopover(event, unitId, statusName, statusDef);
+}
+
+// ===== 狀態快速調整浮窗 =====
+let statusPopoverTarget = null;  // { unitId, statusName }
+
+/**
+ * 開啟狀態快速調整浮窗
+ */
+function openStatusQuickPopover(event, unitId, statusName, statusDef) {
+    closeStatusQuickPopover();
+
+    const unit = findUnitById(unitId);
+    if (!unit || !unit.status) return;
+
+    const rawValue = unit.status[statusName];
+    const isStack = statusDef ? statusDef.type === 'stack' : (rawValue !== '' && !isNaN(parseInt(rawValue)));
+    const icon = statusDef?.icon || '📌';
+    const desc = statusDef ? (statusDef.fullDesc || statusDef.desc || '') : '';
+
+    statusPopoverTarget = { unitId, statusName };
+
+    const stackControls = isStack ? `
+        <div class="popover-stack-row">
+            <button class="popover-stack-btn" onclick="popoverAdjustStacks(-5)">−5</button>
+            <button class="popover-stack-btn" onclick="popoverAdjustStacks(-1)">−</button>
+            <input type="number" id="popover-stack-input" value="${parseInt(rawValue) || 1}" min="0"
+                   onchange="popoverSetStacks(this.value)">
+            <button class="popover-stack-btn" onclick="popoverAdjustStacks(1)">+</button>
+            <button class="popover-stack-btn" onclick="popoverAdjustStacks(5)">+5</button>
+        </div>` : '';
+
+    const pop = document.createElement('div');
+    pop.id = 'status-quick-popover';
+    pop.className = 'status-quick-popover';
+    pop.innerHTML = `
+        <div class="popover-header">
+            <span class="popover-title">${icon} ${escapeHtml(statusName)}</span>
+            <button class="popover-close" onclick="closeStatusQuickPopover()">×</button>
+        </div>
+        ${desc ? `<div class="popover-desc">${escapeHtml(desc)}</div>` : ''}
+        ${stackControls}
+        <div class="popover-footer">
+            <button class="popover-remove-btn" onclick="popoverRemoveStatus()">🗑 移除狀態</button>
+        </div>
+    `;
+    document.body.appendChild(pop);
+
+    // 定位在點擊位置附近，並夾限在視窗內
+    const W = pop.offsetWidth || 240;
+    const H = pop.offsetHeight || 130;
+    let x = event.clientX - W / 2;
+    let y = event.clientY + 12;
+    x = Math.max(8, Math.min(window.innerWidth - W - 8, x));
+    if (y + H > window.innerHeight - 8) y = event.clientY - H - 12;
+    pop.style.left = x + 'px';
+    pop.style.top = Math.max(8, y) + 'px';
+
+    // 點擊浮窗外部時關閉（延遲註冊，避免吃到當前點擊）
+    setTimeout(() => {
+        document.addEventListener('pointerdown', handlePopoverOutsideClick, true);
+    }, 0);
+}
+
+function handlePopoverOutsideClick(e) {
+    const pop = document.getElementById('status-quick-popover');
+    if (pop && !pop.contains(e.target)) closeStatusQuickPopover();
+}
+
+function closeStatusQuickPopover() {
+    const pop = document.getElementById('status-quick-popover');
+    if (pop) pop.remove();
+    statusPopoverTarget = null;
+    document.removeEventListener('pointerdown', handlePopoverOutsideClick, true);
+}
+
+/**
+ * 浮窗內增減層數（即時生效並同步）
+ */
+function popoverAdjustStacks(delta) {
+    if (!statusPopoverTarget) return;
+    const { unitId, statusName } = statusPopoverTarget;
+    const unit = findUnitById(unitId);
+    if (!unit || !unit.status || unit.status[statusName] === undefined) {
+        closeStatusQuickPopover();
+        return;
+    }
+
+    const current = parseInt(unit.status[statusName]) || 0;
+    const newVal = current + delta;
+    updateStatusStacks(unitId, statusName, newVal);
+
+    if (newVal <= 0) {
+        closeStatusQuickPopover();
+    } else {
+        const input = document.getElementById('popover-stack-input');
+        if (input) input.value = newVal;
+    }
+}
+
+/**
+ * 浮窗內直接輸入層數
+ */
+function popoverSetStacks(value) {
+    if (!statusPopoverTarget) return;
+    const parsed = parseInt(value);
+    if (isNaN(parsed)) return;
+    const { unitId, statusName } = statusPopoverTarget;
+    updateStatusStacks(unitId, statusName, parsed);
+    if (parsed <= 0) closeStatusQuickPopover();
+}
+
+function popoverRemoveStatus() {
+    if (!statusPopoverTarget) return;
+    const { unitId, statusName } = statusPopoverTarget;
+    removeStatusFromUnit(unitId, statusName);
+    closeStatusQuickPopover();
 }
 
 // ===== 最近使用狀態 (Recent Usage - LRU) =====

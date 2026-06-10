@@ -15,6 +15,7 @@ function triggerMapBgUpload() {
 }
 
 function handleMapBgUpload(input) {
+    if (myRole !== 'st') return;
     const file = input.files[0];
     if (!file || !file.type.startsWith('image/')) return;
     if (file.size > 10 * 1024 * 1024) {
@@ -24,20 +25,67 @@ function handleMapBgUpload(input) {
     }
     const reader = new FileReader();
     reader.onload = function(e) {
-        state.mapBgImage = e.target.result;
-        applyMapBg();
-        saveMapBgToStorage();
-        renderMap();
-        if (typeof showToast === 'function') showToast('背景圖已設定');
+        const img = new Image();
+        img.onload = function() {
+            // 壓縮後才能存進 Firebase 同步給玩家（原圖可能太大）
+            const compressed = compressMapBgImage(img);
+            if (!compressed) {
+                if (typeof showToast === 'function') showToast('背景圖處理失敗');
+                return;
+            }
+            state.mapBgImage = compressed;
+            applyMapBg();
+            saveMapBgToStorage();
+            if (typeof syncMapBg === 'function') syncMapBg();
+            renderMap();
+            if (typeof showToast === 'function') showToast('背景圖已設定，並同步給所有玩家');
+        };
+        img.onerror = function() {
+            if (typeof showToast === 'function') showToast('圖片載入失敗');
+        };
+        img.src = e.target.result;
     };
     reader.readAsDataURL(file);
     input.value = '';
+}
+
+/**
+ * 壓縮背景圖：長邊縮到 1600px，輸出 JPEG
+ * 並逐步降低品質直到 base64 小於 900KB（Firebase 同步用）
+ */
+function compressMapBgImage(img) {
+    try {
+        const MAX_DIM = 1600;
+        const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, w, h);
+
+        let quality = 0.85;
+        let out = canvas.toDataURL('image/jpeg', quality);
+        while (out.length > 900000 && quality > 0.4) {
+            quality -= 0.15;
+            out = canvas.toDataURL('image/jpeg', quality);
+        }
+        return out;
+    } catch (e) {
+        console.error('背景圖壓縮失敗:', e);
+        return null;
+    }
 }
 
 function clearMapBg() {
     state.mapBgImage = null;
     applyMapBg();
     saveMapBgToStorage();
+    if (typeof syncMapBg === 'function') syncMapBg();
     renderMap();
     if (typeof showToast === 'function') showToast('背景圖已清除');
 }

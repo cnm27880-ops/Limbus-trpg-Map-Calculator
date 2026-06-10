@@ -163,8 +163,10 @@ function undoLastBatch() {
 
 /**
  * 批次套用動作到選定的單位集合
+ * 注意：本系統的血量模型是 hpArr（每格 0=完好/1=B/2=L/3=A），
+ * 狀態則以「狀態名稱 → 字串層數」存於 unit.status
  * @param {Array} unitIds
- * @param {Object} actionData - { type: 'damage'|'heal'|'status', value: number, statusId: string }
+ * @param {Object} actionData - { type: 'damage'|'heal'|'status', value: number, dmgType: 'b'|'l'|'a', statusId: string }
  */
 function applyBatchAction(unitIds, actionData) {
     if (!unitIds || unitIds.length === 0) return;
@@ -174,34 +176,36 @@ function applyBatchAction(unitIds, actionData) {
         const u = findUnitById(id);
         if (!u) return;
 
-        if (actionData.type === 'damage') {
+        if (actionData.type === 'damage' || actionData.type === 'heal') {
             const val = parseInt(actionData.value) || 0;
-            if (u.shield && u.shield > 0) {
-                if (val <= u.shield) {
-                    u.shield -= val;
+            if (val > 0 && typeof modifyHPInternal === 'function') {
+                const hpType = actionData.type === 'heal' ? 'heal' : (actionData.dmgType || 'l');
+                modifyHPInternal(u, hpType, val);
+            }
+        } else if (actionData.type === 'status') {
+            // 以 ID 或名稱解析狀態定義（支援自訂狀態）
+            let def = (typeof getStatusById === 'function') ? getStatusById(actionData.statusId) : null;
+            if (!def && typeof getStatusByName === 'function') def = getStatusByName(actionData.statusId);
+
+            const key = def ? def.name : actionData.statusId;
+            const change = parseInt(actionData.value) || 0;
+            if (!u.status) u.status = {};
+
+            if (def && def.type === 'binary') {
+                // 開關型：正數 = 套用、負數 = 移除
+                if (change < 0) {
+                    delete u.status[key];
                 } else {
-                    const remain = val - u.shield;
-                    u.shield = 0;
-                    u.hp = Math.max(0, u.hp - remain);
+                    u.status[key] = '';
                 }
             } else {
-                u.hp = Math.max(0, u.hp - val);
-            }
-        } else if (actionData.type === 'heal') {
-            const val = parseInt(actionData.value) || 0;
-            u.hp = Math.min(u.maxHp, u.hp + val);
-        } else if (actionData.type === 'status') {
-            if (typeof updateUnitStatus === 'function') {
-                // 如果需要增減狀態，呼叫既有邏輯（需確保 updateUnitStatus 支援該參數結構）
-                // 這裡實作簡單直接改物件
-                if (!u.status) u.status = {};
-                const current = u.status[actionData.statusId] || 0;
-                const change = parseInt(actionData.value) || 0;
-                const newVal = current + change;
+                // 累積型：與現有層數相加（負數可減層）
+                const current = parseInt(u.status[key]) || 0;
+                const newVal = current + (change || 1);
                 if (newVal <= 0) {
-                    delete u.status[actionData.statusId];
+                    delete u.status[key];
                 } else {
-                    u.status[actionData.statusId] = newVal;
+                    u.status[key] = newVal.toString();
                 }
             }
         }

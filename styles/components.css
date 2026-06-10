@@ -900,6 +900,184 @@
     font-style: italic;
 }
 
+/* 狀態網格操作提示 */
+.status-grid-hint {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    padding: 0 2px 8px;
+}
+
+/* 狀態卡右側（類型標籤 + 詳情按鈕） */
+.status-card-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.status-card-info-btn {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.status-card-info-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+/* 目前狀態的 −/+ 快速調層 */
+.stack-adjust-btn {
+    width: 18px;
+    height: 18px;
+    margin: 0 1px;
+    border-radius: 4px;
+    border: 1px solid var(--status-color, #666);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--status-color, var(--text-main));
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+}
+
+.stack-adjust-btn:hover {
+    background: var(--status-color, #666);
+    color: #000;
+}
+
+.stack-value {
+    min-width: 16px;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* ===== 狀態快速調整浮窗 ===== */
+.status-quick-popover {
+    position: fixed;
+    z-index: 3000;
+    width: 250px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+    animation: popoverIn 0.12s ease-out;
+}
+
+@keyframes popoverIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.status-quick-popover .popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    font-weight: bold;
+    font-size: 0.85rem;
+    color: var(--text-main);
+}
+
+.status-quick-popover .popover-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.status-quick-popover .popover-close:hover {
+    color: var(--accent-red);
+}
+
+.status-quick-popover .popover-desc {
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    max-height: 90px;
+    overflow-y: auto;
+    border-bottom: 1px solid var(--border);
+}
+
+.status-quick-popover .popover-stack-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 10px;
+}
+
+.status-quick-popover .popover-stack-btn {
+    flex: 0 0 auto;
+    min-width: 32px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.1s;
+}
+
+.status-quick-popover .popover-stack-btn:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+.status-quick-popover .popover-stack-btn:active {
+    transform: scale(0.94);
+}
+
+.status-quick-popover #popover-stack-input {
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+    text-align: center;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.status-quick-popover .popover-footer {
+    padding: 0 10px 10px;
+}
+
+.status-quick-popover .popover-remove-btn {
+    width: 100%;
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-red);
+    background: rgba(244, 67, 54, 0.1);
+    color: var(--accent-red);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.status-quick-popover .popover-remove-btn:hover {
+    background: var(--accent-red);
+    color: #000;
+}
+
 /* Status Detail Overlay */
 .status-detail-overlay {
     position: fixed;

@@ -566,6 +566,11 @@ function loadRoomData(data) {
         state.customStatuses = [];
     }
 
+    // 載入地圖背景圖（房間共享）
+    if (typeof data.mapBg === 'string' && data.mapBg.startsWith('data:image/')) {
+        state.mapBgImage = data.mapBg;
+    }
+
     // 載入調色盤
     if (data.mapPalette) {
         state.mapPalette = Array.isArray(data.mapPalette) ? data.mapPalette : Object.values(data.mapPalette);
@@ -613,6 +618,26 @@ function setupRoomListeners() {
         renderMap();
     });
     unsubscribeListeners.push(() => roomRef.child('mapPalette').off('value', paletteListener));
+
+    // 監聽地圖背景圖變更（ST 上傳後同步給所有玩家）
+    const mapBgListener = roomRef.child('mapBg').on('value', snapshot => {
+        const val = snapshot.exists() ? snapshot.val() : null;
+        if (typeof val === 'string' && val.startsWith('data:image/') && val.length < 3000000) {
+            state.mapBgImage = val;
+        } else if (!val) {
+            // 節點不存在：若 ST 本機留有舊版背景圖（更新前只存 localStorage），補同步到房間
+            if (myRole === 'st' && state.mapBgImage) {
+                roomRef.child('mapBg').set(state.mapBgImage);
+                return; // 寫入後監聽器會再次觸發
+            }
+            state.mapBgImage = null;
+        } else {
+            console.warn('[Security] 背景圖資料格式不正確，已忽略');
+            return;
+        }
+        if (typeof applyMapBg === 'function') applyMapBg();
+    });
+    unsubscribeListeners.push(() => roomRef.child('mapBg').off('value', mapBgListener));
 
     // 監聽單位變更
     const unitsListener = roomRef.child('units').on('value', snapshot => {
@@ -955,6 +980,14 @@ function syncMapData() {
 function syncMapPalette() {
     if (!roomRef) return;
     roomRef.child('mapPalette').set(state.mapPalette || []);
+}
+
+/**
+ * 更新地圖背景圖到 Firebase（僅 ST，上傳/清除時呼叫）
+ */
+function syncMapBg() {
+    if (!roomRef || myRole !== 'st') return;
+    roomRef.child('mapBg').set(state.mapBgImage || null);
 }
 
 /**

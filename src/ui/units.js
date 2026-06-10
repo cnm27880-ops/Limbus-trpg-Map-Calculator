@@ -173,11 +173,12 @@ function renderUnitsList() {
                 }
 
                 const escapedName = escapeHtml(statusName);
+                const encodedName = encodeURIComponent(statusName).replace(/'/g, '%27');
                 const displayValue = statusValue ? ` ${escapeHtml(statusValue)}` : '';
                 return `<span class="status-badge"
                              data-tooltip="${escapedName}"
                              style="--badge-color: ${color}"
-                             onclick="onStatusTagClick('${u.id}', '${escapedName}')">
+                             onclick="event.stopPropagation();onStatusTagClick(event, '${u.id}', '${encodedName}')">
                     ${icon}${displayValue}
                 </span>`;
             }).join('');

@@ -143,6 +143,12 @@ function renderCategoryTabs() {
  */
 function renderStatusGrid(category) {
     let statuses = [];
+    const overrideFn = (typeof applyStatusOverride === 'function') ? applyStatusOverride : (s => s);
+    // 自訂狀態可指定分類（預設 custom），會一併顯示在該分類網格中
+    const customsInCategory = cat => getCustomStatuses().filter(s => {
+        const c = (s.category && STATUS_CATEGORIES[s.category]) ? s.category : 'custom';
+        return c === cat;
+    });
 
     if (category === 'common') {
         // 常用分類：顯示收藏的狀態，沒有則顯示預設常用
@@ -150,13 +156,14 @@ function renderStatusGrid(category) {
         if (favorites.length > 0) {
             statuses = favorites.map(id => getStatusById(id)).filter(Boolean);
         } else {
-            statuses = STATUS_LIBRARY.common || [];
+            statuses = (STATUS_LIBRARY.common || []).map(overrideFn);
         }
+        statuses = statuses.concat(customsInCategory('common'));
     } else if (category === 'custom') {
         // 自訂分類：從 state.customStatuses 取得（房間共享）
-        statuses = getCustomStatuses();
+        statuses = customsInCategory('custom');
     } else if (STATUS_LIBRARY[category]) {
-        statuses = STATUS_LIBRARY[category];
+        statuses = (STATUS_LIBRARY[category] || []).map(overrideFn).concat(customsInCategory(category));
     }
 
     if (statuses.length === 0) {
@@ -182,6 +189,11 @@ function renderStatusCard(status) {
         ? `<button class="status-card-delete" onclick="event.stopPropagation();confirmDeleteCustomStatus('${status.id}','${escapeHtml(status.name)}')" title="刪除此自訂狀態">×</button>`
         : '';
 
+    // ST 可編輯任何狀態（常駐狀態以覆寫方式儲存，全房間同步）
+    const editBtn = (myRole === 'st')
+        ? `<button class="status-card-info-btn status-card-edit-btn" onclick="event.stopPropagation();openStatusEditorModal('${status.id}')" title="編輯此狀態">✎</button>`
+        : '';
+
     return `
         <div class="status-card" data-status-id="${status.id}"
              style="border-left-color:${borderColor}"
@@ -194,7 +206,10 @@ function renderStatusCard(status) {
             </div>
             <div class="status-card-side">
                 <div class="status-card-type ${status.type}">${status.type === 'stack' ? '累積' : '開關'}</div>
-                <button class="status-card-info-btn" onclick="event.stopPropagation();selectStatus('${status.id}')" title="查看詳情／指定層數">ℹ</button>
+                <div style="display:flex;gap:3px;">
+                    <button class="status-card-info-btn" onclick="event.stopPropagation();selectStatus('${status.id}')" title="查看詳情／指定層數">ℹ</button>
+                    ${editBtn}
+                </div>
             </div>
         </div>
     `;
@@ -653,6 +668,16 @@ function openCustomStatusModal() {
                     </div>
 
                     <div class="form-group">
+                        <label>顯示分類：</label>
+                        <select id="custom-status-category">
+                            <option value="custom">✏️ 自訂</option>
+                            <option value="common">⭐ 常用狀態</option>
+                            <option value="debuff">💀 負面與失能</option>
+                            <option value="mental">🧠 精神與心智</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
                         <label>簡短描述：</label>
                         <input type="text" id="custom-status-desc" placeholder="例如：受到詛咒影響">
                     </div>
@@ -712,13 +737,14 @@ function createCustomStatus() {
     const type = document.getElementById('custom-status-type')?.value || 'binary';
     const desc = document.getElementById('custom-status-desc')?.value.trim() || '自訂狀態';
     const fullDesc = document.getElementById('custom-status-fullDesc')?.value.trim();
+    const category = document.getElementById('custom-status-category')?.value || 'custom';
 
     if (!name) {
         showToast('請輸入狀態名稱');
         return;
     }
 
-    // 建立自訂狀態物件
+    // 建立自訂狀態物件（category 決定顯示在哪個分類網格）
     const newStatus = {
         id: 'custom_' + Date.now(),
         name,
@@ -726,6 +752,7 @@ function createCustomStatus() {
         type,
         desc,
         fullDesc: fullDesc || desc,
+        category,
         isCustom: true
     };
 
@@ -1077,3 +1104,183 @@ function executeDeleteCustomStatus(statusId) {
 }
 
 console.log('🏷️ 狀態管理模組已載入');
+
+// ===== 狀態編輯器（ST 專用，可編輯常駐與自訂狀態） =====
+
+const STATUS_EDITOR_EMOJIS = ['💀', '☠️', '⚡', '🔥', '❄️', '💧', '🌙', '☀️', '⭐', '💫', '🎯', '🔮', '💎', '🗡️', '🛡️', '💪', '👁️', '🧠', '❤️', '💔', '🩸', '😱', '😴', '🕸️', '🌀', '🔒'];
+
+/**
+ * 開啟狀態編輯器
+ * - 自訂狀態：直接修改自訂狀態本身
+ * - 常駐狀態：以「覆寫」方式儲存（不動程式碼），可隨時還原預設
+ * @param {string} statusId - 狀態 ID
+ */
+function openStatusEditorModal(statusId) {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以編輯狀態庫');
+        return;
+    }
+
+    const status = getStatusById(statusId);
+    if (!status) return;
+
+    const isCustom = status.isCustom === true;
+    const hasOverride = !isCustom && state.statusOverrides && state.statusOverrides[statusId];
+    const category = getStatusCategory(statusId) || 'custom';
+
+    const old = document.getElementById('status-editor-overlay');
+    if (old) old.remove();
+
+    const emojiOptions = STATUS_EDITOR_EMOJIS.map(e =>
+        `<span class="emoji-option ${e === status.icon ? 'selected' : ''}" onclick="selectEditorEmoji('${e}')">${e}</span>`
+    ).join('');
+
+    const categoryOptions = Object.entries(STATUS_CATEGORIES).map(([id, cat]) =>
+        `<option value="${id}" ${id === category ? 'selected' : ''}>${cat.icon} ${cat.name}</option>`
+    ).join('');
+
+    const editorHtml = `
+        <div class="status-detail-overlay" id="status-editor-overlay" onclick="closeStatusEditorModal(event)">
+            <div class="status-detail-panel" onclick="event.stopPropagation()">
+                <div class="detail-header" style="border-color:var(--accent-yellow)">
+                    <span class="detail-icon">✎</span>
+                    <span class="detail-name">編輯狀態${isCustom ? '（自訂）' : hasOverride ? '（已覆寫常駐）' : '（常駐）'}</span>
+                </div>
+
+                <div class="detail-body">
+                    <div class="form-group">
+                        <label>狀態名稱：</label>
+                        <input type="text" id="editor-status-name" value="${escapeHtml(status.name)}">
+                    </div>
+
+                    <div class="form-group">
+                        <label>圖示：</label>
+                        <div class="emoji-picker">${emojiOptions}</div>
+                        <input type="text" id="editor-status-icon" value="${status.icon || '📌'}" style="width:50px;text-align:center;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>類型：</label>
+                        <select id="editor-status-type">
+                            <option value="stack" ${status.type === 'stack' ? 'selected' : ''}>累積型（有數值）</option>
+                            <option value="binary" ${status.type === 'binary' ? 'selected' : ''}>開關型（有/無）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>顯示分類：</label>
+                        <select id="editor-status-category">${categoryOptions}</select>
+                        ${!isCustom ? '<div style="font-size:0.68rem;color:var(--text-dim);margin-top:2px;">常駐狀態的分類無法變更（以原始分類顯示）</div>' : ''}
+                    </div>
+
+                    <div class="form-group">
+                        <label>簡短描述：</label>
+                        <input type="text" id="editor-status-desc" value="${escapeHtml(status.desc || '')}">
+                    </div>
+
+                    <div class="form-group">
+                        <label>完整說明：</label>
+                        <textarea id="editor-status-fullDesc">${escapeHtml(status.fullDesc || '')}</textarea>
+                    </div>
+                </div>
+
+                <div class="detail-footer">
+                    ${hasOverride ? `<button onclick="revertStatusOverride('${statusId}')" class="modal-btn" style="background:var(--accent-red);margin-right:auto;">還原預設</button>` : ''}
+                    <button onclick="closeStatusEditorModal()" class="modal-btn">取消</button>
+                    <button onclick="saveStatusEdit('${statusId}')" class="modal-btn" style="background:var(--accent-green);">✓ 儲存</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const modal = document.getElementById('status-modal');
+    const host = modal || document.getElementById('modals-container') || document.body;
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = editorHtml;
+    host.appendChild(wrapper.firstElementChild);
+}
+
+function closeStatusEditorModal(event) {
+    if (event && event.target.id !== 'status-editor-overlay') return;
+    const overlay = document.getElementById('status-editor-overlay');
+    if (overlay) overlay.remove();
+}
+
+function selectEditorEmoji(emoji) {
+    const input = document.getElementById('editor-status-icon');
+    if (input) input.value = emoji;
+    document.querySelectorAll('#status-editor-overlay .emoji-option').forEach(el => {
+        el.classList.toggle('selected', el.textContent === emoji);
+    });
+}
+
+/**
+ * 儲存狀態編輯
+ * @param {string} statusId - 狀態 ID
+ */
+function saveStatusEdit(statusId) {
+    const original = getStatusById(statusId);
+    if (!original) return;
+
+    const name = document.getElementById('editor-status-name')?.value.trim();
+    if (!name) {
+        showToast('請輸入狀態名稱');
+        return;
+    }
+
+    const edited = {
+        id: statusId,
+        name,
+        icon: document.getElementById('editor-status-icon')?.value || '📌',
+        type: document.getElementById('editor-status-type')?.value || 'binary',
+        desc: document.getElementById('editor-status-desc')?.value.trim() || '',
+        fullDesc: document.getElementById('editor-status-fullDesc')?.value.trim() || ''
+    };
+
+    if (original.isCustom) {
+        // 自訂狀態：直接更新（含分類）
+        const updated = {
+            ...original,
+            ...edited,
+            category: document.getElementById('editor-status-category')?.value || original.category || 'custom',
+            isCustom: true
+        };
+        if (typeof updateCustomStatusInRoom === 'function') {
+            updateCustomStatusInRoom(updated);
+        }
+    } else {
+        // 常駐狀態：以覆寫儲存（保留原始 keyResist/canCounter/effects 等欄位）
+        if (typeof setStatusOverrideInRoom === 'function') {
+            setStatusOverrideInRoom(edited);
+        }
+    }
+
+    showToast(`已儲存狀態：${name}`);
+    closeStatusEditorModal();
+    refreshStatusLibraryViews();
+}
+
+/**
+ * 還原常駐狀態為預設定義
+ * @param {string} statusId - 狀態 ID
+ */
+function revertStatusOverride(statusId) {
+    if (typeof removeStatusOverrideFromRoom === 'function') {
+        removeStatusOverrideFromRoom(statusId);
+    }
+    showToast('已還原預設狀態');
+    closeStatusEditorModal();
+    refreshStatusLibraryViews();
+}
+
+/**
+ * 刷新狀態庫相關畫面（網格、分類數量、單位列表）
+ */
+function refreshStatusLibraryViews() {
+    const grid = document.getElementById('status-grid');
+    if (grid) grid.innerHTML = renderStatusGrid(currentStatusCategory);
+    const tabs = document.getElementById('status-category-tabs');
+    if (tabs) tabs.innerHTML = renderCategoryTabs();
+    renderUnitsList();
+    renderSidebarUnits();
+}

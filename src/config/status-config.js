@@ -803,15 +803,28 @@ const STATUS_LIBRARY = {
 // ===== 輔助函數 =====
 
 /**
+ * 套用常駐狀態的覆寫（ST 透過狀態編輯器修改的內容）
+ * @param {object} status - 原始狀態定義
+ * @returns {object} 覆寫後（或原始）的狀態定義
+ */
+function applyStatusOverride(status) {
+    if (!status) return status;
+    if (typeof state !== 'undefined' && state.statusOverrides && state.statusOverrides[status.id]) {
+        return { ...status, ...state.statusOverrides[status.id] };
+    }
+    return status;
+}
+
+/**
  * 根據 ID 獲取狀態定義
  * @param {string} statusId - 狀態 ID
  * @returns {object|null} 狀態定義或 null
  */
 function getStatusById(statusId) {
-    // 先查詢預設狀態庫
+    // 先查詢預設狀態庫（套用覆寫）
     for (const category of Object.values(STATUS_LIBRARY)) {
         const status = category.find(s => s.id === statusId);
-        if (status) return status;
+        if (status) return applyStatusOverride(status);
     }
     // 再查詢房間共享的自訂狀態
     if (typeof state !== 'undefined' && state.customStatuses) {
@@ -832,10 +845,11 @@ function getStatusCategory(statusId) {
             return categoryId;
         }
     }
-    // 檢查自訂狀態
+    // 檢查自訂狀態（可指定分類，預設為 custom）
     if (typeof state !== 'undefined' && state.customStatuses) {
-        if (state.customStatuses.find(s => s.id === statusId)) {
-            return 'custom';
+        const custom = state.customStatuses.find(s => s.id === statusId);
+        if (custom) {
+            return (custom.category && STATUS_CATEGORIES[custom.category]) ? custom.category : 'custom';
         }
     }
     return null;
@@ -855,7 +869,8 @@ function searchStatuses(query) {
     const results = [];
 
     for (const [categoryId, statuses] of Object.entries(STATUS_LIBRARY)) {
-        for (const status of statuses) {
+        for (const rawStatus of statuses) {
+            const status = applyStatusOverride(rawStatus);
             if (
                 status.name.toLowerCase().includes(lowerQuery) ||
                 status.desc.toLowerCase().includes(lowerQuery) ||

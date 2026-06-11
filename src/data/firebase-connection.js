@@ -570,6 +570,11 @@ function loadRoomData(data) {
         state.customStatuses = [];
     }
 
+    // 載入常駐狀態覆寫
+    state.statusOverrides = (data.statusOverrides && typeof data.statusOverrides === 'object')
+        ? data.statusOverrides
+        : {};
+
     // 載入地圖背景圖（房間共享）
     if (typeof data.mapBg === 'string' && data.mapBg.startsWith('data:image/')) {
         state.mapBgImage = data.mapBg;
@@ -746,6 +751,19 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('customStatuses').off('value', customStatusesListener));
+
+    // 監聽常駐狀態覆寫變更（房間共享）
+    const statusOverridesListener = roomRef.child('statusOverrides').on('value', snapshot => {
+        state.statusOverrides = snapshot.exists() ? (snapshot.val() || {}) : {};
+        // 圖示/名稱可能變更，重繪單位列表與開啟中的狀態網格
+        if (typeof renderUnitsList === 'function') renderUnitsList();
+        if (typeof renderSidebarUnits === 'function') renderSidebarUnits();
+        const overrideGrid = document.getElementById('status-grid');
+        if (overrideGrid && typeof currentStatusCategory !== 'undefined' && typeof renderStatusGrid === 'function') {
+            overrideGrid.innerHTML = renderStatusGrid(currentStatusCategory);
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('statusOverrides').off('value', statusOverridesListener));
 
     // 監聽使用者在線列表（用於分配權限功能）
     const usersListener = roomRef.child('users').on('value', snapshot => {
@@ -1095,6 +1113,37 @@ function removeCustomStatusFromRoom(statusId) {
         state.customStatuses = (state.customStatuses || []).filter(s => s.id !== statusId);
         roomRef.child('customStatuses/' + statusId).remove();
     }
+}
+
+/**
+ * 更新房間內的自訂狀態（僅 ST）
+ * @param {Object} statusObj - 自訂狀態物件（含 id）
+ */
+function updateCustomStatusInRoom(statusObj) {
+    if (!roomRef || myRole !== 'st' || !statusObj || !statusObj.id) return;
+    state.customStatuses = (state.customStatuses || []).map(s => s.id === statusObj.id ? statusObj : s);
+    roomRef.child('customStatuses/' + statusObj.id).set(statusObj);
+}
+
+/**
+ * 設定常駐狀態的覆寫（僅 ST）
+ * @param {Object} overrideObj - 覆寫物件（含 id，欄位會合併到原始定義之上）
+ */
+function setStatusOverrideInRoom(overrideObj) {
+    if (!roomRef || myRole !== 'st' || !overrideObj || !overrideObj.id) return;
+    if (!state.statusOverrides) state.statusOverrides = {};
+    state.statusOverrides[overrideObj.id] = overrideObj;
+    roomRef.child('statusOverrides/' + overrideObj.id).set(overrideObj);
+}
+
+/**
+ * 移除常駐狀態的覆寫，還原為預設定義（僅 ST）
+ * @param {string} statusId - 狀態 ID
+ */
+function removeStatusOverrideFromRoom(statusId) {
+    if (!roomRef || myRole !== 'st') return;
+    if (state.statusOverrides) delete state.statusOverrides[statusId];
+    roomRef.child('statusOverrides/' + statusId).remove();
 }
 
 // ===== 玩家操作函數 =====

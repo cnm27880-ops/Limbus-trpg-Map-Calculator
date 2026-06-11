@@ -34,7 +34,9 @@
 
 .token.selected {
     transform: scale(1.15);
-    box-shadow: 0 0 0 3px var(--accent-yellow);
+    box-shadow:
+        0 0 4px 2px var(--accent-yellow),
+        0 0 16px 6px rgba(253, 216, 53, 0.55);
     z-index: 20;
 }
 
@@ -125,10 +127,10 @@
 /* BOSS 選取效果 */
 .token.boss.selected {
     transform: scale(1.05);
-    box-shadow: 
+    box-shadow:
         0 4px 15px rgba(0, 0, 0, 0.8),
-        0 0 0 3px var(--accent-yellow),
-        0 0 20px var(--accent-yellow);
+        0 0 8px 3px var(--accent-yellow),
+        0 0 24px 8px rgba(253, 216, 53, 0.5);
 }
 
 /* BOSS 拖曳效果 */
@@ -3210,8 +3212,9 @@ body.combat-mode .boss-hud-container {
 }
 
 /* Token Status Tooltip - 懸浮狀態提示框 */
+/* 有狀態的棋子不再常駐光暈（光暈僅在選取時顯示），保留 class 供 tooltip 使用 */
 .token-has-status {
-    box-shadow: 0 0 5px 2px var(--accent-yellow);
+    box-shadow: none;
 }
 
 .token-tooltip {
@@ -3600,4 +3603,10 @@ body.combat-mode .boss-hud-container {
     color: var(--text-main);
     text-align: center;
     font-size: 0.95rem;
+}
+
+/* 狀態卡編輯按鈕（ST 專用） */
+.status-card-edit-btn:hover {
+    border-color: var(--accent-green);
+    color: var(--accent-green);
 }

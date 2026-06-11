@@ -413,6 +413,9 @@ function renderMap() {
             let cellTargetY = y;
 
             div.onpointerdown = (e) => {
+                // 只處理左鍵（右鍵留給快速選單，不參與繪製/選取）
+                if (e.button !== undefined && e.button !== 0) return;
+
                 // 記錄起始座標
                 clickStartX = e.clientX;
                 clickStartY = e.clientY;
@@ -442,6 +445,9 @@ function renderMap() {
             };
 
             div.onpointerup = (e) => {
+                // 只處理左鍵
+                if (e.button !== undefined && e.button !== 0) return;
+
                 // 游標模式 + 有選中單位 → 檢查是否為有效點擊（非拖曳）
                 if (currentTool === 'cursor' && selectedUnitId !== null) {
                     // 計算拖曳距離
@@ -479,6 +485,13 @@ function renderMap() {
                             renderAll();
                         }
                         // 點擊移動後阻止事件冒泡
+                        e.stopPropagation();
+                        return;
+                    }
+
+                    // 選中的是無法控制的單位（例如查看敵人）→ 點擊地面取消選取
+                    if (u && !controllable) {
+                        clearSelection();
                         e.stopPropagation();
                         return;
                     }
@@ -598,6 +611,8 @@ function renderMap() {
 
         t.onpointerdown = (e) => {
             if (currentTool !== 'cursor') return;
+            // 只處理左鍵（右鍵留給快速選單，不參與選取）
+            if (e.button !== undefined && e.button !== 0) return;
 
             // 阻止格子接收點擊事件
             e.stopPropagation();
@@ -611,6 +626,8 @@ function renderMap() {
 
         t.onpointerup = (e) => {
             if (currentTool !== 'cursor') return;
+            // 只處理左鍵
+            if (e.button !== undefined && e.button !== 0) return;
             if (tokenClickStartX === null || tokenClickStartY === null) return;
 
             // 阻止格子接收點擊事件
@@ -638,9 +655,13 @@ function renderMap() {
                 return;
             }
 
-            // 有效點擊：選取該單位
+            // 有效點擊：選取該單位；再點一次同一單位則取消選取
             // 移動邏輯：選取後點擊地圖格子來移動（見 cell.onpointerdown）
-            selectUnit(u.id);
+            if (selectedUnitId === u.id) {
+                clearSelection();
+            } else {
+                selectUnit(u.id);
+            }
 
             // 重置起始座標
             tokenClickStartX = null;

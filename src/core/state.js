@@ -15,6 +15,7 @@ let state = {
     mapBgImage: null,           // 地圖背景圖（base64，僅本機儲存）
     players: {},
     customStatuses: [],  // 房間共享的自訂狀態（透過 Firebase 同步）
+    statusOverrides: {}, // 常駐狀態的覆寫（id → 修改後的狀態物件，透過 Firebase 同步）
     isCombatActive: false,      // 是否處於戰鬥狀態
     activeBossId: null,         // 當前顯示大血條的 BOSS 單位 ID
     lastBatchState: null        // 用於 AOE 的備份狀態
@@ -69,6 +70,7 @@ function resetState() {
         mapBgImage: null,
         players: {},
         customStatuses: [],
+        statusOverrides: {},
         isCombatActive: false,
         activeBossId: null
     };

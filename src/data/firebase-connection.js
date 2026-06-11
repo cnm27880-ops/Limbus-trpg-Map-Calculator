@@ -474,6 +474,10 @@ function joinRoom(roomCode, isST) {
                 if (lyricPickBtn) lyricPickBtn.style.display = 'none';
                 const lyricsMenuItem = document.getElementById('qab-lyrics-item');
                 if (lyricsMenuItem) lyricsMenuItem.style.display = 'none';
+
+                // 玩家端隱藏特殊BOSS戰面板入口（ST 專用）
+                const bossBattleItem = document.getElementById('qab-bossbattle-item');
+                if (bossBattleItem) bossBattleItem.style.display = 'none';
                 const lyricsPanel = document.getElementById('lyrics-panel');
                 if (lyricsPanel) lyricsPanel.style.display = 'none';
             } else {

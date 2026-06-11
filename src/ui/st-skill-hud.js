@@ -215,6 +215,9 @@ function clampHudPosition(stateObj, panelId) {
 window.addEventListener('resize', () => {
     if (skillHudState.isVisible) clampHudPosition(skillHudState, 'st-skill-hud');
     if (calcHudState.isVisible) clampHudPosition(calcHudState, 'calc-hud');
+    if (typeof bossBattleState !== 'undefined' && bossBattleState.isVisible) {
+        clampHudPosition(bossBattleState, 'boss-battle-hud');
+    }
 });
 
 // ===== Generic Draggable Panel Setup =====

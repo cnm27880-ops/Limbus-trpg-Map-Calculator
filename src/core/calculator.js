@@ -437,7 +437,7 @@ function togglePlayerMemo() {
 }
 
 function addPlayerMemo() {
-    playerMemoData.push({ name: '', dp: 0, def: 0 });
+    playerMemoData.push({ name: '', dp: 0, atkBonus: 0, def: 0, defBonus: 0 });
     saveMemoData();
     renderPlayerMemo();
 }
@@ -538,20 +538,38 @@ function renderPlayerMemo() {
         const dpInput = document.createElement('input');
         dpInput.type = 'number';
         dpInput.className = 'pm-num';
-        dpInput.title = 'DP';
+        dpInput.title = '攻擊 DP';
         dpInput.placeholder = 'DP';
         dpInput.value = p.dp ?? 0;
         dpInput.addEventListener('change', e => updatePlayerMemoField(idx, 'dp', e.target.value));
         dpInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'dp', e.target.value));
 
+        const atkBonusInput = document.createElement('input');
+        atkBonusInput.type = 'number';
+        atkBonusInput.className = 'pm-num';
+        atkBonusInput.title = '攻擊附加成功';
+        atkBonusInput.placeholder = '附成';
+        atkBonusInput.value = p.atkBonus ?? 0;
+        atkBonusInput.addEventListener('change', e => updatePlayerMemoField(idx, 'atkBonus', e.target.value));
+        atkBonusInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'atkBonus', e.target.value));
+
         const defInput = document.createElement('input');
         defInput.type = 'number';
         defInput.className = 'pm-num';
-        defInput.title = '防禦';
+        defInput.title = '防禦數字';
         defInput.placeholder = '防禦';
         defInput.value = p.def ?? 0;
         defInput.addEventListener('change', e => updatePlayerMemoField(idx, 'def', e.target.value));
         defInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'def', e.target.value));
+
+        const defBonusInput = document.createElement('input');
+        defBonusInput.type = 'number';
+        defBonusInput.className = 'pm-num';
+        defBonusInput.title = '防禦附加成功';
+        defBonusInput.placeholder = '防附';
+        defBonusInput.value = p.defBonus ?? 0;
+        defBonusInput.addEventListener('change', e => updatePlayerMemoField(idx, 'defBonus', e.target.value));
+        defBonusInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'defBonus', e.target.value));
 
         const atkBtn = document.createElement('button');
         atkBtn.type = 'button';
@@ -576,7 +594,9 @@ function renderPlayerMemo() {
 
         item.appendChild(nameInput);
         item.appendChild(dpInput);
+        item.appendChild(atkBonusInput);
         item.appendChild(defInput);
+        item.appendChild(defBonusInput);
         item.appendChild(atkBtn);
         item.appendChild(defBtn);
         item.appendChild(delBtn);

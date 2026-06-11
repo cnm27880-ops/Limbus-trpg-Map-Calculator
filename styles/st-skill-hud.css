@@ -413,3 +413,164 @@
     max-width: 100%;
     box-sizing: border-box;
 }
+
+/* ===== 特殊BOSS戰計算面板 ===== */
+#boss-battle-hud { width: 420px; max-width: 95vw; }
+
+.bb-section {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.bb-section-title {
+    font-size: 0.78rem;
+    font-weight: bold;
+    color: var(--accent-yellow);
+    margin-bottom: 6px;
+}
+
+.bb-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.bb-row label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
+.bb-num {
+    width: 60px;
+    padding: 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    text-align: center;
+    font-size: 0.85rem;
+}
+
+.bb-x-value {
+    font-size: 0.75rem;
+    color: var(--accent-red);
+    font-weight: bold;
+    margin-left: auto;
+}
+
+.bb-counter-select {
+    padding: 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 0.8rem;
+    min-width: 0;
+}
+
+.bb-mini-btn {
+    width: 24px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.bb-mini-btn:hover { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+
+.bb-hint {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+    padding: 4px 0;
+}
+
+.bb-status-chip {
+    display: inline-block;
+    margin: 1px 2px;
+    padding: 1px 6px;
+    border: 1px solid var(--accent-purple);
+    border-radius: 4px;
+    color: var(--accent-purple);
+    font-size: 0.7rem;
+}
+
+.bb-action-row, .bb-player-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 4px;
+}
+
+.bb-action-label {
+    font-size: 0.75rem;
+    color: var(--text-main);
+    width: 72px;
+    flex-shrink: 0;
+}
+
+.bb-action-row .bb-counter-select { flex: 1; }
+
+.bb-player-name {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--text-main);
+    width: 70px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bb-player-stats {
+    flex: 1;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+.bb-init-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.bb-result-row {
+    padding: 6px 8px;
+    margin-bottom: 5px;
+    background: var(--bg-card);
+    border-left: 3px solid var(--accent-red);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.bb-result-row.bb-result-none {
+    border-left-color: var(--border);
+    color: var(--text-dim);
+}
+
+.bb-result-row.bb-result-bonus {
+    border-left-color: var(--accent-green);
+    color: var(--text-main);
+}
+
+.bb-result-head {
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 2px;
+}
+
+.bb-result-detail { color: var(--text-dim); }
+
+.bb-final-dp {
+    color: var(--accent-red);
+    font-weight: bold;
+    font-size: 0.85rem;
+}

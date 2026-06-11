@@ -1223,12 +1223,15 @@ function renderStAoeTargetList() {
     listContainer.innerHTML = '';
     buildStAoeStatusDatalist();
 
-    if (!state.units || state.units.length === 0) {
+    // 排除多重行動條目（沒有自己的血量，傷害應打在 BOSS 本體）
+    const targetableUnits = (state.units || []).filter(u => !u.actionSlotOf);
+
+    if (targetableUnits.length === 0) {
         listContainer.innerHTML = '<div style="color:var(--text-dim);">場上無單位</div>';
         return;
     }
 
-    state.units.forEach(u => {
+    targetableUnits.forEach(u => {
         const item = document.createElement('label');
         item.style.display = 'flex';
         item.style.alignItems = 'center';

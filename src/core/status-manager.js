@@ -7,6 +7,8 @@
 let currentStatusUnitId = null;
 let currentStatusCategory = 'common';
 let statusSearchQuery = '';
+let statusEditMode = false;       // 狀態庫總編輯模式（ST 專用：可拖曳排序/移分類、顯示編輯鍵）
+let draggedStatusId = null;       // 拖曳中的狀態 ID
 
 // ===== Modal 操作 =====
 
@@ -18,6 +20,7 @@ function openStatusModal(unitId) {
     currentStatusUnitId = unitId;
     currentStatusCategory = 'common';
     statusSearchQuery = '';
+    statusEditMode = false;  // 每次開啟預設為非編輯模式，避免誤動
 
     const unit = findUnitById(unitId);
     if (!unit) {
@@ -25,12 +28,20 @@ function openStatusModal(unitId) {
         return;
     }
 
+    // 編輯開關僅 ST 可見
+    const editToggleBtn = (myRole === 'st')
+        ? `<button id="status-edit-toggle" onclick="toggleStatusEditMode()" class="status-edit-toggle" title="開啟後可拖曳排序、移動分類、編輯狀態">🔧 編輯排列</button>`
+        : '';
+
     const modalHtml = `
         <div class="modal-overlay show" id="status-modal" onclick="closeStatusModalOnOverlay(event)">
             <div class="modal status-modal" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span style="font-weight:bold;">🏷️ 管理狀態 - ${escapeHtml(unit.name)}</span>
-                    <button onclick="closeStatusModal()" style="background:none;font-size:1.2rem;">×</button>
+                    <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
+                        ${editToggleBtn}
+                        <button onclick="closeStatusModal()" style="background:none;font-size:1.2rem;">×</button>
+                    </div>
                 </div>
                 <div class="modal-body" style="padding:0;">
                     <!-- 搜尋框 -->
@@ -81,6 +92,158 @@ function openStatusModal(unitId) {
     const existingModal = document.getElementById('status-modal');
     if (existingModal) existingModal.remove();
     container.insertAdjacentHTML('beforeend', modalHtml);
+
+    // 綁定狀態庫拖放（編輯模式用）
+    setupStatusLibraryDnd();
+}
+
+// ===== 狀態庫總編輯模式 =====
+
+/**
+ * 切換狀態庫編輯排列模式（ST 專用）
+ */
+function toggleStatusEditMode() {
+    if (myRole !== 'st') return;
+    statusEditMode = !statusEditMode;
+
+    const btn = document.getElementById('status-edit-toggle');
+    if (btn) {
+        btn.classList.toggle('active', statusEditMode);
+        btn.innerHTML = statusEditMode ? '✓ 完成' : '🔧 編輯排列';
+    }
+
+    const grid = document.getElementById('status-grid');
+    if (grid) {
+        grid.classList.toggle('edit-mode', statusEditMode);
+        grid.innerHTML = renderStatusGrid(currentStatusCategory);
+    }
+
+    const tabs = document.getElementById('status-category-tabs');
+    if (tabs) tabs.innerHTML = renderCategoryTabs();
+
+    const hint = document.querySelector('#status-modal .status-grid-hint');
+    if (hint) {
+        hint.innerHTML = statusEditMode
+            ? '🔧 編輯模式：拖曳 ⋮⋮ 可排序；拖到上方分類頁籤可移動分類；✎ 編輯、🗑 刪除自訂狀態'
+            : '💡 點一下狀態卡＝立即套用（累積型每次 +1、開關型可切換）；點 ℹ 可查看詳情或指定層數';
+    }
+}
+
+/**
+ * 綁定狀態庫拖放事件（事件委派於容器，innerHTML 重繪不受影響）
+ */
+function setupStatusLibraryDnd() {
+    const grid = document.getElementById('status-grid');
+    if (grid && !grid.dataset.dndBound) {
+        grid.dataset.dndBound = '1';
+        grid.addEventListener('dragstart', onStatusCardDragStart);
+        grid.addEventListener('dragover', onStatusGridDragOver);
+        grid.addEventListener('drop', onStatusGridDrop);
+        grid.addEventListener('dragend', cleanupStatusDrag);
+    }
+    const tabs = document.getElementById('status-category-tabs');
+    if (tabs && !tabs.dataset.dndBound) {
+        tabs.dataset.dndBound = '1';
+        tabs.addEventListener('dragover', onTabDragOver);
+        tabs.addEventListener('drop', onTabDrop);
+    }
+}
+
+function onStatusCardDragStart(e) {
+    if (!statusEditMode) return;
+    const card = e.target.closest('.status-card');
+    if (!card) return;
+    draggedStatusId = card.dataset.statusId;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', draggedStatusId); } catch (_) {}
+    card.classList.add('dragging');
+}
+
+function onStatusGridDragOver(e) {
+    if (!draggedStatusId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const card = e.target.closest('.status-card');
+    document.querySelectorAll('#status-grid .drag-over').forEach(el => el.classList.remove('drag-over'));
+    if (card && card.dataset.statusId !== draggedStatusId) card.classList.add('drag-over');
+}
+
+function onStatusGridDrop(e) {
+    if (!draggedStatusId) return;
+    e.preventDefault();
+    const targetCard = e.target.closest('.status-card');
+
+    // 當前分類目前的顯示順序（取 DOM 順序）
+    const ids = Array.from(document.querySelectorAll('#status-grid .status-card')).map(c => c.dataset.statusId);
+    const from = ids.indexOf(draggedStatusId);
+    if (from === -1) { cleanupStatusDrag(); return; }
+    ids.splice(from, 1);
+
+    let to = ids.length;
+    if (targetCard && targetCard.dataset.statusId !== draggedStatusId) {
+        const tIdx = ids.indexOf(targetCard.dataset.statusId);
+        const rect = targetCard.getBoundingClientRect();
+        const after = (e.clientY - rect.top) > rect.height / 2;
+        to = after ? tIdx + 1 : tIdx;
+    }
+    ids.splice(to, 0, draggedStatusId);
+
+    if (typeof setStatusOrderInRoom === 'function') {
+        setStatusOrderInRoom(currentStatusCategory, ids);
+    }
+    cleanupStatusDrag();
+    const grid = document.getElementById('status-grid');
+    if (grid) grid.innerHTML = renderStatusGrid(currentStatusCategory);
+}
+
+function onTabDragOver(e) {
+    if (!draggedStatusId) return;
+    const tab = e.target.closest('.category-tab');
+    if (!tab) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('.category-tab.cat-drop-over').forEach(el => el.classList.remove('cat-drop-over'));
+    tab.classList.add('cat-drop-over');
+}
+
+function onTabDrop(e) {
+    if (!draggedStatusId) return;
+    const tab = e.target.closest('.category-tab');
+    if (!tab) return;
+    e.preventDefault();
+
+    const movedId = draggedStatusId;
+    const newCat = tab.dataset.category;
+    const curCat = getStatusCategory(movedId);
+
+    if (newCat && newCat !== curCat) {
+        // 從原分類排序移除
+        if (state.statusOrder && Array.isArray(state.statusOrder[curCat])) {
+            const filtered = state.statusOrder[curCat].filter(id => id !== movedId);
+            if (typeof setStatusOrderInRoom === 'function') setStatusOrderInRoom(curCat, filtered);
+        }
+        // 設定新分類歸屬
+        if (typeof setStatusCategoryInRoom === 'function') setStatusCategoryInRoom(movedId, newCat);
+        // 加到新分類排序末尾
+        const newOrder = (state.statusOrder && Array.isArray(state.statusOrder[newCat])) ? state.statusOrder[newCat].slice() : [];
+        if (!newOrder.includes(movedId)) newOrder.push(movedId);
+        if (typeof setStatusOrderInRoom === 'function') setStatusOrderInRoom(newCat, newOrder);
+        if (typeof showToast === 'function') showToast(`已移動到「${STATUS_CATEGORIES[newCat]?.name || newCat}」`);
+    }
+
+    cleanupStatusDrag();
+    const grid = document.getElementById('status-grid');
+    if (grid) grid.innerHTML = renderStatusGrid(currentStatusCategory);
+    const tabs = document.getElementById('status-category-tabs');
+    if (tabs) tabs.innerHTML = renderCategoryTabs();
+}
+
+function cleanupStatusDrag() {
+    draggedStatusId = null;
+    document.querySelectorAll('#status-grid .dragging, #status-grid .drag-over')
+        .forEach(el => el.classList.remove('dragging', 'drag-over'));
+    document.querySelectorAll('.category-tab.cat-drop-over')
+        .forEach(el => el.classList.remove('cat-drop-over'));
 }
 
 /**
@@ -110,24 +273,18 @@ function closeStatusModalOnOverlay(event) {
  */
 function renderCategoryTabs() {
     let html = '';
-    const favorites = getFavoriteStatuses();
 
     for (const [id, cat] of Object.entries(STATUS_CATEGORIES)) {
         const isActive = id === currentStatusCategory ? 'active' : '';
-        let count = 0;
-
-        if (id === 'common') {
-            // 常用分類顯示收藏數量
-            count = favorites.length || STATUS_LIBRARY.common.length;
-        } else if (id === 'custom') {
-            // 自訂分類：從 state.customStatuses 取得
-            count = (state.customStatuses || []).length;
-        } else if (STATUS_LIBRARY[id]) {
-            count = STATUS_LIBRARY[id].length;
-        }
+        // 數量＝實際歸屬此分類的狀態數（含跨分類移入者）
+        const count = (typeof getOrderedStatusesForCategory === 'function')
+            ? getOrderedStatusesForCategory(id).length
+            : 0;
+        // 編輯模式時，分類頁籤可作為「拖放目標」以移動分類
+        const dropAttr = statusEditMode ? ' data-cat-drop="1"' : '';
 
         html += `
-            <button class="category-tab ${isActive}" data-category="${id}"
+            <button class="category-tab ${isActive}" data-category="${id}"${dropAttr}
                     onclick="switchStatusCategory('${id}')">
                 ${cat.icon} ${cat.name} <span class="count">${count}</span>
             </button>
@@ -142,29 +299,10 @@ function renderCategoryTabs() {
  * @param {string} category - 分類 ID
  */
 function renderStatusGrid(category) {
-    let statuses = [];
-    const overrideFn = (typeof applyStatusOverride === 'function') ? applyStatusOverride : (s => s);
-    // 自訂狀態可指定分類（預設 custom），會一併顯示在該分類網格中
-    const customsInCategory = cat => getCustomStatuses().filter(s => {
-        const c = (s.category && STATUS_CATEGORIES[s.category]) ? s.category : 'custom';
-        return c === cat;
-    });
-
-    if (category === 'common') {
-        // 常用分類：顯示收藏的狀態，沒有則顯示預設常用
-        const favorites = getFavoriteStatuses();
-        if (favorites.length > 0) {
-            statuses = favorites.map(id => getStatusById(id)).filter(Boolean);
-        } else {
-            statuses = (STATUS_LIBRARY.common || []).map(overrideFn);
-        }
-        statuses = statuses.concat(customsInCategory('common'));
-    } else if (category === 'custom') {
-        // 自訂分類：從 state.customStatuses 取得（房間共享）
-        statuses = customsInCategory('custom');
-    } else if (STATUS_LIBRARY[category]) {
-        statuses = (STATUS_LIBRARY[category] || []).map(overrideFn).concat(customsInCategory(category));
-    }
+    // 統一以「歸屬分類 + 自訂排序」取得狀態（內建套覆寫 + 自訂，依 statusOrder 排列）
+    const statuses = (typeof getOrderedStatusesForCategory === 'function')
+        ? getOrderedStatusesForCategory(category)
+        : [];
 
     if (statuses.length === 0) {
         if (category === 'custom') {
@@ -184,21 +322,22 @@ function renderStatusCard(status) {
     const categoryInfo = STATUS_CATEGORIES[getStatusCategory(status.id)] || {};
     const borderColor = categoryInfo.color || '#666';
 
-    // 自訂狀態才顯示刪除按鈕
-    const deleteBtn = status.isCustom
-        ? `<button class="status-card-delete" onclick="event.stopPropagation();confirmDeleteCustomStatus('${status.id}','${escapeHtml(status.name)}')" title="刪除此自訂狀態">×</button>`
+    // 編輯鍵與刪除鍵只在「編輯排列」模式顯示，平時節省空間、避免誤觸
+    const editControls = (statusEditMode && myRole === 'st')
+        ? `<button class="status-card-info-btn status-card-edit-btn" onclick="event.stopPropagation();openStatusEditorModal('${status.id}')" title="編輯此狀態">✎</button>`
+          + (status.isCustom
+                ? `<button class="status-card-info-btn status-card-del-btn" onclick="event.stopPropagation();confirmDeleteCustomStatus('${status.id}','${escapeHtml(status.name)}')" title="刪除此自訂狀態">🗑</button>`
+                : '')
         : '';
 
-    // ST 可編輯任何狀態（常駐狀態以覆寫方式儲存，全房間同步）
-    const editBtn = (myRole === 'st')
-        ? `<button class="status-card-info-btn status-card-edit-btn" onclick="event.stopPropagation();openStatusEditorModal('${status.id}')" title="編輯此狀態">✎</button>`
-        : '';
+    const dragAttr = statusEditMode ? ' draggable="true"' : '';
+    const cardCls = 'status-card' + (statusEditMode ? ' edit-draggable' : '');
 
     return `
-        <div class="status-card" data-status-id="${status.id}"
+        <div class="${cardCls}" data-status-id="${status.id}"${dragAttr}
              style="border-left-color:${borderColor}"
              onclick="quickApplyStatus('${status.id}')">
-            ${deleteBtn}
+            ${statusEditMode ? '<span class="status-drag-handle" title="拖曳排序／拖到分類頁籤可移動分類">⋮⋮</span>' : ''}
             <div class="status-card-icon">${status.icon}</div>
             <div class="status-card-info">
                 <div class="status-card-name">${status.name}</div>
@@ -208,7 +347,7 @@ function renderStatusCard(status) {
                 <div class="status-card-type ${status.type}">${status.type === 'stack' ? '累積' : '開關'}</div>
                 <div style="display:flex;gap:3px;">
                     <button class="status-card-info-btn" onclick="event.stopPropagation();selectStatus('${status.id}')" title="查看詳情／指定層數">ℹ</button>
-                    ${editBtn}
+                    ${editControls}
                 </div>
             </div>
         </div>
@@ -221,6 +360,8 @@ function renderStatusCard(status) {
  * @param {string} statusId - 狀態 ID
  */
 function quickApplyStatus(statusId) {
+    // 編輯模式下點卡片不套用（避免拖曳/編輯時誤加狀態）
+    if (statusEditMode) return;
     if (!currentStatusUnitId) return;
 
     const status = getStatusById(statusId);

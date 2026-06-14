@@ -840,6 +840,11 @@ function getStatusById(statusId) {
  * @returns {string|null} 分類 ID 或 null
  */
 function getStatusCategory(statusId) {
+    // 覆寫的分類優先（編輯模式下拖曳跨分類移動）
+    if (typeof state !== 'undefined' && state.statusOverrides) {
+        const ov = state.statusOverrides[statusId];
+        if (ov && ov.category && STATUS_CATEGORIES[ov.category]) return ov.category;
+    }
     for (const [categoryId, statuses] of Object.entries(STATUS_LIBRARY)) {
         if (statuses.find(s => s.id === statusId)) {
             return categoryId;
@@ -853,6 +858,41 @@ function getStatusCategory(statusId) {
         }
     }
     return null;
+}
+
+/**
+ * 取得所有狀態定義（內建套用覆寫 + 房間自訂）
+ * @returns {array}
+ */
+function getAllStatusDefs() {
+    const list = [];
+    for (const statuses of Object.values(STATUS_LIBRARY)) {
+        for (const s of statuses) list.push(applyStatusOverride(s));
+    }
+    if (typeof state !== 'undefined' && Array.isArray(state.customStatuses)) {
+        for (const s of state.customStatuses) list.push(s);
+    }
+    return list;
+}
+
+/**
+ * 取得某分類下、依使用者自訂排序排列的狀態定義
+ * 排序來源：state.statusOrder[category]（房間共享）；未列入者保持原相對順序排在後面
+ * @param {string} category - 分類 ID
+ * @returns {array}
+ */
+function getOrderedStatusesForCategory(category) {
+    const members = getAllStatusDefs().filter(s => getStatusCategory(s.id) === category);
+    const order = (typeof state !== 'undefined' && state.statusOrder && state.statusOrder[category]) || [];
+    const rank = id => {
+        const i = order.indexOf(id);
+        return i === -1 ? Infinity : i;
+    };
+    return members.sort((a, b) => {
+        const ra = rank(a.id), rb = rank(b.id);
+        if (ra === rb) return 0;  // 同為 Infinity → 保持原順序（stable sort）
+        return ra - rb;
+    });
 }
 
 /**

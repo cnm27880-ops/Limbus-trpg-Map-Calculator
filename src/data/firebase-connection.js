@@ -575,6 +575,11 @@ function loadRoomData(data) {
         ? data.statusOverrides
         : {};
 
+    // 載入狀態庫自訂排序
+    state.statusOrder = (data.statusOrder && typeof data.statusOrder === 'object')
+        ? data.statusOrder
+        : {};
+
     // 載入地圖背景圖（房間共享）
     if (typeof data.mapBg === 'string' && data.mapBg.startsWith('data:image/')) {
         state.mapBgImage = data.mapBg;
@@ -764,6 +769,20 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('statusOverrides').off('value', statusOverridesListener));
+
+    // 監聽狀態庫排序變更（房間共享）
+    const statusOrderListener = roomRef.child('statusOrder').on('value', snapshot => {
+        state.statusOrder = snapshot.exists() ? (snapshot.val() || {}) : {};
+        const orderGrid = document.getElementById('status-grid');
+        if (orderGrid && typeof currentStatusCategory !== 'undefined' && typeof renderStatusGrid === 'function') {
+            orderGrid.innerHTML = renderStatusGrid(currentStatusCategory);
+        }
+        const orderTabs = document.getElementById('status-category-tabs');
+        if (orderTabs && typeof renderCategoryTabs === 'function') {
+            orderTabs.innerHTML = renderCategoryTabs();
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('statusOrder').off('value', statusOrderListener));
 
     // 監聽使用者在線列表（用於分配權限功能）
     const usersListener = roomRef.child('users').on('value', snapshot => {
@@ -1144,6 +1163,37 @@ function removeStatusOverrideFromRoom(statusId) {
     if (!roomRef || myRole !== 'st') return;
     if (state.statusOverrides) delete state.statusOverrides[statusId];
     roomRef.child('statusOverrides/' + statusId).remove();
+}
+
+/**
+ * 設定某分類的狀態排序（僅 ST）
+ * @param {string} category - 分類 ID
+ * @param {string[]} orderIds - 排序後的狀態 ID 陣列
+ */
+function setStatusOrderInRoom(category, orderIds) {
+    if (!roomRef || myRole !== 'st' || !category) return;
+    if (!state.statusOrder) state.statusOrder = {};
+    state.statusOrder[category] = orderIds;
+    roomRef.child('statusOrder/' + category).set(orderIds);
+}
+
+/**
+ * 移動狀態到另一個分類（僅 ST）
+ * - 自訂狀態：改寫自身 category
+ * - 常駐狀態：以覆寫設定 category
+ * @param {string} statusId - 狀態 ID
+ * @param {string} newCategory - 目標分類 ID
+ */
+function setStatusCategoryInRoom(statusId, newCategory) {
+    if (!roomRef || myRole !== 'st' || !statusId || !newCategory) return;
+    const custom = (state.customStatuses || []).find(s => s.id === statusId);
+    if (custom) {
+        const updated = { ...custom, category: newCategory };
+        updateCustomStatusInRoom(updated);
+    } else {
+        const existing = (state.statusOverrides && state.statusOverrides[statusId]) || {};
+        setStatusOverrideInRoom({ ...existing, id: statusId, category: newCategory });
+    }
 }
 
 // ===== 玩家操作函數 =====

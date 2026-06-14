@@ -3610,3 +3610,70 @@ body.combat-mode .boss-hud-container {
     border-color: var(--accent-green);
     color: var(--accent-green);
 }
+
+/* ===== 狀態庫編輯排列模式 ===== */
+.status-edit-toggle {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+}
+
+.status-edit-toggle:hover {
+    border-color: var(--accent-yellow);
+    color: var(--accent-yellow);
+}
+
+.status-edit-toggle.active {
+    background: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+    color: #000;
+    font-weight: bold;
+}
+
+/* 編輯模式：可拖曳的卡片 */
+.status-card.edit-draggable {
+    cursor: grab;
+    border-style: dashed;
+}
+
+.status-card.edit-draggable:active {
+    cursor: grabbing;
+}
+
+.status-card.dragging {
+    opacity: 0.45;
+}
+
+/* 拖放插入指示 */
+.status-card.drag-over {
+    box-shadow: inset 0 3px 0 0 var(--accent-yellow);
+}
+
+.status-drag-handle {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    letter-spacing: -2px;
+    cursor: grab;
+    flex-shrink: 0;
+    margin-right: 2px;
+    user-select: none;
+}
+
+/* 分類頁籤作為拖放目標 */
+.category-tab.cat-drop-over {
+    background: rgba(253, 216, 53, 0.25);
+    border-color: var(--accent-yellow);
+    box-shadow: 0 0 0 2px var(--accent-yellow);
+}
+
+/* 編輯模式刪除鍵 */
+.status-card-del-btn:hover {
+    border-color: var(--accent-red);
+    color: var(--accent-red);
+}

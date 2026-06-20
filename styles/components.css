@@ -4062,6 +4062,85 @@ body.combat-mode .boss-hud-container {
 .st-rm-spin-btn.plus  { color: var(--accent-green); }
 .st-rm-spin-btn.minus { color: var(--accent-red); }
 
+/* ===== ST 玩家管理卡片 ===== */
+.player-manage-card {
+    position: relative;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* 名稱 + 上線時間 與 次數控制 並排 */
+.player-manage-card .pmc-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-right: 84px; /* 預留右上角刪除按鈕空間 */
+}
+
+.player-manage-card .pmc-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--accent-yellow);
+}
+
+/* 上線狀態小圓點 */
+.player-manage-card .pmc-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
+.player-manage-card .pmc-dot.online {
+    background: var(--accent-green);
+    box-shadow: 0 0 6px var(--accent-green);
+}
+.player-manage-card .pmc-dot.offline {
+    background: var(--text-dim);
+}
+
+/* 最後上線時間：較小、灰色 */
+.player-manage-card .pmc-lastonline {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+}
+
+.player-manage-card .pmc-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* 右上角刪除按鈕 */
+.player-manage-card .pmc-delete-btn {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: var(--accent-red);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+    transition: filter 0.15s ease;
+}
+.player-manage-card .pmc-delete-btn:hover {
+    filter: brightness(1.15);
+}
+
 .st-rm-section-title {
     font-size: 0.8rem;
     color: var(--text-dim);

@@ -59,8 +59,9 @@ function renderSTRouletteManager() {
     container.innerHTML = entries.map(([pid, p]) => {
         const name = esc(p.name || '未知玩家');
         const spins = parseInt(p.spins) || 0;
-        const online = p.online === true;
+        const online = (p.isOnline === true) || (p.online === true);
         const inventory = Array.isArray(p.inventory) ? p.inventory : [];
+        const lastOnlineText = esc(formatLastOnline(p));
 
         // 庫存清單
         let invHtml;
@@ -81,12 +82,16 @@ function renderSTRouletteManager() {
         }
 
         return `
-            <div class="st-rm-player">
-                <div class="st-rm-player-head">
-                    <div class="st-rm-player-name">
+            <div class="player-manage-card">
+                <button class="pmc-delete-btn" onclick="stDeletePlayer('${esc(pid)}')" title="刪除此玩家">🗑️ 刪除</button>
+                <div class="pmc-info">
+                    <div class="pmc-name">
+                        <span class="pmc-dot ${online ? 'online' : 'offline'}"></span>
                         ${name}
-                        ${online ? '' : '<span class="st-rm-offline">(離線)</span>'}
                     </div>
+                    <div class="pmc-lastonline">${lastOnlineText}</div>
+                </div>
+                <div class="pmc-controls">
                     <div class="st-rm-spins">
                         <button class="st-rm-spin-btn minus" onclick="stAdjustSpins('${esc(pid)}', -1)" title="-1 次數">−</button>
                         <span class="st-rm-spins-val">${spins}</span>
@@ -104,6 +109,28 @@ function renderSTRouletteManager() {
             </div>
         `;
     }).join('');
+}
+
+/**
+ * 將玩家的 lastOnline 時間戳記轉換為易讀文字
+ * - isOnline 為 true：顯示「最近上線：現在」
+ * - 否則顯示「最後上線：YYYY/MM/DD HH:mm」（無資料則顯示「未知」）
+ * @param {Object} p - 玩家資料
+ * @returns {string}
+ */
+function formatLastOnline(p) {
+    if (p && (p.isOnline === true || p.online === true)) {
+        return '最近上線：現在';
+    }
+    const ts = p && p.lastOnline;
+    if (typeof ts !== 'number' || ts <= 0) {
+        return '最後上線：未知';
+    }
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    const str = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} `
+        + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `最後上線：${str}`;
 }
 
 /**
@@ -174,6 +201,36 @@ function stGrantSpinsToAll(amount) {
     if (typeof showToast === 'function') {
         showToast(`已為 ${ids.length} 位玩家各 ${amount > 0 ? '+' : ''}${amount} 次數`);
     }
+    renderSTRouletteManager();
+}
+
+/**
+ * 從 Firebase players 節點中完全刪除某玩家（清除幽靈帳號）
+ * @param {string} playerId
+ */
+function stDeletePlayer(playerId) {
+    if (typeof myRole !== 'undefined' && myRole !== 'st') return;
+
+    const player = state && state.players && state.players[playerId];
+    const name = (player && player.name) ? player.name : playerId;
+
+    if (!confirm(`確定要刪除玩家「${name}」嗎？\n此操作會將該玩家從房間中完全移除（含次數與庫存），無法復原！`)) {
+        return;
+    }
+
+    if (typeof roomRef !== 'undefined' && roomRef) {
+        roomRef.child('players/' + playerId).remove()
+            .then(() => {
+                if (typeof showToast === 'function') showToast(`已刪除玩家「${name}」`);
+            })
+            .catch(err => {
+                if (typeof showToast === 'function') showToast('刪除失敗：' + err.message);
+            });
+    }
+
+    // 本地立即移除，避免等待 Firebase 回傳的延遲
+    if (state && state.players) delete state.players[playerId];
+    stRouletteSynthExpanded.delete(playerId);
     renderSTRouletteManager();
 }
 

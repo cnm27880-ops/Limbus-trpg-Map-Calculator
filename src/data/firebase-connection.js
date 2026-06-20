@@ -860,6 +860,9 @@ function setupConnectionMonitor() {
             setConnectionStatus('connected');
             console.log('✅ Firebase 連線已建立');
 
+            // 紀錄玩家「最後上線時間」（供 ST 辨識並清除幽靈帳號）
+            trackPlayerLastOnline();
+
             // 啟動心跳機制
             startHeartbeat();
 
@@ -976,6 +979,31 @@ function registerUserPresence() {
     unsubscribeListeners.push(() => {
         userRef.child('online').onDisconnect().cancel();
         userRef.child('last_active').onDisconnect().cancel();
+    });
+}
+
+/**
+ * 紀錄玩家「最後上線時間」
+ * - 連線時：將 players/{id}/lastOnline 設為伺服器時間、isOnline 設為 true
+ * - 斷線時：透過 onDisconnect() 自動將 isOnline 設為 false，並再次更新 lastOnline
+ * 僅針對玩家節點（ST 不在 players 節點下，故略過）。
+ */
+function trackPlayerLastOnline() {
+    if (!roomRef || !myPlayerId || myRole !== 'player') return;
+
+    const playerRef = roomRef.child('players/' + myPlayerId);
+
+    // 連線時更新上線狀態與時間
+    playerRef.child('isOnline').set(true);
+    playerRef.child('lastOnline').set(firebase.database.ServerValue.TIMESTAMP);
+
+    // 斷線時自動標記離線並再次紀錄最後上線時間
+    playerRef.child('isOnline').onDisconnect().set(false);
+    playerRef.child('lastOnline').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+
+    unsubscribeListeners.push(() => {
+        playerRef.child('isOnline').onDisconnect().cancel();
+        playerRef.child('lastOnline').onDisconnect().cancel();
     });
 }
 

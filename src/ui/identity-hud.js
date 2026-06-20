@@ -112,6 +112,12 @@ function openIdentityModal() {
         const owners = getIdentityOwners();
         if (owners.length) selectIdentityOwner(owners[0], true);
     }
+    // 預設我方攻擊者＝自己控制的單位（方便玩家直接開算）
+    if (!identityHudState.attackerId && typeof state !== 'undefined' && Array.isArray(state.units)) {
+        const mine = (typeof myPlayerId !== 'undefined' && myPlayerId)
+            ? state.units.find(u => u.ownerId === myPlayerId) : null;
+        if (mine) identityHudState.attackerId = mine.id;
+    }
     renderIdentityModal();
     el.style.display = 'flex';
 }
@@ -147,17 +153,26 @@ function selectIdentityOwner(owner, skipRender) {
 function toggleIdentityCard(cardId) {
     const c = identityHudState.cards[cardId] || (identityHudState.cards[cardId] = { owned: false, unlocked: false });
     c.owned = !c.owned;
+    refreshIdentityResult();
     renderIdentityModal();
 }
 
 function toggleIdentityUnlock(cardId) {
     const c = identityHudState.cards[cardId] || (identityHudState.cards[cardId] = { owned: false, unlocked: false });
     c.unlocked = !c.unlocked;
+    refreshIdentityResult();
     renderIdentityModal();
 }
 
+/** 設定欄位並（若已有結果）即時重算重繪，供輸入控制項 onchange 使用。 */
 function setIdentityField(field, value) {
     identityHudState[field] = value;
+}
+
+function updateIdentityField(field, value) {
+    identityHudState[field] = value;
+    refreshIdentityResult();
+    renderIdentityModal();
 }
 
 /**
@@ -187,12 +202,18 @@ function autoInitiativeRank(unitId) {
 
 // ===== 計算 =====
 
-function runIdentityCalc() {
-    if (typeof evaluatePlayerAttack !== 'function') return;
+/**
+ * 實際計算疊加結果並寫入 lastResult。
+ * @param {boolean} silent - true 時不顯示提示（供輸入變動時的即時重算使用）
+ * @returns {boolean} 是否成功算出結果
+ */
+function computeIdentityResult(silent) {
+    if (typeof evaluatePlayerAttack !== 'function') return false;
     const owned = collectOwnedIdentities();
     if (owned.length === 0) {
-        if (typeof showToast === 'function') showToast('請先勾選至少一張持有的人格卡');
-        return;
+        identityHudState.lastResult = null;
+        if (!silent && typeof showToast === 'function') showToast('請先勾選至少一張持有的人格卡');
+        return false;
     }
 
     const attackerUnit = (typeof findUnitById === 'function' && identityHudState.attackerId)
@@ -213,7 +234,21 @@ function runIdentityCalc() {
     });
 
     identityHudState.lastResult = evaluatePlayerAttack(owned, attacker, target);
+    return true;
+}
+
+/** 「⚡ 計算」按鈕：計算並重繪（無卡片時提示）。 */
+function runIdentityCalc() {
+    computeIdentityResult(false);
     renderIdentityModal();
+}
+
+/**
+ * 即時重算：若已有結算結果，於任何輸入變動後同步更新，
+ * 避免面板顯示與目前選擇不符的舊資料。
+ */
+function refreshIdentityResult() {
+    if (identityHudState.lastResult) computeIdentityResult(true);
 }
 
 // ===== 套用 =====
@@ -313,7 +348,11 @@ function renderIdentityResult() {
      .map(([k, v]) => `<div class="idt-bonus"><span>${k}</span><b>+${v}</b></div>`).join('');
 
     const fmtStatus = (m) => Object.entries(m || {})
-        .map(([k, v]) => `${identityStatusName(k)} ${v >= 0 ? '+' : ''}${v}`).join('、');
+        .map(([k, v]) => {
+            const name = identityStatusName(k);
+            if (typeof v !== 'number') return `${name}（${v}）`;
+            return `${name} ${v >= 0 ? '+' : ''}${v}`;
+        }).join('、');
     const tgtStatus = fmtStatus(r.expectedTargetStatus);
     const selfStatus = fmtStatus(r.expectedSelfStatus);
 
@@ -396,19 +435,19 @@ function renderIdentityModal() {
                 <div class="idt-section">
                     <div class="idt-section-title">② 指定單位與條件</div>
                     <div class="idt-field"><label>我方（攻擊者）</label>
-                        <select class="idt-select" onchange="setIdentityField('attackerId', this.value); renderIdentityModal()">${renderIdentityUnitOptions(identityHudState.attackerId)}</select>
+                        <select class="idt-select" onchange="updateIdentityField('attackerId', this.value)">${renderIdentityUnitOptions(identityHudState.attackerId)}</select>
                     </div>
                     <div class="idt-field"><label>目標（敵方）</label>
-                        <select class="idt-select" onchange="setIdentityField('targetId', this.value); renderIdentityModal()">${renderIdentityUnitOptions(identityHudState.targetId)}</select>
+                        <select class="idt-select" onchange="updateIdentityField('targetId', this.value)">${renderIdentityUnitOptions(identityHudState.targetId)}</select>
                     </div>
                     <div class="idt-field"><label>先攻序位（空＝自動）</label>
                         <input class="idt-input" type="number" min="1" placeholder="自動" value="${identityHudState.atkRank}"
-                               oninput="setIdentityField('atkRank', this.value)">
+                               onchange="updateIdentityField('atkRank', this.value)">
                     </div>
                     <div class="idt-checks">
-                        <label><input type="checkbox" ${identityHudState.atkSevere ? 'checked' : ''} onchange="setIdentityField('atkSevere', this.checked)"> 我方嚴重槽已滿</label>
-                        <label><input type="checkbox" ${identityHudState.tgtSevere ? 'checked' : ''} onchange="setIdentityField('tgtSevere', this.checked)"> 目標嚴重槽已滿</label>
-                        <label><input type="checkbox" ${identityHudState.notActed ? 'checked' : ''} onchange="setIdentityField('notActed', this.checked)"> 目標本回合未行動</label>
+                        <label><input type="checkbox" ${identityHudState.atkSevere ? 'checked' : ''} onchange="updateIdentityField('atkSevere', this.checked)"> 我方嚴重槽已滿</label>
+                        <label><input type="checkbox" ${identityHudState.tgtSevere ? 'checked' : ''} onchange="updateIdentityField('tgtSevere', this.checked)"> 目標嚴重槽已滿</label>
+                        <label><input type="checkbox" ${identityHudState.notActed ? 'checked' : ''} onchange="updateIdentityField('notActed', this.checked)"> 目標本回合未行動</label>
                     </div>
                     <div class="idt-action-row">
                         <button class="idt-btn idt-btn-main" onclick="runIdentityCalc()">⚡ 計算疊加效果</button>
@@ -480,6 +519,7 @@ if (typeof window !== 'undefined') {
     window.toggleIdentityCard = toggleIdentityCard;
     window.toggleIdentityUnlock = toggleIdentityUnlock;
     window.setIdentityField = setIdentityField;
+    window.updateIdentityField = updateIdentityField;
     window.runIdentityCalc = runIdentityCalc;
     window.runIdentityTurnStart = runIdentityTurnStart;
     window.applyIdentityToCalc = applyIdentityToCalc;

@@ -293,6 +293,11 @@
         </div>
         <button id="btn-spin-roulette" class="roulette-spin-btn" onclick="spinRoulette()">抽取</button>
         <div id="roulette-result-text" class="roulette-result-text"></div>
+        <label class="roulette-test-toggle">
+            <input type="checkbox" id="roulette-test-mode" onchange="onRouletteTestModeChange()">
+            🧪 測試模式（試轉，不消耗次數）
+        </label>
+        <button id="roulette-st-manage-btn" class="roulette-manage-link" onclick="closeRouletteModal(); openSTRouletteManager();" style="display:none;">⚙️ 管理玩家抽獎次數</button>
     </div>
 </div>
 
@@ -358,6 +363,10 @@
         <div class="qab-menu-item" onclick="openRouletteModal(); closeQABMenu();">
             <span class="qab-menu-icon">🎡</span>
             <span class="qab-menu-text">幸運大轉盤</span>
+        </div>
+        <div class="qab-menu-item" id="qab-roulette-mgr-item" onclick="openSTRouletteManager(); closeQABMenu();">
+            <span class="qab-menu-icon">⚙️</span>
+            <span class="qab-menu-text">轉盤管理 (ST)</span>
         </div>
         <div class="qab-menu-item" id="qab-bossbattle-item" onclick="toggleBossBattleHUD(); closeQABMenu();">
             <span class="qab-menu-icon">👹</span>

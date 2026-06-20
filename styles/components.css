@@ -3781,18 +3781,35 @@ body.combat-mode .boss-hud-container {
     pointer-events: none;
 }
 
-/* 切片文字標籤（由 JS 動態插入） */
-.roulette-slice-label {
+/* 切片「輪輻」：填滿整個轉盤，旋轉至各切片方向，文字置於頂端（半徑外側） */
+.roulette-slice-spoke {
     position: absolute;
-    left: 50%;
-    top: 50%;
-    transform-origin: 0 0;
-    font-size: 0.6rem;
-    font-weight: 700;
-    color: #222;
-    white-space: nowrap;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    transform-origin: 50% 50%;
     pointer-events: none;
-    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* 切片文字標籤：直書、字元正立，沿半徑排列（由 JS 動態插入） */
+.roulette-slice-label {
+    margin-top: 7%;            /* 距邊緣往內，避免貼著外框 */
+    max-height: 38%;           /* 限制長度，避免壓到中央轉軸 */
+    writing-mode: vertical-rl; /* 直書，沿半徑方向 */
+    text-orientation: upright; /* 字元維持正立 */
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #1c1c1c;
+    overflow: hidden;
+    pointer-events: none;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+/* 下半部切片：翻轉文字 180° 使其維持正立、不上下顛倒 */
+.roulette-slice-spoke.flip .roulette-slice-label {
+    transform: rotate(180deg);
 }
 
 /* 中心轉軸 */
@@ -3831,6 +3848,36 @@ body.combat-mode .boss-hud-container {
     font-size: 1rem;
     font-weight: 700;
     color: var(--accent-green);
+}
+
+/* 測試模式切換 */
+.roulette-test-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+}
+.roulette-test-toggle input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-yellow);
+}
+
+/* ST 前往轉盤管理的捷徑按鈕 */
+.roulette-manage-link {
+    display: inline-block;
+    margin-top: 12px;
+    background: var(--accent-purple);
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 8px 16px;
+    border-radius: 8px;
 }
 
 /* ----- 全螢幕中獎廣播遮罩 ----- */

@@ -8,6 +8,7 @@ const STATUS_CATEGORIES = {
     common: { id: 'common', name: '常用狀態', icon: '⭐', color: '#f39c12' },
     debuff: { id: 'debuff', name: '負面與失能', icon: '💀', color: '#e74c3c' },
     mental: { id: 'mental', name: '精神與心智', icon: '🧠', color: '#9b59b6' },
+    identity: { id: 'identity', name: '人格卡', icon: '🃏', color: '#7e57c2' },
     custom: { id: 'custom', name: '自訂', icon: '✏️', color: '#8e24aa' }
 };
 
@@ -796,6 +797,140 @@ const STATUS_LIBRARY = {
                 heavy: null,
                 destruction: null
             }
+        }
+    ],
+
+    // ========== 人格卡（由 identity-config.js 的人格卡引擎施加的專屬狀態） ==========
+    identity: [
+        {
+            id: 'swiftness',
+            name: '迅捷',
+            icon: '🏃',
+            type: 'stack',
+            desc: '先攻值增加',
+            fullDesc: '你的先攻值增加等同於【迅捷】層數。',
+            keyResist: null,
+            effects: { light: '先攻值 +層數', heavy: null, destruction: null }
+        },
+        {
+            id: 'bind',
+            name: '束縛',
+            icon: '⛓️',
+            type: 'stack',
+            desc: '先攻值減少',
+            fullDesc: '目標先攻值減少等同於【束縛】層數。',
+            keyResist: null,
+            effects: { light: '先攻值 -層數', heavy: null, destruction: null }
+        },
+        {
+            id: 'provoke',
+            name: '挑釁',
+            icon: '💢',
+            type: 'stack',
+            desc: '被挑釁',
+            fullDesc: '每層【挑釁】會使目標對你以外的人進行任何檢定都獲得層數減值。',
+            keyResist: null,
+            effects: { light: '對他人檢定 -層數', heavy: null, destruction: null }
+        },
+        {
+            id: 'defenseDown',
+            name: '防禦等級降低',
+            icon: '🛡️',
+            type: 'stack',
+            desc: '防禦附加成功減少',
+            fullDesc: '目標的防禦附加成功減少層數/點。',
+            keyResist: null,
+            effects: { light: '防禦附加成功 -層數', heavy: null, destruction: null }
+        },
+        {
+            id: 'sinking',
+            name: '沉淪',
+            icon: '🌊',
+            type: 'stack',
+            desc: '沉淪點數累積',
+            fullDesc: '沉淪點數累積，與部分人格卡的 DP／傷害計算掛鉤。',
+            keyResist: null,
+            effects: { light: '沉淪點數累積', heavy: null, destruction: null }
+        },
+        {
+            id: 'charge',
+            name: '充能',
+            icon: '🔋',
+            type: 'stack',
+            desc: '特殊能量池-充能',
+            fullDesc: '特殊能量池，上限為 20 層。回合結束時 -1 層，戰鬥結束後歸零。可消耗以發動【超載】。',
+            keyResist: null,
+            effects: { light: '可消耗發動超載', heavy: null, destruction: null }
+        },
+        {
+            id: 'knowledge',
+            name: '學識',
+            icon: '📚',
+            type: 'stack',
+            desc: '特殊能量池-學識',
+            fullDesc: '特殊能量池-學識，可於回合開始捨棄技能加速獲得，戰鬥結束後重置。',
+            keyResist: null,
+            effects: { light: '可消耗轉化為附加成功', heavy: null, destruction: null }
+        },
+        {
+            id: 'trueKnowledge',
+            name: '所解真知',
+            icon: '🔍',
+            type: 'stack',
+            desc: '所解真知層數',
+            fullDesc: '以當前捨棄最高之技能等級計（D=1、C=2…），上限為 5。每層使攻擊判定 +1 DP。',
+            keyResist: null,
+            effects: { light: '攻擊判定 +1 DP/層', heavy: null, destruction: null }
+        },
+        {
+            id: 'loveHate',
+            name: '愛/憎',
+            icon: '💔',
+            type: 'stack',
+            desc: '特殊能量池-愛/憎',
+            fullDesc: '上限 20 點。每累計消耗 10 點愛/憎，獲得 1 層【魔法阿卡納】。',
+            keyResist: null,
+            effects: { light: '可消耗發動強化', heavy: null, destruction: null }
+        },
+        {
+            id: 'arcana',
+            name: '魔法阿卡納',
+            icon: '🔯',
+            type: 'stack',
+            desc: '攻擊與武器傷害增加',
+            fullDesc: '上限 5 點。你的攻擊檢定及武器傷害各增加等同於層數/點。',
+            keyResist: null,
+            effects: { light: '攻擊檢定與武器傷害 +層數', heavy: null, destruction: null }
+        },
+        {
+            id: 'echo',
+            name: '山莊的回響',
+            icon: '🏚️',
+            type: 'binary',
+            desc: '呼嘯山莊系列標記',
+            fullDesc: '呼嘯山莊系列人格的專屬標記，可觸發特殊技能。敵人具有此標記時，全體玩家對全體敵人施加的沮喪點數會同等施加在自己身上，直到標記消失。',
+            keyResist: null,
+            effects: { light: '觸發特殊技能 / 沮喪反噬', heavy: null, destruction: null }
+        },
+        {
+            id: 'duelOtis',
+            name: '決鬥宣告-奧提斯',
+            icon: '⚔️',
+            type: 'binary',
+            desc: '奧提斯的決鬥標記',
+            fullDesc: '標記一名目標。當你對該目標進行任何檢定時，你獲得 +3 DP 完美加值。施加新標記時舊標記消失。',
+            keyResist: null,
+            effects: { light: '對其檢定 +3 DP 完美加值', heavy: null, destruction: null }
+        },
+        {
+            id: 'duelDon',
+            name: '決鬥宣告-唐吉訶德',
+            icon: '🗡️',
+            type: 'binary',
+            desc: '唐吉訶德的決鬥標記',
+            fullDesc: '標記一名目標。對該目標進行任何檢定時 +2 DP 完美加值；每當攻擊命中該目標，立即獲得 1 層【迅捷】（每回合上限 4 層）。施加新標記時舊標記消失。',
+            keyResist: null,
+            effects: { light: '對其檢定 +2 DP，命中獲得迅捷', heavy: null, destruction: null }
         }
     ]
 };

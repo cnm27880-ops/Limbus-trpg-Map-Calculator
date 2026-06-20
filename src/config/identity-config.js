@@ -38,6 +38,22 @@
  *     本資料庫一律視為「直接施加點數」，不記錄任何豁免欄位。
  */
 
+/**
+ * 引擎狀態鍵名（英文）對應到狀態庫（status-config.js）的狀態 id。
+ * 多數同名，僅少數既有狀態 id 不同（破裂=fragile、呼吸法=poise、指令加護/對象=command_*）。
+ * 供 UI 串接時：讀取單位中文狀態 → 引擎英文鍵；引擎輸出英文鍵 → 套用回單位。
+ */
+const IDENTITY_STATUS_KEYMAP = {
+    depression: 'depression', swiftness: 'swiftness', bleed: 'bleed', weak: 'weak',
+    burn: 'burn', charge: 'charge', rupture: 'fragile', tremor: 'tremor',
+    breathing: 'poise', shield: 'shield', loveHate: 'loveHate', arcana: 'arcana',
+    commandProtect: 'command_protect', karma: 'karma', gale: 'gale', sinking: 'sinking',
+    knowledge: 'knowledge', trueKnowledge: 'trueKnowledge', bind: 'bind', provoke: 'provoke',
+    paralyze: 'paralyze', stun: 'stun', flaw: 'flaw', defenseDown: 'defenseDown',
+    nails: 'nails', echo: 'echo', commandTarget: 'command_target',
+    duelOtis: 'duelOtis', duelDon: 'duelDon'
+};
+
 const IDENTITY_LIBRARY = {
 
     // ========================================================================

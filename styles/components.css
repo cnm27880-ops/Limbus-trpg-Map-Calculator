@@ -3940,6 +3940,22 @@ body.combat-mode .boss-hud-container {
     color: var(--accent-purple);
 }
 
+.st-roulette-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.st-rm-bulk-btn {
+    background: var(--accent-green);
+    color: #111;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 7px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
 .st-roulette-player-list {
     padding: 14px 18px 20px;
     overflow-y: auto;

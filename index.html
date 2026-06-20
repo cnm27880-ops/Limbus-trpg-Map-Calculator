@@ -279,7 +279,7 @@
 <div id="modals-container"></div>
 
 <!-- 幸運大轉盤浮動視窗 -->
-<div id="roulette-modal" class="hidden">
+<div id="roulette-modal" class="hidden" onclick="if(event.target.id==='roulette-modal')closeRouletteModal()">
     <div class="roulette-box">
         <button class="roulette-close-btn" onclick="closeRouletteModal()" title="關閉">×</button>
         <div class="roulette-title">🎡 幸運大轉盤</div>
@@ -306,11 +306,14 @@
 </div>
 
 <!-- ST 轉盤管理面板 -->
-<div id="st-roulette-manager" class="hidden">
+<div id="st-roulette-manager" class="hidden" onclick="if(event.target.id==='st-roulette-manager')closeSTRouletteManager()">
     <div class="st-roulette-box">
         <div class="st-roulette-header">
             <span class="st-roulette-title">🎡 轉盤管理</span>
-            <button class="roulette-close-btn" onclick="closeSTRouletteManager()" title="關閉">×</button>
+            <div class="st-roulette-header-actions">
+                <button class="st-rm-bulk-btn" onclick="stGrantSpinsToAll(1)" title="所有玩家各 +1 次數">全體 ＋1 次數</button>
+                <button class="roulette-close-btn" onclick="closeSTRouletteManager()" title="關閉">×</button>
+            </div>
         </div>
         <div id="st-roulette-player-list" class="st-roulette-player-list"></div>
     </div>

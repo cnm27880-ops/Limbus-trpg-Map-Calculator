@@ -155,6 +155,29 @@ function stAdjustSpins(playerId, amount) {
 }
 
 /**
+ * 一次給所有玩家增減抽獎次數（GM 帶團便利功能）
+ * @param {number} amount
+ */
+function stGrantSpinsToAll(amount) {
+    if (typeof myRole !== 'undefined' && myRole !== 'st') return;
+    const players = (state && state.players) ? state.players : {};
+    const ids = Object.keys(players);
+    if (ids.length === 0) {
+        if (typeof showToast === 'function') showToast('目前沒有玩家');
+        return;
+    }
+    ids.forEach(pid => {
+        if (state && typeof state.updatePlayerSpins === 'function') {
+            state.updatePlayerSpins(pid, amount);
+        }
+    });
+    if (typeof showToast === 'function') {
+        showToast(`已為 ${ids.length} 位玩家各 ${amount > 0 ? '+' : ''}${amount} 次數`);
+    }
+    renderSTRouletteManager();
+}
+
+/**
  * 切換某玩家的合成統計展開狀態
  * @param {string} playerId
  */

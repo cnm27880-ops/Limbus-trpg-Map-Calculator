@@ -206,7 +206,9 @@ function spinRoulette() {
 function handleRouletteBroadcast(data) {
     if (!data) return;
 
-    const key = (data.nonce || '') + '|' + (data.ts || '');
+    // 僅以 nonce 去重：firebase ServerValue.TIMESTAMP 會先以估算值、再以確認值各觸發
+    // 一次監聽（同一 nonce、不同 ts），若把 ts 納入 key 會在抽獎者畫面重複彈出。
+    const key = data.nonce || ('ts:' + (data.ts || ''));
     if (key === lastRouletteBroadcastKey) return; // 去重
 
     // 忽略進房前就已存在的舊事件（避免一進房就跳動畫）

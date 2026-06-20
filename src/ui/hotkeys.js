@@ -172,7 +172,9 @@ function handleKeydown(e) {
     if (isTyping) return;
 
     // 檢查是否有 Modal 開啟（除了 Escape 鍵）
-    const hasOpenModal = document.querySelector('.modal-overlay.show');
+    // 也涵蓋幸運大轉盤相關浮層，避免背景快捷鍵在其開啟時誤觸發
+    const hasOpenModal = document.querySelector('.modal-overlay.show')
+        || isRouletteOverlayOpen();
     if (hasOpenModal && e.key !== 'Escape') return;
 
     // 取得按鍵（統一處理）
@@ -251,6 +253,23 @@ function closeAllModals() {
     const modals = document.querySelectorAll('.modal-overlay.show');
     modals.forEach(modal => {
         modal.classList.remove('show');
+    });
+
+    // 一併關閉幸運大轉盤相關浮層（使用 .hidden 切換，非 .modal-overlay）
+    ['roulette-modal', 'st-roulette-manager'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+}
+
+/**
+ * 是否有幸運大轉盤浮層正在開啟
+ * @returns {boolean}
+ */
+function isRouletteOverlayOpen() {
+    return ['roulette-modal', 'st-roulette-manager'].some(id => {
+        const el = document.getElementById(id);
+        return el && !el.classList.contains('hidden');
     });
 }
 

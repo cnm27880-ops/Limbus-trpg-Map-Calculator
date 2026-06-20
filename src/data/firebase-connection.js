@@ -482,6 +482,10 @@ function joinRoom(roomCode, isST) {
                 // 玩家端隱藏特殊BOSS戰面板入口（ST 專用）
                 const bossBattleItem = document.getElementById('qab-bossbattle-item');
                 if (bossBattleItem) bossBattleItem.style.display = 'none';
+
+                // 玩家端隱藏轉盤管理入口（ST 專用）
+                const rouletteMgrItem = document.getElementById('qab-roulette-mgr-item');
+                if (rouletteMgrItem) rouletteMgrItem.style.display = 'none';
                 const lyricsPanel = document.getElementById('lyrics-panel');
                 if (lyricsPanel) lyricsPanel.style.display = 'none';
             } else {

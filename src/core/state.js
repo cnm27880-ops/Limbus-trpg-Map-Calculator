@@ -145,6 +145,114 @@ function canControlUnit(unit) {
     return unit.ownerId === myPlayerId;
 }
 
+// ===== 幸運大轉盤（Roulette）邏輯 =====
+
+/**
+ * 確保玩家物件具備轉盤所需欄位（spins / inventory）
+ * Firebase 上的舊玩家資料可能缺少這些欄位，讀取後統一補齊。
+ * @param {Object} player - 玩家物件
+ * @returns {Object} 補齊後的玩家物件
+ */
+function ensurePlayerRouletteFields(player) {
+    if (!player || typeof player !== 'object') return player;
+    if (typeof player.spins !== 'number' || player.spins < 0) {
+        player.spins = parseInt(player.spins) || 0;
+    }
+    if (!Array.isArray(player.inventory)) {
+        player.inventory = [];
+    }
+    return player;
+}
+
+/**
+ * 對 state.players 內所有玩家補齊轉盤欄位
+ */
+function normalizePlayersRoulette() {
+    if (!state.players || typeof state.players !== 'object') return;
+    Object.values(state.players).forEach(ensurePlayerRouletteFields);
+}
+
+/**
+ * 增減指定玩家的抽獎次數，並同步至 Firebase。
+ * @param {string} playerId - 玩家 ID
+ * @param {number} amount - 增減的次數（可為負）
+ */
+state.updatePlayerSpins = function (playerId, amount) {
+    const player = this.players && this.players[playerId];
+    if (!player) return;
+    ensurePlayerRouletteFields(player);
+
+    const next = Math.max(0, (parseInt(player.spins) || 0) + (parseInt(amount) || 0));
+    player.spins = next;
+
+    // 同步到 Firebase（房間共享）
+    if (typeof roomRef !== 'undefined' && roomRef) {
+        roomRef.child(`players/${playerId}/spins`).set(next);
+    }
+
+    // notify：重繪相關 UI
+    notifyRouletteChange();
+};
+
+/**
+ * 將獎品加入指定玩家的 inventory，並扣除 1 次抽獎次數。
+ * @param {string} playerId - 玩家 ID
+ * @param {number} prizeId - 獎品 ID（對應 ROULETTE_PRIZES）
+ */
+state.addPrizeToPlayer = function (playerId, prizeId) {
+    const player = this.players && this.players[playerId];
+    if (!player) return;
+    ensurePlayerRouletteFields(player);
+
+    const prize = (typeof ROULETTE_PRIZES !== 'undefined')
+        ? ROULETTE_PRIZES.find(p => p.id === prizeId)
+        : null;
+
+    player.inventory.push({
+        prizeId: prizeId,
+        name: prize ? prize.name : String(prizeId),
+        type: prize ? prize.type : 'junk',
+        wonAt: Date.now()
+    });
+
+    // 扣除 1 次抽獎次數
+    player.spins = Math.max(0, (parseInt(player.spins) || 0) - 1);
+
+    // 同步到 Firebase
+    if (typeof roomRef !== 'undefined' && roomRef) {
+        roomRef.child(`players/${playerId}/inventory`).set(player.inventory);
+        roomRef.child(`players/${playerId}/spins`).set(player.spins);
+    }
+
+    notifyRouletteChange();
+};
+
+/**
+ * 廣播一筆抽獎結果到 Firebase（events/roulette），觸發全服中獎動畫。
+ * @param {string} playerName - 中獎玩家名稱
+ * @param {string} prizeName - 中獎獎品名稱
+ */
+state.broadcastRouletteResult = function (playerName, prizeName) {
+    if (typeof roomRef === 'undefined' || !roomRef) return;
+    roomRef.child('events/roulette').set({
+        playerName: playerName || '',
+        prizeName: prizeName || '',
+        ts: (typeof firebase !== 'undefined' && firebase.database)
+            ? firebase.database.ServerValue.TIMESTAMP
+            : Date.now(),
+        // nonce 確保即使連續抽到相同獎品，value 仍會變化以觸發監聽器
+        nonce: Math.random().toString(36).slice(2)
+    });
+};
+
+/**
+ * 轉盤資料變更後的通知（重繪轉盤與 ST 管理面板）
+ */
+function notifyRouletteChange() {
+    if (typeof renderRouletteUI === 'function') renderRouletteUI();
+    if (typeof renderSTRouletteManager === 'function') renderSTRouletteManager();
+}
+
 // ===== AOE 批次處理邏輯 =====
 
 /**

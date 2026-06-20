@@ -3677,3 +3677,424 @@ body.combat-mode .boss-hud-container {
     border-color: var(--accent-red);
     color: var(--accent-red);
 }
+
+/* ============================================================
+   幸運大轉盤 (Roulette)
+   ============================================================ */
+
+/* ----- 轉盤浮動視窗 ----- */
+#roulette-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 16px;
+}
+
+.roulette-box {
+    position: relative;
+    background: var(--bg-panel);
+    border: 2px solid var(--accent-yellow);
+    border-radius: 14px;
+    padding: 22px 22px 26px;
+    width: min(92vw, 420px);
+    max-height: 92vh;
+    overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    text-align: center;
+}
+
+.roulette-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    color: var(--text-dim);
+    font-size: 1.6rem;
+    line-height: 1;
+    padding: 2px 6px;
+}
+.roulette-close-btn:hover { color: var(--accent-red); }
+
+.roulette-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent-yellow);
+    margin-bottom: 8px;
+}
+
+.roulette-spins-info {
+    font-size: 0.95rem;
+    color: var(--text-main);
+    margin-bottom: 16px;
+}
+.roulette-spins-info #roulette-spins-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--accent-green);
+    font-size: 1.2rem;
+}
+
+/* ----- 轉盤本體 ----- */
+.roulette-wheel-wrap {
+    position: relative;
+    width: min(78vw, 320px);
+    height: min(78vw, 320px);
+    margin: 0 auto 20px;
+}
+
+/* 指針：固定於頂端，朝下指向中獎切片 */
+.roulette-pointer {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 16px solid transparent;
+    border-right: 16px solid transparent;
+    border-top: 26px solid var(--accent-red);
+    z-index: 5;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+#roulette-wheel {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    border: 6px solid #1a1a1f;
+    box-shadow: 0 0 0 4px var(--accent-yellow), 0 8px 24px rgba(0, 0, 0, 0.5);
+    /* 預設背景，實際由 JS 以 conic-gradient 動態寫入 */
+    background: conic-gradient(#888 0deg 360deg);
+    /* 真實轉盤減速感：5 秒緩動 */
+    transition: transform 5s cubic-bezier(0.25, 0.1, 0.25, 1);
+    transform: rotate(0deg);
+    overflow: hidden;
+}
+
+/* 旋轉中（JS 套用 inline transform，class 僅作標記/鎖定互動） */
+#roulette-wheel.spinning {
+    pointer-events: none;
+}
+
+/* 切片文字標籤（由 JS 動態插入） */
+.roulette-slice-label {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform-origin: 0 0;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #222;
+    white-space: nowrap;
+    pointer-events: none;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* 中心轉軸 */
+.roulette-hub {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 18%;
+    height: 18%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #fff, #bbb);
+    border: 3px solid var(--accent-yellow);
+    z-index: 4;
+}
+
+.roulette-spin-btn {
+    background: var(--accent-yellow);
+    color: #111;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 12px 32px;
+    border-radius: 30px;
+    box-shadow: 0 4px 12px rgba(253, 216, 53, 0.4);
+}
+.roulette-spin-btn:disabled {
+    background: var(--text-muted);
+    color: var(--text-dim);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.roulette-result-text {
+    margin-top: 14px;
+    min-height: 1.4em;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent-green);
+}
+
+/* ----- 全螢幕中獎廣播遮罩 ----- */
+#roulette-broadcast-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+    animation: roulette-broadcast-fade 0.4s ease;
+}
+
+@keyframes roulette-broadcast-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.roulette-broadcast-inner {
+    text-align: center;
+    padding: 30px 40px;
+    transform: scale(1);
+    animation: roulette-broadcast-pop 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes roulette-broadcast-pop {
+    0%   { transform: scale(0.3); opacity: 0; }
+    60%  { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); }
+}
+
+.roulette-broadcast-label {
+    font-size: clamp(1.4rem, 5vw, 2.6rem);
+    font-weight: 700;
+    color: var(--accent-yellow);
+    letter-spacing: 4px;
+    text-shadow: 0 0 12px rgba(253, 216, 53, 0.8), 0 2px 4px #000;
+    margin-bottom: 12px;
+}
+
+.roulette-broadcast-player {
+    font-size: clamp(1.6rem, 6vw, 3rem);
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 2px 6px #000;
+    margin-bottom: 8px;
+}
+
+.roulette-broadcast-prize {
+    font-size: clamp(2rem, 9vw, 5rem);
+    font-weight: 900;
+    background: linear-gradient(90deg, #ffd54f, #ff8a65, #ff5252, #ba68c8, #4fc3f7, #ffd54f);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 30px rgba(255, 213, 79, 0.6);
+    animation: roulette-prize-shine 3s linear infinite;
+    line-height: 1.2;
+    padding: 0 10px;
+}
+
+@keyframes roulette-prize-shine {
+    from { background-position: 0% 50%; }
+    to   { background-position: 300% 50%; }
+}
+
+/* ----- ST 轉盤管理面板 ----- */
+#st-roulette-manager {
+    position: fixed;
+    inset: 0;
+    z-index: 9100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 16px;
+}
+
+.st-roulette-box {
+    position: relative;
+    background: var(--bg-panel);
+    border: 2px solid var(--accent-purple);
+    border-radius: 14px;
+    width: min(94vw, 560px);
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.st-roulette-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.st-roulette-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--accent-purple);
+}
+
+.st-roulette-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.st-rm-bulk-btn {
+    background: var(--accent-green);
+    color: #111;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 7px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.st-roulette-player-list {
+    padding: 14px 18px 20px;
+    overflow-y: auto;
+}
+
+.st-rm-player {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+}
+
+.st-rm-player-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.st-rm-player-name {
+    font-weight: 700;
+    color: var(--accent-yellow);
+    font-size: 1rem;
+}
+.st-rm-player-name .st-rm-offline {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-left: 6px;
+}
+
+.st-rm-spins {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.st-rm-spins-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: var(--accent-green);
+    min-width: 2ch;
+    text-align: center;
+}
+.st-rm-spin-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    font-weight: 700;
+    font-size: 1rem;
+}
+.st-rm-spin-btn:hover { border-color: var(--border-focus); }
+.st-rm-spin-btn.plus  { color: var(--accent-green); }
+.st-rm-spin-btn.minus { color: var(--accent-red); }
+
+.st-rm-section-title {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin: 8px 0 6px;
+    font-weight: 700;
+}
+
+.st-rm-inventory {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+.st-rm-inv-item {
+    font-size: 0.72rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 9px;
+    color: var(--text-main);
+}
+.st-rm-inv-item.type-point    { border-color: var(--accent-green); color: var(--accent-green); }
+.st-rm-inv-item.type-fragment { border-color: var(--accent-blue);  color: var(--accent-blue); }
+.st-rm-inv-item.type-gacha    { border-color: var(--accent-purple); color: #ce93d8; }
+.st-rm-inv-empty {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.st-rm-synth-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+.st-rm-synth-toggle {
+    background: var(--accent-blue);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 6px;
+}
+.st-rm-synth-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+.st-rm-synth-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.8rem;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: var(--bg-input);
+}
+.st-rm-synth-row.ready { border: 1px solid var(--accent-green); }
+.st-rm-synth-count { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+.st-rm-synth-ready-label { color: var(--accent-green); font-weight: 700; }
+.st-rm-synth-do-btn {
+    background: var(--accent-green);
+    color: #111;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+}
+.st-rm-synth-do-btn:disabled {
+    background: var(--text-muted);
+    color: var(--text-dim);
+    cursor: not-allowed;
+}
+
+.st-rm-empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 30px 10px;
+}

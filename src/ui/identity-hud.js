@@ -130,6 +130,8 @@ function toggleIdentityModal() {
 // ===== 選取操作 =====
 
 function selectIdentityOwner(owner, skipRender) {
+    // 切換角色時清除上一個角色的結算結果，避免結果面板顯示舊資料
+    if (identityHudState.owner !== owner) identityHudState.lastResult = null;
     identityHudState.owner = owner;
     // 初次選此角色 → 預設全部持有、三技未解鎖
     if (typeof getIdentitiesByOwner === 'function') {
@@ -160,11 +162,15 @@ function setIdentityField(field, value) {
 
 /**
  * 蒐集目前「持有」的人格卡，轉為引擎輸入陣列 [{id, unlocked}]。
+ * 僅納入「當前選中角色」名下的卡片，避免切換角色後與前一個角色的選取疊加。
  */
 function collectOwnedIdentities() {
     const list = [];
-    for (const [cardId, c] of Object.entries(identityHudState.cards)) {
-        if (c.owned) list.push({ id: cardId, unlocked: !!c.unlocked });
+    const ownerCards = (typeof getIdentitiesByOwner === 'function' && identityHudState.owner)
+        ? getIdentitiesByOwner(identityHudState.owner) : [];
+    for (const cardId of ownerCards) {
+        const c = identityHudState.cards[cardId];
+        if (c && c.owned) list.push({ id: cardId, unlocked: !!c.unlocked });
     }
     return list;
 }

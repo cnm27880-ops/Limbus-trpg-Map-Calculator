@@ -439,11 +439,15 @@ function joinRoom(roomCode, isST) {
 
             // 玩家加入：註冊自己到玩家列表和使用者列表
             if (!isST) {
+                // 保留返回玩家既有的轉盤資料（spins / inventory），避免重新加入時被重置
+                const existingPlayer = (data.players && data.players[myPlayerId]) || {};
                 const playerData = {
                     name: myName,
                     code: myPlayerCode,
                     online: true,
-                    joinedAt: firebase.database.ServerValue.TIMESTAMP
+                    joinedAt: firebase.database.ServerValue.TIMESTAMP,
+                    spins: (typeof existingPlayer.spins === 'number') ? existingPlayer.spins : 0,  // 幸運大轉盤：剩餘抽獎次數
+                    inventory: Array.isArray(existingPlayer.inventory) ? existingPlayer.inventory : []  // 幸運大轉盤：已抽中的獎品/碎片
                 };
                 roomRef.child('players/' + myPlayerId).set(playerData);
                 showToast(`已加入房間！識別碼：${myPlayerCode}`);
@@ -563,6 +567,8 @@ function loadRoomData(data) {
     } else {
         state.players = {};
     }
+    // 補齊轉盤欄位（spins / inventory）
+    if (typeof normalizePlayersRoulette === 'function') normalizePlayersRoulette();
 
     if (data.customStatuses) {
         state.customStatuses = Object.values(data.customStatuses);
@@ -738,9 +744,23 @@ function setupRoomListeners() {
     const playersListener = roomRef.child('players').on('value', snapshot => {
         if (snapshot.exists()) {
             state.players = snapshot.val();
+        } else {
+            state.players = {};
         }
+        // 補齊轉盤欄位（spins / inventory）並刷新相關 UI
+        if (typeof normalizePlayersRoulette === 'function') normalizePlayersRoulette();
+        if (typeof renderRouletteUI === 'function') renderRouletteUI();
+        if (typeof renderSTRouletteManager === 'function') renderSTRouletteManager();
     });
     unsubscribeListeners.push(() => roomRef.child('players').off('value', playersListener));
+
+    // 監聽幸運大轉盤廣播事件（全服中獎動畫）
+    const rouletteListener = roomRef.child('events/roulette').on('value', snapshot => {
+        if (snapshot.exists() && typeof handleRouletteBroadcast === 'function') {
+            handleRouletteBroadcast(snapshot.val());
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('events/roulette').off('value', rouletteListener));
 
     // 監聽自訂狀態變更（房間共享）
     const customStatusesListener = roomRef.child('customStatuses').on('value', snapshot => {

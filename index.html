@@ -116,6 +116,7 @@
                     <button class="map-manager-btn" onclick="triggerMapBgUpload()" title="上傳地圖背景圖片">🖼️ 背景</button>
                     <button class="map-manager-btn" id="clear-map-bg-btn" onclick="clearMapBg()" title="清除背景圖" style="display:none;">✕ 背景</button>
                     <button class="map-manager-btn" onclick="openMapManagerModal()" title="儲存/載入地圖">📂 地圖</button>
+                    <button class="map-manager-btn" onclick="openSTRouletteManager()" title="管理玩家抽獎次數與碎片">🎡 轉盤管理</button>
                     <select id="map-theme-select" class="map-select" onchange="changeMapTheme(this.value)">
                         <option value="0">一般訓練室</option>
                         <option value="1">後巷深處</option>
@@ -277,6 +278,44 @@
 <!-- Modals -->
 <div id="modals-container"></div>
 
+<!-- 幸運大轉盤浮動視窗 -->
+<div id="roulette-modal" class="hidden">
+    <div class="roulette-box">
+        <button class="roulette-close-btn" onclick="closeRouletteModal()" title="關閉">×</button>
+        <div class="roulette-title">🎡 幸運大轉盤</div>
+        <div class="roulette-spins-info">
+            剩餘次數：<span id="roulette-spins-count">0</span>
+        </div>
+        <div class="roulette-wheel-wrap">
+            <div class="roulette-pointer"></div>
+            <div id="roulette-wheel"></div>
+            <div class="roulette-hub"></div>
+        </div>
+        <button id="btn-spin-roulette" class="roulette-spin-btn" onclick="spinRoulette()">抽取</button>
+        <div id="roulette-result-text" class="roulette-result-text"></div>
+    </div>
+</div>
+
+<!-- 全螢幕中獎廣播遮罩 -->
+<div id="roulette-broadcast-overlay" class="hidden">
+    <div class="roulette-broadcast-inner">
+        <div class="roulette-broadcast-label">🎉 中獎快報 🎉</div>
+        <div class="roulette-broadcast-player" id="roulette-broadcast-player"></div>
+        <div class="roulette-broadcast-prize" id="roulette-broadcast-prize"></div>
+    </div>
+</div>
+
+<!-- ST 轉盤管理面板 -->
+<div id="st-roulette-manager" class="hidden">
+    <div class="st-roulette-box">
+        <div class="st-roulette-header">
+            <span class="st-roulette-title">🎡 轉盤管理</span>
+            <button class="roulette-close-btn" onclick="closeSTRouletteManager()" title="關閉">×</button>
+        </div>
+        <div id="st-roulette-player-list" class="st-roulette-player-list"></div>
+    </div>
+</div>
+
 <!-- 快速操作球 (Quick Action Ball) -->
 <div id="quick-action-ball" class="qab-container">
     <!-- 彈出選單 -->
@@ -312,6 +351,10 @@
         <div class="qab-menu-item" onclick="toggleCalcHUD(); closeQABMenu();">
             <span class="qab-menu-icon">🎲</span>
             <span class="qab-menu-text">懸浮計算器</span>
+        </div>
+        <div class="qab-menu-item" onclick="openRouletteModal(); closeQABMenu();">
+            <span class="qab-menu-icon">🎡</span>
+            <span class="qab-menu-text">幸運大轉盤</span>
         </div>
         <div class="qab-menu-item" id="qab-bossbattle-item" onclick="toggleBossBattleHUD(); closeQABMenu();">
             <span class="qab-menu-icon">👹</span>
@@ -493,6 +536,7 @@
 <!-- 配置層 -->
 <script src="src/config/config.js"></script>
 <script src="src/config/status-config.js"></script>
+<script src="src/config/roulette-config.js"></script>
 <script src="src/config/firebase-config.js"></script>
 
 <!-- 核心層 -->
@@ -526,5 +570,9 @@
 <script src="src/ui/boss-battle-hud.js"></script>
 <script src="src/ui/identity-hud.js"></script>
 <script src="src/ui/main.js"></script>
+
+<!-- 幸運大轉盤 -->
+<script src="src/ui/roulette-ui.js"></script>
+<script src="src/ui/st-roulette-manager.js"></script>
 </body>
 </html>

@@ -54,23 +54,71 @@ function closeQABMenu() {
     document.removeEventListener('click', handleQABOutsideClick);
 }
 
+// ===== 媒體中心（音樂 / 歌詞 分頁融合） =====
+
 /**
- * 切換歌詞工具面板
+ * 開啟媒體中心並切換到指定分頁
+ * @param {string} [tab='music'] - 'music' | 'lyrics'
+ */
+function openMediaPanel(tab) {
+    const panel = document.getElementById('media-panel');
+    if (!panel) return;
+    panel.classList.add('expanded');
+    switchMediaTab(tab || 'music');
+}
+
+/**
+ * 關閉媒體中心
+ */
+function closeMediaPanel() {
+    const panel = document.getElementById('media-panel');
+    if (panel) panel.classList.remove('expanded');
+}
+
+/**
+ * 切換媒體中心開關（QAB 選單入口）
+ */
+function toggleMediaPanel() {
+    const panel = document.getElementById('media-panel');
+    if (!panel) return;
+    if (panel.classList.contains('expanded')) closeMediaPanel();
+    else openMediaPanel('music');
+}
+
+/**
+ * 切換媒體中心分頁（歌詞分頁僅 ST 可用）
+ * @param {string} tab - 'music' | 'lyrics'
+ */
+function switchMediaTab(tab) {
+    // 權限：歌詞工具僅 ST 可用，玩家強制回到音樂分頁
+    if (tab === 'lyrics' && typeof myRole !== 'undefined' && myRole !== 'st') {
+        if (typeof showToast === 'function') showToast('歌詞工具僅 ST 可用');
+        tab = 'music';
+    }
+    const panel = document.getElementById('media-panel');
+    if (!panel) return;
+    panel.classList.add('expanded');
+    ['music', 'lyrics'].forEach(t => {
+        const pane = document.getElementById('media-pane-' + t);
+        const btn = document.getElementById('media-tab-' + t);
+        const active = (t === tab);
+        if (pane) pane.classList.toggle('hidden', !active);
+        if (btn) btn.classList.toggle('active', active);
+    });
+}
+
+/**
+ * 相容舊呼叫：開啟音樂分頁
+ */
+function toggleMusicPanel() {
+    openMediaPanel('music');
+}
+
+/**
+ * 相容舊呼叫：開啟歌詞分頁
  */
 function toggleLyricsPanel() {
-    const panel = document.getElementById('lyrics-panel');
-    if (!panel) return;
-
-    const isOpen = panel.classList.contains('expanded');
-
-    if (!isOpen) {
-        // 開啟歌詞面板時，根據音樂面板是否開啟來調整位置
-        const musicPanel = document.getElementById('music-player-panel');
-        const musicOpen = musicPanel && musicPanel.classList.contains('expanded');
-        panel.style.right = musicOpen ? (musicPanel.offsetWidth + 10) + 'px' : '0px';
-    }
-
-    panel.classList.toggle('expanded', !isOpen);
+    openMediaPanel('lyrics');
 }
 
 // ===== 頁面載入初始化 =====

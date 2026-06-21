@@ -3345,35 +3345,79 @@ body.combat-mode .boss-hud-container {
 .player-memo-list {
     display: flex;
     flex-direction: column;
+    gap: 10px;
 }
 
+/* 卡片化：每位玩家一張，分「攻擊 / 防禦 / 豁免」三組帶標籤的欄位 */
 .player-memo-item {
     display: flex;
-    gap: 4px;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.player-memo-item .pm-head {
+    display: flex;
+    gap: 6px;
     align-items: center;
-    margin-bottom: 4px;
-    flex-wrap: nowrap;
 }
 
 .player-memo-item input[type="text"].pm-name {
     flex: 1 1 auto;
     min-width: 60px;
-    padding: 3px 5px;
-    font-size: 0.78rem;
+    padding: 5px 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
     background: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--text-main);
 }
 
+.player-memo-item .pm-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.player-memo-item .pm-group-title {
+    font-size: 0.72rem;
+    font-weight: bold;
+    color: var(--accent-yellow);
+    letter-spacing: 0.5px;
+}
+
+.player-memo-item .pm-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.player-memo-item .pm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 52px;
+}
+
+.player-memo-item .pm-field-label {
+    font-size: 0.66rem;
+    color: var(--text-dim);
+    text-align: center;
+    white-space: nowrap;
+}
+
 .player-memo-item input[type="number"].pm-num {
-    flex: 0 0 42px;
-    width: 42px;
-    padding: 3px 4px;
-    font-size: 0.78rem;
+    width: 100%;
+    padding: 4px 4px;
+    font-size: 0.82rem;
     background: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--text-main);
     text-align: center;
     -moz-appearance: textfield;
@@ -3387,14 +3431,19 @@ body.combat-mode .boss-hud-container {
 
 .player-memo-item .pm-btn {
     flex: 0 0 auto;
-    padding: 2px 5px;
-    background: var(--bg-panel);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: var(--bg-input);
     border: 1px solid var(--border);
     color: var(--text-main);
-    border-radius: 3px;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 0.8rem;
-    line-height: 1.2;
+    font-size: 0.9rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .player-memo-item .pm-btn:hover {

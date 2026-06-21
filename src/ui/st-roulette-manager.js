@@ -59,7 +59,9 @@ function renderSTRouletteManager() {
     container.innerHTML = entries.map(([pid, p]) => {
         const name = esc(p.name || '未知玩家');
         const spins = parseInt(p.spins) || 0;
-        const online = (p.isOnline === true) || (p.online === true);
+        // 在線判定僅採用 isOnline（由 Firebase onDisconnect 可靠維護），
+        // 不再參考舊的 online 欄位——它在玩家未正常關閉分頁時會殘留為 true，造成「幽靈在線」。
+        const online = (p.isOnline === true);
         const inventory = Array.isArray(p.inventory) ? p.inventory : [];
         const lastOnlineText = esc(formatLastOnline(p));
 
@@ -119,7 +121,7 @@ function renderSTRouletteManager() {
  * @returns {string}
  */
 function formatLastOnline(p) {
-    if (p && (p.isOnline === true || p.online === true)) {
+    if (p && p.isOnline === true) {
         return '最近上線：現在';
     }
     const ts = p && p.lastOnline;

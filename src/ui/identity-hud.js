@@ -87,6 +87,7 @@ function applyEngineStatusesToUnit(unitId, statusMap) {
 let identityHudState = {
     owner: null,
     cards: {},          // cardId -> { owned: bool, unlocked: bool }
+    cardInputs: {},     // cardId -> { key: value }（人格卡的特殊手動資源，如意志力/魔法阿卡納）
     attackerId: null,
     targetId: null,
     atkRank: '',        // 先攻序位（空＝自動依先攻值推算）
@@ -95,6 +96,44 @@ let identityHudState = {
     notActed: false,    // 目標本回合未行動
     lastResult: null
 };
+
+// ===== 狀態持久化（保留上次選擇的角色與持有/解鎖，計算結果不保存） =====
+const IDENTITY_STATE_KEY = 'limbus-identity-state';
+
+function saveIdentityState() {
+    try {
+        localStorage.setItem(IDENTITY_STATE_KEY, JSON.stringify({
+            owner: identityHudState.owner,
+            cards: identityHudState.cards,
+            cardInputs: identityHudState.cardInputs
+        }));
+    } catch (e) { /* ignore */ }
+}
+
+function loadIdentityState() {
+    try {
+        const raw = localStorage.getItem(IDENTITY_STATE_KEY);
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        if (s && typeof s === 'object') {
+            if (s.owner) identityHudState.owner = s.owner;
+            if (s.cards && typeof s.cards === 'object') identityHudState.cards = s.cards;
+            if (s.cardInputs && typeof s.cardInputs === 'object') identityHudState.cardInputs = s.cardInputs;
+        }
+    } catch (e) { /* ignore */ }
+}
+
+/** 設定某張人格卡的手動資源輸入（如當前意志力），並即時重算。 */
+function setCardInput(cardId, key, value) {
+    if (!identityHudState.cardInputs[cardId]) identityHudState.cardInputs[cardId] = {};
+    const num = parseInt(value);
+    identityHudState.cardInputs[cardId][key] = isNaN(num) ? 0 : num;
+    saveIdentityState();
+    refreshIdentityResult();
+    // 重繪結果區（提醒可能隨意志力正負而改變），但不重建整個面板以免輸入框失焦
+    const resultBox = document.querySelector('#identity-modal .idt-result');
+    if (resultBox) resultBox.innerHTML = renderIdentityResult();
+}
 
 // ===== 自訂人格卡（使用者打字匯入） =====
 const CUSTOM_IDENTITY_KEY = 'limbus-custom-identities';
@@ -311,10 +350,12 @@ function openIdentityModal() {
         el.addEventListener('click', (e) => { if (e.target === el) closeIdentityModal(); });
         document.body.appendChild(el);
     }
-    // 預設選第一個角色
-    if (!identityHudState.owner && typeof getIdentityOwners === 'function') {
+    // 沿用上次選擇的角色；若沒有（或先前選的角色已不存在）才退回第一個
+    if (typeof getIdentityOwners === 'function') {
         const owners = getIdentityOwners();
-        if (owners.length) selectIdentityOwner(owners[0], true);
+        if (!identityHudState.owner || !owners.includes(identityHudState.owner)) {
+            if (owners.length) selectIdentityOwner(owners[0], true);
+        }
     }
     // 預設我方攻擊者＝自己控制的單位（方便玩家直接開算）
     if (!identityHudState.attackerId && typeof state !== 'undefined' && Array.isArray(state.units)) {
@@ -351,12 +392,14 @@ function selectIdentityOwner(owner, skipRender) {
             }
         }
     }
+    saveIdentityState();
     if (!skipRender) renderIdentityModal();
 }
 
 function toggleIdentityCard(cardId) {
     const c = identityHudState.cards[cardId] || (identityHudState.cards[cardId] = { owned: false, unlocked: false });
     c.owned = !c.owned;
+    saveIdentityState();
     refreshIdentityResult();
     renderIdentityModal();
 }
@@ -364,6 +407,7 @@ function toggleIdentityCard(cardId) {
 function toggleIdentityUnlock(cardId) {
     const c = identityHudState.cards[cardId] || (identityHudState.cards[cardId] = { owned: false, unlocked: false });
     c.unlocked = !c.unlocked;
+    saveIdentityState();
     refreshIdentityResult();
     renderIdentityModal();
 }
@@ -437,8 +481,56 @@ function computeIdentityResult(silent) {
         notActedThisTurn: !!identityHudState.notActed
     });
 
-    identityHudState.lastResult = evaluatePlayerAttack(owned, attacker, target);
+    // 疊加人格卡的「手動資源輸入」到攻擊者狀態，讓條件/動態數值（如魔法阿卡納層數、
+    // 意志力正負判定型態）能據此計算。
+    applyManualInputsToAttacker(owned, attacker);
+
+    const result = evaluatePlayerAttack(owned, attacker, target);
+    // 附加「資源提醒」（如：暗型態自傷扣血、光型態 -4 意志力），供 ST/玩家確認資源增減
+    result.reminders = collectIdentityReminders(owned, attacker, target);
+    identityHudState.lastResult = result;
     return true;
+}
+
+/**
+ * 把持有卡的手動資源輸入覆寫到攻擊者狀態。
+ * 對應到引擎狀態鍵（如 arcana / loveHate）者直接寫入 status；其餘自訂鍵（如 will）亦寫入。
+ */
+function applyManualInputsToAttacker(owned, attacker) {
+    if (!attacker.status) attacker.status = {};
+    for (const { id } of owned) {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
+        if (!card || !Array.isArray(card.manualInputs)) continue;
+        const vals = identityHudState.cardInputs[id] || {};
+        for (const inp of card.manualInputs) {
+            const v = (vals[inp.key] !== undefined) ? vals[inp.key] : (inp.default || 0);
+            attacker.status[inp.key] = parseInt(v) || 0;
+        }
+    }
+}
+
+/**
+ * 蒐集持有卡的資源提醒：
+ *  - 卡片 reminders 陣列（可帶 condition(target, attacker) 決定是否顯示）
+ *  - 卡片 formNote（型態／資源機制總說明）恆顯示
+ */
+function collectIdentityReminders(owned, attacker, target) {
+    const out = [];
+    for (const { id } of owned) {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
+        if (!card) continue;
+        if (Array.isArray(card.reminders)) {
+            for (const rm of card.reminders) {
+                let show = true;
+                if (typeof rm.condition === 'function') {
+                    try { show = !!rm.condition(target, attacker); } catch (e) { show = false; }
+                }
+                if (show && rm.text) out.push({ card: card.name, text: rm.text });
+            }
+        }
+        if (card.formNote) out.push({ card: card.name, text: card.formNote, note: true });
+    }
+    return out;
 }
 
 /** 「⚡ 計算」按鈕：計算並重繪（無卡片時提示）。 */
@@ -542,6 +634,38 @@ function renderIdentityCardList() {
     }).join('');
 }
 
+/**
+ * 渲染「特殊資源」區：列出所有持有卡所宣告的手動輸入欄位（如當前意志力、魔法阿卡納層數）。
+ * 沒有任何持有卡需要手動輸入時，整段不顯示。
+ */
+function renderIdentityManualInputs() {
+    const owned = collectOwnedIdentities();
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+    let rows = '';
+    for (const { id } of owned) {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
+        if (!card || !Array.isArray(card.manualInputs) || card.manualInputs.length === 0) continue;
+        const vals = identityHudState.cardInputs[id] || {};
+        const fields = card.manualInputs.map(inp => {
+            const v = (vals[inp.key] !== undefined) ? vals[inp.key] : (inp.default || 0);
+            const hint = inp.hint ? `<span class="idt-mi-hint">${esc(inp.hint)}</span>` : '';
+            return `<label class="idt-mi-field">
+                        <span class="idt-mi-label">${esc(inp.label)}${hint}</span>
+                        <input class="idt-input" type="number" value="${esc(String(v))}"
+                               onchange="setCardInput('${id}','${inp.key}',this.value)">
+                    </label>`;
+        }).join('');
+        rows += `<div class="idt-mi-card"><div class="idt-mi-card-name">${esc(card.name)}</div>${fields}</div>`;
+    }
+    if (!rows) return '';
+    return `
+        <div class="idt-section">
+            <div class="idt-section-title">②‧5 特殊資源（依持有人格卡填寫）</div>
+            <div class="idt-mi-hint-top">部分人格卡的效果依「玩家自身資源」變動（如意志力、魔法阿卡納層數），請在此填入當前數值以正確計算。</div>
+            ${rows}
+        </div>`;
+}
+
 function renderIdentityResult() {
     const r = identityHudState.lastResult;
     if (!r) return '<div class="idt-result-empty">設定完成後按「⚡ 計算疊加效果」</div>';
@@ -602,6 +726,12 @@ function renderIdentityResult() {
             const desc = (typeof escapeHtml === 'function') ? escapeHtml(l.desc || '') : (l.desc || '');
             return `<div class="idt-log idt-manual"><span class="idt-log-src">${src}</span><span class="idt-log-eff">${desc}</span></div>`;
         }).join('');
+    }
+    if (Array.isArray(r.reminders) && r.reminders.length) {
+        const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+        html += '<div class="idt-log-title idt-remind-title">💠 資源提醒（血量／意志力／型態）</div>';
+        html += r.reminders.map(rm =>
+            `<div class="idt-remind ${rm.note ? 'idt-remind-note' : ''}">${esc(rm.text)}</div>`).join('');
     }
     return html;
 }
@@ -665,6 +795,8 @@ function renderIdentityModal() {
                         <button class="idt-btn" onclick="runIdentityTurnStart()" title="套用回合開始的資源獲取（呼吸法／充能／人民之盾等）">🔄 回合開始資源</button>
                     </div>
                 </div>
+
+                ${renderIdentityManualInputs()}
 
                 <div class="idt-section">
                     <div class="idt-section-title">③ 結算結果</div>
@@ -733,6 +865,17 @@ function injectIdentityStyles() {
         .idt-rule-vals label{font-size:.76rem;color:var(--text-dim,#aaa);display:flex;flex-direction:column;gap:3px;}
         .idt-rule-vals input{width:84px;}
         .idt-rule-del{flex:0 0 auto;min-width:0;max-width:46px;}
+        .idt-mi-hint-top{font-size:.76rem;color:var(--text-dim,#888);margin-bottom:8px;}
+        .idt-mi-card{border:1px solid var(--accent-purple,#7e57c2);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:rgba(126,87,194,.08);}
+        .idt-mi-card-name{font-size:.82rem;font-weight:bold;color:var(--accent-purple,#9b59b6);margin-bottom:6px;}
+        .idt-mi-field{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;}
+        .idt-mi-field:last-child{margin-bottom:0;}
+        .idt-mi-label{font-size:.82rem;color:var(--text,#eee);display:flex;flex-direction:column;}
+        .idt-mi-hint{font-size:.7rem;color:var(--text-dim,#999);}
+        .idt-mi-field input{width:90px;flex:0 0 auto;}
+        .idt-remind-title{color:var(--accent-blue,#4aa3ff);}
+        .idt-remind{font-size:.82rem;color:var(--text,#eee);background:rgba(74,163,255,.08);border-left:3px solid var(--accent-blue,#4aa3ff);border-radius:4px;padding:6px 8px;margin:4px 0;line-height:1.5;}
+        .idt-remind-note{border-left-color:var(--accent-purple,#7e57c2);background:rgba(126,87,194,.08);color:var(--text-dim,#bbb);font-size:.78rem;}
     `;
     document.head.appendChild(s);
 }
@@ -762,8 +905,10 @@ if (typeof window !== 'undefined') {
     window.idtDraftSetRule = idtDraftSetRule;
     window.saveNewIdentity = saveNewIdentity;
     window.deleteCustomIdentity = deleteCustomIdentity;
-    // 啟動時把使用者儲存的自訂人格卡注入資料庫
+    window.setCardInput = setCardInput;
+    // 啟動時把使用者儲存的自訂人格卡注入資料庫，並還原上次的選擇
     registerAllCustomIdentities();
+    loadIdentityState();
     // 注入樣式（DOM 已就緒時立即注入，否則待載入）
     if (document.head) injectIdentityStyles();
     else document.addEventListener('DOMContentLoaded', injectIdentityStyles);

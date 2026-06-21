@@ -1,3 +1,38 @@
+/* ===== 戰鬥工具整合面板：分頁列與分頁內容 ===== */
+.battle-tools-tabs { display: flex; gap: 4px; }
+.bt-tab {
+    width: 32px; height: 28px;
+    padding: 0;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.95rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+}
+.bt-tab:hover { border-color: var(--border-focus); }
+.bt-tab.active {
+    background: rgba(229, 57, 53, 0.18);
+    color: var(--accent-red);
+    border-color: var(--accent-red);
+}
+.battle-tools-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.bt-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.skill-hud.collapsed .battle-tools-body { display: none; }
+
 /* ===== ST Skill Macro HUD ===== */
 .skill-hud {
     position: fixed;

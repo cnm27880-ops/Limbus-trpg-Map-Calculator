@@ -1167,9 +1167,8 @@ function initSkillHUD() {
     loadSkillHudSettings();
     loadCalcHudSettings();
 
-    // Auto-show if previously visible
-    if (skillHudState.isVisible) showSkillHUD();
-    if (calcHudState.isVisible) showCalcHUD();
+    // 不在此自動開啟舊的獨立視窗：招式 / 計算 / BOSS 已整合到「戰鬥工具」面板，
+    // 由 battle-tools-hud.js 統一管理開關（避免建立重複的 DOM 與 ID）。
 }
 
 if (document.readyState === 'loading') {

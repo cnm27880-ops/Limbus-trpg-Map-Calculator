@@ -435,7 +435,8 @@ function joinRoom(roomCode, isST) {
             }
 
             // 載入房間資料
-            loadRoomData(snapshot.val());
+            const data = snapshot.val();
+            loadRoomData(data);
 
             // 玩家加入：註冊自己到玩家列表和使用者列表
             if (!isST) {
@@ -473,21 +474,13 @@ function joinRoom(roomCode, isST) {
                 if (playBtn) playBtn.style.display = 'none';
                 if (stopBtn) stopBtn.style.display = 'none';
 
-                // 玩家端隱藏歌詞功能（歌詞選擇器、歌詞工具選單、歌詞面板）
+                // 玩家端隱藏歌詞功能：歌詞選擇器按鈕 + 媒體中心的「歌詞」分頁（ST 專用）
                 const lyricPickBtn = document.getElementById('bgm-lyrics-pick-btn');
                 if (lyricPickBtn) lyricPickBtn.style.display = 'none';
-                const lyricsMenuItem = document.getElementById('qab-lyrics-item');
-                if (lyricsMenuItem) lyricsMenuItem.style.display = 'none';
+                const lyricsTab = document.getElementById('media-tab-lyrics');
+                if (lyricsTab) lyricsTab.style.display = 'none';
 
-                // 玩家端隱藏特殊BOSS戰面板入口（ST 專用）
-                const bossBattleItem = document.getElementById('qab-bossbattle-item');
-                if (bossBattleItem) bossBattleItem.style.display = 'none';
-
-                // 玩家端隱藏轉盤管理入口（ST 專用）
-                const rouletteMgrItem = document.getElementById('qab-roulette-mgr-item');
-                if (rouletteMgrItem) rouletteMgrItem.style.display = 'none';
-                const lyricsPanel = document.getElementById('lyrics-panel');
-                if (lyricsPanel) lyricsPanel.style.display = 'none';
+                // 特殊BOSS戰分頁（ST 專用）於建立「戰鬥工具」面板時依角色自動隱藏
             } else {
                 // ST 的音樂控制區塊
                 const musicStControls = document.getElementById('bgm-st-controls');

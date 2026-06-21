@@ -288,13 +288,9 @@ function toggleHotkeyHelp() {
         if (hotkeyHelpVisible) {
             renderHotkeyHelp();
 
-            // 關閉其他面板（音樂面板）
-            const musicPanel = document.getElementById('music-player-panel');
-            if (musicPanel) {
-                musicPanel.classList.remove('expanded');
-                const musicBtn = document.getElementById('qab-music-btn');
-                if (musicBtn) musicBtn.classList.remove('active');
-            }
+            // 關閉其他面板（媒體中心：音樂 / 歌詞）
+            const mediaPanel = document.getElementById('media-panel');
+            if (mediaPanel) mediaPanel.classList.remove('expanded');
         }
     }
 }

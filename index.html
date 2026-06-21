@@ -328,46 +328,25 @@
 <div id="quick-action-ball" class="qab-container">
     <!-- 彈出選單 -->
     <div class="qab-menu" id="qab-menu">
-        <div class="qab-menu-item" onclick="toggleMusicPanel(); closeQABMenu();">
+        <div class="qab-menu-item" onclick="toggleMediaPanel(); closeQABMenu();">
             <span class="qab-menu-icon">🎵</span>
-            <span class="qab-menu-text">音樂播放器</span>
+            <span class="qab-menu-text">媒體中心（音樂 / 歌詞）</span>
         </div>
-        <div class="qab-menu-item" id="qab-lyrics-item" onclick="toggleLyricsPanel(); closeQABMenu();">
-            <span class="qab-menu-icon">📝</span>
-            <span class="qab-menu-text">歌詞工具</span>
-        </div>
-        <div class="qab-menu-item" onclick="toggleHotkeyHelp(); closeQABMenu();">
-            <span class="qab-menu-icon">⌨</span>
-            <span class="qab-menu-text">快捷鍵說明</span>
-        </div>
-        <div class="qab-menu-item" onclick="toggleCombatHUD(); closeQABMenu();">
-            <span class="qab-menu-icon">🎯</span>
-            <span class="qab-menu-text">戰鬥儀表板</span>
-        </div>
-        <div class="qab-menu-item" onclick="toggleSkillHUD(); closeQABMenu();">
-            <span class="qab-menu-icon">🗡️</span>
-            <span class="qab-menu-text">怪物招式面板</span>
+        <div class="qab-menu-item" onclick="toggleBattleTools(); closeQABMenu();">
+            <span class="qab-menu-icon">⚔️</span>
+            <span class="qab-menu-text">戰鬥工具（招式 / 計算 / BOSS）</span>
         </div>
         <div class="qab-menu-item" onclick="toggleIdentityModal(); closeQABMenu();">
             <span class="qab-menu-icon">🃏</span>
             <span class="qab-menu-text">人格卡引擎</span>
         </div>
-        <div class="qab-menu-item" onclick="toggleCalcHUD(); closeQABMenu();">
-            <span class="qab-menu-icon">🎲</span>
-            <span class="qab-menu-text">懸浮計算器</span>
-        </div>
         <div class="qab-menu-item" onclick="openRouletteModal(); closeQABMenu();">
             <span class="qab-menu-icon">🎡</span>
             <span class="qab-menu-text">幸運大轉盤</span>
         </div>
-        <div class="qab-menu-item" id="qab-bossbattle-item" onclick="toggleBossBattleHUD(); closeQABMenu();">
-            <span class="qab-menu-icon">👹</span>
-            <span class="qab-menu-text">特殊BOSS戰</span>
-        </div>
-        <div class="qab-menu-divider"></div>
-        <div class="qab-menu-item" onclick="openHUDSettings(); closeQABMenu();">
-            <span class="qab-menu-icon">⚙️</span>
-            <span class="qab-menu-text">HUD 設定</span>
+        <div class="qab-menu-item" onclick="toggleHotkeyHelp(); closeQABMenu();">
+            <span class="qab-menu-icon">⌨</span>
+            <span class="qab-menu-text">快捷鍵說明</span>
         </div>
     </div>
 
@@ -376,12 +355,18 @@
         <span class="qab-icon">⚡</span>
     </button>
 
-    <!-- 音樂播放器面板 -->
-    <div id="music-player-panel" class="qab-panel music-panel">
-        <div class="music-header">
-            <span class="music-title">背景音樂</span>
-            <button class="music-close-btn" onclick="toggleMusicPanel()">×</button>
+    <!-- 媒體中心：音樂播放器 + 歌詞工具（分頁融合） -->
+    <div id="media-panel" class="qab-panel media-panel">
+        <div class="media-header">
+            <div class="media-tabs">
+                <button class="media-tab active" id="media-tab-music" onclick="switchMediaTab('music')">🎵 音樂</button>
+                <button class="media-tab" id="media-tab-lyrics" onclick="switchMediaTab('lyrics')">📝 歌詞</button>
+            </div>
+            <button class="music-close-btn" onclick="closeMediaPanel()">×</button>
         </div>
+        <div class="media-body">
+        <!-- 音樂分頁 -->
+        <div class="media-pane" id="media-pane-music">
         <div class="music-panel-body">
             <div class="music-now-playing">
                 <span class="music-label">正在播放</span>
@@ -406,14 +391,10 @@
                 </div>
             </div>
         </div>
-    </div>
+        </div><!-- /media-pane-music -->
 
-    <!-- 歌詞工具面板 (獨立) -->
-    <div id="lyrics-panel" class="qab-panel lyrics-tool-panel">
-        <div class="music-header">
-            <span class="music-title">歌詞工具</span>
-            <button class="music-close-btn" onclick="toggleLyricsPanel()">×</button>
-        </div>
+        <!-- 歌詞分頁 -->
+        <div class="media-pane hidden" id="media-pane-lyrics">
         <div class="lyrics-tool-body">
             <!-- 歌詞輸入 -->
             <div class="lyrics-section">
@@ -496,7 +477,9 @@
             </div>
             </div><!-- /lyrics-st-controls -->
         </div>
-    </div>
+        </div><!-- /media-pane-lyrics -->
+        </div><!-- /media-body -->
+    </div><!-- /media-panel -->
 
     <!-- 快捷鍵說明面板 -->
     <div class="qab-panel hotkey-help-panel hidden" id="hotkey-help">
@@ -572,6 +555,7 @@
 <script src="src/ui/combat-hud.js"></script>
 <script src="src/ui/st-skill-hud.js"></script>
 <script src="src/ui/boss-battle-hud.js"></script>
+<script src="src/ui/battle-tools-hud.js"></script>
 <script src="src/ui/identity-hud.js"></script>
 <script src="src/ui/main.js"></script>
 

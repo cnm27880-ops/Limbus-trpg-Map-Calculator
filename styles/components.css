@@ -1699,6 +1699,61 @@
     display: flex;
 }
 
+/* ===== 媒體中心（音樂 / 歌詞 分頁融合） ===== */
+.media-panel {
+    width: 320px;
+    max-height: calc(100vh - 80px);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+}
+.media-panel.expanded { display: flex; }
+
+.media-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, var(--bg-card), rgba(253, 216, 53, 0.08));
+    border-bottom: 1px solid var(--border);
+}
+.media-tabs { display: flex; gap: 6px; }
+.media-tab {
+    padding: 5px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: all 0.15s;
+}
+.media-tab:hover { border-color: var(--border-focus); }
+.media-tab.active {
+    background: rgba(253, 216, 53, 0.15);
+    color: var(--accent-yellow);
+    border-color: var(--accent-yellow);
+}
+
+.media-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.media-pane {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .music-panel-body {
     flex: 1;
     overflow-y: auto;

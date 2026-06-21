@@ -437,7 +437,16 @@ function togglePlayerMemo() {
 }
 
 function addPlayerMemo() {
-    playerMemoData.push({ name: '', dp: 0, atkBonus: 0, def: 0, defBonus: 0 });
+    playerMemoData.push({
+        name: '',
+        dp: 0, pen: 0, speed: 0, magic: 0,   // 攻擊檢定 + 子項（破甲 / 高速 / 破魔）
+        atkBonus: 0,                          // 攻擊附加成功
+        def: 0,                               // 防禦檢定
+        defBonus: 0,                          // 防禦附加成功
+        reflexSave: 0,                        // 反射豁免
+        willSave: 0,                          // 意志豁免
+        fortSave: 0                           // 強韌豁免
+    });
     saveMemoData();
     renderPlayerMemo();
 }
@@ -466,16 +475,39 @@ function fireInputChange(el) {
     el.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+function memoSetCalcInput(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.value = value;
+        fireInputChange(el);
+    }
+}
+
+// 依數值同步攻擊加成標籤（破甲 / 高速 / 破魔）的開關狀態
+function memoSyncAtkTag(type, on) {
+    const tag = document.querySelector(`.atk-tag[data-type="${type}"]`);
+    if (!tag || typeof toggleAtkTag !== 'function') return;
+    const active = tag.classList.contains('active');
+    if (on && !active) toggleAtkTag(type);
+    else if (!on && active) toggleAtkTag(type);
+}
+
 function applyMemoToAttack(index) {
     const data = playerMemoData[index];
     if (!data) return;
-    const atkInput = document.getElementById('c-atk');
-    if (atkInput) {
-        atkInput.value = data.dp;
-        fireInputChange(atkInput);
-    }
+
+    memoSetCalcInput('c-atk', data.dp ?? 0);
+    memoSetCalcInput('c-atk-auto', data.atkBonus ?? 0);
+    memoSetCalcInput('c-pen', data.pen ?? 0);
+    memoSetCalcInput('c-speed', data.speed ?? 0);
+    memoSetCalcInput('c-magic', data.magic ?? 0);
+
+    memoSyncAtkTag('pen', (data.pen ?? 0) > 0);
+    memoSyncAtkTag('speed', (data.speed ?? 0) > 0);
+    memoSyncAtkTag('magic', (data.magic ?? 0) > 0);
+
     if (typeof showToast === 'function') {
-        showToast(`已套用 ${data.name || '玩家'} 的 DP (${data.dp}) 至攻擊方`);
+        showToast(`已套用 ${data.name || '玩家'} 的攻擊數值（檢定 ${data.dp ?? 0}）`);
     }
     if (typeof calculateDP === 'function') calculateDP();
 }
@@ -484,12 +516,10 @@ function applyMemoToDefense(index) {
     const data = playerMemoData[index];
     if (!data) return;
 
-    const atkInput = document.getElementById('c-atk');
-    if (atkInput) {
-        atkInput.value = data.dp;
-        fireInputChange(atkInput);
-    }
+    // 防禦附加成功
+    memoSetCalcInput('c-def-auto', data.defBonus ?? 0);
 
+    // 防禦檢定 → 基礎防禦
     const baseTag = document.querySelector('.def-tag[data-def="base"]');
     const baseRow = document.getElementById('def-base');
     if (baseTag && !baseTag.classList.contains('active')) {
@@ -500,12 +530,12 @@ function applyMemoToDefense(index) {
     }
     const baseInput = document.querySelector('input[data-def="base"]');
     if (baseInput) {
-        baseInput.value = data.def;
+        baseInput.value = data.def ?? 0;
         fireInputChange(baseInput);
     }
 
     if (typeof showToast === 'function') {
-        showToast(`已套用 ${data.name || '玩家'}：DP ${data.dp} → 攻擊、防禦 ${data.def} → 基礎`);
+        showToast(`已套用 ${data.name || '玩家'} 的防禦數值（檢定 ${data.def ?? 0}）`);
     }
     if (typeof calculateDP === 'function') calculateDP();
 }
@@ -523,65 +553,67 @@ function renderPlayerMemo() {
         return;
     }
 
+    // 建立一個帶標籤的數值欄位
+    function numField(idx, field, value, label, title) {
+        const wrap = document.createElement('label');
+        wrap.className = 'pm-field';
+        const span = document.createElement('span');
+        span.className = 'pm-field-label';
+        span.innerText = label;
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.className = 'pm-num';
+        inp.title = title || label;
+        inp.value = value ?? 0;
+        inp.addEventListener('change', e => updatePlayerMemoField(idx, field, e.target.value));
+        inp.addEventListener('blur', e => updatePlayerMemoField(idx, field, e.target.value));
+        wrap.appendChild(span);
+        wrap.appendChild(inp);
+        return wrap;
+    }
+
+    // 建立一個分組（標題 + 數值欄位列）
+    function group(title, fields) {
+        const g = document.createElement('div');
+        g.className = 'pm-group';
+        const t = document.createElement('div');
+        t.className = 'pm-group-title';
+        t.innerText = title;
+        const row = document.createElement('div');
+        row.className = 'pm-row';
+        fields.forEach(f => row.appendChild(f));
+        g.appendChild(t);
+        g.appendChild(row);
+        return g;
+    }
+
     playerMemoData.forEach((p, idx) => {
         const item = document.createElement('div');
         item.className = 'player-memo-item';
 
+        // 標題列：名稱 + 套用/刪除按鈕
+        const head = document.createElement('div');
+        head.className = 'pm-head';
+
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
         nameInput.className = 'pm-name';
-        nameInput.placeholder = '名稱';
+        nameInput.placeholder = '玩家名稱';
         nameInput.value = p.name || '';
         nameInput.addEventListener('input', e => updatePlayerMemoField(idx, 'name', e.target.value));
         nameInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'name', e.target.value));
 
-        const dpInput = document.createElement('input');
-        dpInput.type = 'number';
-        dpInput.className = 'pm-num';
-        dpInput.title = '攻擊 DP';
-        dpInput.placeholder = 'DP';
-        dpInput.value = p.dp ?? 0;
-        dpInput.addEventListener('change', e => updatePlayerMemoField(idx, 'dp', e.target.value));
-        dpInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'dp', e.target.value));
-
-        const atkBonusInput = document.createElement('input');
-        atkBonusInput.type = 'number';
-        atkBonusInput.className = 'pm-num';
-        atkBonusInput.title = '攻擊附加成功';
-        atkBonusInput.placeholder = '附成';
-        atkBonusInput.value = p.atkBonus ?? 0;
-        atkBonusInput.addEventListener('change', e => updatePlayerMemoField(idx, 'atkBonus', e.target.value));
-        atkBonusInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'atkBonus', e.target.value));
-
-        const defInput = document.createElement('input');
-        defInput.type = 'number';
-        defInput.className = 'pm-num';
-        defInput.title = '防禦數字';
-        defInput.placeholder = '防禦';
-        defInput.value = p.def ?? 0;
-        defInput.addEventListener('change', e => updatePlayerMemoField(idx, 'def', e.target.value));
-        defInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'def', e.target.value));
-
-        const defBonusInput = document.createElement('input');
-        defBonusInput.type = 'number';
-        defBonusInput.className = 'pm-num';
-        defBonusInput.title = '防禦附加成功';
-        defBonusInput.placeholder = '防附';
-        defBonusInput.value = p.defBonus ?? 0;
-        defBonusInput.addEventListener('change', e => updatePlayerMemoField(idx, 'defBonus', e.target.value));
-        defBonusInput.addEventListener('blur', e => updatePlayerMemoField(idx, 'defBonus', e.target.value));
-
         const atkBtn = document.createElement('button');
         atkBtn.type = 'button';
         atkBtn.className = 'pm-btn pm-atk';
-        atkBtn.title = '套用至攻擊';
+        atkBtn.title = '套用攻擊數值至計算器（檢定 / 破甲 / 高速 / 破魔 / 附加成功）';
         atkBtn.innerText = '⚔️';
         atkBtn.addEventListener('click', () => applyMemoToAttack(idx));
 
         const defBtn = document.createElement('button');
         defBtn.type = 'button';
         defBtn.className = 'pm-btn pm-def';
-        defBtn.title = '套用至防禦 (DP→攻擊、防禦→基礎)';
+        defBtn.title = '套用防禦數值至計算器（防禦檢定 → 基礎、防禦附加成功）';
         defBtn.innerText = '🛡️';
         defBtn.addEventListener('click', () => applyMemoToDefense(idx));
 
@@ -592,14 +624,37 @@ function renderPlayerMemo() {
         delBtn.innerText = '❌';
         delBtn.addEventListener('click', () => deletePlayerMemo(idx));
 
-        item.appendChild(nameInput);
-        item.appendChild(dpInput);
-        item.appendChild(atkBonusInput);
-        item.appendChild(defInput);
-        item.appendChild(defBonusInput);
-        item.appendChild(atkBtn);
-        item.appendChild(defBtn);
-        item.appendChild(delBtn);
+        head.appendChild(nameInput);
+        head.appendChild(atkBtn);
+        head.appendChild(defBtn);
+        head.appendChild(delBtn);
+
+        // 攻擊群組
+        const atkGroup = group('🗡️ 攻擊', [
+            numField(idx, 'dp', p.dp, '檢定', '攻擊檢定 DP'),
+            numField(idx, 'pen', p.pen, '破甲', '破甲值'),
+            numField(idx, 'speed', p.speed, '高速', '高速值'),
+            numField(idx, 'magic', p.magic, '破魔', '破魔值'),
+            numField(idx, 'atkBonus', p.atkBonus, '附加成功', '攻擊附加成功')
+        ]);
+
+        // 防禦群組
+        const defGroup = group('🛡️ 防禦', [
+            numField(idx, 'def', p.def, '檢定', '防禦檢定'),
+            numField(idx, 'defBonus', p.defBonus, '附加成功', '防禦附加成功')
+        ]);
+
+        // 豁免群組（僅記錄，供 ST 參考）
+        const saveGroup = group('✨ 豁免', [
+            numField(idx, 'reflexSave', p.reflexSave, '反射', '反射豁免'),
+            numField(idx, 'willSave', p.willSave, '意志', '意志豁免'),
+            numField(idx, 'fortSave', p.fortSave, '強韌', '強韌豁免')
+        ]);
+
+        item.appendChild(head);
+        item.appendChild(atkGroup);
+        item.appendChild(defGroup);
+        item.appendChild(saveGroup);
         list.appendChild(item);
     });
 }

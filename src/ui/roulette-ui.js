@@ -92,10 +92,9 @@ function buildRouletteWheel() {
         const spoke = document.createElement('div');
         spoke.className = 'roulette-slice-spoke';
         spoke.style.transform = `rotate(${angle}deg)`;
-        // 下半部（90°~270°）若不翻轉文字會上下顛倒，加上 flip 讓字維持正立
-        if (angle > 90 && angle < 270) spoke.classList.add('flip');
 
         // 內層文字：轉盤上只顯示簡稱（shortName），完整名稱保留於 title 與全螢幕廣播
+        // 所有切片統一沿半徑由外向內排列：Emoji（首字元）固定在外圈，文字往圓心方向延伸
         const label = document.createElement('div');
         label.className = 'roulette-slice-label';
         label.textContent = p.shortName || p.name;

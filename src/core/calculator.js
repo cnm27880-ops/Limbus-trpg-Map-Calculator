@@ -572,18 +572,16 @@ function renderPlayerMemo() {
         return wrap;
     }
 
-    // 建立一個分組（標題 + 數值欄位列）
-    function group(title, fields) {
+    // 建立一個緊湊分組（emoji 標記 + 數值欄位），整組不換行、組與組之間可換行
+    function group(tag, title, fields) {
         const g = document.createElement('div');
         g.className = 'pm-group';
-        const t = document.createElement('div');
-        t.className = 'pm-group-title';
-        t.innerText = title;
-        const row = document.createElement('div');
-        row.className = 'pm-row';
-        fields.forEach(f => row.appendChild(f));
+        const t = document.createElement('span');
+        t.className = 'pm-group-tag';
+        t.innerText = tag;
+        t.title = title;
         g.appendChild(t);
-        g.appendChild(row);
+        fields.forEach(f => g.appendChild(f));
         return g;
     }
 
@@ -629,32 +627,28 @@ function renderPlayerMemo() {
         head.appendChild(defBtn);
         head.appendChild(delBtn);
 
-        // 攻擊群組
-        const atkGroup = group('🗡️ 攻擊', [
+        // 緊湊欄位列：三組（攻擊 / 防禦 / 豁免）以 emoji 標記，整體自動換行
+        const fields = document.createElement('div');
+        fields.className = 'pm-fields';
+        fields.appendChild(group('🗡️', '攻擊', [
             numField(idx, 'dp', p.dp, '檢定', '攻擊檢定 DP'),
             numField(idx, 'pen', p.pen, '破甲', '破甲值'),
             numField(idx, 'speed', p.speed, '高速', '高速值'),
             numField(idx, 'magic', p.magic, '破魔', '破魔值'),
-            numField(idx, 'atkBonus', p.atkBonus, '附加成功', '攻擊附加成功')
-        ]);
-
-        // 防禦群組
-        const defGroup = group('🛡️ 防禦', [
+            numField(idx, 'atkBonus', p.atkBonus, '附成', '攻擊附加成功')
+        ]));
+        fields.appendChild(group('🛡️', '防禦', [
             numField(idx, 'def', p.def, '檢定', '防禦檢定'),
-            numField(idx, 'defBonus', p.defBonus, '附加成功', '防禦附加成功')
-        ]);
-
-        // 豁免群組（僅記錄，供 ST 參考）
-        const saveGroup = group('✨ 豁免', [
+            numField(idx, 'defBonus', p.defBonus, '附成', '防禦附加成功')
+        ]));
+        fields.appendChild(group('✨', '豁免', [
             numField(idx, 'reflexSave', p.reflexSave, '反射', '反射豁免'),
             numField(idx, 'willSave', p.willSave, '意志', '意志豁免'),
             numField(idx, 'fortSave', p.fortSave, '強韌', '強韌豁免')
-        ]);
+        ]));
 
         item.appendChild(head);
-        item.appendChild(atkGroup);
-        item.appendChild(defGroup);
-        item.appendChild(saveGroup);
+        item.appendChild(fields);
         list.appendChild(item);
     });
 }

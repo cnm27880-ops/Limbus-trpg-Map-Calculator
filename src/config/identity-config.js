@@ -664,16 +664,18 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, dpBonus: (t, a) => (a.status.arcana || 0), weaponDamage: (t, a) => (a.status.arcana || 0), source: '魔法阿卡納', skill: '（被動）' }
             ],
             onHit: [
+                // 型態判定：依玩家填寫的「當前意志力」決定光（>0）／暗（<0）。
+                // 意志力為 0（未填）時兩種型態皆不計入，僅保留與型態無關的效果。
                 // 【光】奉主管老爺之命登場！
-                { condition: () => true, selfStatus: { loveHate: 2 }, targetStatus: { rupture: 2 }, source: '【光】奉主管老爺之命登場！', skill: '【光】奉主管老爺之命登場！' },
+                { condition: (t, a) => (a.status.will || 0) > 0, selfStatus: { loveHate: 2 }, targetStatus: { rupture: 2 }, source: '【光】奉主管老爺之命登場！', skill: '【光】奉主管老爺之命登場！' },
                 // 【暗】惡人…在哪…？
-                { condition: () => true, selfStatus: { loveHate: 5 }, targetStatus: { depression: 5 }, source: '【暗】惡人…在哪…？', skill: '【暗】惡人…在哪…？' },
+                { condition: (t, a) => (a.status.will || 0) < 0, selfStatus: { loveHate: 5 }, targetStatus: { depression: 5 }, source: '【暗】惡人…在哪…？', skill: '【暗】惡人…在哪…？' },
                 // 【光】要用愛！喲！
-                { condition: () => true, selfStatus: { loveHate: 3 }, targetStatus: { rupture: 2 }, source: '【光】要用愛！喲！', skill: '【光】要用愛！喲！' },
+                { condition: (t, a) => (a.status.will || 0) > 0, selfStatus: { loveHate: 3 }, targetStatus: { rupture: 2 }, source: '【光】要用愛！喲！', skill: '【光】要用愛！喲！' },
                 // 【暗】從我的腦袋裡出去…
-                { condition: () => true, selfStatus: { loveHate: 5 }, targetStatus: { depression: 5 }, source: '【暗】從我的腦袋裡出去…', skill: '【暗】從我的腦袋裡出去…' },
+                { condition: (t, a) => (a.status.will || 0) < 0, selfStatus: { loveHate: 5 }, targetStatus: { depression: 5 }, source: '【暗】從我的腦袋裡出去…', skill: '【暗】從我的腦袋裡出去…' },
                 // 【光】阿卡納律動【重複抽取解鎖】
-                { condition: () => true, selfStatus: { loveHate: 3, arcana: 1 }, source: '【光】阿卡納律動！', skill: '阿卡納律動', locked: true }
+                { condition: (t, a) => (a.status.will || 0) > 0, selfStatus: { loveHate: 3, arcana: 1 }, source: '【光】阿卡納律動！', skill: '阿卡納律動', locked: true }
             ],
             onActive: [
                 { name: '【光】奉主管老爺之命登場！（消耗愛憎）', source: '【光】奉主管老爺之命登場！', skill: '【光】奉主管老爺之命登場！', desc: '命中時可主動消耗 7 點愛/憎，使本次攻擊 DP +3。', effect: { cost: { loveHate: 7 }, dpBonus: 3 } },

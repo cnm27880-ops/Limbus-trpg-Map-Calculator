@@ -3345,31 +3345,31 @@ body.combat-mode .boss-hud-container {
 .player-memo-list {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
 }
 
-/* 卡片化：每位玩家一張，分「攻擊 / 防禦 / 豁免」三組帶標籤的欄位 */
+/* 緊湊卡片：標題列 + 一條會自動換行的欄位列（攻擊 / 防禦 / 豁免三組以 emoji 區隔） */
 .player-memo-item {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px;
+    gap: 4px;
+    padding: 5px 7px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 6px;
 }
 
 .player-memo-item .pm-head {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
 }
 
 .player-memo-item input[type="text"].pm-name {
     flex: 1 1 auto;
-    min-width: 60px;
-    padding: 5px 8px;
-    font-size: 0.85rem;
+    min-width: 50px;
+    padding: 3px 6px;
+    font-size: 0.8rem;
     font-weight: 600;
     background: var(--bg-input);
     border: 1px solid var(--border);
@@ -3377,47 +3377,49 @@ body.combat-mode .boss-hud-container {
     color: var(--text-main);
 }
 
-.player-memo-item .pm-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.player-memo-item .pm-group-title {
-    font-size: 0.72rem;
-    font-weight: bold;
-    color: var(--accent-yellow);
-    letter-spacing: 0.5px;
-}
-
-.player-memo-item .pm-row {
+.player-memo-item .pm-fields {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 3px 10px;
+}
+
+.player-memo-item .pm-group {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    gap: 3px;
+}
+
+.player-memo-item .pm-group-tag {
+    align-self: center;
+    font-size: 0.85rem;
+    cursor: help;
 }
 
 .player-memo-item .pm-field {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    flex: 1 1 auto;
-    min-width: 52px;
+    align-items: center;
+    gap: 1px;
+    flex: 0 0 auto;
+    width: 40px;
 }
 
 .player-memo-item .pm-field-label {
-    font-size: 0.66rem;
+    font-size: 0.6rem;
     color: var(--text-dim);
     text-align: center;
     white-space: nowrap;
+    line-height: 1.1;
 }
 
 .player-memo-item input[type="number"].pm-num {
     width: 100%;
-    padding: 4px 4px;
-    font-size: 0.82rem;
+    padding: 2px 2px;
+    font-size: 0.74rem;
     background: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 3px;
     color: var(--text-main);
     text-align: center;
     -moz-appearance: textfield;
@@ -3431,15 +3433,15 @@ body.combat-mode .boss-hud-container {
 
 .player-memo-item .pm-btn {
     flex: 0 0 auto;
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     padding: 0;
     background: var(--bg-input);
     border: 1px solid var(--border);
     color: var(--text-main);
-    border-radius: 5px;
+    border-radius: 4px;
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     line-height: 1;
     display: flex;
     align-items: center;

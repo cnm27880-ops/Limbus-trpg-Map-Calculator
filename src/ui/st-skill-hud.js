@@ -1,15 +1,14 @@
 /**
  * Limbus Command - 戰鬥面板共用工具 + 群體操作 (AOE)
  *
- * 原「怪物招式」與「浮動 DP 計算器」已移除：
+ * 原「怪物招式」「浮動 DP 計算器」「導覽列計算頁」「Google Sheets 戰鬥 HUD」均已移除：
  *   - 怪物每招的 DP / 狀態改由「多重行動設定」逐招填寫（src/ui/units.js）
- *   - DP 計算改用導覽列「計算」頁面，不再有浮動視窗
+ *   - 戰鬥全面改為「右鍵棋子 → 黑箱計算 → QTE 彈窗」，不再需要手動計算器
  *
  * 本檔保留下列跨面板共用的函式：
- *   - 通用可拖曳 / 雙擊摺疊 / 位置夾限（boss / battle-tools 面板共用）
+ *   - 通用可拖曳 / 雙擊摺疊 / 位置夾限
  *   - 狀態名稱顯示輔助（getStatusName / getStatusDisplayName）
- *   - 計算器橋接（applyAttackToCalc / applyDefenseToCalc，供 combat-hud 等呼叫）
- *   - ST 群體操作 (AOE)（已整合進「戰鬥工具 / BOSS」面板）
+ *   - ST 群體操作 (AOE)（已整合進「多重行動設定」面板）
  */
 
 // ===== Position Clamping =====
@@ -131,47 +130,6 @@ function getStatusDisplayName(statusId) {
     return statusId;
 }
 
-// ===== Calculator Bridge（供 combat-hud 等「填入計算器」按鈕呼叫） =====
-// 將數值填入導覽列「計算」頁面的計算器（不再開浮動視窗）。
-
-function applyDefenseToCalc(defType, value) {
-    const input = document.querySelector(`input[data-def="${defType}"]`);
-    if (input) {
-        input.value = value;
-        const tag = document.querySelector(`.def-tag[data-def="${defType}"]`);
-        if (tag && !tag.classList.contains('active') && typeof toggleDefTag === 'function') {
-            toggleDefTag(defType);
-        }
-    }
-    if (typeof showToast === 'function') showToast('已載入防禦值：' + value);
-}
-
-function applyAttackToCalc(dp, pen, speed, magic, name) {
-    const atkInput = document.getElementById('c-atk');
-    const penInput = document.getElementById('c-pen');
-    const speedInput = document.getElementById('c-speed');
-    const magicInput = document.getElementById('c-magic');
-
-    if (atkInput) atkInput.value = dp || 0;
-    if (penInput) penInput.value = pen || 0;
-    if (speedInput) speedInput.value = speed || 0;
-    if (magicInput) magicInput.value = magic || 0;
-
-    if (pen > 0 && typeof toggleAtkTag === 'function') {
-        const tag = document.querySelector('.atk-tag[data-type="pen"]');
-        if (tag && !tag.classList.contains('active')) toggleAtkTag('pen');
-    }
-    if (speed > 0 && typeof toggleAtkTag === 'function') {
-        const tag = document.querySelector('.atk-tag[data-type="speed"]');
-        if (tag && !tag.classList.contains('active')) toggleAtkTag('speed');
-    }
-    if (magic > 0 && typeof toggleAtkTag === 'function') {
-        const tag = document.querySelector('.atk-tag[data-type="magic"]');
-        if (tag && !tag.classList.contains('active')) toggleAtkTag('magic');
-    }
-
-    if (typeof showToast === 'function') showToast('已載入攻擊：' + (name || 'DP ' + dp));
-}
 
 // ===== ST AOE Manager =====
 
@@ -330,8 +288,6 @@ window.setupPanelDrag = setupPanelDrag;
 window.setupPanelCollapse = setupPanelCollapse;
 window.getStatusName = getStatusName;
 window.getStatusDisplayName = getStatusDisplayName;
-window.applyDefenseToCalc = applyDefenseToCalc;
-window.applyAttackToCalc = applyAttackToCalc;
 window.toggleStAoePanel = toggleStAoePanel;
 window.renderStAoeTargetList = renderStAoeTargetList;
 window.stAoeSelect = stAoeSelect;

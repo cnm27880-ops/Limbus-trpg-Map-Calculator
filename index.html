@@ -18,8 +18,6 @@
     <!-- CSS 檔案 -->
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="styles/components.css">
-    <link rel="stylesheet" href="styles/calculator.css">
-    <link rel="stylesheet" href="styles/combat-hud.css">
     <link rel="stylesheet" href="styles/st-skill-hud.css">
 </head>
 <body>
@@ -68,7 +66,6 @@
     <div class="nav-tabs">
         <button class="nav-tab active" data-page="map" onclick="switchPage('map')">🗺️ 地圖</button>
         <button class="nav-tab" data-page="units" onclick="switchPage('units')">⚔️ 單位</button>
-        <button class="nav-tab" data-page="calc" onclick="switchPage('calc')">🎲 計算</button>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
         <div class="conn-status" id="conn-status" title="連線狀態">
@@ -156,111 +153,6 @@
         <div class="units-list" id="units-list"></div>
     </div>
 
-    <!-- Calculator Page -->
-    <div id="page-calc" class="page">
-        <div class="calc-container">
-            <!-- Boss Mode Section -->
-            <div class="calc-section">
-                <label class="boss-toggle">
-                    <input type="checkbox" id="boss-mode" onchange="toggleBossMode()">
-                    <div>
-                        <div style="font-weight:bold;color:var(--accent-purple);">🔮 特殊 BOSS 模式</div>
-                        <div style="font-size:0.75rem;color:var(--text-dim);">啟用房規計算：複數行動、先攻加成</div>
-                    </div>
-                </label>
-                <div class="boss-options" id="boss-options">
-                    <div class="calc-grid">
-                        <div class="calc-field">
-                            <span class="calc-label">主線/支線等級</span>
-                            <input type="number" id="boss-tier" value="1" min="1" max="10" onchange="updateBossSummary()">
-                        </div>
-                        <div class="calc-field">
-                            <span class="calc-label">本回合狀況</span>
-                            <select id="boss-engage" onchange="updateBossSummary()">
-                                <option value="yes">有對抗行動</option>
-                                <option value="no">完全未對抗 (我方DP+)</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div id="boss-actions-list" style="margin-top:10px;"></div>
-                    <button class="boss-add-action" onclick="addBossAction()">+ 新增對抗行動</button>
-                    <div class="boss-summary">
-                        <div style="font-weight:bold;color:var(--accent-purple);margin-bottom:6px;">📊 結果預覽</div>
-                        <div id="boss-summary-content" style="display:flex;flex-direction:column;gap:4px;"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Attacker Section -->
-            <div class="calc-section">
-                <div class="calc-section-title atk">🗡️ 攻擊方 (我方)</div>
-                <div class="atk-tags">
-                    <span class="atk-tag" data-type="pen" onclick="toggleAtkTag('pen')">破甲</span>
-                    <span class="atk-tag" data-type="speed" onclick="toggleAtkTag('speed')">高速</span>
-                    <span class="atk-tag" data-type="magic" onclick="toggleAtkTag('magic')">破魔</span>
-                </div>
-                <div class="calc-grid">
-                    <div class="calc-field">
-                        <span class="calc-label">攻擊 DP</span>
-                        <input type="number" id="c-atk" value="10" min="0">
-                    </div>
-                    <div class="calc-field">
-                        <span class="calc-label">攻擊附加成功</span>
-                        <input type="number" id="c-atk-auto" value="0" min="0">
-                    </div>
-                    <div class="calc-field">
-                        <span class="calc-label">意志加值</span>
-                        <select id="c-will">
-                            <option value="0">不使用</option>
-                            <option value="3">+3 (完美)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="def-input-row" id="row-pen">
-                    <span>破甲值</span>
-                    <input type="number" id="c-pen" value="0">
-                </div>
-                <div class="def-input-row" id="row-speed">
-                    <span>高速值</span>
-                    <input type="number" id="c-speed" value="0">
-                </div>
-                <div class="def-input-row" id="row-magic">
-                    <span>破魔值</span>
-                    <input type="number" id="c-magic" value="0">
-                </div>
-            </div>
-
-            <!-- Defender Section -->
-            <div class="calc-section">
-                <div class="calc-section-title def">🛡️ 防禦方 (敵方)</div>
-                <div class="def-tags" id="def-tags"></div>
-                <div class="def-inputs" id="def-inputs"></div>
-                <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-                    <div class="calc-grid">
-                        <div class="calc-field">
-                            <span class="calc-label">本回合已受擊次數</span>
-                            <input type="number" id="c-hits" value="0" min="0">
-                        </div>
-                        <div class="calc-field">
-                            <span class="calc-label" style="color:var(--accent-orange)">防禦附加成功</span>
-                            <input type="number" id="c-def-auto" value="0" min="0">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="calc-buttons">
-                <button class="calc-btn calc-btn-reset" onclick="resetCalc()">🔄 重置</button>
-                <button class="calc-btn calc-btn-calc" onclick="calculateDP()">⚡ 計算 (僅一般)</button>
-            </div>
-            <div style="text-align:center;padding:15px;background:var(--bg-input);border-radius:8px;border:1px solid var(--border);">
-                <div id="result-main" style="font-size:2rem;font-weight:bold;color:var(--accent-green);">---</div>
-                <div id="result-detail" style="font-size:0.8rem;color:var(--text-dim);margin-top:5px;">
-                    一般計算結果顯示於此<br>(BOSS模式請看上方預覽面板)
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- Modals -->
@@ -620,12 +512,10 @@
 <script src="src/core/map-manager.js"></script>
 <script src="src/ui/units.js"></script>
 <script src="src/core/status-manager.js"></script>
-<script src="src/core/calculator.js"></script>
 <script src="src/ui/hotkeys.js"></script>
 <script src="src/ui/modals.js"></script>
 <script src="src/utils/audio.js"></script>
 <script src="src/ui/lyrics.js"></script>
-<script src="src/ui/combat-hud.js"></script>
 <script src="src/ui/combat-modals.js"></script>
 <script src="src/ui/combat-broadcast.js"></script>
 <script src="src/ui/st-skill-hud.js"></script>

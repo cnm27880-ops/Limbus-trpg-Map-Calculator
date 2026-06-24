@@ -12,7 +12,7 @@
  *   IDENTITY_LIBRARY / IDENTITY_STATUS_KEYMAP / getIdentityOwners / getIdentitiesByOwner /
  *   getIdentityById / evaluatePlayerAttack / evaluatePlayerTurnStart（資料與引擎層）
  *   getStatusById / addStatusToUnit / findUnitById / state / showToast /
- *   applyAttackToCalc / escapeHtml（既有網站）
+ *   escapeHtml（既有網站）
  */
 
 // ===== 轉接層 =====
@@ -549,18 +549,6 @@ function refreshIdentityResult() {
 
 // ===== 套用 =====
 
-function applyIdentityToCalc() {
-    const r = identityHudState.lastResult;
-    if (!r) return;
-    const atk = document.getElementById('c-atk');
-    const auto = document.getElementById('c-atk-auto');
-    if (atk) atk.value = (parseInt(atk.value) || 0) + (r.totalDpBonus || 0);
-    if (auto) auto.value = (parseInt(auto.value) || 0) + (r.totalExtraSuccess || 0);
-    if (typeof showToast === 'function') {
-        showToast(`已載入計算器：DP +${r.totalDpBonus || 0}、附加成功 +${r.totalExtraSuccess || 0}`);
-    }
-}
-
 function applyIdentityTargetStatus() {
     const r = identityHudState.lastResult;
     if (!r) return;
@@ -711,7 +699,6 @@ function renderIdentityResult() {
     if (selfStatus) html += `<div class="idt-statline">🔵 預計施加自身：<b>${selfStatus}</b></div>`;
 
     html += '<div class="idt-apply-row">'
-        + '<button class="idt-btn idt-btn-mini" onclick="applyIdentityToCalc()">📥 載入計算器</button>'
         + '<button class="idt-btn idt-btn-mini" onclick="applyIdentityTargetStatus()">🎯 套用目標狀態</button>'
         + '<button class="idt-btn idt-btn-mini" onclick="applyIdentitySelfStatus()">🔵 套用自身狀態</button>'
         + '</div>';
@@ -892,7 +879,6 @@ if (typeof window !== 'undefined') {
     window.updateIdentityField = updateIdentityField;
     window.runIdentityCalc = runIdentityCalc;
     window.runIdentityTurnStart = runIdentityTurnStart;
-    window.applyIdentityToCalc = applyIdentityToCalc;
     window.applyIdentityTargetStatus = applyIdentityTargetStatus;
     window.applyIdentitySelfStatus = applyIdentitySelfStatus;
     window.renderIdentityModal = renderIdentityModal;

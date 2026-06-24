@@ -16,11 +16,6 @@ const HOTKEYS = {
         description: '切換到單位頁面',
         category: 'navigation'
     },
-    '3': {
-        action: () => switchPage('calc'),
-        description: '切換到計算頁面',
-        category: 'navigation'
-    },
 
     // ===== 工具切換 =====
     'q': {
@@ -123,13 +118,6 @@ const HOTKEYS = {
     '?': {
         action: () => toggleHotkeyHelp(),
         description: '顯示快捷鍵說明',
-        category: 'panels'
-    },
-    'h': {
-        action: () => {
-            if (typeof toggleCombatHUD === 'function') toggleCombatHUD();
-        },
-        description: '切換戰鬥儀表板',
         category: 'panels'
     }
 };

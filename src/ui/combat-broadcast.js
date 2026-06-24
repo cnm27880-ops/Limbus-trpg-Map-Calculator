@@ -13,10 +13,16 @@ function cqOnBroadcasting(data) {
     const banner = document.getElementById('combat-broadcast-banner');
     if (!banner) return;
 
-    const attackerName = (data.attacker && data.attacker.name) || '未知攻擊者';
-    const finalDice = data.finalDice ?? 0;
+    const attackerName = String((data.attacker && data.attacker.name) || '未知攻擊者');
+    const finalDice = Number(data.finalDice) || 0;
 
-    banner.innerHTML = `【${escapeHtml(attackerName)}】發起攻擊！碰撞產生優勢！👉 請投擲 <span class="combat-broadcast-dice">${finalDice}</span> 顆攻擊骰！`;
+    banner.textContent = '';
+    banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！碰撞產生優勢！👉 請投擲 `));
+    const diceSpan = document.createElement('span');
+    diceSpan.className = 'combat-broadcast-dice';
+    diceSpan.textContent = String(finalDice);
+    banner.appendChild(diceSpan);
+    banner.appendChild(document.createTextNode(' 顆攻擊骰！'));
 
     clearTimeout(combatBroadcastTimer);
     banner.classList.add('show');

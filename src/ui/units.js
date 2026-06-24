@@ -1043,49 +1043,63 @@ function applyAllTurnEndItems(unitId) {
 function openUnitContextMenu(event, unitId) {
     event.preventDefault();
     event.stopPropagation();
+    // 避免同一棋子上其它 contextmenu 監聽器（地圖棋子的狀態 tooltip 切換）被一併觸發，造成 tooltip 卡住
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     closeUnitContextMenu();
 
     const u = findUnitById(unitId);
     if (!u) return;
-    // 無權限的單位不顯示選單（保留瀏覽器預設右鍵行為已被 preventDefault 擋掉也無妨）
-    if (typeof canControlUnit === 'function' && !canControlUnit(u)) return;
 
     const isSt = myRole === 'st';
     const isBoss = u.isBoss || u.type === 'boss';
     const deployed = u.x >= 0;
 
+    const canControl = typeof canControlUnit !== 'function' || canControlUnit(u);
+    // 玩家即使無控制權，仍可對敵方/BOSS 發起攻擊
+    const canAttack = !isSt && (u.type === 'enemy' || isBoss);
+
+    // 既不能控制、也不能攻擊 → 不顯示任何選單
+    if (!canControl && !canAttack) return;
+
     let items;
-    if (u.actionSlotOf) {
+    if (canControl && u.actionSlotOf) {
         // 多重行動條目：只提供設定與刪除
         items = [
             { icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.actionSlotOf}')` },
             { icon: '✕', label: '刪除此行動', cls: 'danger', fn: `deleteUnit('${u.id}')` }
         ];
     } else {
-        items = [
-            { icon: '⚔', label: '傷害面板', fn: `openHpModal('${u.id}','damage')` },
-            { icon: '💚', label: '治療面板', fn: `openHpModal('${u.id}','heal')` },
-            { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
-            { icon: '🛡', label: '設定護盾', fn: `openShieldModal('${u.id}')` },
-            { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` },
-            { icon: '♻', label: '重置血量', fn: `resetUnitHp('${u.id}')` }
-        ];
-        if (isSt) {
-            items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
-            items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
-            if (isBoss) {
-                items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
+        items = [];
+        if (canControl) {
+            items.push(
+                { icon: '⚔', label: '傷害面板', fn: `openHpModal('${u.id}','damage')` },
+                { icon: '💚', label: '治療面板', fn: `openHpModal('${u.id}','heal')` },
+                { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
+                { icon: '🛡', label: '設定護盾', fn: `openShieldModal('${u.id}')` },
+                { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` },
+                { icon: '♻', label: '重置血量', fn: `resetUnitHp('${u.id}')` }
+            );
+            if (isSt) {
+                items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
+                items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
+                if (isBoss) {
+                    items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
+                }
             }
         }
         // ===== 盲盒戰鬥與 QTE 系統：附加戰鬥按鈕（不影響原有操作項目） =====
-        if (!isSt && (u.type === 'enemy' || isBoss)) {
+        if (canAttack) {
             items.push({ icon: '⚔️', label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
         } else if (isSt && u.type === 'player') {
             items.push({ icon: '🗡️', label: '發起威脅 (QTE)', fn: `openThreatModal('${u.id}')` });
         }
 
-        items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
+        if (canControl) {
+            items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
+        }
     }
+
+    if (!items.length) return;
 
     const menu = document.createElement('div');
     menu.id = 'unit-context-menu';

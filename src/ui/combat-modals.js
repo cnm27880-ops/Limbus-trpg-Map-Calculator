@@ -36,8 +36,8 @@ function openAttackModal(unitId) {
     const memo = cmLoadMemo(ATTACK_MODAL_MEMO_KEY) || {};
     document.getElementById('attack-dp').value = memo.dp ?? 0;
     document.getElementById('attack-auto').value = memo.auto ?? 0;
-    document.getElementById('attack-ignore-def').checked = !!memo.ignoreDef;
-    document.getElementById('attack-crit-vicious').checked = !!memo.critVicious;
+    document.getElementById('attack-ignore-def').value = memo.ignoreDef ?? 0;
+    document.getElementById('attack-crit-vicious').value = memo.critVicious ?? 0;
 
     openModal('attack-modal');
 }
@@ -60,14 +60,14 @@ function submitAttackModal() {
     if (!attackModalTarget) return;
     const dp = Number(document.getElementById('attack-dp').value) || 0;
     const auto = Number(document.getElementById('attack-auto').value) || 0;
-    const ignoreDef = document.getElementById('attack-ignore-def').checked;
-    const critVicious = document.getElementById('attack-crit-vicious').checked;
+    const ignoreDef = Math.max(0, Number(document.getElementById('attack-ignore-def').value) || 0);
+    const critVicious = Math.max(0, Number(document.getElementById('attack-crit-vicious').value) || 0);
 
     cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious });
 
     const attacker = {
         id: myPlayerId, name: myName,
-        dp, auto, ignoreDefense: ignoreDef, critVicious
+        dp, auto, ignoreDef, critVicious
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
@@ -113,6 +113,19 @@ function submitDefenseModal() {
 function cqOnSTReview(data) {
     if (myRole !== 'st') return;
     document.getElementById('st-review-suggested').innerText = `系統建議骰數：${data.baseDice ?? 0} 顆`;
+
+    // 顯示攻擊方宣告的特殊參數，供 ST 黑箱判定參考
+    const atk = data.attacker || {};
+    const ignoreDef = Number(atk.ignoreDef) || 0;
+    const critVicious = Number(atk.critVicious) || 0;
+    const ctx = document.getElementById('st-review-context');
+    if (ctx) {
+        const notes = [];
+        if (ignoreDef > 0) notes.push(`無視防禦 ${ignoreDef} 點`);
+        if (critVicious > 0) notes.push(`嚴重轉惡性 ${critVicious} 點`);
+        ctx.innerText = notes.length ? `攻擊方宣告：${notes.join('、')}` : '';
+    }
+
     document.getElementById('st-review-modifier').value = 0;
     openModal('st-review-modal');
 }

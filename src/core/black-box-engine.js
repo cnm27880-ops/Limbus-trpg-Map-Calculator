@@ -13,15 +13,17 @@ function bbRunBlackBoxCalculation(data) {
     const atkTotal = (Number(attacker.dp) || 0) + (Number(attacker.auto) || 0);
 
     let defTotal = 0;
-    if (!attacker.ignoreDefense) {
-        if (data.defense) {
-            defTotal = (Number(data.defense.dp) || 0) + (Number(data.defense.auto) || 0);
-        } else {
-            // 玩家發起攻擊（無防禦 QTE）：嘗試從目標單位資料抓取基礎防禦
-            const targetUnit = typeof findUnitById === 'function' ? findUnitById(data.target && data.target.id) : null;
-            defTotal = (targetUnit && Number(targetUnit.defDp)) || 0;
-        }
+    if (data.defense) {
+        defTotal = (Number(data.defense.dp) || 0) + (Number(data.defense.auto) || 0);
+    } else {
+        // 玩家發起攻擊（無防禦 QTE）：嘗試從目標單位資料抓取基礎防禦
+        const targetUnit = typeof findUnitById === 'function' ? findUnitById(data.target && data.target.id) : null;
+        defTotal = (targetUnit && Number(targetUnit.defDp)) || 0;
     }
+
+    // 無視防禦點數：直接扣減防禦總值（不會低於 0）
+    const ignoreDef = Math.max(0, Number(attacker.ignoreDef) || 0);
+    defTotal = Math.max(0, defTotal - ignoreDef);
 
     const baseDice = Math.max(0, atkTotal - defTotal);
     cqEnterSTReview(baseDice);

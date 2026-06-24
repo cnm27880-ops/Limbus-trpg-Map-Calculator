@@ -3305,25 +3305,32 @@ body.combat-mode .boss-hud-container {
     margin-bottom: 6px;
 }
 
-.combat-modal-tags {
+/* 戰鬥 Modal 欄位寬度保護：避免 number 輸入框溢出格子 */
+#attack-modal .calc-field,
+#defense-qte-modal .calc-field,
+#st-review-modal .calc-field {
+    min-width: 0;
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    justify-content: center;
-    margin: 6px 0;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.combat-modal-tags label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+#attack-modal .calc-field input,
+#defense-qte-modal .calc-field input,
+#st-review-modal .calc-field input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.st-review-context {
+    text-align: center;
+    color: var(--accent-yellow);
     font-size: 0.85rem;
-    color: var(--text-main);
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
-    cursor: pointer;
+    margin-top: 6px;
+}
+
+.st-review-context:empty {
+    display: none;
 }
 
 #defense-qte-modal .modal {

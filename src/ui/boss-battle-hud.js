@@ -369,9 +369,83 @@ function renderBossBattleResults() {
     container.innerHTML = html;
 }
 
+// ===== 右鍵棋子：單位 BOSS 戰鬥數值設定 =====
+/**
+ * 開啟某單位的 BOSS 戰鬥數值設定（ST 專用）。
+ * 數值直接存在單位上（bossAtkMod / bossDefMod / sideLevel），並與黑箱計算連動：
+ *   - 玩家攻擊此單位時，bossDefMod 併入該單位防禦總值
+ *   - 此單位（BOSS/敵方）攻擊玩家時，bossAtkMod 併入攻擊總值
+ * @param {string} unitId
+ */
+function openBossUnitModal(unitId) {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以設定 BOSS 戰鬥數值');
+        return;
+    }
+    const u = findUnitById(unitId);
+    if (!u) return;
+
+    const existing = document.getElementById('boss-unit-modal');
+    if (existing) existing.remove();
+
+    const html = `
+        <div class="modal-overlay show" id="boss-unit-modal" onclick="if(event.target.id==='boss-unit-modal')closeBossUnitModal()">
+            <div class="modal" style="max-width:400px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">👹 戰鬥數值設定 - ${escapeHtml(u.name || '單位')}</span>
+                    <button onclick="closeBossUnitModal()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>支線等級（修正基數 = 等級 × 10）</label>
+                        <input type="number" id="boss-unit-side-level" value="${u.sideLevel || 1}" min="1" max="99">
+                    </div>
+                    <div class="form-group">
+                        <label>攻擊 DP 修正（此單位攻擊玩家時，攻擊總值 +此值）</label>
+                        <input type="number" id="boss-unit-atk-mod" value="${u.bossAtkMod || 0}">
+                    </div>
+                    <div class="form-group">
+                        <label>防禦修正（玩家攻擊此單位時，防禦總值 +此值）</label>
+                        <input type="number" id="boss-unit-def-mod" value="${u.bossDefMod || 0}">
+                    </div>
+                    <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
+                        這些數值會在右鍵「發起攻擊／威脅」的黑箱判定時自動套用，無需另外開啟 BOSS 戰面板。
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="closeBossUnitModal()" style="background:var(--bg-card);">取消</button>
+                    <button class="modal-btn" onclick="saveBossUnitModal('${u.id}')" style="background:var(--accent-green);color:#000;">儲存</button>
+                </div>
+            </div>
+        </div>
+    `;
+    const container = document.getElementById('modals-container') || document.body;
+    container.insertAdjacentHTML('beforeend', html);
+}
+
+function closeBossUnitModal() {
+    const modal = document.getElementById('boss-unit-modal');
+    if (modal) modal.remove();
+}
+
+function saveBossUnitModal(unitId) {
+    if (myRole !== 'st') return;
+    const u = findUnitById(unitId);
+    if (!u) return;
+    u.sideLevel = Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1);
+    u.bossAtkMod = parseInt(document.getElementById('boss-unit-atk-mod')?.value) || 0;
+    u.bossDefMod = parseInt(document.getElementById('boss-unit-def-mod')?.value) || 0;
+    if (typeof broadcastState === 'function') broadcastState();
+    closeBossUnitModal();
+    if (typeof showToast === 'function') showToast(`已更新 ${u.name || '單位'} 的 BOSS 戰鬥數值`);
+}
+
 // ===== Window bindings =====
 window.toggleBossBattleHUD = toggleBossBattleHUD;
 window.showBossBattleHUD = showBossBattleHUD;
+window.openBossUnitModal = openBossUnitModal;
+window.closeBossUnitModal = closeBossUnitModal;
+window.saveBossUnitModal = saveBossUnitModal;
 window.closeBossBattleHUD = closeBossBattleHUD;
 window.bbUpdate = bbUpdate;
 window.bbUpdateAction = bbUpdateAction;

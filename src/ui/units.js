@@ -1043,49 +1043,66 @@ function applyAllTurnEndItems(unitId) {
 function openUnitContextMenu(event, unitId) {
     event.preventDefault();
     event.stopPropagation();
+    // 避免同一棋子上其它 contextmenu 監聽器（地圖棋子的狀態 tooltip 切換）被一併觸發，造成 tooltip 卡住
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     closeUnitContextMenu();
 
     const u = findUnitById(unitId);
     if (!u) return;
-    // 無權限的單位不顯示選單（保留瀏覽器預設右鍵行為已被 preventDefault 擋掉也無妨）
-    if (typeof canControlUnit === 'function' && !canControlUnit(u)) return;
 
     const isSt = myRole === 'st';
     const isBoss = u.isBoss || u.type === 'boss';
     const deployed = u.x >= 0;
 
+    const canControl = typeof canControlUnit !== 'function' || canControlUnit(u);
+    // 玩家即使無控制權，仍可對敵方/BOSS 發起攻擊
+    const canAttack = !isSt && (u.type === 'enemy' || isBoss);
+
+    // 既不能控制、也不能攻擊 → 不顯示任何選單
+    if (!canControl && !canAttack) return;
+
     let items;
-    if (u.actionSlotOf) {
+    if (canControl && u.actionSlotOf) {
         // 多重行動條目：只提供設定與刪除
         items = [
             { icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.actionSlotOf}')` },
             { icon: '✕', label: '刪除此行動', cls: 'danger', fn: `deleteUnit('${u.id}')` }
         ];
     } else {
-        items = [
-            { icon: '⚔', label: '傷害面板', fn: `openHpModal('${u.id}','damage')` },
-            { icon: '💚', label: '治療面板', fn: `openHpModal('${u.id}','heal')` },
-            { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
-            { icon: '🛡', label: '設定護盾', fn: `openShieldModal('${u.id}')` },
-            { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` },
-            { icon: '♻', label: '重置血量', fn: `resetUnitHp('${u.id}')` }
-        ];
-        if (isSt) {
-            items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
-            items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
-            if (isBoss) {
-                items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
+        items = [];
+        if (canControl) {
+            items.push(
+                { icon: '⚔', label: '傷害面板', fn: `openHpModal('${u.id}','damage')` },
+                { icon: '💚', label: '治療面板', fn: `openHpModal('${u.id}','heal')` },
+                { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
+                { icon: '🛡', label: '設定護盾', fn: `openShieldModal('${u.id}')` },
+                { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` },
+                { icon: '♻', label: '重置血量', fn: `resetUnitHp('${u.id}')` }
+            );
+            if (isSt) {
+                items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
+                items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
+                if (isBoss || u.type === 'enemy') {
+                    items.push({ icon: '👹', label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });
+                }
+                if (isBoss) {
+                    items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
+                }
             }
         }
         // ===== 盲盒戰鬥與 QTE 系統：附加戰鬥按鈕（不影響原有操作項目） =====
-        if (!isSt && (u.type === 'enemy' || isBoss)) {
+        if (canAttack) {
             items.push({ icon: '⚔️', label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
         } else if (isSt && u.type === 'player') {
             items.push({ icon: '🗡️', label: '發起威脅 (QTE)', fn: `openThreatModal('${u.id}')` });
         }
 
-        items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
+        if (canControl) {
+            items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
+        }
     }
+
+    if (!items.length) return;
 
     const menu = document.createElement('div');
     menu.id = 'unit-context-menu';
@@ -1143,6 +1160,10 @@ function getActionSlots(bossId) {
  * 行動條目會出現在先攻列表但沒有血條/狀態（共用本體 BOSS 的血量）
  * @param {string} bossId - 本體單位 ID
  */
+// 多重行動編輯暫存：{ bossId, actions: [{ init, dp, statuses:[{id,stacks}] }] }
+// actions[0] = 本體（行動1）；其餘對應行動條目。狀態為動態增刪，故以暫存物件管理而非每次讀 DOM。
+let maEdit = null;
+
 function openMultiActionModal(bossId) {
     if (myRole !== 'st') {
         showToast('只有 ST 可以設定多重行動');
@@ -1154,14 +1175,18 @@ function openMultiActionModal(bossId) {
     if (boss.actionSlotOf) return openMultiActionModal(boss.actionSlotOf);
 
     const slots = getActionSlots(bossId);
-    const total = slots.length + 1;
+
+    // 由現有單位資料初始化暫存
+    maEdit = { bossId, actions: [] };
+    maEdit.actions.push(maReadActionFrom(boss));
+    slots.forEach(s => maEdit.actions.push(maReadActionFrom(s)));
 
     const existing = document.getElementById('multi-action-modal');
     if (existing) existing.remove();
 
     const html = `
         <div class="modal-overlay show" id="multi-action-modal" onclick="if(event.target.id==='multi-action-modal')closeMultiActionModal()">
-            <div class="modal" style="max-width:420px;" onclick="event.stopPropagation()">
+            <div class="modal" style="max-width:460px;" onclick="event.stopPropagation()">
                 <div class="modal-header">
                     <span style="font-weight:bold;">⚔ 多重行動設定 - ${escapeHtml(boss.name || '單位')}</span>
                     <button onclick="closeMultiActionModal()" style="background:none;font-size:1.2rem;">×</button>
@@ -1169,16 +1194,17 @@ function openMultiActionModal(bossId) {
                 <div class="modal-body">
                     <div class="form-group">
                         <label>總行動次數（含本體，例：七招式 BOSS 填 7）</label>
-                        <input type="number" id="ma-count" value="${total}" min="1" max="12"
-                               onchange="renderMultiActionInits('${bossId}')">
+                        <input type="number" id="ma-count" value="${maEdit.actions.length}" min="1" max="12"
+                               onchange="maSetCount(this.value)">
                     </div>
                     <div class="form-group">
-                        <label>各行動先攻值（行動 1 = 本體自己的先攻）</label>
-                        <div class="ma-init-grid" id="ma-init-grid"></div>
+                        <label>各行動：先攻 / DP / 命中時對目標施加的狀態</label>
+                        <div id="ma-action-list"></div>
                     </div>
+                    <datalist id="ma-status-options"></datalist>
                     <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
-                        行動條目只佔先攻順序，沒有自己的血條與狀態；對 BOSS 的傷害照常打在本體上。
-                        刪除本體 BOSS 時會自動清掉所有行動條目。
+                        行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上。
+                        DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加。
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1190,78 +1216,147 @@ function openMultiActionModal(bossId) {
         </div>
     `;
     document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
-    renderMultiActionInits(bossId);
+    maBuildStatusDatalist();
+    renderMultiActionList();
+}
+
+/** 從單位讀取行動設定（先攻 / DP / 狀態），含舊資料相容 */
+function maReadActionFrom(unit) {
+    return {
+        init: unit.init || 0,
+        dp: unit.actionDp || 0,
+        statuses: Array.isArray(unit.actionStatuses) ? unit.actionStatuses.map(s => ({ ...s })) : []
+    };
 }
 
 function closeMultiActionModal() {
     const modal = document.getElementById('multi-action-modal');
     if (modal) modal.remove();
+    maEdit = null;
 }
 
-/**
- * 依「總行動次數」重新渲染先攻輸入格（保留已輸入的值）
- * @param {string} bossId - 本體單位 ID
- */
-function renderMultiActionInits(bossId) {
-    const grid = document.getElementById('ma-init-grid');
-    const countInput = document.getElementById('ma-count');
-    if (!grid || !countInput) return;
-
-    const boss = findUnitById(bossId);
-    const slots = getActionSlots(bossId);
-    const count = Math.max(1, Math.min(12, parseInt(countInput.value) || 1));
-    countInput.value = count;
-
-    // 既有輸入值優先，其次是現有單位資料
-    const currentValues = [];
-    for (let i = 0; i < count; i++) {
-        const input = document.getElementById('ma-init-' + i);
-        if (input) {
-            currentValues[i] = input.value;
-        } else if (i === 0) {
-            currentValues[i] = boss ? (boss.init || 0) : 0;
-        } else {
-            currentValues[i] = slots[i - 1] ? (slots[i - 1].init || 0) : 0;
-        }
+/** 建立狀態名稱自動補全清單（預設庫 + 自訂狀態） */
+function maBuildStatusDatalist() {
+    const dl = document.getElementById('ma-status-options');
+    if (!dl) return;
+    const names = [];
+    if (typeof getAllStatuses === 'function') getAllStatuses().forEach(s => names.push(s.name));
+    if (typeof state !== 'undefined' && Array.isArray(state.customStatuses)) {
+        state.customStatuses.forEach(s => { if (s && s.name) names.push(s.name); });
     }
+    dl.innerHTML = [...new Set(names)].map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+}
 
-    grid.innerHTML = currentValues.map((v, i) => `
-        <div class="ma-init-cell">
-            <label>行動${i + 1}${i === 0 ? '（本體）' : ''}</label>
-            <input type="number" id="ma-init-${i}" value="${v}">
-        </div>
-    `).join('');
+/** 調整總行動次數（保留已填資料） */
+function maSetCount(value) {
+    if (!maEdit) return;
+    const count = Math.max(1, Math.min(12, parseInt(value) || 1));
+    const cur = maEdit.actions;
+    if (count > cur.length) {
+        while (maEdit.actions.length < count) maEdit.actions.push({ init: 0, dp: 0, statuses: [] });
+    } else if (count < cur.length) {
+        maEdit.actions = cur.slice(0, count);
+    }
+    const countInput = document.getElementById('ma-count');
+    if (countInput) countInput.value = count;
+    renderMultiActionList();
+}
+
+function maUpdateField(index, field, value) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    maEdit.actions[index][field] = parseInt(value) || 0;
+}
+
+/** 由輸入框（狀態名稱 + 層數）新增一個狀態到指定行動 */
+function maAddStatus(index) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    const nameInput = document.getElementById('ma-status-name-' + index);
+    const stackInput = document.getElementById('ma-status-stack-' + index);
+    const raw = (nameInput?.value || '').trim();
+    if (!raw) return;
+    let def = (typeof getStatusByName === 'function') ? getStatusByName(raw) : null;
+    if (!def && typeof getStatusById === 'function') def = getStatusById(raw);
+    const id = def ? def.id : raw;
+    const stacks = parseInt(stackInput?.value) || 0;
+    const existing = maEdit.actions[index].statuses.find(s => s.id === id);
+    if (existing) existing.stacks = stacks;
+    else maEdit.actions[index].statuses.push({ id, stacks });
+    if (nameInput) nameInput.value = '';
+    if (stackInput) stackInput.value = '1';
+    renderMultiActionList();
+}
+
+function maRemoveStatus(index, statusIdx) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    maEdit.actions[index].statuses.splice(statusIdx, 1);
+    renderMultiActionList();
+}
+
+function maStatusLabel(s) {
+    const name = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
+    return escapeHtml(name) + (s.stacks > 0 ? ' x' + s.stacks : '');
+}
+
+/** 依暫存重新渲染行動列表（先攻/DP/狀態） */
+function renderMultiActionList() {
+    const list = document.getElementById('ma-action-list');
+    if (!list || !maEdit) return;
+    list.innerHTML = maEdit.actions.map((a, i) => {
+        const chips = a.statuses.length
+            ? a.statuses.map((s, si) =>
+                `<span class="ma-status-chip">${maStatusLabel(s)}<button onclick="maRemoveStatus(${i},${si})" title="移除">×</button></span>`
+              ).join('')
+            : '<span style="font-size:0.7rem;color:var(--text-dim);">無</span>';
+        return `
+        <div class="ma-action-card">
+            <div class="ma-action-head">行動${i + 1}${i === 0 ? '（本體）' : ''}</div>
+            <div class="ma-action-fields">
+                <label>先攻<input type="number" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
+                <label>DP<input type="number" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
+            </div>
+            <div class="ma-status-row">
+                <input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="狀態名稱（例：破裂）">
+                <input type="number" id="ma-status-stack-${i}" value="1" title="層數" style="width:56px;">
+                <button class="ma-mini-btn" onclick="maAddStatus(${i})">＋</button>
+            </div>
+            <div class="ma-status-chips">${chips}</div>
+        </div>`;
+    }).join('');
 }
 
 /**
- * 儲存多重行動設定：建立/更新/移除行動條目並寫入先攻
+ * 儲存多重行動設定：建立/更新/移除行動條目並寫入先攻、DP、狀態
  * @param {string} bossId - 本體單位 ID
  */
 function saveMultiAction(bossId) {
     const boss = findUnitById(bossId);
-    if (!boss) return;
+    if (!boss || !maEdit) return;
 
-    const count = Math.max(1, Math.min(12, parseInt(document.getElementById('ma-count')?.value) || 1));
-    const inits = [];
-    for (let i = 0; i < count; i++) {
-        inits[i] = parseInt(document.getElementById('ma-init-' + i)?.value) || 0;
-    }
+    const actions = maEdit.actions;
+    const count = actions.length;
 
-    // 行動 1 = 本體先攻
-    boss.init = inits[0];
+    // 行動 1 = 本體
+    boss.init = actions[0].init;
+    boss.actionDp = actions[0].dp;
+    boss.actionStatuses = actions[0].statuses.map(s => ({ ...s }));
 
     const slots = getActionSlots(bossId);
 
     // 更新或建立行動 2..count
     for (let i = 1; i < count; i++) {
+        const data = actions[i];
         if (slots[i - 1]) {
-            slots[i - 1].init = inits[i];
+            slots[i - 1].init = data.init;
+            slots[i - 1].actionDp = data.dp;
+            slots[i - 1].actionStatuses = data.statuses.map(s => ({ ...s }));
             slots[i - 1].slotIndex = i + 1;
         } else {
             const slot = createUnit(`${boss.name}・行動${i + 1}`, 1, boss.type);
             slot.actionSlotOf = bossId;
             slot.slotIndex = i + 1;
-            slot.init = inits[i];
+            slot.init = data.init;
+            slot.actionDp = data.dp;
+            slot.actionStatuses = data.statuses.map(s => ({ ...s }));
             state.units.push(slot);
         }
     }

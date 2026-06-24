@@ -7,6 +7,7 @@ const ATTACK_MODAL_MEMO_KEY = 'limbus-attack-modal-memo';
 const DEFENSE_MODAL_MEMO_KEY = 'limbus-defense-modal-memo';
 
 let attackModalTarget = null; // { id, name }
+let threatPendingStatuses = []; // ST 威脅時，所選 BOSS 行動要施加給目標的狀態 [{id,stacks}]
 
 function cmLoadMemo(key) {
     try {
@@ -36,10 +37,58 @@ function openAttackModal(unitId) {
     const memo = cmLoadMemo(ATTACK_MODAL_MEMO_KEY) || {};
     document.getElementById('attack-dp').value = memo.dp ?? 0;
     document.getElementById('attack-auto').value = memo.auto ?? 0;
-    document.getElementById('attack-ignore-def').checked = !!memo.ignoreDef;
-    document.getElementById('attack-crit-vicious').checked = !!memo.critVicious;
+    document.getElementById('attack-ignore-def').value = memo.ignoreDef ?? 0;
+    document.getElementById('attack-crit-vicious').value = memo.critVicious ?? 0;
+
+    // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
+    threatPendingStatuses = [];
+    cmRenderThreatActions();
 
     openModal('attack-modal');
+}
+
+/**
+ * 渲染 ST 威脅時的「BOSS 行動」選擇列。玩家攻擊或無作用中 BOSS 時隱藏。
+ */
+function cmRenderThreatActions() {
+    const box = document.getElementById('attack-boss-actions');
+    if (!box) return;
+    box.style.display = 'none';
+    box.innerHTML = '';
+    if (myRole !== 'st') return;
+    if (typeof state === 'undefined' || !state.activeBossId) return;
+    const boss = (typeof findUnitById === 'function') ? findUnitById(state.activeBossId) : null;
+    if (!boss) return;
+
+    // 本體（行動1）+ 各行動條目
+    const actions = [boss];
+    if (typeof getActionSlots === 'function') actions.push(...getActionSlots(boss.id));
+
+    const btns = actions.map((u, i) => {
+        const dp = u.actionDp || 0;
+        const statuses = Array.isArray(u.actionStatuses) ? u.actionStatuses : [];
+        const stTxt = statuses.length
+            ? statuses.map(s => {
+                const nm = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
+                return nm + (s.stacks > 0 ? ('x' + s.stacks) : '');
+              }).join('、')
+            : '無狀態';
+        return `<button type="button" class="threat-action-btn" onclick="cmApplyThreatAction('${u.id}')">行動${i + 1}${i === 0 ? '·本體' : ''}<small>DP ${dp}｜${escapeHtml(stTxt)}</small></button>`;
+    }).join('');
+
+    box.innerHTML = `<div class="threat-action-label">⚔ ${escapeHtml(boss.name || 'BOSS')} 行動（點選帶入 DP 與狀態）</div><div class="threat-action-btns">${btns}</div>`;
+    box.style.display = 'block';
+}
+
+/**
+ * 套用某 BOSS 行動：帶入 DP 並暫存其狀態（送出威脅時施加給目標）。
+ */
+function cmApplyThreatAction(unitId) {
+    const u = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    if (!u) return;
+    document.getElementById('attack-dp').value = u.actionDp || 0;
+    threatPendingStatuses = Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [];
+    if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${u.actionDp || 0}`);
 }
 
 function closeAttackModal() {
@@ -54,29 +103,88 @@ function openThreatModal(unitId) {
 }
 
 /**
+ * 自動套用攻擊方目前在人格卡面板（identity-hud）勾選持有/解鎖的人格卡，
+ * 疊加其 onAttack/onHit 數值加值，回傳可併入黑箱計算的 DP/額外成功加總與觸發紀錄。
+ * 僅在玩家發起攻擊時套用（ST 發起威脅走的是另一套敵方資料，不涉及玩家人格卡）。
+ * @param {object} attackerUnit
+ * @param {object} targetUnit
+ * @returns {{ dpBonus: number, extraSuccess: number, names: string[] }}
+ */
+function cmResolveIdentityBonus(attackerUnit, targetUnit) {
+    const empty = { dpBonus: 0, extraSuccess: 0, names: [] };
+    if (myRole === 'st') return empty;
+    if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
+
+    const owner = identityHudState.owner;
+    if (!owner || typeof getIdentitiesByOwner !== 'function') return empty;
+
+    const ownedCards = getIdentitiesByOwner(owner)
+        .filter(id => identityHudState.cards[id] && identityHudState.cards[id].owned)
+        .map(id => ({ id, unlocked: !!identityHudState.cards[id].unlocked }));
+    if (!ownedCards.length) return empty;
+
+    const attackerState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(attackerUnit) : (attackerUnit || {});
+    const targetState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(targetUnit) : (targetUnit || {});
+    const result = evaluatePlayerAttack(ownedCards, attackerState, targetState);
+
+    return {
+        dpBonus: result.totalDpBonus || 0,
+        extraSuccess: result.totalExtraSuccess || 0,
+        names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))]
+    };
+}
+
+/**
  * 發送按鈕：依目前使用者角色決定走「攻擊」或「威脅」流程
  */
 function submitAttackModal() {
     if (!attackModalTarget) return;
     const dp = Number(document.getElementById('attack-dp').value) || 0;
     const auto = Number(document.getElementById('attack-auto').value) || 0;
-    const ignoreDef = document.getElementById('attack-ignore-def').checked;
-    const critVicious = document.getElementById('attack-crit-vicious').checked;
+    const ignoreDef = Math.max(0, Number(document.getElementById('attack-ignore-def').value) || 0);
+    const critVicious = Math.max(0, Number(document.getElementById('attack-crit-vicious').value) || 0);
 
     cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious });
 
+    // 攻擊方單位：玩家＝自己控制的單位；ST 發起威脅＝目前作用中的 BOSS（用於套用 BOSS 攻擊修正）
+    let attackerUnit = null;
+    if (typeof state !== 'undefined' && Array.isArray(state.units)) {
+        attackerUnit = (myRole === 'st')
+            ? (state.activeBossId ? state.units.find(u => u.id === state.activeBossId) : null)
+            : state.units.find(u => u.ownerId === myPlayerId);
+    }
+    const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
+    const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
+
     const attacker = {
         id: myPlayerId, name: myName,
-        dp, auto, ignoreDefense: ignoreDef, critVicious
+        unitId: attackerUnit ? attackerUnit.id : null,
+        dp, auto, ignoreDef, critVicious,
+        identityDpBonus: identityBonus.dpBonus,
+        identityExtraSuccess: identityBonus.extraSuccess,
+        identityNotes: identityBonus.names
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
     if (myRole === 'st') {
         cqInitiateThreat({ attacker, target });
+        // 所選 BOSS 行動的狀態自動施加到目標玩家單位
+        if (threatPendingStatuses.length && typeof addStatusToUnit === 'function') {
+            const applied = [];
+            threatPendingStatuses.forEach(s => {
+                addStatusToUnit(target.id, s.id, s.stacks > 0 ? s.stacks : null);
+                const nm = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
+                applied.push(nm + (s.stacks > 0 ? ' x' + s.stacks : ''));
+            });
+            if (applied.length && typeof showToast === 'function') showToast('已對目標施加：' + applied.join('、'));
+        }
+        threatPendingStatuses = [];
         if (typeof showToast === 'function') showToast('威脅已發起，等待玩家防禦...');
     } else {
         cqInitiateAttack({ attacker, target });
-        if (typeof showToast === 'function') showToast('攻擊已送出，等待系統判定...');
+        const bonusTotal = identityBonus.dpBonus + identityBonus.extraSuccess;
+        const bonusMsg = bonusTotal ? `（已自動套用人格卡加值 +${bonusTotal}）` : '';
+        if (typeof showToast === 'function') showToast('攻擊已送出，等待系統判定...' + bonusMsg);
     }
     closeAttackModal();
 }
@@ -113,6 +221,24 @@ function submitDefenseModal() {
 function cqOnSTReview(data) {
     if (myRole !== 'st') return;
     document.getElementById('st-review-suggested').innerText = `系統建議骰數：${data.baseDice ?? 0} 顆`;
+
+    // 顯示攻擊方宣告的特殊參數，供 ST 黑箱判定參考
+    const atk = data.attacker || {};
+    const ignoreDef = Number(atk.ignoreDef) || 0;
+    const critVicious = Number(atk.critVicious) || 0;
+    const identityDpBonus = Number(atk.identityDpBonus) || 0;
+    const identityExtraSuccess = Number(atk.identityExtraSuccess) || 0;
+    const ctx = document.getElementById('st-review-context');
+    if (ctx) {
+        const notes = [];
+        if (ignoreDef > 0) notes.push(`無視防禦 ${ignoreDef} 點`);
+        if (critVicious > 0) notes.push(`嚴重轉惡性 ${critVicious} 點`);
+        if (identityDpBonus > 0) notes.push(`人格卡 DP +${identityDpBonus}`);
+        if (identityExtraSuccess > 0) notes.push(`人格卡額外成功 +${identityExtraSuccess}`);
+        if (Array.isArray(atk.identityNotes) && atk.identityNotes.length) notes.push(`套用人格卡：${atk.identityNotes.join('、')}`);
+        ctx.innerText = notes.length ? `攻擊方宣告：${notes.join('、')}` : '';
+    }
+
     document.getElementById('st-review-modifier').value = 0;
     openModal('st-review-modal');
 }

@@ -392,7 +392,7 @@ function openBossUnitModal(unitId) {
         <div class="modal-overlay show" id="boss-unit-modal" onclick="if(event.target.id==='boss-unit-modal')closeBossUnitModal()">
             <div class="modal" style="max-width:400px;" onclick="event.stopPropagation()">
                 <div class="modal-header">
-                    <span style="font-weight:bold;">👹 BOSS 戰鬥數值 - ${escapeHtml(u.name || '單位')}</span>
+                    <span style="font-weight:bold;">👹 戰鬥數值設定 - ${escapeHtml(u.name || '單位')}</span>
                     <button onclick="closeBossUnitModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">

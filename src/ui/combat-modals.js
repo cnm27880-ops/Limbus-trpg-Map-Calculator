@@ -7,6 +7,7 @@ const ATTACK_MODAL_MEMO_KEY = 'limbus-attack-modal-memo';
 const DEFENSE_MODAL_MEMO_KEY = 'limbus-defense-modal-memo';
 
 let attackModalTarget = null; // { id, name }
+let threatPendingStatuses = []; // ST 威脅時，所選 BOSS 行動要施加給目標的狀態 [{id,stacks}]
 
 function cmLoadMemo(key) {
     try {
@@ -39,7 +40,55 @@ function openAttackModal(unitId) {
     document.getElementById('attack-ignore-def').value = memo.ignoreDef ?? 0;
     document.getElementById('attack-crit-vicious').value = memo.critVicious ?? 0;
 
+    // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
+    threatPendingStatuses = [];
+    cmRenderThreatActions();
+
     openModal('attack-modal');
+}
+
+/**
+ * 渲染 ST 威脅時的「BOSS 行動」選擇列。玩家攻擊或無作用中 BOSS 時隱藏。
+ */
+function cmRenderThreatActions() {
+    const box = document.getElementById('attack-boss-actions');
+    if (!box) return;
+    box.style.display = 'none';
+    box.innerHTML = '';
+    if (myRole !== 'st') return;
+    if (typeof state === 'undefined' || !state.activeBossId) return;
+    const boss = (typeof findUnitById === 'function') ? findUnitById(state.activeBossId) : null;
+    if (!boss) return;
+
+    // 本體（行動1）+ 各行動條目
+    const actions = [boss];
+    if (typeof getActionSlots === 'function') actions.push(...getActionSlots(boss.id));
+
+    const btns = actions.map((u, i) => {
+        const dp = u.actionDp || 0;
+        const statuses = Array.isArray(u.actionStatuses) ? u.actionStatuses : [];
+        const stTxt = statuses.length
+            ? statuses.map(s => {
+                const nm = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
+                return nm + (s.stacks > 0 ? ('x' + s.stacks) : '');
+              }).join('、')
+            : '無狀態';
+        return `<button type="button" class="threat-action-btn" onclick="cmApplyThreatAction('${u.id}')">行動${i + 1}${i === 0 ? '·本體' : ''}<small>DP ${dp}｜${escapeHtml(stTxt)}</small></button>`;
+    }).join('');
+
+    box.innerHTML = `<div class="threat-action-label">⚔ ${escapeHtml(boss.name || 'BOSS')} 行動（點選帶入 DP 與狀態）</div><div class="threat-action-btns">${btns}</div>`;
+    box.style.display = 'block';
+}
+
+/**
+ * 套用某 BOSS 行動：帶入 DP 並暫存其狀態（送出威脅時施加給目標）。
+ */
+function cmApplyThreatAction(unitId) {
+    const u = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    if (!u) return;
+    document.getElementById('attack-dp').value = u.actionDp || 0;
+    threatPendingStatuses = Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [];
+    if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${u.actionDp || 0}`);
 }
 
 function closeAttackModal() {
@@ -119,6 +168,17 @@ function submitAttackModal() {
 
     if (myRole === 'st') {
         cqInitiateThreat({ attacker, target });
+        // 所選 BOSS 行動的狀態自動施加到目標玩家單位
+        if (threatPendingStatuses.length && typeof addStatusToUnit === 'function') {
+            const applied = [];
+            threatPendingStatuses.forEach(s => {
+                addStatusToUnit(target.id, s.id, s.stacks > 0 ? s.stacks : null);
+                const nm = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
+                applied.push(nm + (s.stacks > 0 ? ' x' + s.stacks : ''));
+            });
+            if (applied.length && typeof showToast === 'function') showToast('已對目標施加：' + applied.join('、'));
+        }
+        threatPendingStatuses = [];
         if (typeof showToast === 'function') showToast('威脅已發起，等待玩家防禦...');
     } else {
         cqInitiateAttack({ attacker, target });

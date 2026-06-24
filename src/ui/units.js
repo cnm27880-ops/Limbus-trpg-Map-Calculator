@@ -1082,6 +1082,9 @@ function openUnitContextMenu(event, unitId) {
             if (isSt) {
                 items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
                 items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
+                if (isBoss || u.type === 'enemy') {
+                    items.push({ icon: '👹', label: 'BOSS 戰鬥數值', fn: `openBossUnitModal('${u.id}')` });
+                }
                 if (isBoss) {
                     items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
                 }

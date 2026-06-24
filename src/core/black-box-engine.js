@@ -43,6 +43,9 @@ function bbRunBlackBoxCalculation(data) {
     const attackerMods = bbSumStatusCalcMods(attackerUnit);
     atkTotal = Math.max(0, atkTotal + attackerMods.atkDp);
 
+    // 攻擊方若為 BOSS/敵方單位，套用其 BOSS 戰鬥數值（攻擊 DP 修正）
+    if (attackerUnit) atkTotal = Math.max(0, atkTotal + (Number(attackerUnit.bossAtkMod) || 0));
+
     let defTotal = 0;
     if (data.defense) {
         defTotal = (Number(data.defense.dp) || 0) + (Number(data.defense.auto) || 0);
@@ -54,6 +57,9 @@ function bbRunBlackBoxCalculation(data) {
     // 目標身上的狀態（如麻痺/凍結）扣減防禦判定
     const targetMods = bbSumStatusCalcMods(targetUnit);
     defTotal = Math.max(0, defTotal + targetMods.defMod);
+
+    // 目標若為 BOSS/敵方單位，套用其 BOSS 戰鬥數值（防禦修正）
+    if (targetUnit) defTotal = Math.max(0, defTotal + (Number(targetUnit.bossDefMod) || 0));
 
     // 無視防禦點數：直接扣減防禦總值（不會低於 0）
     const ignoreDef = Math.max(0, Number(attacker.ignoreDef) || 0);

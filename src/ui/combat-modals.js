@@ -97,8 +97,13 @@ function submitAttackModal() {
 
     cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious });
 
-    const attackerUnit = (typeof state !== 'undefined' && Array.isArray(state.units))
-        ? state.units.find(u => u.ownerId === myPlayerId) : null;
+    // 攻擊方單位：玩家＝自己控制的單位；ST 發起威脅＝目前作用中的 BOSS（用於套用 BOSS 攻擊修正）
+    let attackerUnit = null;
+    if (typeof state !== 'undefined' && Array.isArray(state.units)) {
+        attackerUnit = (myRole === 'st')
+            ? (state.activeBossId ? state.units.find(u => u.id === state.activeBossId) : null)
+            : state.units.find(u => u.ownerId === myPlayerId);
+    }
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
     const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
 

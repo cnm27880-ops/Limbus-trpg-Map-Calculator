@@ -159,18 +159,6 @@
     <!-- Calculator Page -->
     <div id="page-calc" class="page">
         <div class="calc-container">
-            <!-- Player Stats Memo Section -->
-            <div id="player-stats-memo-section" class="calc-section player-memo-section">
-                <button id="toggle-player-memo-btn" type="button" class="player-memo-toggle" onclick="togglePlayerMemo()">
-                    <span>👥 玩家數值備忘錄</span>
-                    <span id="player-memo-toggle-icon">▼</span>
-                </button>
-                <div id="player-memo-container" class="hidden player-memo-container">
-                    <button type="button" class="player-memo-add" onclick="addPlayerMemo()">+ 新增玩家</button>
-                    <div id="player-memo-list" class="player-memo-list"></div>
-                </div>
-            </div>
-
             <!-- Boss Mode Section -->
             <div class="calc-section">
                 <label class="boss-toggle">
@@ -277,6 +265,84 @@
 
 <!-- Modals -->
 <div id="modals-container"></div>
+
+<!-- 發起攻擊 Modal -->
+<div class="modal-overlay" id="attack-modal" onclick="if(event.target.id==='attack-modal')closeAttackModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <span>⚔️ 發起攻擊</span>
+            <button onclick="closeAttackModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="combat-modal-target" id="attack-target-name">目標：---</div>
+            <div class="calc-grid">
+                <div class="calc-field">
+                    <span class="calc-label">總攻擊 DP</span>
+                    <input type="number" id="attack-dp" value="0" min="0">
+                </div>
+                <div class="calc-field">
+                    <span class="calc-label">攻擊附加成功</span>
+                    <input type="number" id="attack-auto" value="0" min="0">
+                </div>
+            </div>
+            <div class="combat-modal-tags">
+                <label><input type="checkbox" id="attack-ignore-def"> 無視防禦</label>
+                <label><input type="checkbox" id="attack-crit-vicious"> 嚴重轉惡性</label>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn" onclick="closeAttackModal()" style="background:var(--bg-card);">取消</button>
+            <button class="modal-btn" onclick="submitAttackModal()" style="background:var(--accent-red);">發送攻擊</button>
+        </div>
+    </div>
+</div>
+
+<!-- 防禦 QTE Modal -->
+<div class="modal-overlay" id="defense-qte-modal">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <span>🛡️ 防禦 QTE</span>
+        </div>
+        <div class="modal-body">
+            <div class="qte-warning-banner" id="defense-qte-warning">⚠️ 你正遭受攻擊！立即填入防禦數值！</div>
+            <div class="calc-grid">
+                <div class="calc-field">
+                    <span class="calc-label">防禦總 DP</span>
+                    <input type="number" id="defense-dp" value="0" min="0">
+                </div>
+                <div class="calc-field">
+                    <span class="calc-label">防禦附加成功</span>
+                    <input type="number" id="defense-auto" value="0" min="0">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn" onclick="submitDefenseModal()" style="background:var(--accent-red);width:100%;">全力防禦</button>
+        </div>
+    </div>
+</div>
+
+<!-- ST 審核 Modal -->
+<div class="modal-overlay" id="st-review-modal">
+    <div class="modal" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <span>🧮 ST 黑箱審核</span>
+        </div>
+        <div class="modal-body">
+            <div class="st-review-suggested" id="st-review-suggested">系統建議骰數：--- 顆</div>
+            <div class="calc-field">
+                <span class="calc-label">最終微調增減</span>
+                <input type="number" id="st-review-modifier" value="0">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn" onclick="confirmSTReview()" style="background:var(--accent-green);width:100%;">確認並廣播</button>
+        </div>
+    </div>
+</div>
+
+<!-- 全場戰鬥廣播橫幅 -->
+<div class="combat-broadcast-banner" id="combat-broadcast-banner"></div>
 
 <!-- 幸運大轉盤浮動視窗 -->
 <div id="roulette-modal" class="hidden" onclick="if(event.target.id==='roulette-modal')closeRouletteModal()">
@@ -541,6 +607,10 @@
 <script src="src/data/storage.js"></script>
 <script src="src/data/firebase-connection.js"></script>
 
+<!-- 戰鬥隊列核心（盲盒戰鬥與 QTE 系統，依賴 firebase-connection.js 的 roomRef） -->
+<script src="src/core/combat-queue.js"></script>
+<script src="src/core/black-box-engine.js"></script>
+
 <!-- UI 層 -->
 <script src="src/ui/camera.js"></script>
 <script src="src/ui/map.js"></script>
@@ -553,6 +623,8 @@
 <script src="src/utils/audio.js"></script>
 <script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-hud.js"></script>
+<script src="src/ui/combat-modals.js"></script>
+<script src="src/ui/combat-broadcast.js"></script>
 <script src="src/ui/st-skill-hud.js"></script>
 <script src="src/ui/boss-battle-hud.js"></script>
 <script src="src/ui/battle-tools-hud.js"></script>

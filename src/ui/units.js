@@ -1077,6 +1077,13 @@ function openUnitContextMenu(event, unitId) {
                 items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
             }
         }
+        // ===== 盲盒戰鬥與 QTE 系統：附加戰鬥按鈕（不影響原有操作項目） =====
+        if (!isSt && (u.type === 'enemy' || isBoss)) {
+            items.push({ icon: '⚔️', label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
+        } else if (isSt && u.type === 'player') {
+            items.push({ icon: '🗡️', label: '發起威脅 (QTE)', fn: `openThreatModal('${u.id}')` });
+        }
+
         items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
     }
 

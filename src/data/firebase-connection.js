@@ -1127,11 +1127,11 @@ function syncState() {
  */
 function sendState() {
     if (myRole === 'st') {
-        // 速率限制：ST 每 10 秒最多 30 次同步
-        if (typeof RateLimiter !== 'undefined' && !RateLimiter.check('sendState', 30, 10000)) {
-            console.warn('[Security] sendState 操作過於頻繁，已節流');
-            return;
-        }
+        // 注意：sendState 是 ST 自己的權威狀態同步（非玩家輸入），不可加速率限制節流。
+        // 戰鬥中頻繁操作（多重行動編輯、AOE、HP/護盾調整等）很容易在短時間內觸發多次同步；
+        // 過去曾對此加上「每 10 秒 30 次」的節流，超過時會直接丟棄該次同步且只 console.warn，
+        // 導致 ST 本地畫面看起來已儲存、但 Firebase 從未真正寫入，造成多重行動/HP 等資料在
+        // 其他端或重新整理後消失。真正需要防護濫用的是玩家→host 訊息（sendToHost 已有節流）。
         syncMapData();
         syncMapPalette();
         syncUnits();

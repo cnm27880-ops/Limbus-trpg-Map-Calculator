@@ -9,6 +9,7 @@
 
 let combatQueueListener = null;
 let combatQueueLast = null; // 上一次收到的隊列資料，避免重複觸發彈窗
+let cqLastCalculatedTs = null; // 已執行過黑箱運算的 ts，避免 Firebase 對同一筆寫入重複觸發 value 造成重算覆蓋正確結果
 
 function cqRef() {
     return roomRef ? roomRef.child('combatQueue') : null;
@@ -33,6 +34,7 @@ function cqSetupListener() {
 
 function cqHandleUpdate(data) {
     if (!data || data.status === 'idle') {
+        cqLastCalculatedTs = null; // 重置，讓下一場戰鬥可以重新觸發黑箱運算
         if (typeof cqOnIdle === 'function') cqOnIdle();
         return;
     }
@@ -42,8 +44,10 @@ function cqHandleUpdate(data) {
             if (typeof cqOnPendingDefense === 'function') cqOnPendingDefense(data);
             break;
         case 'calculating':
-            // 黑箱引擎僅在 ST 端執行
-            if (myRole === 'st' && typeof bbRunBlackBoxCalculation === 'function') {
+            // 黑箱引擎僅在 ST 端執行；Firebase 對同一筆寫入可能觸發多次 value（本地預測 + 伺服器確認），
+            // 以 ts（本場戰鬥唯一識別，於 cqInitiateAttack/cqInitiateThreat 設定後即不再變動）避免重算覆蓋已送審的正確結果。
+            if (myRole === 'st' && typeof bbRunBlackBoxCalculation === 'function' && data.ts !== cqLastCalculatedTs) {
+                cqLastCalculatedTs = data.ts;
                 bbRunBlackBoxCalculation(data);
             }
             break;
@@ -68,8 +72,10 @@ function cqInitiateAttack(payload) {
         target: payload.target,
         defense: null,
         baseDice: null,
+        baseExtraSuccess: null,
         modifier: null,
         finalDice: null,
+        finalExtraSuccess: null,
         ts: firebase.database.ServerValue.TIMESTAMP
     });
 }
@@ -86,8 +92,10 @@ function cqInitiateThreat(payload) {
         target: payload.target,
         defense: null,
         baseDice: null,
+        baseExtraSuccess: null,
         modifier: null,
         finalDice: null,
+        finalExtraSuccess: null,
         ts: firebase.database.ServerValue.TIMESTAMP
     });
 }
@@ -105,28 +113,32 @@ function cqSubmitDefense(defense) {
 }
 
 /**
- * ST 端：黑箱引擎完成基礎運算後，寫入 base_dice（與運算過程 debugStr）並轉入 st_review。
+ * ST 端：黑箱引擎完成基礎運算後，寫入 baseDice 與 baseExtraSuccess（兩者分開，不相加）
+ * 與運算過程 debugStr，並轉入 st_review。
  */
-function cqEnterSTReview(baseDice, debugStr) {
+function cqEnterSTReview(baseDice, baseExtraSuccess, debugStr) {
     const ref = cqRef();
     if (!ref) return;
     ref.update({
         status: 'st_review',
         baseDice: baseDice,
+        baseExtraSuccess: baseExtraSuccess,
         debugStr: debugStr || ''
     });
 }
 
 /**
- * ST 確認最終微調後，寫入 final_dice 並轉入 broadcasting。
+ * ST 確認最終微調後，寫入 finalDice / finalExtraSuccess 並轉入 broadcasting。
+ * 微調僅套用於骰數（finalDice），附加成功維持黑箱原值。
  */
-function cqBroadcastResult(finalDice, modifier) {
+function cqBroadcastResult(finalDice, finalExtraSuccess, modifier) {
     const ref = cqRef();
     if (!ref) return;
     ref.update({
         status: 'broadcasting',
         modifier: modifier,
-        finalDice: finalDice
+        finalDice: finalDice,
+        finalExtraSuccess: finalExtraSuccess
     });
 }
 

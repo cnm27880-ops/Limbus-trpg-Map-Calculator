@@ -182,6 +182,24 @@ function toggleSidebar() {
     }
 }
 
+// ===== 加權 HP 百分比 =====
+/**
+ * 計算單位的加權剩餘 HP 百分比（B=1, L=2, A=3 分，分數越高代表傷害越重）
+ * 用於 BOSS 血條 HUD 與隱藏 B/L/A 明細時顯示的百分比血條。
+ * @param {Object} unit - 單位物件（含 hpArr / maxHp）
+ * @returns {number} 0~100 的剩餘百分比
+ */
+function calculateWeightedHpPercent(unit) {
+    if (!unit) return 100;
+    const hpArr = unit.hpArr || [];
+    const maxHp = unit.maxHp || hpArr.length || 1;
+    const maxWeight = maxHp * 3;
+    if (maxWeight <= 0) return 100;
+    const damageWeight = hpArr.reduce((sum, x) => sum + (Number(x) || 0), 0);
+    const remaining = Math.max(0, maxWeight - damageWeight);
+    return (remaining / maxWeight) * 100;
+}
+
 // ===== HP 狀態描述 =====
 /**
  * 取得模糊的 HP 狀態描述（用於隱藏敵人詳細資訊）

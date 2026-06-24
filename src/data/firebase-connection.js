@@ -835,6 +835,9 @@ function setupRoomListeners() {
 
     // 設置連線監控和心跳機制
     setupConnectionMonitor();
+
+    // 設置戰鬥隊列監聽（盲盒戰鬥與 QTE 系統，獨立於上述同步狀態）
+    if (typeof cqSetupListener === 'function') cqSetupListener();
 }
 
 /**

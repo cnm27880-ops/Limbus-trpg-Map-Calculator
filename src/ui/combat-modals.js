@@ -45,6 +45,14 @@ function openAttackModal(unitId) {
     cmRenderThreatActions();
 
     openModal('attack-modal');
+
+    // ST 開啟威脅視窗時，自動點選第一個可用行動，預先帶入其 DP / 狀態（仍可再手動切換）
+    if (myRole === 'st') {
+        setTimeout(() => {
+            const firstBtn = document.querySelector('#attack-boss-actions .threat-action-btn');
+            if (firstBtn) firstBtn.click();
+        }, 0);
+    }
 }
 
 /**
@@ -204,8 +212,11 @@ function submitAttackModal() {
  * combat-queue.js 在 pending_defense 狀態時呼叫：若自己是目標玩家，彈出防禦 QTE。
  */
 function cqOnPendingDefense(data) {
+    if (myRole === 'st') return;
     const target = data.target || {};
-    if (myRole === 'st' || target.id !== myPlayerId) return;
+    // target.id 是棋子(Token)的 unit.id，不是玩家帳號 ID，必須先找到對應單位再比對其 ownerId
+    const targetUnit = typeof findUnitById === 'function' ? findUnitById(target.id) : null;
+    if (!targetUnit || targetUnit.ownerId !== myPlayerId) return;
 
     const memo = cmLoadMemo(DEFENSE_MODAL_MEMO_KEY) || {};
     document.getElementById('defense-dp').value = memo.dp ?? 0;
@@ -249,7 +260,8 @@ function cqOnSTReview(data) {
         if (identityExtraSuccess > 0) notes.push(`人格卡額外成功 +${identityExtraSuccess}`);
         if (counterPhaseDpBonus > 0) notes.push(`未對抗任何行動 DP +${counterPhaseDpBonus}`);
         if (Array.isArray(atk.identityNotes) && atk.identityNotes.length) notes.push(`套用人格卡：${atk.identityNotes.join('、')}`);
-        ctx.innerText = notes.length ? `攻擊方宣告：${notes.join('、')}` : '';
+        const debugLine = data.debugStr ? `\n${data.debugStr}` : '';
+        ctx.innerText = (notes.length ? `攻擊方宣告：${notes.join('、')}` : '') + debugLine;
     }
 
     document.getElementById('st-review-modifier').value = 0;

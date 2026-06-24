@@ -126,9 +126,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 初始化 Modal
     if (typeof initModals === 'function') initModals();
     
-    // 初始化計算器
-    if (typeof initCalculator === 'function') initCalculator();
-    
     // 初始化檔案上傳
     if (typeof initFileUpload === 'function') initFileUpload();
 

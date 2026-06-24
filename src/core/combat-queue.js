@@ -105,14 +105,15 @@ function cqSubmitDefense(defense) {
 }
 
 /**
- * ST 端：黑箱引擎完成基礎運算後，寫入 base_dice 並轉入 st_review。
+ * ST 端：黑箱引擎完成基礎運算後，寫入 base_dice（與運算過程 debugStr）並轉入 st_review。
  */
-function cqEnterSTReview(baseDice) {
+function cqEnterSTReview(baseDice, debugStr) {
     const ref = cqRef();
     if (!ref) return;
     ref.update({
         status: 'st_review',
-        baseDice: baseDice
+        baseDice: baseDice,
+        debugStr: debugStr || ''
     });
 }
 

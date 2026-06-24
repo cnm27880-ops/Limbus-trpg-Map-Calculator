@@ -3327,6 +3327,7 @@ body.combat-mode .boss-hud-container {
     color: var(--accent-yellow);
     font-size: 0.85rem;
     margin-top: 6px;
+    white-space: pre-wrap;
 }
 
 .st-review-context:empty {

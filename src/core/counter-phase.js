@@ -17,14 +17,37 @@ function cpRef() {
     return (typeof roomRef !== 'undefined' && roomRef) ? roomRef.child('counterPhase') : null;
 }
 
+/**
+ * Firebase 對「全部子項皆為連續數字鍵」的陣列會原樣回傳 array，
+ * 但若中間有缺漏鍵或寫入時機不一致，SDK 可能改回傳一般物件，導致 .map/.forEach 整段失效、
+ * 畫面只剩下殘存的部分項目（外觀上很像「只顯示 1 個行動」）。讀取後一律正規化回陣列，避免此落差。
+ * @param {*} value
+ * @returns {array}
+ */
+function cpAsArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') return Object.values(value);
+    return [];
+}
+
+function cpNormalizeState(data) {
+    const base = { started: false, roundId: 0, bossId: null, actions: [], assignments: {} };
+    if (!data) return base;
+    return {
+        ...base,
+        ...data,
+        actions: cpAsArray(data.actions),
+        assignments: (data.assignments && typeof data.assignments === 'object') ? data.assignments : {}
+    };
+}
+
 function cpSetupListener() {
     const ref = cpRef();
     if (!ref) return;
     if (counterPhaseListener) ref.off('value', counterPhaseListener);
 
     counterPhaseListener = ref.on('value', snapshot => {
-        const data = snapshot.val();
-        counterPhaseState = data || { started: false, roundId: 0, bossId: null, actions: [], assignments: {} };
+        counterPhaseState = cpNormalizeState(snapshot.val());
         cpHandleUpdate();
     });
     if (typeof unsubscribeListeners !== 'undefined') {
@@ -87,7 +110,7 @@ function cpResolvePlayerMods(playerId, playerInit) {
     if (!counterPhaseState.started) return result;
     const boss = (typeof findUnitById === 'function') ? findUnitById(counterPhaseState.bossId) : null;
     const X = ((boss && boss.sideLevel) || 1) * 10;
-    const mine = (counterPhaseState.assignments || {})[playerId] || [];
+    const mine = cpAsArray((counterPhaseState.assignments || {})[playerId]);
 
     if (mine.length === 0) {
         result.selfBonus = X;
@@ -111,7 +134,7 @@ function cpResolveActionMod(actionId) {
     const empty = { playerId: null, playerName: '', mod: 0 };
     if (!counterPhaseState.started) return empty;
     const playerId = Object.keys(counterPhaseState.assignments || {})
-        .find(pid => ((counterPhaseState.assignments[pid] || []).includes(actionId)));
+        .find(pid => cpAsArray(counterPhaseState.assignments[pid]).includes(actionId));
     if (!playerId) return empty;
 
     const playerUnit = (typeof state !== 'undefined' && Array.isArray(state.units))

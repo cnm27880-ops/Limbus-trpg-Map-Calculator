@@ -60,11 +60,12 @@ function cmRenderThreatActions() {
     const boss = (typeof findUnitById === 'function') ? findUnitById(state.activeBossId) : null;
     if (!boss) return;
 
-    // 本體（行動1）+ 各行動條目
-    const actions = [boss];
-    if (typeof getActionSlots === 'function') actions.push(...getActionSlots(boss.id));
+    // 本體（行動1）+ 各行動條目（AOE 行動不走單體威脅流程，請改用多重行動面板的群體操作）
+    const allActions = [boss];
+    if (typeof getActionSlots === 'function') allActions.push(...getActionSlots(boss.id));
 
-    const btns = actions.map((u, i) => {
+    const btns = allActions.map((u, i) => {
+        if (u.actionAoe) return '';
         const dp = u.actionDp || 0;
         const statuses = Array.isArray(u.actionStatuses) ? u.actionStatuses : [];
         const stTxt = statuses.length
@@ -74,7 +75,7 @@ function cmRenderThreatActions() {
               }).join('、')
             : '無狀態';
         return `<button type="button" class="threat-action-btn" onclick="cmApplyThreatAction('${u.id}')">行動${i + 1}${i === 0 ? '·本體' : ''}<small>DP ${dp}｜${escapeHtml(stTxt)}</small></button>`;
-    }).join('');
+    }).filter(Boolean).join('');
 
     box.innerHTML = `<div class="threat-action-label">⚔ ${escapeHtml(boss.name || 'BOSS')} 行動（點選帶入 DP 與狀態）</div><div class="threat-action-btns">${btns}</div>`;
     box.style.display = 'block';
@@ -86,9 +87,12 @@ function cmRenderThreatActions() {
 function cmApplyThreatAction(unitId) {
     const u = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
     if (!u) return;
-    document.getElementById('attack-dp').value = u.actionDp || 0;
+    const counterMod = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(unitId) : { mod: 0, playerName: '' };
+    const dp = (u.actionDp || 0) + (counterMod.mod || 0);
+    document.getElementById('attack-dp').value = dp;
     threatPendingStatuses = Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [];
-    if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${u.actionDp || 0}`);
+    const modTxt = counterMod.mod ? `（含對抗${escapeHtml(counterMod.playerName)} ${counterMod.mod > 0 ? '+' : ''}${counterMod.mod}）` : '';
+    if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${dp}${modTxt}`);
 }
 
 function closeAttackModal() {
@@ -156,13 +160,20 @@ function submitAttackModal() {
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
     const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
 
+    // 玩家發起攻擊：若本回合未對抗任何 BOSS 行動，自動套用對抗分配的自身 DP 加成
+    let counterPhaseDpBonus = 0;
+    if (myRole !== 'st' && attackerUnit && typeof cpResolvePlayerMods === 'function') {
+        counterPhaseDpBonus = cpResolvePlayerMods(myPlayerId, attackerUnit.init || 0).selfBonus;
+    }
+
     const attacker = {
         id: myPlayerId, name: myName,
         unitId: attackerUnit ? attackerUnit.id : null,
         dp, auto, ignoreDef, critVicious,
         identityDpBonus: identityBonus.dpBonus,
         identityExtraSuccess: identityBonus.extraSuccess,
-        identityNotes: identityBonus.names
+        identityNotes: identityBonus.names,
+        counterPhaseDpBonus
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
@@ -228,6 +239,7 @@ function cqOnSTReview(data) {
     const critVicious = Number(atk.critVicious) || 0;
     const identityDpBonus = Number(atk.identityDpBonus) || 0;
     const identityExtraSuccess = Number(atk.identityExtraSuccess) || 0;
+    const counterPhaseDpBonus = Number(atk.counterPhaseDpBonus) || 0;
     const ctx = document.getElementById('st-review-context');
     if (ctx) {
         const notes = [];
@@ -235,6 +247,7 @@ function cqOnSTReview(data) {
         if (critVicious > 0) notes.push(`嚴重轉惡性 ${critVicious} 點`);
         if (identityDpBonus > 0) notes.push(`人格卡 DP +${identityDpBonus}`);
         if (identityExtraSuccess > 0) notes.push(`人格卡額外成功 +${identityExtraSuccess}`);
+        if (counterPhaseDpBonus > 0) notes.push(`未對抗任何行動 DP +${counterPhaseDpBonus}`);
         if (Array.isArray(atk.identityNotes) && atk.identityNotes.length) notes.push(`套用人格卡：${atk.identityNotes.join('、')}`);
         ctx.innerText = notes.length ? `攻擊方宣告：${notes.join('、')}` : '';
     }
@@ -260,4 +273,49 @@ function cqOnIdle() {
     closeModal('attack-modal');
     closeModal('defense-qte-modal');
     closeModal('st-review-modal');
+}
+
+/**
+ * counter-phase.js 偵測到本回合徵詢已開始、且自己尚未送出分配時自動呼叫（玩家端）。
+ * 列出本回合 BOSS 的所有行動供玩家勾選要對抗哪些。
+ */
+function openCounterAssignModal() {
+    const existing = document.getElementById('counter-assign-modal');
+    if (existing) existing.remove();
+
+    const boss = (typeof findUnitById === 'function') ? findUnitById(counterPhaseState.bossId) : null;
+    const actions = counterPhaseState.actions || [];
+    const rows = actions.map(a => `
+        <label class="counter-assign-row">
+            <input type="checkbox" value="${a.id}" class="counter-assign-check">
+            <span>${escapeHtml(a.label)}（先攻 ${a.init}）</span>
+        </label>
+    `).join('');
+
+    const html = `
+        <div class="modal-overlay show" id="counter-assign-modal">
+            <div class="modal" style="max-width:380px;">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">⚔️ 本回合對抗分配${boss ? '：' + escapeHtml(boss.name || '') : ''}</span>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:0.85rem;color:var(--text-dim);">勾選你這回合要對抗的 BOSS 行動（可複選，可不選）。未勾選任何行動，本回合你的攻擊 DP 會自動加成。</p>
+                    ${rows || '<div class="bb-hint">尚無行動資料</div>'}
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="submitCounterAssign()" style="background:var(--accent-green);width:100%;">送出</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function submitCounterAssign() {
+    const checks = document.querySelectorAll('#counter-assign-modal .counter-assign-check:checked');
+    const ids = Array.from(checks).map(c => c.value);
+    cpSubmitAssignment(ids);
+    const modal = document.getElementById('counter-assign-modal');
+    if (modal) modal.remove();
+    if (typeof showToast === 'function') showToast('已送出本回合對抗分配');
 }

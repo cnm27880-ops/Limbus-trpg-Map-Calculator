@@ -1204,7 +1204,51 @@ function openMultiActionModal(bossId) {
                     <datalist id="ma-status-options"></datalist>
                     <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
                         行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上。
-                        DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加。
+                        DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加；勾選「AOE」的行動請改用下方群體操作套用。
+                    </div>
+
+                    <!-- 對抗分配（先攻對抗計算自動化） -->
+                    <div class="skill-hud-aoe-section" style="padding:8px; border:1px solid var(--border); margin-top:10px;">
+                        <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">🎲 對抗分配</div>
+                        <button class="skill-action-btn" style="width:100%;margin-bottom:6px;" onclick="cpStartRound('${bossId}')">開始新輪次：徵詢玩家對抗行動</button>
+                        <div id="ma-counter-status" style="font-size:0.78rem;color:var(--text-dim);"></div>
+                    </div>
+
+                    <!-- 群體操作 (AOE) -->
+                    <div class="skill-hud-aoe-section" id="skill-hud-aoe" style="padding:8px; border:1px solid var(--border); margin-top:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleStAoePanel()">
+                            <span style="font-weight:bold; color:var(--accent-red);">💥 群體操作 (AOE)</span>
+                            <span id="st-aoe-toggle-icon">▼</span>
+                        </div>
+                        <div id="st-aoe-panel-content" style="display:none; margin-top:8px;">
+                            <div style="display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap;">
+                                <button class="skill-action-btn" style="flex:1; min-width:70px;" onclick="stAoeSelect('players')">全選玩家</button>
+                                <button class="skill-action-btn" style="flex:1; min-width:70px;" onclick="stAoeSelect('enemies')">全選敵人</button>
+                                <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('all')">全選</button>
+                                <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('none')">取消全選</button>
+                                <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('invert')">反選</button>
+                            </div>
+                            <div id="st-aoe-target-list" style="max-height:100px; overflow-y:auto; border:1px solid var(--border); padding:5px; margin-bottom:5px; font-size:0.8rem;"></div>
+                            <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
+                                <label style="font-size:0.8rem; color:var(--text-dim); flex-shrink:0;">數值</label>
+                                <input type="number" id="st-aoe-value-input" value="1" min="1" style="flex:1; min-width:0; padding:4px;">
+                                <select id="st-aoe-dmg-type" style="flex:0 0 auto; padding:4px;" title="傷害類型">
+                                    <option value="b">B傷</option>
+                                    <option value="l" selected>L傷</option>
+                                    <option value="a">A傷</option>
+                                </select>
+                                <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-red); color:#fff;" onclick="executeStAoeAction('damage')">傷害</button>
+                                <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-green); color:#fff;" onclick="executeStAoeAction('heal')">治癒</button>
+                            </div>
+                            <div style="display:flex; gap:5px; margin-bottom:5px;">
+                                <input type="text" id="st-aoe-status-id" list="st-aoe-status-options" placeholder="狀態名稱（例：流血）" style="flex:2; min-width:0; padding:4px;">
+                                <input type="number" id="st-aoe-status-val" value="1" placeholder="層數" title="層數（負數可減層）" style="flex:1; min-width:0; padding:4px;">
+                                <button class="skill-action-btn" style="flex:0 0 auto;" onclick="executeStAoeAction('status')">套用狀態</button>
+                            </div>
+                            <div style="display:flex; gap:5px;">
+                                <button class="skill-action-btn" style="flex:1; background:#555; color:#fff;" onclick="undoStAoe()">復原上一步</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1218,14 +1262,38 @@ function openMultiActionModal(bossId) {
     document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
     maBuildStatusDatalist();
     renderMultiActionList();
+    renderMultiActionCounterStatus();
 }
 
-/** 從單位讀取行動設定（先攻 / DP / 狀態），含舊資料相容 */
+/**
+ * 渲染多重行動 Modal 內的「對抗分配」狀態（counter-phase.js 狀態更新時呼叫）
+ */
+function renderMultiActionCounterStatus() {
+    const box = document.getElementById('ma-counter-status');
+    if (!box) return;
+    if (typeof counterPhaseState === 'undefined' || !counterPhaseState.started) {
+        box.innerHTML = '尚未開始本輪徵詢';
+        return;
+    }
+    const actions = counterPhaseState.actions || [];
+    const assignments = counterPhaseState.assignments || {};
+    const submitted = Object.keys(assignments);
+    const rows = actions.map(a => {
+        const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
+        return r.playerId
+            ? `${escapeHtml(a.label)}：${escapeHtml(r.playerName)} 對抗（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）`
+            : `${escapeHtml(a.label)}：無人對抗`;
+    }).join('<br>');
+    box.innerHTML = `已送出 ${submitted.length} 人<br>${rows}`;
+}
+
+/** 從單位讀取行動設定（先攻 / DP / 狀態 / 是否為AOE行動），含舊資料相容 */
 function maReadActionFrom(unit) {
     return {
         init: unit.init || 0,
         dp: unit.actionDp || 0,
-        statuses: Array.isArray(unit.actionStatuses) ? unit.actionStatuses.map(s => ({ ...s })) : []
+        statuses: Array.isArray(unit.actionStatuses) ? unit.actionStatuses.map(s => ({ ...s })) : [],
+        aoe: !!unit.actionAoe
     };
 }
 
@@ -1253,7 +1321,7 @@ function maSetCount(value) {
     const count = Math.max(1, Math.min(12, parseInt(value) || 1));
     const cur = maEdit.actions;
     if (count > cur.length) {
-        while (maEdit.actions.length < count) maEdit.actions.push({ init: 0, dp: 0, statuses: [] });
+        while (maEdit.actions.length < count) maEdit.actions.push({ init: 0, dp: 0, statuses: [], aoe: false });
     } else if (count < cur.length) {
         maEdit.actions = cur.slice(0, count);
     }
@@ -1265,6 +1333,30 @@ function maSetCount(value) {
 function maUpdateField(index, field, value) {
     if (!maEdit || !maEdit.actions[index]) return;
     maEdit.actions[index][field] = parseInt(value) || 0;
+}
+
+/** 切換某行動是否為 AOE 行動（群體效果，不走單體威脅/防禦QTE流程） */
+function maToggleAoe(index, checked) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    maEdit.actions[index].aoe = !!checked;
+    renderMultiActionList();
+}
+
+/** 把指定行動的 DP / 狀態帶入下方的群體操作 (AOE) 區塊，供 ST 勾選目標後一次套用 */
+function maFillAoeFromAction(index) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    const a = maEdit.actions[index];
+    if (!stAoePanelOpen && typeof toggleStAoePanel === 'function') toggleStAoePanel();
+    const valInput = document.getElementById('st-aoe-value-input');
+    if (valInput) valInput.value = a.dp || 0;
+    if (a.statuses.length) {
+        const s = a.statuses[0];
+        const nameInput = document.getElementById('st-aoe-status-id');
+        const stackInput = document.getElementById('st-aoe-status-val');
+        if (nameInput) nameInput.value = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
+        if (stackInput) stackInput.value = s.stacks;
+    }
+    if (typeof showToast === 'function') showToast(`已帶入行動${index + 1}數值，請於下方勾選目標後套用`);
 }
 
 /** 由輸入框（狀態名稱 + 層數）新增一個狀態到指定行動 */
@@ -1309,10 +1401,16 @@ function renderMultiActionList() {
             : '<span style="font-size:0.7rem;color:var(--text-dim);">無</span>';
         return `
         <div class="ma-action-card">
-            <div class="ma-action-head">行動${i + 1}${i === 0 ? '（本體）' : ''}</div>
+            <div class="ma-action-head">
+                行動${i + 1}${i === 0 ? '（本體）' : ''}
+                <label class="ma-aoe-toggle" title="勾選後此行動視為群體(AOE)效果，僅透過下方「群體操作」套用，不會出現在單體威脅快選中">
+                    <input type="checkbox" ${a.aoe ? 'checked' : ''} onchange="maToggleAoe(${i}, this.checked)"> AOE
+                </label>
+            </div>
             <div class="ma-action-fields">
                 <label>先攻<input type="number" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
                 <label>DP<input type="number" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
+                <button class="ma-mini-btn" type="button" title="帶入下方群體操作(AOE)區塊" onclick="maFillAoeFromAction(${i})">↓ 帶入AOE</button>
             </div>
             <div class="ma-status-row">
                 <input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="狀態名稱（例：破裂）">
@@ -1339,6 +1437,7 @@ function saveMultiAction(bossId) {
     boss.init = actions[0].init;
     boss.actionDp = actions[0].dp;
     boss.actionStatuses = actions[0].statuses.map(s => ({ ...s }));
+    boss.actionAoe = !!actions[0].aoe;
 
     const slots = getActionSlots(bossId);
 
@@ -1349,6 +1448,7 @@ function saveMultiAction(bossId) {
             slots[i - 1].init = data.init;
             slots[i - 1].actionDp = data.dp;
             slots[i - 1].actionStatuses = data.statuses.map(s => ({ ...s }));
+            slots[i - 1].actionAoe = !!data.aoe;
             slots[i - 1].slotIndex = i + 1;
         } else {
             const slot = createUnit(`${boss.name}・行動${i + 1}`, 1, boss.type);
@@ -1357,6 +1457,7 @@ function saveMultiAction(bossId) {
             slot.init = data.init;
             slot.actionDp = data.dp;
             slot.actionStatuses = data.statuses.map(s => ({ ...s }));
+            slot.actionAoe = !!data.aoe;
             state.units.push(slot);
         }
     }

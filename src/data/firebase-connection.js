@@ -838,6 +838,9 @@ function setupRoomListeners() {
 
     // 設置戰鬥隊列監聽（盲盒戰鬥與 QTE 系統，獨立於上述同步狀態）
     if (typeof cqSetupListener === 'function') cqSetupListener();
+
+    // 設置 BOSS 多重行動對抗分配監聽（獨立於上述同步狀態）
+    if (typeof cpSetupListener === 'function') cpSetupListener();
 }
 
 /**

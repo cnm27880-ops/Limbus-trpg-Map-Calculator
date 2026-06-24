@@ -34,7 +34,8 @@ function bbSumStatusCalcMods(unit) {
 function bbRunBlackBoxCalculation(data) {
     const attacker = data.attacker || {};
     let atkTotal = (Number(attacker.dp) || 0) + (Number(attacker.auto) || 0)
-        + (Number(attacker.identityDpBonus) || 0) + (Number(attacker.identityExtraSuccess) || 0);
+        + (Number(attacker.identityDpBonus) || 0) + (Number(attacker.identityExtraSuccess) || 0)
+        + (Number(attacker.counterPhaseDpBonus) || 0);
 
     const attackerUnit = (typeof findUnitById === 'function' && attacker.unitId) ? findUnitById(attacker.unitId) : null;
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(data.target && data.target.id) : null;
@@ -43,23 +44,17 @@ function bbRunBlackBoxCalculation(data) {
     const attackerMods = bbSumStatusCalcMods(attackerUnit);
     atkTotal = Math.max(0, atkTotal + attackerMods.atkDp);
 
-    // 攻擊方若為 BOSS/敵方單位，套用其 BOSS 戰鬥數值（攻擊 DP 修正）
-    if (attackerUnit) atkTotal = Math.max(0, atkTotal + (Number(attackerUnit.bossAtkMod) || 0));
-
     let defTotal = 0;
     if (data.defense) {
         defTotal = (Number(data.defense.dp) || 0) + (Number(data.defense.auto) || 0);
     } else {
-        // 玩家發起攻擊（無防禦 QTE）：嘗試從目標單位資料抓取基礎防禦
-        defTotal = (targetUnit && Number(targetUnit.defDp)) || 0;
+        // 玩家發起攻擊（無防禦 QTE，目標為 BOSS/敵方單位）：採用單位的基礎防禦／防禦附加成功
+        defTotal = (targetUnit && (Number(targetUnit.defDp) || 0) + (Number(targetUnit.defAuto) || 0)) || 0;
     }
 
     // 目標身上的狀態（如麻痺/凍結）扣減防禦判定
     const targetMods = bbSumStatusCalcMods(targetUnit);
     defTotal = Math.max(0, defTotal + targetMods.defMod);
-
-    // 目標若為 BOSS/敵方單位，套用其 BOSS 戰鬥數值（防禦修正）
-    if (targetUnit) defTotal = Math.max(0, defTotal + (Number(targetUnit.bossDefMod) || 0));
 
     // 無視防禦點數：直接扣減防禦總值（不會低於 0）
     const ignoreDef = Math.max(0, Number(attacker.ignoreDef) || 0);

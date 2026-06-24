@@ -3673,6 +3673,18 @@ body.combat-mode .boss-hud-container {
     font-weight: bold;
     color: var(--accent-yellow);
     margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.ma-aoe-toggle {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.7rem;
+    font-weight: normal;
+    color: var(--text-dim);
+    cursor: pointer;
 }
 .ma-action-fields {
     display: flex;
@@ -3788,6 +3800,19 @@ body.combat-mode .boss-hud-container {
 }
 .threat-action-btn:hover {
     border-color: var(--accent-red);
+}
+
+.counter-assign-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.counter-assign-row:last-child {
+    border-bottom: none;
 }
 
 /* ===== 狀態庫編輯排列模式 ===== */

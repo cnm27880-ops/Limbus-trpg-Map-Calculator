@@ -26,12 +26,6 @@ function clampHudPosition(stateObj, panelId) {
     }
 }
 
-window.addEventListener('resize', () => {
-    if (typeof bossBattleState !== 'undefined' && bossBattleState.isVisible) {
-        clampHudPosition(bossBattleState, 'boss-battle-hud');
-    }
-});
-
 // ===== Generic Draggable Panel Setup =====
 
 function setupPanelDrag(panelId, headerId, stateObj, saveFn) {

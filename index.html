@@ -404,10 +404,6 @@
             <span class="qab-menu-icon">🎵</span>
             <span class="qab-menu-text">媒體中心</span>
         </div>
-        <div class="qab-menu-item" onclick="toggleBattleTools(); closeQABMenu();">
-            <span class="qab-menu-icon">⚔️</span>
-            <span class="qab-menu-text">戰鬥工具</span>
-        </div>
         <div class="qab-menu-item" onclick="toggleIdentityModal(); closeQABMenu();">
             <span class="qab-menu-icon">🃏</span>
             <span class="qab-menu-text">人格卡引擎</span>
@@ -615,6 +611,7 @@
 
 <!-- 戰鬥隊列核心（盲盒戰鬥與 QTE 系統，依賴 firebase-connection.js 的 roomRef） -->
 <script src="src/core/combat-queue.js"></script>
+<script src="src/core/counter-phase.js"></script>
 <script src="src/core/black-box-engine.js"></script>
 
 <!-- UI 層 -->
@@ -633,7 +630,6 @@
 <script src="src/ui/combat-broadcast.js"></script>
 <script src="src/ui/st-skill-hud.js"></script>
 <script src="src/ui/boss-battle-hud.js"></script>
-<script src="src/ui/battle-tools-hud.js"></script>
 <script src="src/ui/identity-hud.js"></script>
 <script src="src/ui/main.js"></script>
 

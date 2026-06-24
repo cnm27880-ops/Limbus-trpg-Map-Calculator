@@ -67,6 +67,8 @@ const STATUS_LIBRARY = {
             desc: '頭暈眼花，影響行動',
             fullDesc: '每點暈眩點數使攻擊、運動、感知檢定失去 1DP，基礎速度 -1m。重度：昏迷。',
             keyResist: ['耐力','決心'],
+            // 黑箱引擎自動扣減：每點暈眩使攻擊方 DP -1
+            calcMod: { atkDp: -1 },
             effects: {
                 light: '攻擊/運動/感知 -1DP/點，速度 -1m/點',
                 heavy: '昏迷（失去意識）',
@@ -81,6 +83,8 @@ const STATUS_LIBRARY = {
             desc: '身體失去行動能力',
             fullDesc: '每點麻痺點數使攻擊、運動檢定、速度 -1DP，防禦依序 -1。重度：定身。',
             keyResist: ['耐力','決心'],
+            // 黑箱引擎自動扣減：每點麻痺使攻擊方 DP -1，使防禦方防禦總值 -1
+            calcMod: { atkDp: -1, defMod: -1 },
             effects: {
                 light: '攻擊/運動/速度 -1DP/點，防禦 -1/點',
                 heavy: '定身（無法移動，速度 0，失去防禦）',
@@ -96,6 +100,8 @@ const STATUS_LIBRARY = {
             fullDesc: '每點凍結點數使生理檢定 -1DP，速度 -1m，防禦依序 -1。重度：冰封。與燃燒互相抵銷。',
             keyResist: ['力量','敏捷'],
             canCounter: ['burn'],
+            // 黑箱引擎自動扣減：每點凍結使防禦方防禦總值 -1（生理檢定非攻擊判定，不計入 atkDp）
+            calcMod: { defMod: -1 },
             effects: {
                 light: '生理檢定 -1DP/點，速度 -1m/點，防禦 -1/點',
                 heavy: '冰封（無法移動，失去防禦，無法攻擊）',

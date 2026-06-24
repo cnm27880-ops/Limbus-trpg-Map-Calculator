@@ -54,6 +54,38 @@ function openThreatModal(unitId) {
 }
 
 /**
+ * 自動套用攻擊方目前在人格卡面板（identity-hud）勾選持有/解鎖的人格卡，
+ * 疊加其 onAttack/onHit 數值加值，回傳可併入黑箱計算的 DP/額外成功加總與觸發紀錄。
+ * 僅在玩家發起攻擊時套用（ST 發起威脅走的是另一套敵方資料，不涉及玩家人格卡）。
+ * @param {object} attackerUnit
+ * @param {object} targetUnit
+ * @returns {{ dpBonus: number, extraSuccess: number, names: string[] }}
+ */
+function cmResolveIdentityBonus(attackerUnit, targetUnit) {
+    const empty = { dpBonus: 0, extraSuccess: 0, names: [] };
+    if (myRole === 'st') return empty;
+    if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
+
+    const owner = identityHudState.owner;
+    if (!owner || typeof getIdentitiesByOwner !== 'function') return empty;
+
+    const ownedCards = getIdentitiesByOwner(owner)
+        .filter(id => identityHudState.cards[id] && identityHudState.cards[id].owned)
+        .map(id => ({ id, unlocked: !!identityHudState.cards[id].unlocked }));
+    if (!ownedCards.length) return empty;
+
+    const attackerState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(attackerUnit) : (attackerUnit || {});
+    const targetState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(targetUnit) : (targetUnit || {});
+    const result = evaluatePlayerAttack(ownedCards, attackerState, targetState);
+
+    return {
+        dpBonus: result.totalDpBonus || 0,
+        extraSuccess: result.totalExtraSuccess || 0,
+        names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))]
+    };
+}
+
+/**
  * 發送按鈕：依目前使用者角色決定走「攻擊」或「威脅」流程
  */
 function submitAttackModal() {
@@ -65,9 +97,18 @@ function submitAttackModal() {
 
     cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious });
 
+    const attackerUnit = (typeof state !== 'undefined' && Array.isArray(state.units))
+        ? state.units.find(u => u.ownerId === myPlayerId) : null;
+    const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
+    const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
+
     const attacker = {
         id: myPlayerId, name: myName,
-        dp, auto, ignoreDef, critVicious
+        unitId: attackerUnit ? attackerUnit.id : null,
+        dp, auto, ignoreDef, critVicious,
+        identityDpBonus: identityBonus.dpBonus,
+        identityExtraSuccess: identityBonus.extraSuccess,
+        identityNotes: identityBonus.names
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
@@ -76,7 +117,9 @@ function submitAttackModal() {
         if (typeof showToast === 'function') showToast('威脅已發起，等待玩家防禦...');
     } else {
         cqInitiateAttack({ attacker, target });
-        if (typeof showToast === 'function') showToast('攻擊已送出，等待系統判定...');
+        const bonusTotal = identityBonus.dpBonus + identityBonus.extraSuccess;
+        const bonusMsg = bonusTotal ? `（已自動套用人格卡加值 +${bonusTotal}）` : '';
+        if (typeof showToast === 'function') showToast('攻擊已送出，等待系統判定...' + bonusMsg);
     }
     closeAttackModal();
 }
@@ -118,11 +161,16 @@ function cqOnSTReview(data) {
     const atk = data.attacker || {};
     const ignoreDef = Number(atk.ignoreDef) || 0;
     const critVicious = Number(atk.critVicious) || 0;
+    const identityDpBonus = Number(atk.identityDpBonus) || 0;
+    const identityExtraSuccess = Number(atk.identityExtraSuccess) || 0;
     const ctx = document.getElementById('st-review-context');
     if (ctx) {
         const notes = [];
         if (ignoreDef > 0) notes.push(`無視防禦 ${ignoreDef} 點`);
         if (critVicious > 0) notes.push(`嚴重轉惡性 ${critVicious} 點`);
+        if (identityDpBonus > 0) notes.push(`人格卡 DP +${identityDpBonus}`);
+        if (identityExtraSuccess > 0) notes.push(`人格卡額外成功 +${identityExtraSuccess}`);
+        if (Array.isArray(atk.identityNotes) && atk.identityNotes.length) notes.push(`套用人格卡：${atk.identityNotes.join('、')}`);
         ctx.innerText = notes.length ? `攻擊方宣告：${notes.join('、')}` : '';
     }
 

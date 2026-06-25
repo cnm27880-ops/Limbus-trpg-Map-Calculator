@@ -67,13 +67,17 @@ function bbRunBlackBoxCalculation(data) {
     const attacker = data.attacker || {};
 
     // ===== DP 桶（攻擊判定）=====
-    const atkDpParts = [
-        bbSafeNumber(attacker.dp),
-        bbSafeNumber(attacker.identityDpBonus),
-        bbSafeNumber(attacker.counterPhaseDpBonus)
-    ];
-    let atkDpTotal = atkDpParts.reduce((a, b) => a + b, 0);
-    const atkDpBaseLabel = `${atkDpTotal}`;
+    const atkDpDeclared = bbSafeNumber(attacker.dp);
+    const atkIdentityDp = bbSafeNumber(attacker.identityDpBonus);
+    const atkCounterDp = bbSafeNumber(attacker.counterPhaseDpBonus);
+    let atkDpTotal = atkDpDeclared + atkIdentityDp + atkCounterDp;
+
+    // 明細分項：把「宣告 DP」與「人格引擎加成」「未對抗加成」拆開列出，
+    // 讓 ST 在審核明細中看得到人格引擎實際貢獻多少，而非只看到一個合併後的數字。
+    const atkBaseParts = [`宣告${atkDpDeclared}`];
+    if (atkIdentityDp) atkBaseParts.push(`人格${atkIdentityDp >= 0 ? '+' : ''}${atkIdentityDp}`);
+    if (atkCounterDp) atkBaseParts.push(`未對抗+${atkCounterDp}`);
+    const atkDpBaseLabel = atkBaseParts.join('+');
 
     const attackerUnit = (typeof findUnitById === 'function' && attacker.unitId) ? findUnitById(attacker.unitId) : null;
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(data.target && data.target.id) : null;
@@ -93,27 +97,34 @@ function bbRunBlackBoxCalculation(data) {
         defDpBaseLabel = `${defDpTotal}`;
     }
 
-    // 目標身上的狀態（如麻痺/凍結）扣減防禦判定 DP
+    // 目標身上的狀態（如麻痺/凍結）扣減防禦判定 DP。
+    // 注意：bbSumStatusCalcMods 內部對每一筆狀態是「累加（+=）」而非「覆蓋（=）」，
+    // 故多筆減益（如 -134、-3、-3）會正確相加，而不會只剩最後一筆。
     const targetMods = bbSumStatusCalcMods(targetUnit);
-    defDpTotal = bbSafeNumber(defDpTotal + targetMods.defMod);
+
+    // 防禦最終值＝基礎防禦 DP ＋ 全部狀態修正，並加上下限保護（扣到 0 為止，不可為負）。
+    let finalDefense = Math.max(0, bbSafeNumber(defDpTotal + targetMods.defMod));
 
     // 無視防禦點數：直接扣減防禦方 DP（不會低於 0，且不影響附加成功）
     const ignoreDef = Math.max(0, bbSafeNumber(attacker.ignoreDef));
-    defDpTotal = Math.max(0, defDpTotal);
-    if (ignoreDef > 0) defDpTotal = Math.max(0, defDpTotal - ignoreDef);
+    if (ignoreDef > 0) finalDefense = Math.max(0, finalDefense - ignoreDef);
 
-    const baseDice = Math.max(0, bbSafeNumber(atkDpTotal - defDpTotal));
+    const baseDice = Math.max(0, bbSafeNumber(atkDpTotal - finalDefense));
 
     // ===== 附加成功桶（與 DP 完全分開計算）=====
-    const atkExtraTotal = bbSafeNumber(attacker.auto) + bbSafeNumber(attacker.identityExtraSuccess);
+    const atkAutoDeclared = bbSafeNumber(attacker.auto);
+    const atkIdentityExtra = bbSafeNumber(attacker.identityExtraSuccess);
+    const atkExtraTotal = atkAutoDeclared + atkIdentityExtra;
     const defExtraTotal = data.defense ? bbSafeNumber(data.defense.auto) : bbSafeNumber(targetUnit && targetUnit.defAuto);
     const baseExtraSuccess = Math.max(0, bbSafeNumber(atkExtraTotal - defExtraTotal));
 
     const atkLabels = [atkDpBaseLabel, ...attackerMods.labels].filter(Boolean);
     const defLabels = [defDpBaseLabel, ...targetMods.labels].filter(Boolean);
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
-    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${defDpTotal} ➡️ 骰數: ${baseDice}\n`
-        + `【附加成功】攻: ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
+    // 附加成功同樣分項列出人格引擎貢獻
+    const atkExtraLabel = atkIdentityExtra ? `宣告${atkAutoDeclared}+人格+${atkIdentityExtra}` : `${atkAutoDeclared}`;
+    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ 骰數: ${baseDice}\n`
+        + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
 
     cqEnterSTReview(baseDice, baseExtraSuccess, debugStr);
 }

@@ -139,10 +139,22 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     const targetState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(targetUnit) : (targetUnit || {});
     const result = evaluatePlayerAttack(ownedCards, attackerState, targetState);
 
+    // 人格引擎在攻擊／命中時會對目標施加的負面狀態（沮喪、流血、破裂…）。
+    // 整理成「中文狀態名＋層數」清單，供發起攻擊時自動施加並在 ST 明細中列出。
+    const targetStatus = result.expectedTargetStatus || {};
+    const statusNotes = Object.entries(targetStatus).map(([engKey, layers]) => {
+        const amount = parseInt(layers) || 0;
+        if (!amount) return '';
+        const name = (typeof identityStatusName === 'function') ? identityStatusName(engKey) : engKey;
+        return `${name}+${amount}`;
+    }).filter(Boolean);
+
     return {
         dpBonus: result.totalDpBonus || 0,
         extraSuccess: result.totalExtraSuccess || 0,
-        names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))]
+        names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))],
+        targetStatus,
+        statusNotes
     };
 }
 
@@ -181,6 +193,7 @@ function submitAttackModal() {
         identityDpBonus: identityBonus.dpBonus,
         identityExtraSuccess: identityBonus.extraSuccess,
         identityNotes: identityBonus.names,
+        identityStatusNotes: identityBonus.statusNotes || [],
         counterPhaseDpBonus
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
@@ -201,6 +214,16 @@ function submitAttackModal() {
         if (typeof showToast === 'function') showToast('威脅已發起，等待玩家防禦...');
     } else {
         cqInitiateAttack({ attacker, target });
+
+        // 人格引擎判定本次攻擊／命中會對目標施加的負面狀態，於發起攻擊時自動套用到目標單位，
+        // 讓 ST 不需在審核時手動補上玩家人格給予的減益。
+        if (identityBonus.targetStatus && typeof applyEngineStatusesToUnit === 'function') {
+            const applied = applyEngineStatusesToUnit(target.id, identityBonus.targetStatus);
+            if (applied && identityBonus.statusNotes.length && typeof showToast === 'function') {
+                showToast('人格效果已對目標施加：' + identityBonus.statusNotes.join('、'));
+            }
+        }
+
         const bonusTotal = identityBonus.dpBonus + identityBonus.extraSuccess;
         const bonusMsg = bonusTotal ? `（已自動套用人格卡加值 +${bonusTotal}）` : '';
         if (typeof showToast === 'function') showToast('攻擊已送出，等待系統判定...' + bonusMsg);
@@ -244,6 +267,16 @@ function cqOnSTReview(data) {
     if (myRole !== 'st') return;
     const baseDice = data.baseDice ?? 0;
     const baseExtraSuccess = data.baseExtraSuccess ?? 0;
+
+    // 把黑箱算出的初步骰數／附加成功直接釘在 Modal 的 data-* 屬性上。
+    // 「確認廣播」時改由這裡讀取，避免依賴 combatQueueLast 全域變數的更新時序，
+    // 杜絕廣播骰數變成 0 的狀態遺失（State Loss）問題。
+    const reviewModal = document.getElementById('st-review-modal');
+    if (reviewModal) {
+        reviewModal.dataset.baseDice = String(baseDice);
+        reviewModal.dataset.baseExtraSuccess = String(baseExtraSuccess);
+    }
+
     // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
     const extraTxt = baseExtraSuccess > 0 ? ` + 附加成功 ${baseExtraSuccess}` : '';
     document.getElementById('st-review-suggested').innerText = `系統建議骰數：${baseDice} 顆${extraTxt}`;
@@ -264,6 +297,7 @@ function cqOnSTReview(data) {
         if (identityExtraSuccess > 0) notes.push(`人格卡額外成功 +${identityExtraSuccess}`);
         if (counterPhaseDpBonus > 0) notes.push(`未對抗任何行動 DP +${counterPhaseDpBonus}`);
         if (Array.isArray(atk.identityNotes) && atk.identityNotes.length) notes.push(`套用人格卡：${atk.identityNotes.join('、')}`);
+        if (Array.isArray(atk.identityStatusNotes) && atk.identityStatusNotes.length) notes.push(`人格已自動對目標施加：${atk.identityStatusNotes.join('、')}`);
         const debugLine = data.debugStr ? `\n${data.debugStr}` : '';
         ctx.innerText = (notes.length ? `攻擊方宣告：${notes.join('、')}` : '') + debugLine;
     }
@@ -273,12 +307,19 @@ function cqOnSTReview(data) {
 }
 
 function confirmSTReview() {
-    if (combatQueueLast === null) return;
-    const baseDice = (combatQueueLast && combatQueueLast.baseDice) || 0;
-    const baseExtraSuccess = (combatQueueLast && combatQueueLast.baseExtraSuccess) || 0;
-    const modifier = Number(document.getElementById('st-review-modifier').value) || 0;
+    // 優先從 Modal 的 data-* 屬性讀取初步骰數（cqOnSTReview 渲染時已釘上），
+    // 全域 combatQueueLast 僅作為退路，避免監聽器更新時序造成骰數讀成 0。
+    const reviewModal = document.getElementById('st-review-modal');
+    const ds = reviewModal ? reviewModal.dataset : {};
+    const dsDice = parseInt(ds.baseDice, 10);
+    const dsExtra = parseInt(ds.baseExtraSuccess, 10);
+    const baseDice = Number.isFinite(dsDice) ? dsDice : ((combatQueueLast && combatQueueLast.baseDice) || 0);
+    const baseExtraSuccess = Number.isFinite(dsExtra) ? dsExtra : ((combatQueueLast && combatQueueLast.baseExtraSuccess) || 0);
+
+    const STModifier = document.getElementById('st-review-modifier').value;
+    const modifier = parseInt(STModifier, 10) || 0;
     // 微調僅套用於骰數，附加成功維持黑箱原值（兩者分開，不相加）
-    const finalDice = Math.max(0, baseDice + modifier);
+    const finalDice = Math.max(0, parseInt(baseDice, 10) + modifier);
 
     closeModal('st-review-modal');
     cqBroadcastResult(finalDice, baseExtraSuccess, modifier);

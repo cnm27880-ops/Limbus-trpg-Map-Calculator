@@ -53,56 +53,67 @@ function bbSumStatusCalcMods(unit) {
 
 /**
  * 隊列進入 calculating 狀態時，由 ST 端自動執行基礎運算。
- * 攻擊方宣告值（DP + 附加成功 + 人格卡加值）與防禦方宣告值（DP + 附加成功）相減，得出 base_dice。
- * 攻擊方/防禦方身上的狀態效果（如暈眩/麻痺/凍結）會自動套用其 calcMod 修正。
- * 若攻擊方勾選「無視防禦」，依宣告點數直接扣減防禦總值。
- * 全程以 bbSafeNumber 過濾任何 undefined/NaN 來源，避免單一壞資料把骰數歸零；
- * 並組合 debugStr 隨 baseDice 一起送進 ST 審核面板，讓計算過程透明可核對。
+ *
+ * 注意：「攻擊判定 DP」與「附加成功」是兩種不同的東西，全程分開計算與顯示，絕不相加成單一數字：
+ *   - DP 桶：攻擊方總攻擊 DP + 人格卡 DP 加值 + 對抗加成 + 雙方狀態 calcMod（暈眩/麻痺/凍結等）－防禦方總防禦 DP
+ *     → 得出「骰數」(baseDice)，即實際要投擲的骰子數。
+ *   - 附加成功桶：攻擊方附加成功 + 人格卡額外成功 － 防禦方附加成功
+ *     → 得出「附加成功」(baseExtraSuccess)，為直接算成功、不參與投骰的固定成功數。
+ * 若攻擊方勾選「無視防禦」，依宣告點數直接扣減防禦方 DP（不影響附加成功）。
+ * 全程以 bbSafeNumber 過濾任何 undefined/NaN 來源，避免單一壞資料污染整體計算；
+ * 並組合 debugStr 隨 baseDice / baseExtraSuccess 一起送進 ST 審核面板，讓計算過程透明可核對。
  */
 function bbRunBlackBoxCalculation(data) {
     const attacker = data.attacker || {};
-    const atkParts = [
+
+    // ===== DP 桶（攻擊判定）=====
+    const atkDpParts = [
         bbSafeNumber(attacker.dp),
-        bbSafeNumber(attacker.auto),
         bbSafeNumber(attacker.identityDpBonus),
-        bbSafeNumber(attacker.identityExtraSuccess),
         bbSafeNumber(attacker.counterPhaseDpBonus)
     ];
-    let atkTotal = atkParts.reduce((a, b) => a + b, 0);
-    const atkBaseLabel = `${atkTotal}`;
+    let atkDpTotal = atkDpParts.reduce((a, b) => a + b, 0);
+    const atkDpBaseLabel = `${atkDpTotal}`;
 
     const attackerUnit = (typeof findUnitById === 'function' && attacker.unitId) ? findUnitById(attacker.unitId) : null;
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(data.target && data.target.id) : null;
 
-    // 攻擊方身上的狀態（如暈眩/麻痺）扣減攻擊判定
+    // 攻擊方身上的狀態（如暈眩/麻痺）扣減攻擊判定 DP
     const attackerMods = bbSumStatusCalcMods(attackerUnit);
-    atkTotal = Math.max(0, bbSafeNumber(atkTotal + attackerMods.atkDp));
+    atkDpTotal = bbSafeNumber(atkDpTotal + attackerMods.atkDp);
 
-    let defTotal = 0;
-    let defBaseLabel = '0';
+    let defDpTotal = 0;
+    let defDpBaseLabel = '0';
     if (data.defense) {
-        defTotal = bbSafeNumber(data.defense.dp) + bbSafeNumber(data.defense.auto);
-        defBaseLabel = `${defTotal}`;
+        defDpTotal = bbSafeNumber(data.defense.dp);
+        defDpBaseLabel = `${defDpTotal}`;
     } else {
-        // 玩家發起攻擊（無防禦 QTE，目標為 BOSS/敵方單位）：採用單位的基礎防禦／防禦附加成功
-        defTotal = targetUnit ? (bbSafeNumber(targetUnit.defDp) + bbSafeNumber(targetUnit.defAuto)) : 0;
-        defBaseLabel = `${defTotal}`;
+        // 玩家發起攻擊（無防禦 QTE，目標為 BOSS/敵方單位）：採用單位的基礎防禦 DP
+        defDpTotal = targetUnit ? bbSafeNumber(targetUnit.defDp) : 0;
+        defDpBaseLabel = `${defDpTotal}`;
     }
 
-    // 目標身上的狀態（如麻痺/凍結）扣減防禦判定
+    // 目標身上的狀態（如麻痺/凍結）扣減防禦判定 DP
     const targetMods = bbSumStatusCalcMods(targetUnit);
-    defTotal = Math.max(0, bbSafeNumber(defTotal + targetMods.defMod));
+    defDpTotal = bbSafeNumber(defDpTotal + targetMods.defMod);
 
-    // 無視防禦點數：直接扣減防禦總值（不會低於 0）
+    // 無視防禦點數：直接扣減防禦方 DP（不會低於 0，且不影響附加成功）
     const ignoreDef = Math.max(0, bbSafeNumber(attacker.ignoreDef));
-    if (ignoreDef > 0) defTotal = Math.max(0, defTotal - ignoreDef);
+    defDpTotal = Math.max(0, defDpTotal);
+    if (ignoreDef > 0) defDpTotal = Math.max(0, defDpTotal - ignoreDef);
 
-    const baseDice = Math.max(0, bbSafeNumber(atkTotal - defTotal));
+    const baseDice = Math.max(0, bbSafeNumber(atkDpTotal - defDpTotal));
 
-    const atkLabels = [atkBaseLabel, ...attackerMods.labels].filter(Boolean);
-    const defLabels = [defBaseLabel, ...targetMods.labels].filter(Boolean);
+    // ===== 附加成功桶（與 DP 完全分開計算）=====
+    const atkExtraTotal = bbSafeNumber(attacker.auto) + bbSafeNumber(attacker.identityExtraSuccess);
+    const defExtraTotal = data.defense ? bbSafeNumber(data.defense.auto) : bbSafeNumber(targetUnit && targetUnit.defAuto);
+    const baseExtraSuccess = Math.max(0, bbSafeNumber(atkExtraTotal - defExtraTotal));
+
+    const atkLabels = [atkDpBaseLabel, ...attackerMods.labels].filter(Boolean);
+    const defLabels = [defDpBaseLabel, ...targetMods.labels].filter(Boolean);
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
-    const debugStr = `攻: ${atkLabels.join('+')} = ${atkTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${defTotal} ➡️ 最終骰數: ${baseDice}`;
+    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${defDpTotal} ➡️ 骰數: ${baseDice}\n`
+        + `【附加成功】攻: ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
 
-    cqEnterSTReview(baseDice, debugStr);
+    cqEnterSTReview(baseDice, baseExtraSuccess, debugStr);
 }

@@ -242,7 +242,11 @@ function submitDefenseModal() {
  */
 function cqOnSTReview(data) {
     if (myRole !== 'st') return;
-    document.getElementById('st-review-suggested').innerText = `系統建議骰數：${data.baseDice ?? 0} 顆`;
+    const baseDice = data.baseDice ?? 0;
+    const baseExtraSuccess = data.baseExtraSuccess ?? 0;
+    // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
+    const extraTxt = baseExtraSuccess > 0 ? ` + 附加成功 ${baseExtraSuccess}` : '';
+    document.getElementById('st-review-suggested').innerText = `系統建議骰數：${baseDice} 顆${extraTxt}`;
 
     // 顯示攻擊方宣告的特殊參數，供 ST 黑箱判定參考
     const atk = data.attacker || {};
@@ -271,11 +275,13 @@ function cqOnSTReview(data) {
 function confirmSTReview() {
     if (combatQueueLast === null) return;
     const baseDice = (combatQueueLast && combatQueueLast.baseDice) || 0;
+    const baseExtraSuccess = (combatQueueLast && combatQueueLast.baseExtraSuccess) || 0;
     const modifier = Number(document.getElementById('st-review-modifier').value) || 0;
+    // 微調僅套用於骰數，附加成功維持黑箱原值（兩者分開，不相加）
     const finalDice = Math.max(0, baseDice + modifier);
 
     closeModal('st-review-modal');
-    cqBroadcastResult(finalDice, modifier);
+    cqBroadcastResult(finalDice, baseExtraSuccess, modifier);
 }
 
 /**

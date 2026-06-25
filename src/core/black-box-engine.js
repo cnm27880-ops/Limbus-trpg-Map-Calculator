@@ -123,7 +123,10 @@ function bbRunBlackBoxCalculation(data) {
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
     // 附加成功同樣分項列出人格引擎貢獻
     const atkExtraLabel = atkIdentityExtra ? `宣告${atkAutoDeclared}+人格+${atkIdentityExtra}` : `${atkAutoDeclared}`;
-    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ 骰數: ${baseDice}\n`
+    let diceStr = `骰數: ${baseDice}`;
+    if (baseDice <= 0) diceStr = `骰數: 0 (防禦大於攻擊，請投擲機運骰)`;
+
+    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ ${diceStr}\n`
         + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
 
     cqEnterSTReview(baseDice, baseExtraSuccess, debugStr);

@@ -4430,52 +4430,57 @@ body.combat-mode .boss-hud-container {
    史詩更新：戰鬥日誌 / 構築室（系統 A）與 E.G.O 侵蝕系統（系統 B）
    ============================================================ */
 
-/* ===== Limbus 24 格刻度時鐘（全域，頂部置中） ===== */
+/* ===== Limbus 24 格刻度時鐘（戰鬥日誌區） ===== */
 #limbus-clock-display {
-    position: fixed;
-    top: 52px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 850;
-    background: linear-gradient(135deg, #18090b, #0a0405);
-    border: 1px solid #6b0d12;
-    border-radius: 10px;
-    padding: 6px 12px 5px;
-    box-shadow: 0 4px 18px rgba(139, 0, 0, .45);
-    pointer-events: none;
+    position: relative;
+    width: 32px;
+    height: 32px;
+    margin-left: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     user-select: none;
 }
-/* 未載入刻度資料（登入畫面、尚未進房）時不顯示空框 */
 #limbus-clock-display:empty { display: none; }
-#limbus-clock-display .clock-cells {
+#limbus-clock-display .clock-circle-bg {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    box-shadow: 0 0 8px rgba(139, 0, 0, .8), inset 0 0 3px rgba(0,0,0,0.8);
+    transition: background 0.3s ease;
+    border: 1px solid #1a0000;
+}
+#limbus-clock-display .clock-tick {
+    position: absolute;
+    width: 2px;
+    height: 100%;
+    background: #000;
+    left: 50%;
+    transform-origin: center;
+    margin-left: -1px;
+}
+#limbus-clock-display .clock-inner {
+    position: absolute;
+    top: 15%;
+    left: 15%;
+    width: 70%;
+    height: 70%;
+    background: radial-gradient(circle, #2a0808, #110000);
+    border-radius: 50%;
     display: flex;
-    gap: 2px;
     justify-content: center;
+    align-items: center;
+    z-index: 2;
+    border: 1px solid #3a0b0b;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
 }
-#limbus-clock-display .clock-cell {
-    width: 7px;
-    height: 16px;
-    border-radius: 2px;
-    background: #2a2a2e;
-    transition: background .25s, box-shadow .25s;
+#limbus-clock-display .clock-label-number {
+    font-size: 0.65rem;
+    font-weight: bold;
+    color: #ff5a5a;
+    text-shadow: 0 0 3px #ff0000;
 }
-#limbus-clock-display .clock-cell.filled {
-    background: #8b0000;
-    box-shadow: 0 0 5px rgba(220, 30, 30, .85), inset 0 0 2px rgba(255, 120, 120, .6);
-}
-#limbus-clock-display .clock-cell.partial {
-    background: linear-gradient(90deg, #8b0000 50%, #2a2a2e 50%);
-    box-shadow: 0 0 4px rgba(220, 30, 30, .6);
-}
-#limbus-clock-display .clock-cell.empty { background: #1d1d20; }
-#limbus-clock-display .clock-label {
-    text-align: center;
-    font-size: .62rem;
-    letter-spacing: 1px;
-    color: #d98a8a;
-    margin-top: 3px;
-}
-#limbus-clock-display .clock-label b { color: #ff5a5a; }
 
 /* ===== E.G.O 侵蝕全場警告橫幅 ===== */
 #erosion-warning-toast {

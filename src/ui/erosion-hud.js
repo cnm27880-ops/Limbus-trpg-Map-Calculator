@@ -67,21 +67,26 @@ function renderClockDisplay() {
     const box = document.getElementById('limbus-clock-display');
     if (!box) return;
     const ticks = eroClockTicks;
-    const full = Math.floor(ticks);
-    const hasPartial = (ticks - full) > 0;
 
-    let cells = '';
-    for (let i = 1; i <= ERO_CLOCK_MAX; i++) {
-        let cls = 'clock-cell';
-        if (i <= full) cls += ' filled';
-        else if (i === full + 1 && hasPartial) cls += ' partial';
-        else cls += ' empty';
-        cells += `<div class="${cls}"></div>`;
+    // Circular 24 step logic with conic-gradient
+    const percentage = Math.max(0, Math.min(100, (ticks / ERO_CLOCK_MAX) * 100));
+
+    // Create red ring for remaining ticks, dark gray for consumed
+    // We add 24 ticks as rotation divisions in css/html
+    let ticksHtml = '';
+    for(let i=0; i<24; i++) {
+        ticksHtml += `<div class="clock-tick" style="transform: rotate(${i * 15}deg);"></div>`;
     }
+
     const label = (Math.round(ticks * 10) / 10);
     box.innerHTML = `
-        <div class="clock-cells">${cells}</div>
-        <div class="clock-label">侵蝕刻度 <b>${label}</b> / ${ERO_CLOCK_MAX}</div>`;
+        <div class="clock-circle-bg" style="background: conic-gradient(from 0deg, #8B0000 0%, #8B0000 ${percentage}%, #111 ${percentage}%, #111 100%);">
+            ${ticksHtml}
+            <div class="clock-inner">
+                <span class="clock-label-number">${label}</span>
+            </div>
+        </div>
+    `;
 }
 
 // ===== 侵蝕控制台（ST） =====
@@ -151,7 +156,7 @@ function renderErosionConsole() {
             <div class="ero-section-title">🕒 刻度時鐘操作（目前 ${Math.round(eroClockTicks * 10) / 10} / ${ERO_CLOCK_MAX}）</div>
             <div class="ero-btn-row">
                 <button class="ero-btn ero-minus" onclick="eroSetClock(-1)">-1 單人復活</button>
-                <button class="ero-btn ero-minus" onclick="eroSetClock(-1.5)">-1.5 雙人復活</button>
+                <button class="ero-btn ero-minus" onclick="eroSetClock(-0.5)">-0.5 雙人復活</button>
                 <button class="ero-btn ero-minus" onclick="eroSetClock(-6)">-6 全滅</button>
             </div>
             <div class="ero-btn-row">

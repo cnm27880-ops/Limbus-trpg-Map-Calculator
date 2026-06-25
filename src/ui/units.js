@@ -256,19 +256,13 @@ function renderUnitsList() {
                 : '';
 
             // ST 專屬的多重行動設定（BOSS 一回合多次行動）
-            const multiActionBtn = isSt
+            const multiActionBtn = (isSt && u.type === 'boss')
                 ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="多重行動設定（一回合多次行動）">⚔×</button>`
                 : '';
 
             actions = `
                 <div class="unit-actions">
-                    <button class="action-btn dmg-b" onclick="modifyHP('${u.id}','b',1)" title="按住Shift開啟數量輸入">+B</button>
-                    <button class="action-btn dmg-l" onclick="modifyHP('${u.id}','l',1)" title="按住Shift開啟數量輸入">+L</button>
-                    <button class="action-btn dmg-a" onclick="modifyHP('${u.id}','a',1)" title="按住Shift開啟數量輸入">+A</button>
-                    <button class="action-btn" onclick="openHpModal('${u.id}','damage')" title="開啟傷害面板">⚔</button>
-                    <button class="action-btn heal" onclick="openHpModal('${u.id}','heal')" title="開啟治療面板">治療</button>
-                    <button class="action-btn heal" onclick="resetUnitHp('${u.id}')" title="清除所有傷害，重置血條">♻</button>
-                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="設定護盾">🛡</button>
+                    <button class="action-btn heal" onclick="openVitalityModal('${u.id}')" title="生存管理 (血量/護盾)">❤️ 管理</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
@@ -1072,15 +1066,14 @@ function openUnitContextMenu(event, unitId) {
         items = [];
         if (canControl) {
             items.push(
-                { icon: '⚔', label: '傷害面板', fn: `openHpModal('${u.id}','damage')` },
-                { icon: '💚', label: '治療面板', fn: `openHpModal('${u.id}','heal')` },
+                { icon: '❤️', label: '生存管理', fn: `openVitalityModal('${u.id}')` },
                 { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
-                { icon: '🛡', label: '設定護盾', fn: `openShieldModal('${u.id}')` },
-                { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` },
-                { icon: '♻', label: '重置血量', fn: `resetUnitHp('${u.id}')` }
+                { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` }
             );
             if (isSt) {
-                items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
+                if (u.type === 'boss') {
+                    items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
+                }
                 items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
                 if (isBoss || u.type === 'enemy') {
                     items.push({ icon: '👹', label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });

@@ -18,21 +18,33 @@ function cqOnBroadcasting(data) {
     const finalExtraSuccess = Number(data.finalExtraSuccess) || 0;
 
     banner.textContent = '';
-    banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！碰撞產生優勢！👉 請投擲 `));
-    const diceSpan = document.createElement('span');
-    diceSpan.className = 'combat-broadcast-dice';
-    diceSpan.textContent = String(finalDice);
-    banner.appendChild(diceSpan);
-    // 骰數與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
-    if (finalExtraSuccess > 0) {
-        banner.appendChild(document.createTextNode(' 顆攻擊骰，並有 '));
-        const extraSpan = document.createElement('span');
-        extraSpan.className = 'combat-broadcast-dice';
-        extraSpan.textContent = String(finalExtraSuccess);
-        banner.appendChild(extraSpan);
-        banner.appendChild(document.createTextNode(' 個附加成功！'));
+
+    if (finalDice <= 0) {
+        banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！👉 🎲 骰數歸零！請投擲機運骰！`));
+        if (finalExtraSuccess > 0) {
+            banner.appendChild(document.createTextNode(' 附加成功 '));
+            const extraSpan = document.createElement('span');
+            extraSpan.className = 'combat-broadcast-dice';
+            extraSpan.textContent = String(finalExtraSuccess);
+            banner.appendChild(extraSpan);
+        }
     } else {
-        banner.appendChild(document.createTextNode(' 顆攻擊骰！'));
+        banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！碰撞產生優勢！👉 請投擲 `));
+        const diceSpan = document.createElement('span');
+        diceSpan.className = 'combat-broadcast-dice';
+        diceSpan.textContent = String(finalDice);
+        banner.appendChild(diceSpan);
+        // 骰數與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
+        if (finalExtraSuccess > 0) {
+            banner.appendChild(document.createTextNode(' 顆攻擊骰，並有 '));
+            const extraSpan = document.createElement('span');
+            extraSpan.className = 'combat-broadcast-dice';
+            extraSpan.textContent = String(finalExtraSuccess);
+            banner.appendChild(extraSpan);
+            banner.appendChild(document.createTextNode(' 個附加成功！'));
+        } else {
+            banner.appendChild(document.createTextNode(' 顆攻擊骰！'));
+        }
     }
 
     clearTimeout(combatBroadcastTimer);

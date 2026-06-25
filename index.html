@@ -266,12 +266,9 @@
             <input type="hidden" id="vitality-target-id">
             <input type="hidden" id="vitality-action-type" value="b">
         </div>
-        <div class="modal-footer" style="justify-content: space-between;">
-            <button class="modal-btn" onclick="resetVitalityHp()" style="background:var(--bg-card);color:var(--text-dim);">♻️ 重置血量</button>
-            <div>
-                <button class="modal-btn" onclick="closeModal('vitality-modal')" style="background:var(--bg-card);">取消</button>
-                <button class="modal-btn" onclick="submitVitalityHp()" style="background:var(--accent-red);">執行</button>
-            </div>
+        <div class="modal-footer">
+            <button class="modal-btn" onclick="closeModal('vitality-modal')" style="background:var(--bg-card);">取消</button>
+            <button class="modal-btn" onclick="submitVitalityHp()" style="background:var(--accent-red);">執行</button>
         </div>
     </div>
 </div>

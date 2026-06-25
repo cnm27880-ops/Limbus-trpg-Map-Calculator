@@ -1022,10 +1022,3 @@ function submitVitalityShield() {
     }
 }
 
-function resetVitalityHp() {
-    const id = document.getElementById('vitality-target-id').value;
-    if (typeof resetUnitHp === 'function') {
-        resetUnitHp(id);
-    }
-    showToast('血量已重置');
-}

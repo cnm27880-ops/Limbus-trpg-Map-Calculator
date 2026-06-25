@@ -145,6 +145,7 @@ function renderErosionConsole() {
     const prevSource = document.getElementById('ero-source')?.value || '';
     const prevAbsorber = document.getElementById('ero-absorber')?.value || '';
     const prevThreshold = document.getElementById('ero-threshold')?.value || ERO_DEFAULT_THRESHOLD;
+    const prevReviveTarget = document.getElementById('ero-revive-target')?.value || '';
 
     const absorber = (typeof findUnitById === 'function' && prevAbsorber) ? findUnitById(prevAbsorber) : null;
     const absorberErosion = eroGetErosionLayers(absorber);
@@ -163,6 +164,18 @@ function renderErosionConsole() {
                 <button class="ero-btn ero-plus" onclick="eroSetClock(2)">+2 支線完成</button>
                 <button class="ero-btn ero-plus" onclick="eroSetClock(4)">+4 主線完成</button>
                 <button class="ero-btn ero-reset" onclick="eroResetClock()">↺ 滿血 (24)</button>
+            </div>
+        </div>
+
+        <div class="ero-section">
+            <div class="ero-section-title">⛑️ 復活與刻度連動</div>
+            <div class="ero-field"><label>目標玩家</label>
+                <select id="ero-revive-target" class="ero-select"></select></div>
+            <button class="ero-btn ero-revive" onclick="eroReviveTarget()">⛑️ 復活並重置血量</button>
+            <div id="ero-revive-tick-prompt" class="ero-btn-row hidden">
+                <button class="ero-btn ero-minus" onclick="eroConfirmReviveTick(-1)">單人 -1</button>
+                <button class="ero-btn ero-minus" onclick="eroConfirmReviveTick(-0.5)">多人 -0.5</button>
+                <button class="ero-btn ero-minus" onclick="eroConfirmReviveTick(-6)">全滅 -6</button>
             </div>
         </div>
 
@@ -191,6 +204,30 @@ function renderErosionConsole() {
     // 單位下拉以 DOM 填充（名稱用 textContent，避免 innerHTML 注入）
     eroPopulateSelect('ero-source', eroIsEnemy, prevSource);
     eroPopulateSelect('ero-absorber', eroIsPlayer, prevAbsorber);
+    eroPopulateSelect('ero-revive-target', eroIsPlayer, prevReviveTarget);
+}
+
+// ===== 復活並重置血量（與刻度連動） =====
+/** 點擊「復活並重置血量」：立即重置目標玩家血量，並彈出刻度扣除快捷選項。 */
+function eroReviveTarget() {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const targetId = document.getElementById('ero-revive-target')?.value || '';
+    const target = (typeof findUnitById === 'function') ? findUnitById(targetId) : null;
+    if (!target) { if (typeof showToast === 'function') showToast('請先選擇要復活的目標玩家'); return; }
+
+    if (typeof resetUnitHp === 'function') resetUnitHp(targetId);
+
+    const prompt = document.getElementById('ero-revive-tick-prompt');
+    if (prompt) prompt.classList.remove('hidden');
+}
+
+/** 選擇本次復活扣除的刻度數，直接連動扣除 Firebase 上的 clockTicks。 */
+function eroConfirmReviveTick(delta) {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    eroSetClock(delta);
+    const prompt = document.getElementById('ero-revive-tick-prompt');
+    if (prompt) prompt.classList.add('hidden');
+    if (typeof showToast === 'function') showToast(`已復活並扣除 ${Math.abs(Number(delta) || 0)} 刻度`);
 }
 
 // ===== 刻度操作 =====
@@ -316,6 +353,8 @@ if (typeof window !== 'undefined') {
     window.eroDrainSin = eroDrainSin;
     window.eroRollTarget = eroRollTarget;
     window.eroBurnOut = eroBurnOut;
+    window.eroReviveTarget = eroReviveTarget;
+    window.eroConfirmReviveTick = eroConfirmReviveTick;
     window.handleErosionBroadcast = handleErosionBroadcast;
     window.renderClockDisplay = renderClockDisplay;
 }

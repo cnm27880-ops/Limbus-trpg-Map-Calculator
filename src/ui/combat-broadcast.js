@@ -54,12 +54,14 @@ function cqOnBroadcasting(data) {
     // 戰鬥日誌（系統 A）：把這次廣播寫入 combatLogs（ST 端單一寫入，函式內已防呆）
     if (typeof bbPushCombatLog === 'function') {
         const defenderName = String((data.target && data.target.name) || '');
-        const attackerId = String((data.attacker && data.attacker.id) || '');
+        // 以攻擊發起時記下的 attackerRole 區分玩家／ST 操作怪物，而非用 id 前綴猜測
+        // （ST 發起威脅時 attacker.id 仍是 ST 自己的 myPlayerId，用前綴判斷會誤判為玩家攻擊）。
+        const attackerRole = (data.attacker && data.attacker.attackerRole === 'player') ? 'player' : 'enemy';
         bbPushCombatLog({
             attackerName: attackerName,
             defenderName: defenderName,
             finalDice: finalDice,
-            attackerIsPlayer: attackerId.startsWith('player_'),
+            attackerRole: attackerRole,
             broadcastText: banner.textContent || ''
         });
     }

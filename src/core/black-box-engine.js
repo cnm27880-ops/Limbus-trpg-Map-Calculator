@@ -15,16 +15,19 @@ function bbSafeNumber(value) {
 
 /**
  * 加總某單位身上所有「具備 calcMod 數值定義」的狀態效果，回傳對攻擊/防禦判定的修正值，
- * 並附帶每一筆套用的標籤（供 debugStr 顯示）。
+ * 並分別附帶「實際影響攻擊 DP」與「實際影響防禦 DP」的標籤（供 debugStr 顯示）。
  * 只有 status-config.js 中明確標註 calcMod 的狀態（如暈眩/麻痺/凍結）會被計入，
  * 其餘狀態仍維持純顯示用，避免對未定義數值規則的效果做出武斷假設。
+ * 注意：atkLabels／defLabels 分開記錄，是為了避免「此單位身上某狀態只影響攻擊 DP，
+ * 卻在它作為防禦方時也被列進防禦計算說明」這類顯示與實際計算不一致的問題——
+ * 呼叫端應依該單位在本次判定中的角色（攻擊方→用 atkLabels；防禦方→用 defLabels）取用。
  * calcMod 的數值定義可能缺漏、或未來改為函式（modifiers.attackDP(unit) 形式），
  * 因此一律透過 bbSafeNumber 取值，並支援 calcMod 為 function 的情況。
  * @param {object} unit - state.units 中的單位（依 unit.status 以中文狀態名稱為鍵）
- * @returns {{ atkDp: number, defMod: number, labels: string[] }}
+ * @returns {{ atkDp: number, defMod: number, atkLabels: string[], defLabels: string[] }}
  */
 function bbSumStatusCalcMods(unit) {
-    const mods = { atkDp: 0, defMod: 0, labels: [] };
+    const mods = { atkDp: 0, defMod: 0, atkLabels: [], defLabels: [] };
     if (!unit || !unit.status || typeof STATUS_LIBRARY === 'undefined') return mods;
     for (const category of Object.values(STATUS_LIBRARY)) {
         for (const def of category) {
@@ -42,8 +45,8 @@ function bbSumStatusCalcMods(unit) {
             const defDelta = defPer * stacks;
             mods.atkDp += atkDelta;
             mods.defMod += defDelta;
-            if (atkDelta) mods.labels.push(`${def.name}(${atkDelta > 0 ? '+' : ''}${atkDelta})`);
-            if (defDelta) mods.labels.push(`${def.name}(${defDelta > 0 ? '+' : ''}${defDelta})`);
+            if (atkDelta) mods.atkLabels.push(`${def.name}(${atkDelta > 0 ? '+' : ''}${atkDelta})`);
+            if (defDelta) mods.defLabels.push(`${def.name}(${defDelta > 0 ? '+' : ''}${defDelta})`);
         }
     }
     mods.atkDp = bbSafeNumber(mods.atkDp);
@@ -118,8 +121,10 @@ function bbRunBlackBoxCalculation(data) {
     const defExtraTotal = data.defense ? bbSafeNumber(data.defense.auto) : bbSafeNumber(targetUnit && targetUnit.defAuto);
     const baseExtraSuccess = Math.max(0, bbSafeNumber(atkExtraTotal - defExtraTotal));
 
-    const atkLabels = [atkDpBaseLabel, ...attackerMods.labels].filter(Boolean);
-    const defLabels = [defDpBaseLabel, ...targetMods.labels].filter(Boolean);
+    // 攻擊方只取會影響「攻擊 DP」的標籤；防禦方只取會影響「防禦 DP」的標籤——
+    // 避免列出不影響本次計算的負面狀態（例如只扣攻擊 DP 的暈眩出現在目標的防禦計算說明中）。
+    const atkLabels = [atkDpBaseLabel, ...attackerMods.atkLabels].filter(Boolean);
+    const defLabels = [defDpBaseLabel, ...targetMods.defLabels].filter(Boolean);
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
     // 附加成功同樣分項列出人格引擎貢獻
     const atkExtraLabel = atkIdentityExtra ? `宣告${atkAutoDeclared}+人格+${atkIdentityExtra}` : `${atkAutoDeclared}`;

@@ -128,3 +128,42 @@ function bbRunBlackBoxCalculation(data) {
 
     cqEnterSTReview(baseDice, baseExtraSuccess, debugStr);
 }
+
+/**
+ * 戰鬥日誌（系統 A）：於全場廣播時，由 ST 端把這一筆攻擊結果寫入
+ * Firebase /rooms/{roomId}/combatLogs，供「戰鬥日誌 / 構築室」分頁渲染。
+ * 採單一寫入者（ST）避免重複，並維持最多 100 筆（FIFO）。
+ * 本函式為附屬功能，全程 try-catch，任何失敗都不可影響戰鬥主流程。
+ * @param {object} entry - { attackerName, defenderName, finalDice, attackerIsPlayer, broadcastText }
+ */
+function bbPushCombatLog(entry) {
+    try {
+        if (typeof roomRef === 'undefined' || !roomRef) return;
+        if (typeof myRole !== 'undefined' && myRole !== 'st') return;
+        if (!entry || typeof entry !== 'object') return;
+
+        const ref = roomRef.child('combatLogs');
+        const ts = (typeof firebase !== 'undefined' && firebase.database && firebase.database.ServerValue)
+            ? firebase.database.ServerValue.TIMESTAMP : Date.now();
+        ref.push({
+            timestamp: ts,
+            attackerName: String(entry.attackerName || '未知攻擊者').slice(0, 60),
+            defenderName: String(entry.defenderName || '').slice(0, 60),
+            finalDice: Number(entry.finalDice) || 0,
+            attackerIsPlayer: !!entry.attackerIsPlayer,
+            broadcastText: String(entry.broadcastText || '').slice(0, 300)
+        });
+
+        // FIFO：push 鍵以時間排序，超過 100 筆時移除最舊者
+        ref.once('value').then(snap => {
+            const val = snap.val();
+            if (!val) return;
+            const keys = Object.keys(val);
+            if (keys.length > 100) {
+                keys.slice(0, keys.length - 100).forEach(k => ref.child(k).remove());
+            }
+        }).catch(() => {});
+    } catch (e) {
+        /* 日誌寫入失敗不影響戰鬥 */
+    }
+}

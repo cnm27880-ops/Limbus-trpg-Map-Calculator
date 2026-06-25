@@ -39,6 +39,19 @@ function cqOnBroadcasting(data) {
     banner.classList.add('show');
     combatBroadcastTimer = setTimeout(() => banner.classList.remove('show'), 4500);
 
+    // 戰鬥日誌（系統 A）：把這次廣播寫入 combatLogs（ST 端單一寫入，函式內已防呆）
+    if (typeof bbPushCombatLog === 'function') {
+        const defenderName = String((data.target && data.target.name) || '');
+        const attackerId = String((data.attacker && data.attacker.id) || '');
+        bbPushCombatLog({
+            attackerName: attackerName,
+            defenderName: defenderName,
+            finalDice: finalDice,
+            attackerIsPlayer: attackerId.startsWith('player_'),
+            broadcastText: banner.textContent || ''
+        });
+    }
+
     // 廣播結束後 5 秒，ST 端自動重置隊列為 idle
     if (myRole === 'st') {
         clearTimeout(combatBroadcastResetTimer);

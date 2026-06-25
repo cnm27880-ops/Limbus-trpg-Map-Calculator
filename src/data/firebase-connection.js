@@ -841,6 +841,12 @@ function setupRoomListeners() {
 
     // 設置 BOSS 多重行動對抗分配監聽（獨立於上述同步狀態）
     if (typeof cpSetupListener === 'function') cpSetupListener();
+
+    // 系統 A：戰鬥日誌 / 構築室監聽（combatLogs）
+    if (typeof logViewSetupListener === 'function') logViewSetupListener();
+
+    // 系統 B：刻度時鐘與 E.G.O 侵蝕監聽（clockTicks / events/erosion）
+    if (typeof erosionSetupListener === 'function') erosionSetupListener();
 }
 
 /**

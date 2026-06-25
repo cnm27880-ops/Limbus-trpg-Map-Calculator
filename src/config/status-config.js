@@ -345,6 +345,22 @@ const STATUS_LIBRARY = {
                 heavy: null,
                 destruction: null
             }
+        },
+        {
+            // E.G.O 侵蝕系統：吸收罪業轉化的能量，超過閾值將暴走（見 src/ui/erosion-hud.js）。
+            // 採 type:'stack' 以便 addStatusToUnit 正常累加層數。
+            id: 'erosion_amplify',
+            name: '侵蝕增幅',
+            icon: '🔥',
+            type: 'stack',
+            desc: '吸收罪業轉化的能量',
+            fullDesc: '吸收罪業轉化的能量。超過閾值將暴走，發動 E.G.O 侵蝕毀滅打擊。',
+            keyResist: null,
+            effects: {
+                light: '累積侵蝕能量，超過閾值將暴走',
+                heavy: null,
+                destruction: null
+            }
         }
     ],
 

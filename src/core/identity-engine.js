@@ -99,7 +99,7 @@ function resolveAmount(value, target, attacker) {
  * @param {object} attacker
  */
 function accumulateStatus(accumulator, statusMap, target, attacker) {
-    if (!statusMap) return;
+    if (!statusMap || typeof statusMap !== 'object' || Array.isArray(statusMap)) return;
     for (const [key, value] of Object.entries(statusMap)) {
         const amount = resolveAmount(value, target, attacker);
         if (amount === 0) continue;
@@ -137,51 +137,56 @@ function processHooks(hooks, phase, card, unlocked, target, attacker, result) {
     if (!Array.isArray(hooks)) return;
 
     for (const hook of hooks) {
-        if (!isHookActive(hook, unlocked)) continue;
-        if (!evalCondition(hook, target, attacker)) continue;
+        // 單一格式不完整的 hook 不應讓整體結算崩潰，逐項以 try/catch 隔離防呆
+        try {
+            if (!isHookActive(hook, unlocked)) continue;
+            if (!evalCondition(hook, target, attacker)) continue;
 
-        // manual 效果：不自動計入數值，但保留資料供 UI 顯示
-        if (hook.manual) {
-            result.triggerLogs.push({
+            // manual 效果：不自動計入數值，但保留資料供 UI 顯示
+            if (hook.manual) {
+                result.triggerLogs.push({
+                    identityId: card.id,
+                    identityName: card.name,
+                    phase,
+                    source: hook.source || '',
+                    skill: hook.skill || '',
+                    manual: true,
+                    desc: hook.desc || ''
+                });
+                continue;
+            }
+
+            const log = {
                 identityId: card.id,
                 identityName: card.name,
                 phase,
                 source: hook.source || '',
-                skill: hook.skill || '',
-                manual: true,
-                desc: hook.desc || ''
-            });
-            continue;
-        }
+                skill: hook.skill || ''
+            };
 
-        const log = {
-            identityId: card.id,
-            identityName: card.name,
-            phase,
-            source: hook.source || '',
-            skill: hook.skill || ''
-        };
+            // 累加數值加值
+            for (const key of IDENTITY_BONUS_KEYS) {
+                if (hook[key] === undefined) continue;
+                const amount = resolveAmount(hook[key], target, attacker);
+                if (amount === 0) continue;
+                result.totals[key] += amount;
+                log[key] = amount;
+            }
 
-        // 累加數值加值
-        for (const key of IDENTITY_BONUS_KEYS) {
-            if (hook[key] === undefined) continue;
-            const amount = resolveAmount(hook[key], target, attacker);
-            if (amount === 0) continue;
-            result.totals[key] += amount;
-            log[key] = amount;
-        }
+            // 累加狀態
+            if (hook.targetStatus) {
+                accumulateStatus(result.expectedTargetStatus, hook.targetStatus, target, attacker);
+                log.targetStatus = hook.targetStatus;
+            }
+            if (hook.selfStatus) {
+                accumulateStatus(result.expectedSelfStatus, hook.selfStatus, target, attacker);
+                log.selfStatus = hook.selfStatus;
+            }
 
-        // 累加狀態
-        if (hook.targetStatus) {
-            accumulateStatus(result.expectedTargetStatus, hook.targetStatus, target, attacker);
-            log.targetStatus = hook.targetStatus;
+            result.triggerLogs.push(log);
+        } catch (e) {
+            // 格式異常的 hook 直接跳過，不影響其他人格卡的計算
         }
-        if (hook.selfStatus) {
-            accumulateStatus(result.expectedSelfStatus, hook.selfStatus, target, attacker);
-            log.selfStatus = hook.selfStatus;
-        }
-
-        result.triggerLogs.push(log);
     }
 }
 

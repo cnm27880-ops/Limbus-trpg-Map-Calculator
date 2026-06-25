@@ -200,11 +200,11 @@ function registerCustomIdentity(raw) {
 
     rules.forEach(r => {
         if (!r || typeof r !== 'object') return;
-        const bucket = (r.phase === 'hit') ? onHit : onAttack;
+        const bucket = ((r.phase || '').toString().trim().toLowerCase() === 'hit') ? onHit : onAttack;
 
         const statusKey = (r.statusKey || '').toString();
         const min = parseInt(r.min) || 0;
-        const condOn = (r.condOn === 'self') ? 'self' : 'target';
+        const condOn = ((r.condOn || '').toString().trim().toLowerCase() === 'self') ? 'self' : 'target';
         if (statusKey) keyStatuses.add(statusKey);
 
         // 由「目標／自身某狀態達門檻」宣告式條件，建立引擎 condition 函式（門檻 0＝無條件恆真）
@@ -216,6 +216,7 @@ function registerCustomIdentity(raw) {
 
         const source = (r.source || raw.name || '自訂').toString();
         const effect = { condition: cond, source, skill: source };
+        if (r.locked) effect.locked = true;
         let hasEffect = false;
         NUM_FIELDS.forEach(([src, dst]) => {
             const v = parseInt(r[src]) || 0;
@@ -248,6 +249,7 @@ function registerCustomIdentity(raw) {
         custom: true,
         keyStatuses: [...keyStatuses],
         manualInputs,
+        repeatUnlockSkill: (raw.repeatUnlockSkill || '').toString(),
         hooks: { onAttack, onHit }
     };
 }
@@ -297,11 +299,13 @@ function aiSchemaExample() {
             { phase: 'attack', statusKey: 'bleed', min: 7, condOn: 'target', dp: 3, source: '流血突刺' },
             { phase: 'attack', statusKey: 'breathing', min: 10, condOn: 'self', weaponDamage: 2, source: '蓄勢' },
             { phase: 'hit', targetStatus: { bleed: 2 }, source: '流血突刺' },
-            { phase: 'hit', statusKey: 'bleed', min: 10, condOn: 'target', targetStatus: { weak: 1 }, selfStatus: { swiftness: 1 }, source: '流血突刺', note: '若骰中兩個以上 10，額外附加 2 點虛弱（需擲骰判定）。' }
+            { phase: 'hit', statusKey: 'bleed', min: 10, condOn: 'target', targetStatus: { weak: 1 }, selfStatus: { swiftness: 1 }, source: '流血突刺', note: '若骰中兩個以上 10，額外附加 2 點虛弱（需擲骰判定）。' },
+            { phase: 'attack', dp: 2, source: '萬鍛連掌', locked: true, note: '此為重複抽取解鎖技，僅在玩家勾選「已解鎖」時才計入計算。' }
         ],
         specialResources: [
             { key: 'will', label: '當前意志力', default: 0, hint: '>0 光型態 / <0 暗型態' }
-        ]
+        ],
+        repeatUnlockSkill: '萬鍛連掌'
     };
 }
 
@@ -323,11 +327,14 @@ function aiBuildSystemPrompt() {
         '  - 數值加值（數字，視情況給）：dp、succ（附加成功）、weaponDamage、spellPower、finalDamage。',
         '  - 狀態施加：targetStatus / selfStatus，格式為 { 狀態鍵: 層數 }。',
         '  - source：此效果來源技能名稱。',
+        '  - locked：布林值。如果卡片描述中有提到【重複抽取解鎖】或【三技】，請將該條規則的 locked 設為 true；沒有提到的規則請設為 false 或省略。',
+        '- repeatUnlockSkill：字串。如果卡片描述中有提到【重複抽取解鎖】或【三技】，請將該技能名稱填入此欄位；如果沒有，請保持為空字串 ""。',
         '- specialResources：自訂能量／層數系統（如意志力、魔法阿卡納層數），每項 { key, label, default, hint }；無則給空陣列 []。',
         '',
         `合法的狀態鍵（statusKey / targetStatus / selfStatus 只能使用這些英文鍵）：${statusList}。`,
         '',
-        '重要：若遇到無法量化的複雜效果（如：擊殺時觸發某事件、機率性／擲骰判定、指定友軍、依層數動態縮放的數值），',
+        '重要：所有可量化的狀態增減、數值加值、條件判定，請盡量轉換並放入 "rules" 陣列中的對應欄位；',
+        '若遇到無法量化的複雜效果（如：擊殺時觸發某事件、機率性／擲骰判定、指定友軍、依層數動態縮放的數值），',
         '不要捏造數字，請改將該效果的完整文字描述放進該規則的 "note" 欄位，或放進卡片最外層的 "desc"（需手動判定）欄位。'
     ].join('\n');
 }
@@ -418,18 +425,20 @@ function saveAIIdentity() {
         return;
     }
 
-    const owner = (parsed.owner || '').toString().trim();
-    const name = (parsed.name || '').toString().trim();
-    if (!owner) { if (typeof showToast === 'function') showToast('JSON 缺少 owner（角色名稱）'); return; }
-    if (!name) { if (typeof showToast === 'function') showToast('JSON 缺少 name（人格卡名稱）'); return; }
+    // owner / name 缺漏時補上預設值而非阻擋匯入，避免 AI 漏給欄位導致整張卡無法儲存
+    const owner = (parsed.owner || '').toString().trim() || '自訂';
+    const name = (parsed.name || '').toString().trim() || '自訂人格卡';
 
-    // 正規化為儲存格式（補預設值，避免 AI 漏給欄位）
+    // 正規化為儲存格式（補預設值，避免 AI 漏給「解鎖三技/重複抽取」等舊版必填欄位導致匯入被擋）
     const raw = {
         id: (parsed.id && String(parsed.id).trim()) || ('custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
         owner, name,
         desc: (parsed.desc || '').toString(),
-        rules: Array.isArray(parsed.rules) ? parsed.rules : [],
-        specialResources: Array.isArray(parsed.specialResources) ? parsed.specialResources : []
+        rules: (Array.isArray(parsed.rules) ? parsed.rules : []).map(r => (r && typeof r === 'object') ? Object.assign({
+            phase: 'attack', statusKey: '', min: 0, condOn: 'target', source: '', note: '', locked: false
+        }, r) : r),
+        specialResources: Array.isArray(parsed.specialResources) ? parsed.specialResources : [],
+        repeatUnlockSkill: (parsed.repeatUnlockSkill || parsed.unlockableSkill || parsed.skill3Name || '').toString()
     };
 
     // 寫入人格卡資料庫並即時註冊進引擎

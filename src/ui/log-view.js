@@ -20,7 +20,7 @@ const LV_AI_MODEL_KEY = 'limbus-ai-model';
 const LV_AI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const LV_AI_DEFAULT_MODEL = 'gpt-4o-mini';
 
-let lvCombatLogs = []; // [{ timestamp, attackerName, defenderName, finalDice, attackerIsPlayer, broadcastText }]
+let lvCombatLogs = []; // [{ timestamp, attackerName, defenderName, finalDice, attackerRole: 'player'|'enemy', broadcastText }]
 let lvLogEditMode = false;
 let lvSelectedLogs = new Set();
 
@@ -151,10 +151,14 @@ function renderCombatLogs() {
         const t = log.timestamp ? new Date(log.timestamp) : null;
         const timeStr = t ? `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}` : '';
 
-        const row = document.createElement('div');
-        row.className = 'log-row ' + (log.attackerIsPlayer ? 'log-row-player' : 'log-row-enemy');
+        // 編輯模式下整行用 <label> 包覆 checkbox：點擊行內任何地方都會原生觸發勾選，
+        // 不需手動轉發點擊事件，也不會有「點兩次互相抵銷」的問題。
+        const editable = lvLogEditMode && log.id;
+        const row = document.createElement(editable ? 'label' : 'div');
+        row.className = 'log-row ' + (log.attackerRole === 'player' ? 'log-row-player' : 'log-row-enemy');
 
-        if (lvLogEditMode && log.id) {
+        if (editable) {
+            row.classList.add('log-row-editable');
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.style.marginRight = '8px';
@@ -203,7 +207,8 @@ function renderCombatLogs() {
  */
 function getRecentPlayerAverageDice(n) {
     const limit = n || 20;
-    const playerLogs = lvCombatLogs.filter(l => l && l.attackerIsPlayer);
+    // 只取 attackerRole === 'player' 的日誌，避免 ST 操作怪物的擲骰污染玩家平均火力統計
+    const playerLogs = lvCombatLogs.filter(l => l && l.attackerRole === 'player');
     const recent = playerLogs.slice(-limit);
     if (!recent.length) return { avg: 0, count: 0 };
     const sum = recent.reduce((a, l) => a + (Number(l.finalDice) || 0), 0);
@@ -228,13 +233,35 @@ function lvEncounterSchemaExample() {
     };
 }
 
+/**
+ * 從圖鑑（怪物庫）中隨機抽取 1~2 隻作為 Few-shot 範例；圖鑑為空則回退到標準 Schema 範本。
+ * @returns {{ examples: object[], fromBestiary: boolean }}
+ */
+function lvPickBestiaryExamples() {
+    const lib = lvLoadMonsterLibrary();
+    if (!lib.length) return { examples: [lvEncounterSchemaExample()], fromBestiary: false };
+
+    const shuffled = lib.slice().sort(() => Math.random() - 0.5);
+    const picked = shuffled.slice(0, Math.min(2, shuffled.length));
+    const examples = picked.map(m => ({
+        monsters: [{
+            name: m.name, hp: m.hp, defDp: m.defDp, defAuto: m.defAuto,
+            atkDp: m.atkDp, init: m.init, notes: m.notes || ''
+        }]
+    }));
+    return { examples, fromBestiary: true };
+}
+
 function lvBuildEncounterSystemPrompt(avgDice, theme, difficulty) {
-    const example = JSON.stringify(lvEncounterSchemaExample(), null, 2);
+    const { examples, fromBestiary } = lvPickBestiaryExamples();
+    const exampleText = examples.map(e => JSON.stringify(e, null, 2)).join('\n');
     return [
         '你是一個 TRPG 遭遇設計器。請依使用者提供的主題與難度，產生一組怪物的 JSON 資料，且只輸出 JSON 本體、不要任何說明文字或 markdown 圍欄。',
         '',
-        '輸出格式必須與下方範例 100% 吻合（這是系統實際讀取的怪物格式）：',
-        example,
+        fromBestiary
+            ? '以下是圖鑑（怪物庫）中既有怪物的真實資料，作為 JSON 結構與數值強度的參考範例（Few-shot）。請務必沿用相同的欄位與資料型態：'
+            : '圖鑑目前是空的，下方為系統支援的標準怪物 JSON Schema 範本，輸出格式必須與其 100% 吻合（這是系統實際讀取的怪物格式）：',
+        exampleText,
         '',
         '欄位說明：',
         '- monsters：陣列，每個怪物物件包含：',

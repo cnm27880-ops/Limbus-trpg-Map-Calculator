@@ -4482,33 +4482,28 @@ body.combat-mode .boss-hud-container {
     text-shadow: 0 0 3px #ff0000;
 }
 
-/* ===== E.G.O 侵蝕全場警告橫幅 ===== */
+/* ===== E.G.O 侵蝕警告提示（局部小卡，避免紅光暈跨整個畫面邊緣） ===== */
 #erosion-warning-toast {
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
+    top: 14px;
+    left: 50%;
     z-index: 12000;
-    padding: 18px 16px;
+    max-width: min(420px, 90vw);
+    padding: 14px 18px;
     text-align: center;
-    font-size: 1.15rem;
+    font-size: 1rem;
     font-weight: 700;
     color: #fff;
     background: linear-gradient(135deg, #b00010, #6b0008);
-    border-bottom: 2px solid #ff3b3b;
-    box-shadow: 0 6px 30px rgba(176, 0, 16, .7);
-    transform: translateY(-130%);
+    border: 1px solid #ff3b3b;
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+    transform: translate(-50%, -130%);
     transition: transform .35s cubic-bezier(.2, 1.2, .3, 1);
-    text-shadow: 0 0 10px rgba(255, 60, 60, .8);
     pointer-events: none;
 }
 #erosion-warning-toast.show {
-    transform: translateY(0);
-    animation: ero-warn-pulse 1.1s ease-in-out infinite;
-}
-@keyframes ero-warn-pulse {
-    0%, 100% { box-shadow: 0 6px 30px rgba(176, 0, 16, .55); }
-    50% { box-shadow: 0 6px 44px rgba(255, 60, 60, .95); }
+    transform: translate(-50%, 0);
 }
 
 /* ===== 通用浮動 HUD（侵蝕控制台） ===== */
@@ -4575,6 +4570,7 @@ body.combat-mode .boss-hud-container {
 .ero-btn.ero-plus { border-color: #2e6b2e; color: #8fe08f; }
 .ero-btn.ero-reset { border-color: var(--accent-yellow, #fdd835); color: var(--accent-yellow, #fdd835); }
 .ero-btn.ero-drain { width: 100%; background: linear-gradient(135deg, #8b0000, #5c0006); color: #fff; font-weight: 700; margin-top: 4px; }
+.ero-btn.ero-revive { width: 100%; background: linear-gradient(135deg, #1e6b3a, #0e3b20); color: #fff; font-weight: 700; margin-top: 4px; }
 .ero-btn.ero-roll { flex: 1; background: #2a1530; border-color: var(--accent-purple, #8e24aa); color: #d9a8ff; }
 .ero-btn.ero-burn { flex: 1; background: #2a1a0a; border-color: var(--accent-orange, #fb8c00); color: #ffba73; }
 .ero-overload-area { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
@@ -4637,6 +4633,8 @@ body.combat-mode .boss-hud-container {
 }
 .log-row-player { border-left-color: var(--accent-blue, #1e88e5); }
 .log-row-enemy { border-left-color: var(--accent-red, #e53935); }
+.log-row-editable { cursor: pointer; transition: background 0.15s ease; }
+.log-row-editable:hover { background: rgba(255, 255, 255, 0.08); }
 .log-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
 .log-attacker { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); }
 .log-time { font-size: .72rem; color: var(--text-dim, #777); }

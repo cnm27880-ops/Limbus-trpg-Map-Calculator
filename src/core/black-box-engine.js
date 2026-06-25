@@ -137,7 +137,7 @@ function bbRunBlackBoxCalculation(data) {
  * Firebase /rooms/{roomId}/combatLogs，供「戰鬥日誌 / 構築室」分頁渲染。
  * 採單一寫入者（ST）避免重複，並維持最多 100 筆（FIFO）。
  * 本函式為附屬功能，全程 try-catch，任何失敗都不可影響戰鬥主流程。
- * @param {object} entry - { attackerName, defenderName, finalDice, attackerIsPlayer, broadcastText }
+ * @param {object} entry - { attackerName, defenderName, finalDice, attackerRole: 'player'|'enemy', broadcastText }
  */
 function bbPushCombatLog(entry) {
     try {
@@ -153,7 +153,7 @@ function bbPushCombatLog(entry) {
             attackerName: String(entry.attackerName || '未知攻擊者').slice(0, 60),
             defenderName: String(entry.defenderName || '').slice(0, 60),
             finalDice: Number(entry.finalDice) || 0,
-            attackerIsPlayer: !!entry.attackerIsPlayer,
+            attackerRole: (entry.attackerRole === 'player') ? 'player' : 'enemy',
             broadcastText: String(entry.broadcastText || '').slice(0, 300)
         });
 

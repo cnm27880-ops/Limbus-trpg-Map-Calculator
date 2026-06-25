@@ -67,13 +67,17 @@ function bbRunBlackBoxCalculation(data) {
     const attacker = data.attacker || {};
 
     // ===== DP 桶（攻擊判定）=====
-    const atkDpParts = [
-        bbSafeNumber(attacker.dp),
-        bbSafeNumber(attacker.identityDpBonus),
-        bbSafeNumber(attacker.counterPhaseDpBonus)
-    ];
-    let atkDpTotal = atkDpParts.reduce((a, b) => a + b, 0);
-    const atkDpBaseLabel = `${atkDpTotal}`;
+    const atkDpDeclared = bbSafeNumber(attacker.dp);
+    const atkIdentityDp = bbSafeNumber(attacker.identityDpBonus);
+    const atkCounterDp = bbSafeNumber(attacker.counterPhaseDpBonus);
+    let atkDpTotal = atkDpDeclared + atkIdentityDp + atkCounterDp;
+
+    // 明細分項：把「宣告 DP」與「人格引擎加成」「未對抗加成」拆開列出，
+    // 讓 ST 在審核明細中看得到人格引擎實際貢獻多少，而非只看到一個合併後的數字。
+    const atkBaseParts = [`宣告${atkDpDeclared}`];
+    if (atkIdentityDp) atkBaseParts.push(`人格${atkIdentityDp >= 0 ? '+' : ''}${atkIdentityDp}`);
+    if (atkCounterDp) atkBaseParts.push(`未對抗+${atkCounterDp}`);
+    const atkDpBaseLabel = atkBaseParts.join('+');
 
     const attackerUnit = (typeof findUnitById === 'function' && attacker.unitId) ? findUnitById(attacker.unitId) : null;
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(data.target && data.target.id) : null;
@@ -93,27 +97,74 @@ function bbRunBlackBoxCalculation(data) {
         defDpBaseLabel = `${defDpTotal}`;
     }
 
-    // 目標身上的狀態（如麻痺/凍結）扣減防禦判定 DP
+    // 目標身上的狀態（如麻痺/凍結）扣減防禦判定 DP。
+    // 注意：bbSumStatusCalcMods 內部對每一筆狀態是「累加（+=）」而非「覆蓋（=）」，
+    // 故多筆減益（如 -134、-3、-3）會正確相加，而不會只剩最後一筆。
     const targetMods = bbSumStatusCalcMods(targetUnit);
-    defDpTotal = bbSafeNumber(defDpTotal + targetMods.defMod);
+
+    // 防禦最終值＝基礎防禦 DP ＋ 全部狀態修正，並加上下限保護（扣到 0 為止，不可為負）。
+    let finalDefense = Math.max(0, bbSafeNumber(defDpTotal + targetMods.defMod));
 
     // 無視防禦點數：直接扣減防禦方 DP（不會低於 0，且不影響附加成功）
     const ignoreDef = Math.max(0, bbSafeNumber(attacker.ignoreDef));
-    defDpTotal = Math.max(0, defDpTotal);
-    if (ignoreDef > 0) defDpTotal = Math.max(0, defDpTotal - ignoreDef);
+    if (ignoreDef > 0) finalDefense = Math.max(0, finalDefense - ignoreDef);
 
-    const baseDice = Math.max(0, bbSafeNumber(atkDpTotal - defDpTotal));
+    const baseDice = Math.max(0, bbSafeNumber(atkDpTotal - finalDefense));
 
     // ===== 附加成功桶（與 DP 完全分開計算）=====
-    const atkExtraTotal = bbSafeNumber(attacker.auto) + bbSafeNumber(attacker.identityExtraSuccess);
+    const atkAutoDeclared = bbSafeNumber(attacker.auto);
+    const atkIdentityExtra = bbSafeNumber(attacker.identityExtraSuccess);
+    const atkExtraTotal = atkAutoDeclared + atkIdentityExtra;
     const defExtraTotal = data.defense ? bbSafeNumber(data.defense.auto) : bbSafeNumber(targetUnit && targetUnit.defAuto);
     const baseExtraSuccess = Math.max(0, bbSafeNumber(atkExtraTotal - defExtraTotal));
 
     const atkLabels = [atkDpBaseLabel, ...attackerMods.labels].filter(Boolean);
     const defLabels = [defDpBaseLabel, ...targetMods.labels].filter(Boolean);
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
-    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${defDpTotal} ➡️ 骰數: ${baseDice}\n`
-        + `【附加成功】攻: ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
+    // 附加成功同樣分項列出人格引擎貢獻
+    const atkExtraLabel = atkIdentityExtra ? `宣告${atkAutoDeclared}+人格+${atkIdentityExtra}` : `${atkAutoDeclared}`;
+    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ 骰數: ${baseDice}\n`
+        + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
 
     cqEnterSTReview(baseDice, baseExtraSuccess, debugStr);
+}
+
+/**
+ * 戰鬥日誌（系統 A）：於全場廣播時，由 ST 端把這一筆攻擊結果寫入
+ * Firebase /rooms/{roomId}/combatLogs，供「戰鬥日誌 / 構築室」分頁渲染。
+ * 採單一寫入者（ST）避免重複，並維持最多 100 筆（FIFO）。
+ * 本函式為附屬功能，全程 try-catch，任何失敗都不可影響戰鬥主流程。
+ * @param {object} entry - { attackerName, defenderName, finalDice, attackerIsPlayer, broadcastText }
+ */
+function bbPushCombatLog(entry) {
+    try {
+        if (typeof roomRef === 'undefined' || !roomRef) return;
+        if (typeof myRole !== 'undefined' && myRole !== 'st') return;
+        if (!entry || typeof entry !== 'object') return;
+
+        const ref = roomRef.child('combatLogs');
+        const ts = (typeof firebase !== 'undefined' && firebase.database && firebase.database.ServerValue)
+            ? firebase.database.ServerValue.TIMESTAMP : Date.now();
+        ref.push({
+            timestamp: ts,
+            attackerName: String(entry.attackerName || '未知攻擊者').slice(0, 60),
+            defenderName: String(entry.defenderName || '').slice(0, 60),
+            finalDice: Number(entry.finalDice) || 0,
+            attackerIsPlayer: !!entry.attackerIsPlayer,
+            broadcastText: String(entry.broadcastText || '').slice(0, 300)
+        });
+
+        // FIFO：以 .once 讀取（非監聽，不會造成無限迴圈），超過 100 筆時移除最舊者。
+        // push 鍵本身依時間遞增排序，明確 sort() 以確保移除的是最舊的鍵，與物件列舉順序無關。
+        ref.once('value').then(snap => {
+            const val = snap.val();
+            if (!val) return;
+            const keys = Object.keys(val).sort();
+            if (keys.length > 100) {
+                keys.slice(0, keys.length - 100).forEach(k => ref.child(k).remove());
+            }
+        }).catch(() => {});
+    } catch (e) {
+        /* 日誌寫入失敗不影響戰鬥 */
+    }
 }

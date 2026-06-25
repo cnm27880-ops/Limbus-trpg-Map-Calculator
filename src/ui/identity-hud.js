@@ -147,9 +147,6 @@ const IDT_STATUS_LABELS = {
     loveHate: '愛/憎', karma: '業'
 };
 
-// 編輯中的草稿（null = 未在新增表單）
-let identityDraft = null;
-
 function loadCustomIdentities() {
     try {
         const raw = localStorage.getItem(CUSTOM_IDENTITY_KEY);
@@ -163,40 +160,98 @@ function saveCustomIdentities(arr) {
 }
 
 /**
- * 將純資料草稿轉為引擎可用的人格卡（含 condition 函式），並注入 IDENTITY_LIBRARY。
+ * 將「純資料」人格卡（無函式、可 JSON 序列化）轉為引擎可用的人格卡（含 condition 函式），
+ * 並注入 IDENTITY_LIBRARY。
+ *
+ * 支援的資料結構（AI 鍛造爐輸出 / localStorage 儲存格式，皆向後相容舊版 {statusKey,min,dp,succ}）：
+ *   {
+ *     id, owner, name,
+ *     desc: "整體需手動判定的說明",
+ *     rules: [{
+ *        phase: "attack"|"hit",            // 預設 attack
+ *        statusKey, min, condOn:"target"|"self",   // 條件（門檻 0／省略＝無條件）
+ *        dp, succ, weaponDamage, spellPower, finalDamage,
+ *        targetStatus: { key: layers }, selfStatus: { key: layers },
+ *        source: "技能名", note: "此條規則需手動判定的補充"
+ *     }],
+ *     specialResources: [{ key, label, default, hint }]   // 特殊資源（意志力／阿卡納層數…）
+ *   }
+ * 全程以 || []／|| '' 與型別檢查防護，避免 AI 漏給欄位導致註冊時崩潰。
  */
+function sanitizeStatusMap(m) {
+    if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+    const out = {};
+    for (const [k, v] of Object.entries(m)) {
+        const n = parseInt(v) || 0;
+        if (k && n) out[k] = n;
+    }
+    return Object.keys(out).length ? out : null;
+}
+
 function registerCustomIdentity(raw) {
     if (typeof IDENTITY_LIBRARY === 'undefined' || !raw || !raw.id) return;
-    const rules = Array.isArray(raw.rules) ? raw.rules : [];
-    const onAttack = rules.map(r => {
-        const dp = parseInt(r.dp) || 0;
-        const succ = parseInt(r.succ) || 0;
-        if (!dp && !succ) return null;
-        const key = r.statusKey || '';
-        const min = parseInt(r.min) || 0;
-        const cond = (key && min > 0)
-            ? (t => ((t && t.status && t.status[key]) || 0) >= min)
-            : (() => true);
-        const e = { condition: cond, source: raw.name, skill: raw.name };
-        if (dp) e.dpBonus = dp;
-        if (succ) e.extraSuccess = succ;
-        return e;
-    }).filter(Boolean);
 
-    // 說明文字以「手動效果」掛入，計算時於結果區列出供 ST 參考
-    if (raw.desc && raw.desc.trim()) {
-        onAttack.push({ manual: true, condition: () => true, desc: raw.desc.trim(), source: raw.name, skill: raw.name });
-    }
+    const rules = Array.isArray(raw.rules) ? raw.rules : [];
+    const onAttack = [];
+    const onHit = [];
+    const keyStatuses = new Set();
+    // 數值欄位：資料鍵 → 引擎鍵
+    const NUM_FIELDS = [['dp', 'dpBonus'], ['succ', 'extraSuccess'], ['weaponDamage', 'weaponDamage'], ['spellPower', 'spellPower'], ['finalDamage', 'finalDamage']];
+
+    rules.forEach(r => {
+        if (!r || typeof r !== 'object') return;
+        const bucket = (r.phase === 'hit') ? onHit : onAttack;
+
+        const statusKey = (r.statusKey || '').toString();
+        const min = parseInt(r.min) || 0;
+        const condOn = (r.condOn === 'self') ? 'self' : 'target';
+        if (statusKey) keyStatuses.add(statusKey);
+
+        // 由「目標／自身某狀態達門檻」宣告式條件，建立引擎 condition 函式（門檻 0＝無條件恆真）
+        const cond = (statusKey && min > 0)
+            ? (condOn === 'self'
+                ? ((t, a) => ((a && a.status && a.status[statusKey]) || 0) >= min)
+                : ((t) => ((t && t.status && t.status[statusKey]) || 0) >= min))
+            : (() => true);
+
+        const source = (r.source || raw.name || '自訂').toString();
+        const effect = { condition: cond, source, skill: source };
+        let hasEffect = false;
+        NUM_FIELDS.forEach(([src, dst]) => {
+            const v = parseInt(r[src]) || 0;
+            if (v) { effect[dst] = v; hasEffect = true; }
+        });
+        const tgt = sanitizeStatusMap(r.targetStatus);
+        const slf = sanitizeStatusMap(r.selfStatus);
+        if (tgt) { effect.targetStatus = tgt; hasEffect = true; Object.keys(tgt).forEach(k => keyStatuses.add(k)); }
+        if (slf) { effect.selfStatus = slf; hasEffect = true; Object.keys(slf).forEach(k => keyStatuses.add(k)); }
+        if (hasEffect) bucket.push(effect);
+
+        // 此條規則附帶的「需手動判定」補充
+        const note = (r.note || '').toString().trim();
+        if (note) bucket.push({ manual: true, condition: cond, desc: note, source, skill: source });
+    });
+
+    // 卡片整體「需手動判定」說明（無法量化的複雜／機率效果）
+    const desc = (raw.desc || '').toString().trim();
+    if (desc) onAttack.push({ manual: true, condition: () => true, desc, source: raw.name || '自訂', skill: raw.name || '自訂' });
+
+    // 特殊資源（意志力／阿卡納層數…）→ 引擎的 manualInputs；缺漏時退回空陣列
+    const manualInputs = (Array.isArray(raw.specialResources) ? raw.specialResources : [])
+        .filter(s => s && s.key)
+        .map(s => ({ key: String(s.key), label: (s.label || s.key).toString(), default: parseInt(s.default) || 0, hint: (s.hint || '').toString() }));
 
     IDENTITY_LIBRARY[raw.id] = {
         id: raw.id,
-        name: raw.name || '自訂人格卡',
-        owner: raw.owner || '自訂',
+        name: (raw.name || '自訂人格卡').toString(),
+        owner: (raw.owner || '自訂').toString(),
         custom: true,
-        keyStatuses: [...new Set(rules.map(r => r.statusKey).filter(Boolean))],
-        hooks: { onAttack }
+        keyStatuses: [...keyStatuses],
+        manualInputs,
+        hooks: { onAttack, onHit }
     };
 }
+
 
 function registerAllCustomIdentities() {
     loadCustomIdentities().forEach(registerCustomIdentity);
@@ -213,126 +268,234 @@ function deleteCustomIdentity(id) {
     if (typeof showToast === 'function') showToast('已刪除自訂人格卡');
 }
 
-// ===== 新增人格卡表單 =====
+// ===== AI 人格鍛造爐（自然語言 → JSON → 人格卡） =====
+
+// AI 連線設定（端點 / 金鑰 / 模型）持久化於 localStorage。
+const AI_ENDPOINT_KEY = 'limbus-ai-endpoint';
+const AI_KEY_KEY = 'limbus-ai-key';
+const AI_MODEL_KEY = 'limbus-ai-model';
+const AI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+const AI_DEFAULT_MODEL = 'gpt-4o-mini';
+
+function getAISetting(key, fallback) {
+    try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+}
+function setAISetting(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* quota / disabled */ }
+}
+
+/**
+ * 餵給 AI 的「範例 Schema」：直接取自系統實際讀取的人格卡資料結構（純資料、無函式），
+ * 強制 AI 輸出的欄位名稱與現有引擎 100% 吻合（見 registerCustomIdentity）。
+ */
+function aiSchemaExample() {
+    return {
+        owner: '格里高爾',
+        name: '自訂・流血突刺',
+        desc: '擊殺目標時對其周圍 3 公尺內所有敵人施加 3 點流血（需 ST 自行判定範圍）。',
+        rules: [
+            { phase: 'attack', statusKey: 'bleed', min: 7, condOn: 'target', dp: 3, source: '流血突刺' },
+            { phase: 'attack', statusKey: 'breathing', min: 10, condOn: 'self', weaponDamage: 2, source: '蓄勢' },
+            { phase: 'hit', targetStatus: { bleed: 2 }, source: '流血突刺' },
+            { phase: 'hit', statusKey: 'bleed', min: 10, condOn: 'target', targetStatus: { weak: 1 }, selfStatus: { swiftness: 1 }, source: '流血突刺', note: '若骰中兩個以上 10，額外附加 2 點虛弱（需擲骰判定）。' }
+        ],
+        specialResources: [
+            { key: 'will', label: '當前意志力', default: 0, hint: '>0 光型態 / <0 暗型態' }
+        ]
+    };
+}
+
+/** 組裝送給 AI 的嚴謹 System Prompt（含範例 Schema 與合法狀態鍵清單）。 */
+function aiBuildSystemPrompt() {
+    const statusList = Object.entries(IDT_STATUS_LABELS).map(([k, v]) => `${k}(${v})`).join('、');
+    const example = JSON.stringify(aiSchemaExample(), null, 2);
+    return [
+        '你是一個嚴謹的 TRPG 規則解析器。請將使用者輸入的「人格卡描述」轉換為單一 JSON 物件，且只輸出 JSON 本體、不要任何說明文字或 markdown 圍欄。',
+        '',
+        '輸出的 JSON 欄位名稱必須與下方範例結構 100% 吻合（這是系統實際讀取的格式）：',
+        example,
+        '',
+        '欄位規則：',
+        '- owner：角色名稱；name：人格卡名稱（兩者必填、字串）。',
+        '- rules：陣列，每條是一個獨立會「疊加觸發」的效果。',
+        '  - phase："attack"（攻擊／檢定前的 DP・武器傷害・附加成功・威力・最終傷害加值）或 "hit"（命中後對目標/自身施加狀態）。',
+        '  - 條件（可省略＝無條件恆生效）：statusKey + min（門檻）+ condOn（"target" 檢查目標 / "self" 檢查攻擊者自身的該狀態）。',
+        '  - 數值加值（數字，視情況給）：dp、succ（附加成功）、weaponDamage、spellPower、finalDamage。',
+        '  - 狀態施加：targetStatus / selfStatus，格式為 { 狀態鍵: 層數 }。',
+        '  - source：此效果來源技能名稱。',
+        '- specialResources：自訂能量／層數系統（如意志力、魔法阿卡納層數），每項 { key, label, default, hint }；無則給空陣列 []。',
+        '',
+        `合法的狀態鍵（statusKey / targetStatus / selfStatus 只能使用這些英文鍵）：${statusList}。`,
+        '',
+        '重要：若遇到無法量化的複雜效果（如：擊殺時觸發某事件、機率性／擲骰判定、指定友軍、依層數動態縮放的數值），',
+        '不要捏造數字，請改將該效果的完整文字描述放進該規則的 "note" 欄位，或放進卡片最外層的 "desc"（需手動判定）欄位。'
+    ].join('\n');
+}
 
 function openAddIdentityForm() {
-    identityDraft = {
-        owner: identityHudState.owner || '',
-        name: '',
-        desc: '',
-        rules: [{ statusKey: '', min: 0, dp: 0, succ: 0 }]
-    };
-    renderAddIdentityForm();
+    renderAIForge();
 }
 
 function cancelAddIdentity() {
-    identityDraft = null;
     renderIdentityModal();
 }
 
-function idtDraftSet(field, value) {
-    if (identityDraft) identityDraft[field] = value;
+/**
+ * 階段 3：呼叫 AI 端點，將自然語言描述轉為 JSON 填入預覽區。
+ */
+async function generateIdentityFromAI() {
+    const promptEl = document.getElementById('ai-identity-prompt');
+    const previewEl = document.getElementById('ai-identity-preview');
+    const btn = document.getElementById('btn-generate-identity');
+    if (!promptEl || !previewEl) return;
+
+    const userText = (promptEl.value || '').trim();
+    if (!userText) { if (typeof showToast === 'function') showToast('請先輸入人格卡描述'); return; }
+
+    const endpoint = (getAISetting(AI_ENDPOINT_KEY, AI_DEFAULT_ENDPOINT) || '').trim() || AI_DEFAULT_ENDPOINT;
+    const apiKey = (getAISetting(AI_KEY_KEY, '') || '').trim();
+    const model = (getAISetting(AI_MODEL_KEY, AI_DEFAULT_MODEL) || '').trim() || AI_DEFAULT_MODEL;
+    if (!apiKey) { if (typeof showToast === 'function') showToast('請先在上方填入 API Key'); return; }
+
+    if (btn) { btn.disabled = true; btn.dataset.label = btn.innerText; btn.innerText = '⏳ AI 產生中...'; }
+
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+            body: JSON.stringify({
+                model,
+                temperature: 0.2,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: aiBuildSystemPrompt() },
+                    { role: 'user', content: userText }
+                ]
+            })
+        });
+
+        if (!res.ok) {
+            const errText = await res.text().catch(() => '');
+            throw new Error(`HTTP ${res.status} ${res.statusText}${errText ? '：' + errText.slice(0, 300) : ''}`);
+        }
+
+        const data = await res.json();
+        const content = data && data.choices && data.choices[0] && data.choices[0].message
+            ? (data.choices[0].message.content || '') : '';
+        if (!content) throw new Error('AI 回傳內容為空');
+
+        // 嘗試美化 JSON；若無法解析則原樣放入供使用者手動修正
+        let pretty = content.trim();
+        try { pretty = JSON.stringify(JSON.parse(pretty), null, 2); } catch (e) { /* 保留原文 */ }
+        previewEl.value = pretty;
+        if (typeof showToast === 'function') showToast('AI 已產生 JSON，請確認後儲存');
+    } catch (err) {
+        previewEl.value = `// 產生失敗：${err && err.message ? err.message : err}\n// 請檢查 API 端點 / 金鑰 / 模型名稱，或改用手動填寫 JSON。`;
+        if (typeof showToast === 'function') showToast('AI 產生失敗，詳見預覽區');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerText = btn.dataset.label || '✨ AI 產生'; }
+    }
 }
 
-function idtDraftAddRule() {
-    if (!identityDraft) return;
-    identityDraft.rules.push({ statusKey: '', min: 0, dp: 0, succ: 0 });
-    renderAddIdentityForm();
-}
+/**
+ * 階段 4：將預覽區 JSON 安全解析後存入人格卡資料庫。
+ */
+function saveAIIdentity() {
+    const previewEl = document.getElementById('ai-identity-preview');
+    if (!previewEl) return;
+    const text = (previewEl.value || '').trim();
+    if (!text) { if (typeof showToast === 'function') showToast('預覽區是空的，請先產生或貼上 JSON'); return; }
 
-function idtDraftRemoveRule(i) {
-    if (!identityDraft) return;
-    identityDraft.rules.splice(i, 1);
-    if (identityDraft.rules.length === 0) identityDraft.rules.push({ statusKey: '', min: 0, dp: 0, succ: 0 });
-    renderAddIdentityForm();
-}
-
-function idtDraftSetRule(i, field, value) {
-    if (identityDraft && identityDraft.rules[i]) identityDraft.rules[i][field] = value;
-}
-
-function saveNewIdentity() {
-    if (!identityDraft) return;
-    const owner = (identityDraft.owner || '').trim();
-    const name = (identityDraft.name || '').trim();
-    if (!owner) { if (typeof showToast === 'function') showToast('請填寫角色名稱'); return; }
-    if (!name) { if (typeof showToast === 'function') showToast('請填寫人格卡名稱'); return; }
-
-    const desc = (identityDraft.desc || '').trim();
-    const rules = identityDraft.rules
-        .map(r => ({ statusKey: r.statusKey || '', min: parseInt(r.min) || 0, dp: parseInt(r.dp) || 0, succ: parseInt(r.succ) || 0 }))
-        .filter(r => r.dp || r.succ);
-
-    if (rules.length === 0 && !desc) {
-        if (typeof showToast === 'function') showToast('請至少填一條加成（DP 或附加成功），或填寫說明');
+    let parsed;
+    try {
+        parsed = JSON.parse(text);
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('JSON 格式錯誤，無法解析：' + (e.message || e));
+        return;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        if (typeof showToast === 'function') showToast('JSON 必須是一個物件');
         return;
     }
 
+    const owner = (parsed.owner || '').toString().trim();
+    const name = (parsed.name || '').toString().trim();
+    if (!owner) { if (typeof showToast === 'function') showToast('JSON 缺少 owner（角色名稱）'); return; }
+    if (!name) { if (typeof showToast === 'function') showToast('JSON 缺少 name（人格卡名稱）'); return; }
+
+    // 正規化為儲存格式（補預設值，避免 AI 漏給欄位）
     const raw = {
-        id: 'custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-        owner, name, desc, rules
+        id: (parsed.id && String(parsed.id).trim()) || ('custom_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
+        owner, name,
+        desc: (parsed.desc || '').toString(),
+        rules: Array.isArray(parsed.rules) ? parsed.rules : [],
+        specialResources: Array.isArray(parsed.specialResources) ? parsed.specialResources : []
     };
 
-    const arr = loadCustomIdentities();
-    arr.push(raw);
-    saveCustomIdentities(arr);
-    registerCustomIdentity(raw);
+    // 寫入人格卡資料庫並即時註冊進引擎
+    try {
+        const arr = loadCustomIdentities().filter(c => c.id !== raw.id);
+        arr.push(raw);
+        saveCustomIdentities(arr);
+        registerCustomIdentity(raw);
+    } catch (e) {
+        if (typeof showToast === 'function') showToast('儲存失敗：' + (e.message || e));
+        return;
+    }
 
-    identityDraft = null;
     identityHudState.owner = owner;
     if (typeof selectIdentityOwner === 'function') selectIdentityOwner(owner, true);
     identityHudState.cards[raw.id] = { owned: true, unlocked: false };
     renderIdentityModal();
-    if (typeof showToast === 'function') showToast(`已新增人格卡「${name}」`);
+    if (typeof showToast === 'function') showToast(`已鍛造人格卡「${name}」`);
 }
 
-function renderAddIdentityForm() {
+function renderAIForge() {
     const el = document.getElementById('identity-modal');
-    if (!el || !identityDraft) return;
+    if (!el) return;
     const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
 
-    const statusOpts = (sel) => '<option value="">（無條件）</option>' +
-        Object.entries(IDT_STATUS_LABELS).map(([k, v]) =>
-            `<option value="${k}"${k === sel ? ' selected' : ''}>${v}</option>`).join('');
-
-    const rulesHtml = identityDraft.rules.map((r, i) => `
-        <div class="idt-rule">
-            <div class="idt-rule-cond">
-                <span class="idt-rule-label">當目標</span>
-                <select class="idt-input idt-rule-status" onchange="idtDraftSetRule(${i},'statusKey',this.value)">${statusOpts(r.statusKey)}</select>
-                <span class="idt-rule-label">≥</span>
-                <input class="idt-input idt-rule-min" type="number" min="0" value="${r.min || 0}" title="門檻（0＝無條件恆生效）" onchange="idtDraftSetRule(${i},'min',this.value)">
-            </div>
-            <div class="idt-rule-vals">
-                <label>DP 加值<input class="idt-input" type="number" value="${r.dp || 0}" onchange="idtDraftSetRule(${i},'dp',this.value)"></label>
-                <label>附加成功<input class="idt-input" type="number" value="${r.succ || 0}" onchange="idtDraftSetRule(${i},'succ',this.value)"></label>
-                <button class="idt-btn idt-rule-del" title="刪除此條規則" onclick="idtDraftRemoveRule(${i})">🗑️</button>
-            </div>
-        </div>`).join('');
+    const endpoint = getAISetting(AI_ENDPOINT_KEY, AI_DEFAULT_ENDPOINT);
+    const apiKey = getAISetting(AI_KEY_KEY, '');
+    const model = getAISetting(AI_MODEL_KEY, AI_DEFAULT_MODEL);
 
     el.innerHTML = `
         <div class="identity-modal-box">
             <div class="idt-header">
-                <span>➕ 新增人格卡</span>
+                <span>🤖 AI 人格鍛造爐</span>
                 <button class="idt-close" onclick="cancelAddIdentity()">×</button>
             </div>
             <div class="idt-body">
                 <div class="idt-section">
-                    <div class="idt-field"><label>角色名稱（owner）</label>
-                        <input class="idt-input" type="text" value="${esc(identityDraft.owner)}" placeholder="例：格里高爾" oninput="idtDraftSet('owner',this.value)"></div>
-                    <div class="idt-field"><label>人格卡名稱</label>
-                        <input class="idt-input" type="text" value="${esc(identityDraft.name)}" placeholder="例：自訂・突進斬" oninput="idtDraftSet('name',this.value)"></div>
-                    <div class="idt-field"><label>說明（選填；特殊／需擲骰效果寫這裡，計算時列為手動提示）</label>
-                        <textarea class="idt-input" rows="2" placeholder="例：擊殺時對全體敵人施加 3 點沮喪" oninput="idtDraftSet('desc',this.value)">${esc(identityDraft.desc)}</textarea></div>
+                    <div class="idt-section-title">① AI 連線設定（儲存在本機）</div>
+                    <div class="idt-field"><label>API 端點 Endpoint</label>
+                        <input class="idt-input" type="text" value="${esc(endpoint)}" placeholder="${AI_DEFAULT_ENDPOINT}"
+                               onchange="setAISetting('${AI_ENDPOINT_KEY}', this.value)"></div>
+                    <div class="idt-field"><label>API Key</label>
+                        <input class="idt-input" type="password" value="${esc(apiKey)}" placeholder="sk-..." autocomplete="off"
+                               onchange="setAISetting('${AI_KEY_KEY}', this.value)"></div>
+                    <div class="idt-field"><label>模型 Model</label>
+                        <input class="idt-input" type="text" value="${esc(model)}" placeholder="${AI_DEFAULT_MODEL}"
+                               onchange="setAISetting('${AI_MODEL_KEY}', this.value)"></div>
                 </div>
+
                 <div class="idt-section">
-                    <div class="idt-section-title">攻擊加成規則</div>
-                    <div class="idt-rule-hint">每條規則：可選「當目標某狀態達到門檻」時，提供 DP／附加成功加值；門檻填 0＝無條件恆生效。</div>
-                    ${rulesHtml}
-                    <button class="idt-btn idt-btn-mini" onclick="idtDraftAddRule()">＋ 新增一條規則</button>
+                    <div class="idt-section-title">② 貼上人格卡描述（自然語言）</div>
+                    <div class="idt-rule-hint">直接描述這張卡的技能、條件與效果即可；複雜／需擲骰的效果 AI 會放進「需手動判定」說明。</div>
+                    <textarea class="idt-input idt-forge-area" id="ai-identity-prompt" rows="5"
+                              placeholder="例：格里高爾的『流血突刺』。當目標流血 7 以上時攻擊 +3 DP；命中時施加 2 點流血；擊殺時對周圍敵人施加流血（需 ST 判定）。"></textarea>
+                    <button class="idt-btn idt-btn-main" id="btn-generate-identity" onclick="generateIdentityFromAI()">✨ AI 產生</button>
                 </div>
+
+                <div class="idt-section">
+                    <div class="idt-section-title">③ JSON 預覽（可手動修改以防錯）</div>
+                    <textarea class="idt-input idt-forge-area" id="ai-identity-preview" rows="12" spellcheck="false"
+                              style="font-family: monospace; white-space: pre;"
+                              placeholder="AI 產生的 JSON 會出現在這裡，你也可以直接貼上／修改 JSON。"></textarea>
+                </div>
+
                 <div class="idt-action-row">
-                    <button class="idt-btn idt-btn-main" onclick="saveNewIdentity()">💾 儲存人格卡</button>
+                    <button class="idt-btn idt-btn-main" id="btn-save-identity" onclick="saveAIIdentity()">💾 儲存人格卡</button>
                     <button class="idt-btn" onclick="cancelAddIdentity()">取消</button>
                 </div>
             </div>
@@ -863,6 +1026,9 @@ function injectIdentityStyles() {
         .idt-remind-title{color:var(--accent-blue,#4aa3ff);}
         .idt-remind{font-size:.82rem;color:var(--text,#eee);background:rgba(74,163,255,.08);border-left:3px solid var(--accent-blue,#4aa3ff);border-radius:4px;padding:6px 8px;margin:4px 0;line-height:1.5;}
         .idt-remind-note{border-left-color:var(--accent-purple,#7e57c2);background:rgba(126,87,194,.08);color:var(--text-dim,#bbb);font-size:.78rem;}
+        .idt-forge-area{width:100%;resize:vertical;line-height:1.5;margin-bottom:8px;}
+        #ai-identity-preview{font-size:.8rem;color:var(--accent-green,#8bd17c);}
+        #btn-generate-identity[disabled]{opacity:.6;cursor:progress;}
     `;
     document.head.appendChild(s);
 }
@@ -882,14 +1048,12 @@ if (typeof window !== 'undefined') {
     window.applyIdentityTargetStatus = applyIdentityTargetStatus;
     window.applyIdentitySelfStatus = applyIdentitySelfStatus;
     window.renderIdentityModal = renderIdentityModal;
-    // 自訂人格卡
+    // 自訂人格卡（AI 人格鍛造爐）
     window.openAddIdentityForm = openAddIdentityForm;
     window.cancelAddIdentity = cancelAddIdentity;
-    window.idtDraftSet = idtDraftSet;
-    window.idtDraftAddRule = idtDraftAddRule;
-    window.idtDraftRemoveRule = idtDraftRemoveRule;
-    window.idtDraftSetRule = idtDraftSetRule;
-    window.saveNewIdentity = saveNewIdentity;
+    window.setAISetting = setAISetting;
+    window.generateIdentityFromAI = generateIdentityFromAI;
+    window.saveAIIdentity = saveAIIdentity;
     window.deleteCustomIdentity = deleteCustomIdentity;
     window.setCardInput = setCardInput;
     // 啟動時把使用者儲存的自訂人格卡注入資料庫，並還原上次的選擇

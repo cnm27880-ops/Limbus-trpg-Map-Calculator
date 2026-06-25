@@ -61,29 +61,49 @@ function lvApplyRolePermissions() {
 function renderCombatLogs() {
     const list = document.getElementById('combat-log-list');
     if (!list) return;
-    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
+
+    // 以 DOM 節點 + textContent 建構，避免把跨客戶端的使用者資料（玩家名稱等）
+    // 透過 innerHTML 注入，從根本杜絕 XSS。
+    list.textContent = '';
 
     if (!lvCombatLogs.length) {
-        list.innerHTML = '<div class="log-empty">尚無戰鬥紀錄。發起攻擊並廣播後，日誌會即時出現在這裡。</div>';
+        const empty = document.createElement('div');
+        empty.className = 'log-empty';
+        empty.textContent = '尚無戰鬥紀錄。發起攻擊並廣播後，日誌會即時出現在這裡。';
+        list.appendChild(empty);
         return;
     }
 
-    list.innerHTML = lvCombatLogs.map(log => {
+    const frag = document.createDocumentFragment();
+    for (const log of lvCombatLogs) {
         const t = log.timestamp ? new Date(log.timestamp) : null;
         const timeStr = t ? `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}` : '';
-        const sideClass = log.attackerIsPlayer ? 'log-row-player' : 'log-row-enemy';
-        const text = log.broadcastText
-            ? esc(log.broadcastText)
-            : `【${esc(log.attackerName)}】對【${esc(log.defenderName || '???')}】發動攻擊 👉 ${Number(log.finalDice) || 0} 顆骰`;
-        return `
-            <div class="log-row ${sideClass}">
-                <div class="log-row-head">
-                    <span class="log-attacker">${esc(log.attackerName || '未知')}</span>
-                    <span class="log-time">${timeStr}</span>
-                </div>
-                <div class="log-row-body">${text}</div>
-            </div>`;
-    }).join('');
+
+        const row = document.createElement('div');
+        row.className = 'log-row ' + (log.attackerIsPlayer ? 'log-row-player' : 'log-row-enemy');
+
+        const head = document.createElement('div');
+        head.className = 'log-row-head';
+        const attacker = document.createElement('span');
+        attacker.className = 'log-attacker';
+        attacker.textContent = log.attackerName || '未知';
+        const time = document.createElement('span');
+        time.className = 'log-time';
+        time.textContent = timeStr;
+        head.appendChild(attacker);
+        head.appendChild(time);
+
+        const body = document.createElement('div');
+        body.className = 'log-row-body';
+        body.textContent = log.broadcastText
+            ? log.broadcastText
+            : `【${log.attackerName || '???'}】對【${log.defenderName || '???'}】發動攻擊 👉 ${Number(log.finalDice) || 0} 顆骰`;
+
+        row.appendChild(head);
+        row.appendChild(body);
+        frag.appendChild(row);
+    }
+    list.appendChild(frag);
 
     // 自動捲到最新
     list.scrollTop = list.scrollHeight;

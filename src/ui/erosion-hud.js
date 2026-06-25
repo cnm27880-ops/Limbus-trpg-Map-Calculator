@@ -100,17 +100,28 @@ function closeErosionHud() {
     if (hud) hud.classList.add('hidden');
 }
 
-function eroUnitOptions(filterFn, selectedId) {
-    let opts = '<option value="">（請選擇）</option>';
+/**
+ * 以 DOM 節點填充 <select>（option 文字用 textContent），避免把 Firebase 來源的
+ * 單位名稱經由 innerHTML 注入，杜絕 XSS。
+ */
+function eroPopulateSelect(selectId, filterFn, selectedId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.textContent = '';
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '（請選擇）';
+    sel.appendChild(ph);
     if (typeof state !== 'undefined' && Array.isArray(state.units)) {
         for (const u of state.units) {
             if (!filterFn(u)) continue;
-            const sel = (u.id === selectedId) ? ' selected' : '';
-            const safe = (typeof escapeHtml === 'function') ? escapeHtml(u.name || '') : (u.name || '');
-            opts += `<option value="${u.id}"${sel}>${safe}</option>`;
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.name || '';
+            if (u.id === selectedId) opt.selected = true;
+            sel.appendChild(opt);
         }
     }
-    return opts;
 }
 
 function eroIsEnemy(u) { return u && (u.type === 'enemy' || u.type === 'boss'); }
@@ -153,9 +164,9 @@ function renderErosionConsole() {
         <div class="ero-section">
             <div class="ero-section-title">🩸 罪業抽取與侵蝕暴走</div>
             <div class="ero-field"><label>來源（敵方）</label>
-                <select id="ero-source" class="ero-select">${eroUnitOptions(eroIsEnemy, prevSource)}</select></div>
+                <select id="ero-source" class="ero-select"></select></div>
             <div class="ero-field"><label>吸收者（玩家）</label>
-                <select id="ero-absorber" class="ero-select" onchange="renderErosionConsole()">${eroUnitOptions(eroIsPlayer, prevAbsorber)}</select></div>
+                <select id="ero-absorber" class="ero-select" onchange="renderErosionConsole()"></select></div>
             <div class="ero-field"><label>暴走閾值</label>
                 <input id="ero-threshold" class="ero-input" type="number" min="1" value="${threshold}" onchange="renderErosionConsole()"></div>
 
@@ -171,6 +182,10 @@ function renderErosionConsole() {
                 <button class="ero-btn ero-burn" onclick="eroBurnOut()">✨ 燃盡（清空侵蝕）</button>
             </div>
         </div>`;
+
+    // 單位下拉以 DOM 填充（名稱用 textContent，避免 innerHTML 注入）
+    eroPopulateSelect('ero-source', eroIsEnemy, prevSource);
+    eroPopulateSelect('ero-absorber', eroIsPlayer, prevAbsorber);
 }
 
 // ===== 刻度操作 =====
@@ -278,8 +293,8 @@ function handleErosionBroadcast(val) {
     if (typeof val.ts === 'number' && (Date.now() - val.ts) > 15000) return;
     const el = document.getElementById('erosion-warning-toast');
     if (!el) return;
-    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
-    el.innerHTML = `⚠️ 警告！【${esc(val.playerName)}】發生 E.G.O 侵蝕，鎖定【${esc(val.targetSide || '？')}】發動毀滅打擊！`;
+    // 使用 textContent 而非 innerHTML：本身不解析 HTML，從根本杜絕 XSS（含跨客戶端的玩家名稱）
+    el.textContent = `⚠️ 警告！【${val.playerName}】發生 E.G.O 侵蝕，鎖定【${val.targetSide || '？'}】發動毀滅打擊！`;
     el.classList.add('show');
     clearTimeout(eroWarningTimer);
     eroWarningTimer = setTimeout(() => el.classList.remove('show'), 6000);

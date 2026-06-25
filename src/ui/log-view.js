@@ -21,6 +21,8 @@ const LV_AI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const LV_AI_DEFAULT_MODEL = 'gpt-4o-mini';
 
 let lvCombatLogs = []; // [{ timestamp, attackerName, defenderName, finalDice, attackerIsPlayer, broadcastText }]
+let lvLogEditMode = false;
+let lvSelectedLogs = new Set();
 
 function lvGetSetting(key, fallback) {
     try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
@@ -36,7 +38,10 @@ function logViewSetupListener() {
     const listener = ref.on('value', snapshot => {
         const val = snapshot.val();
         lvCombatLogs = val
-            ? Object.keys(val).map(k => val[k]).filter(Boolean)
+            ? Object.keys(val).map(k => {
+                if (val[k]) val[k].id = k;
+                return val[k];
+            }).filter(Boolean)
                 .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
             : [];
         renderCombatLogs();
@@ -55,6 +60,73 @@ function lvApplyRolePermissions() {
     if (encPanel) encPanel.style.display = isST ? 'flex' : 'none';
     const dps = document.getElementById('log-dps-stat');
     if (dps) dps.style.display = isST ? 'block' : 'none';
+
+    // Add edit button if ST
+    if (isST) {
+        let logHeader = document.querySelector('.log-panel-header');
+        if (logHeader && !document.getElementById('log-edit-toggle')) {
+            const editGroup = document.createElement('div');
+            editGroup.style.display = 'flex';
+            editGroup.style.gap = '5px';
+
+            const editBtn = document.createElement('button');
+            editBtn.id = 'log-edit-toggle';
+            editBtn.className = 'action-btn';
+            editBtn.style.padding = '2px 8px';
+            editBtn.innerHTML = '✎ 編輯日誌';
+            editBtn.onclick = toggleLogEditMode;
+
+            const delBtn = document.createElement('button');
+            delBtn.id = 'log-delete-selected';
+            delBtn.className = 'action-btn danger';
+            delBtn.style.padding = '2px 8px';
+            delBtn.style.display = 'none';
+            delBtn.innerHTML = '🗑️ 刪除選取項目';
+            delBtn.onclick = deleteSelectedLogs;
+
+            editGroup.appendChild(editBtn);
+            editGroup.appendChild(delBtn);
+
+            logHeader.appendChild(editGroup);
+        }
+    }
+}
+
+
+function toggleLogEditMode() {
+    lvLogEditMode = !lvLogEditMode;
+    lvSelectedLogs.clear();
+
+    const delBtn = document.getElementById('log-delete-selected');
+    if (delBtn) delBtn.style.display = lvLogEditMode ? 'inline-block' : 'none';
+
+    const editBtn = document.getElementById('log-edit-toggle');
+    if (editBtn) editBtn.innerHTML = lvLogEditMode ? '完成編輯' : '✎ 編輯日誌';
+
+    renderCombatLogs();
+}
+
+function toggleLogSelection(id) {
+    if (lvSelectedLogs.has(id)) {
+        lvSelectedLogs.delete(id);
+    } else {
+        lvSelectedLogs.add(id);
+    }
+}
+
+function deleteSelectedLogs() {
+    if (lvSelectedLogs.size === 0) return;
+    if (typeof roomRef === 'undefined' || !roomRef) return;
+
+    const updates = {};
+    lvSelectedLogs.forEach(id => {
+        updates[`combatLogs/${id}`] = null;
+    });
+
+    roomRef.update(updates).then(() => {
+        lvSelectedLogs.clear();
+        toggleLogEditMode(); // Exit edit mode after deletion
+    }).catch(e => console.error('Failed to delete logs:', e));
 }
 
 // ===== 戰鬥日誌渲染 =====
@@ -82,6 +154,20 @@ function renderCombatLogs() {
         const row = document.createElement('div');
         row.className = 'log-row ' + (log.attackerIsPlayer ? 'log-row-player' : 'log-row-enemy');
 
+        if (lvLogEditMode && log.id) {
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.style.marginRight = '8px';
+            cb.checked = lvSelectedLogs.has(log.id);
+            cb.onchange = () => toggleLogSelection(log.id);
+            row.appendChild(cb);
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+        }
+
+        const contentDiv = document.createElement('div');
+        contentDiv.style.flex = '1';
+
         const head = document.createElement('div');
         head.className = 'log-row-head';
         const attacker = document.createElement('span');
@@ -99,8 +185,9 @@ function renderCombatLogs() {
             ? log.broadcastText
             : `【${log.attackerName || '???'}】對【${log.defenderName || '???'}】發動攻擊 👉 ${Number(log.finalDice) || 0} 顆骰`;
 
-        row.appendChild(head);
-        row.appendChild(body);
+        contentDiv.appendChild(head);
+        contentDiv.appendChild(body);
+        row.appendChild(contentDiv);
         frag.appendChild(row);
     }
     list.appendChild(frag);

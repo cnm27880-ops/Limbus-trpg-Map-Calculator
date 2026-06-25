@@ -736,6 +736,70 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, manual: true, source: '永別了！', skill: '永別了！', locked: true, desc: '近戰白刃攻擊若骰中兩個以上的 10，指定兩名友方單位使其下次判定 +6 士氣加值（與劍跡可同時觸發，單位選擇不可疊加）。' }
             ]
         }
+    },
+
+    // 唐吉訶德 - し協會南部5科科長 ── 迅捷 / 呼吸法
+    don_shi_south5: {
+        id: 'don_shi_south5',
+        name: '唐吉訶德 - し協會南部5科科長',
+        owner: '唐吉訶德',
+        repeatUnlockSkill: '過度呼吸',
+        keyStatuses: ['swiftness', 'breathing'],
+        hooks: {
+            onAttack: [
+                // 迅捷（被動）：先攻值增加等同於迅捷層數，引擎不直接運算先攻，故保留為手動提示
+                { condition: () => true, manual: true, source: '迅捷', skill: '（被動）',
+                  desc: '你的先攻值增加等同於你身上【迅捷】層數。' },
+                // 呼吸增幅（被動）：呼吸法 15+ 使能看見你的友方在攻擊檢定獲得士氣加值，每 15 層疊加一次
+                { condition: (t, a) => (a.status.breathing || 0) >= 15, manual: true, source: '呼吸增幅', skill: '（被動）',
+                  desc: '你的【呼吸法】達到 15 層以上時，所有能看見你的友方單位在攻擊檢定上獲得 2 點士氣加值，每 15 層疊加一次。' },
+                // 調整呼吸：宣告攻擊時立即獲得 2 層迅捷
+                { condition: () => true, selfStatus: { swiftness: 2 }, source: '調整呼吸', skill: '調整呼吸' },
+                // 二連斬擊：嚴重生命槽被填滿時獲得 4 層迅捷（持續到戰鬥結束，一場戰鬥僅觸發一次）
+                { condition: (t, a) => !!a.severeFull, manual: true, source: '二連斬擊', skill: '二連斬擊',
+                  desc: '本次戰鬥中，若你的嚴重生命槽被填滿，立即獲得 4 層【迅捷】，效果持續到戰鬥結束；一場戰鬥僅觸發一次。' },
+                // 過度呼吸【重複抽取解鎖】：迅捷 10+ → 本次攻擊 +15 DP
+                { condition: (t, a) => (a.status.swiftness || 0) >= 10, dpBonus: 15, source: '過度呼吸', skill: '過度呼吸', locked: true }
+            ],
+            onHit: [
+                // 調整呼吸：命中時獲得 2 層呼吸法
+                { condition: () => true, selfStatus: { breathing: 2 }, source: '調整呼吸', skill: '調整呼吸' },
+                // 二連斬擊：命中時再獲得 3 層呼吸法、3 層迅捷
+                { condition: () => true, selfStatus: { breathing: 3 }, source: '二連斬擊', skill: '二連斬擊' },
+                { condition: () => true, selfStatus: { swiftness: 3 }, source: '二連斬擊', skill: '二連斬擊' }
+            ]
+        }
+    },
+
+    // 唐吉訶德 - 腦葉公司 E.G.O::提燈 ── 破裂 / 挑釁
+    don_ego_lantern: {
+        id: 'don_ego_lantern',
+        name: '唐吉訶德 - 腦葉公司EGO::提燈',
+        owner: '唐吉訶德',
+        repeatUnlockSkill: '嚼嚼旋風！',
+        keyStatuses: ['rupture', 'provoke'],
+        hooks: {
+            onAttack: [
+                // 閃爍誘餌：目標破裂 5+ → +3 DP
+                { condition: (t) => (t.status.rupture || 0) >= 5, dpBonus: 3, source: '閃爍誘餌', skill: '閃爍誘餌' },
+                // 嚼嚼旋風【重複抽取解鎖】：目標破裂 7+ → 再 +5 DP
+                { condition: (t) => (t.status.rupture || 0) >= 7, dpBonus: 5, source: '嚼嚼旋風！', skill: '嚼嚼旋風！', locked: true },
+                // 嚼嚼旋風【重複抽取解鎖】：提燈噬咬（可宣告，恢復嚴重傷害，需手動結算）
+                { condition: () => true, manual: true, source: '提燈噬咬', skill: '嚼嚼旋風！', locked: true,
+                  desc: '可宣告發動「提燈噬咬」：恢復 2 點嚴重傷害 (L)；目標身上每有 2 層【破裂】，再額外恢復 1 點嚴重傷害 (L)。若此時你的嚴重生命槽已被填滿，本次攻擊額外造成 2 點物理嚴重傷害，且上述生命恢復量翻倍。' }
+            ],
+            onHit: [
+                // 吾當嚙之！：命中時附加 3 層挑釁、2 層破裂
+                { condition: () => true, targetStatus: { provoke: 3 }, source: '吾當嚙之！', skill: '吾當嚙之！' },
+                { condition: () => true, targetStatus: { rupture: 2 }, source: '吾當嚙之！', skill: '吾當嚙之！' },
+                // 閃爍誘餌：命中時再附加 2 層破裂
+                { condition: () => true, targetStatus: { rupture: 2 }, source: '閃爍誘餌', skill: '閃爍誘餌' },
+                // 閃爍誘餌：若命中前目標破裂不超過 3 層，再額外施加 3 層破裂
+                { condition: (t) => (t.status.rupture || 0) <= 3, targetStatus: { rupture: 3 }, source: '閃爍誘餌（破裂 ≤3 加成）', skill: '閃爍誘餌' },
+                // 嚼嚼旋風【重複抽取解鎖】：命中時再附加 3 層挑釁
+                { condition: () => true, targetStatus: { provoke: 3 }, source: '嚼嚼旋風！', skill: '嚼嚼旋風！', locked: true }
+            ]
+        }
     }
 };
 

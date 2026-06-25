@@ -108,25 +108,36 @@ function closeErosionHud() {
 /**
  * 以 DOM 節點填充 <select>（option 文字用 textContent），避免把 Firebase 來源的
  * 單位名稱經由 innerHTML 注入，杜絕 XSS。
+ * @param {string|string[]} selectedId - 單選傳字串；多選（select multiple）傳陣列，重繪時保留勾選狀態。
  */
 function eroPopulateSelect(selectId, filterFn, selectedId) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
+    const selectedSet = new Set(Array.isArray(selectedId) ? selectedId : [selectedId]);
     sel.textContent = '';
-    const ph = document.createElement('option');
-    ph.value = '';
-    ph.textContent = '（請選擇）';
-    sel.appendChild(ph);
+    if (!sel.multiple) {
+        const ph = document.createElement('option');
+        ph.value = '';
+        ph.textContent = '（請選擇）';
+        sel.appendChild(ph);
+    }
     if (typeof state !== 'undefined' && Array.isArray(state.units)) {
         for (const u of state.units) {
             if (!filterFn(u)) continue;
             const opt = document.createElement('option');
             opt.value = u.id;
             opt.textContent = u.name || '';
-            if (u.id === selectedId) opt.selected = true;
+            if (selectedSet.has(u.id)) opt.selected = true;
             sel.appendChild(opt);
         }
     }
+}
+
+/** 取得多選 <select> 目前所有被選取的單位 id。 */
+function eroGetSelectedValues(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return [];
+    return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
 }
 
 function eroIsEnemy(u) { return u && (u.type === 'enemy' || u.type === 'boss'); }
@@ -143,11 +154,13 @@ function renderErosionConsole() {
 
     // 保留目前選取，避免重繪時清空
     const prevSource = document.getElementById('ero-source')?.value || '';
-    const prevAbsorber = document.getElementById('ero-absorber')?.value || '';
+    const prevAbsorbers = eroGetSelectedValues('ero-absorber');
     const prevThreshold = document.getElementById('ero-threshold')?.value || ERO_DEFAULT_THRESHOLD;
-    const prevReviveTarget = document.getElementById('ero-revive-target')?.value || '';
+    const prevReviveTargets = eroGetSelectedValues('ero-revive-target');
 
-    const absorber = (typeof findUnitById === 'function' && prevAbsorber) ? findUnitById(prevAbsorber) : null;
+    // 暴走閾值狀態列：多選吸收者時，僅以第一位作為顯示／判定基準（與單選邏輯相容）
+    const firstAbsorberId = prevAbsorbers[0] || '';
+    const absorber = (typeof findUnitById === 'function' && firstAbsorberId) ? findUnitById(firstAbsorberId) : null;
     const absorberErosion = eroGetErosionLayers(absorber);
     const threshold = parseInt(prevThreshold, 10) || ERO_DEFAULT_THRESHOLD;
     const overloadReady = absorber && absorberErosion >= threshold;
@@ -169,8 +182,8 @@ function renderErosionConsole() {
 
         <div class="ero-section">
             <div class="ero-section-title">⛑️ 復活與刻度連動</div>
-            <div class="ero-field"><label>目標玩家</label>
-                <select id="ero-revive-target" class="ero-select"></select></div>
+            <div class="ero-field"><label>目標玩家（可多選，同回合多人復活時請一起選取）</label>
+                <select id="ero-revive-target" class="ero-select" multiple size="4"></select></div>
             <button class="ero-btn ero-revive" onclick="eroReviveTarget()">⛑️ 復活並重置血量</button>
             <div id="ero-revive-tick-prompt" class="ero-btn-row hidden">
                 <button class="ero-btn ero-minus" onclick="eroConfirmReviveTick(-1)">單人 -1</button>
@@ -183,16 +196,16 @@ function renderErosionConsole() {
             <div class="ero-section-title">🩸 罪業抽取與侵蝕暴走</div>
             <div class="ero-field"><label>來源（敵方）</label>
                 <select id="ero-source" class="ero-select"></select></div>
-            <div class="ero-field"><label>吸收者（玩家）</label>
-                <select id="ero-absorber" class="ero-select" onchange="renderErosionConsole()"></select></div>
+            <div class="ero-field"><label>吸收者（玩家，可多選；多人復活時將均攤抽取到的侵蝕層數）</label>
+                <select id="ero-absorber" class="ero-select" multiple size="4" onchange="renderErosionConsole()"></select></div>
             <div class="ero-field"><label>暴走閾值</label>
                 <input id="ero-threshold" class="ero-input" type="number" min="1" value="${threshold}" onchange="renderErosionConsole()"></div>
 
             <div class="ero-status-line">
-                吸收者目前侵蝕增幅：<b class="${overloadReady ? 'ero-over' : ''}">${absorberErosion}</b> / ${threshold}
+                吸收者目前侵蝕增幅（第一位）：<b class="${overloadReady ? 'ero-over' : ''}">${absorberErosion}</b> / ${threshold}
             </div>
 
-            <button class="ero-btn ero-drain" onclick="eroDrainSin()">🩸 抽取罪業</button>
+            <button class="ero-btn ero-drain" onclick="eroDrainSin()">🩸 抽取罪業（均攤給所有已選吸收者）</button>
 
             <div class="ero-overload-area">
                 <button class="ero-btn ero-roll" onclick="eroRollTarget()" ${overloadReady ? '' : 'disabled'}>
@@ -203,19 +216,18 @@ function renderErosionConsole() {
 
     // 單位下拉以 DOM 填充（名稱用 textContent，避免 innerHTML 注入）
     eroPopulateSelect('ero-source', eroIsEnemy, prevSource);
-    eroPopulateSelect('ero-absorber', eroIsPlayer, prevAbsorber);
-    eroPopulateSelect('ero-revive-target', eroIsPlayer, prevReviveTarget);
+    eroPopulateSelect('ero-absorber', eroIsPlayer, prevAbsorbers);
+    eroPopulateSelect('ero-revive-target', eroIsPlayer, prevReviveTargets);
 }
 
 // ===== 復活並重置血量（與刻度連動） =====
-/** 點擊「復活並重置血量」：立即重置目標玩家血量，並彈出刻度扣除快捷選項。 */
+/** 點擊「復活並重置血量」：立即重置所有已選目標玩家的血量（支援同回合多人復活），並彈出刻度扣除快捷選項。 */
 function eroReviveTarget() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const targetId = document.getElementById('ero-revive-target')?.value || '';
-    const target = (typeof findUnitById === 'function') ? findUnitById(targetId) : null;
-    if (!target) { if (typeof showToast === 'function') showToast('請先選擇要復活的目標玩家'); return; }
+    const targetIds = eroGetSelectedValues('ero-revive-target');
+    if (!targetIds.length) { if (typeof showToast === 'function') showToast('請先選擇要復活的目標玩家'); return; }
 
-    if (typeof resetUnitHp === 'function') resetUnitHp(targetId);
+    targetIds.forEach(id => { if (typeof resetUnitHp === 'function') resetUnitHp(id); });
 
     const prompt = document.getElementById('ero-revive-tick-prompt');
     if (prompt) prompt.classList.remove('hidden');
@@ -257,8 +269,8 @@ function eroIsDebuffStatusName(name) {
 function eroDrainSin() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
     const sourceId = document.getElementById('ero-source')?.value || '';
-    const absorberId = document.getElementById('ero-absorber')?.value || '';
-    if (!sourceId || !absorberId) { if (typeof showToast === 'function') showToast('請先選擇來源與吸收者'); return; }
+    const absorberIds = eroGetSelectedValues('ero-absorber');
+    if (!sourceId || !absorberIds.length) { if (typeof showToast === 'function') showToast('請先選擇來源與吸收者'); return; }
 
     const source = (typeof findUnitById === 'function') ? findUnitById(sourceId) : null;
     if (!source || !source.status) { if (typeof showToast === 'function') showToast('來源沒有任何狀態'); return; }
@@ -280,13 +292,19 @@ function eroDrainSin() {
     drainedKeys.forEach(k => { delete source.status[k]; });
     if (typeof syncUnitStatus === 'function') syncUnitStatus(sourceId);
 
-    // 轉化為吸收者的侵蝕增幅層數
+    // 轉化為吸收者的侵蝕增幅層數：同回合多人復活時，由所有已選吸收者均攤（無法整除的餘數依序分給前幾位，避免層數憑空消失）
+    const perHead = Math.floor(gained / absorberIds.length);
+    const remainder = gained - perHead * absorberIds.length;
     if (gained > 0 && typeof addStatusToUnit === 'function') {
-        addStatusToUnit(absorberId, ERO_STATUS_ID, gained);
+        absorberIds.forEach((id, idx) => {
+            const amount = perHead + (idx < remainder ? 1 : 0);
+            if (amount > 0) addStatusToUnit(id, ERO_STATUS_ID, amount);
+        });
     }
 
     if (typeof showToast === 'function') {
-        showToast(`抽取罪業：來源 ${total} 層負面 → 吸收者 +${gained} 侵蝕增幅`);
+        const splitNote = absorberIds.length > 1 ? `（${absorberIds.length} 人均攤）` : '';
+        showToast(`抽取罪業：來源 ${total} 層負面 → 共 +${gained} 侵蝕增幅${splitNote}`);
     }
     renderErosionConsole();
 }

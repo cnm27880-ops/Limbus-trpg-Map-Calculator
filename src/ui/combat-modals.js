@@ -123,7 +123,8 @@ function openThreatModal(unitId) {
  * @returns {{ dpBonus: number, extraSuccess: number, names: string[] }}
  */
 function cmResolveIdentityBonus(attackerUnit, targetUnit) {
-    const empty = { dpBonus: 0, extraSuccess: 0, names: [] };
+    // 所有欄位都給預設值，確保呼叫端（submitAttackModal / cqOnSTReview）即使走早退路徑也能安全存取
+    const empty = { dpBonus: 0, extraSuccess: 0, names: [], targetStatus: {}, statusNotes: [] };
     if (myRole === 'st') return empty;
     if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
 
@@ -163,10 +164,11 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
  */
 function submitAttackModal() {
     if (!attackModalTarget) return;
-    const dp = Number(document.getElementById('attack-dp').value) || 0;
-    const auto = Number(document.getElementById('attack-auto').value) || 0;
-    const ignoreDef = Math.max(0, Number(document.getElementById('attack-ignore-def').value) || 0);
-    const critVicious = Math.max(0, Number(document.getElementById('attack-crit-vicious').value) || 0);
+    // 嚴格整數轉型（parseInt 基底 10），避免字串相加（"10"+"5"→"105"）等型別污染
+    const dp = parseInt(document.getElementById('attack-dp').value, 10) || 0;
+    const auto = parseInt(document.getElementById('attack-auto').value, 10) || 0;
+    const ignoreDef = Math.max(0, parseInt(document.getElementById('attack-ignore-def').value, 10) || 0);
+    const critVicious = Math.max(0, parseInt(document.getElementById('attack-crit-vicious').value, 10) || 0);
 
     cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious });
 
@@ -249,8 +251,9 @@ function cqOnPendingDefense(data) {
 }
 
 function submitDefenseModal() {
-    const dp = Number(document.getElementById('defense-dp').value) || 0;
-    const auto = Number(document.getElementById('defense-auto').value) || 0;
+    // 嚴格整數轉型，與攻擊端一致，避免型別污染
+    const dp = parseInt(document.getElementById('defense-dp').value, 10) || 0;
+    const auto = parseInt(document.getElementById('defense-auto').value, 10) || 0;
 
     cmSaveMemo(DEFENSE_MODAL_MEMO_KEY, { dp, auto });
 

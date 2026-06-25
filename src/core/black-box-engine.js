@@ -154,11 +154,12 @@ function bbPushCombatLog(entry) {
             broadcastText: String(entry.broadcastText || '').slice(0, 300)
         });
 
-        // FIFO：push 鍵以時間排序，超過 100 筆時移除最舊者
+        // FIFO：以 .once 讀取（非監聽，不會造成無限迴圈），超過 100 筆時移除最舊者。
+        // push 鍵本身依時間遞增排序，明確 sort() 以確保移除的是最舊的鍵，與物件列舉順序無關。
         ref.once('value').then(snap => {
             const val = snap.val();
             if (!val) return;
-            const keys = Object.keys(val);
+            const keys = Object.keys(val).sort();
             if (keys.length > 100) {
                 keys.slice(0, keys.length - 100).forEach(k => ref.child(k).remove());
             }

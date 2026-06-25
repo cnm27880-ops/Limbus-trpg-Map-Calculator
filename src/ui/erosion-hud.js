@@ -143,7 +143,7 @@ function renderErosionConsole() {
 
     const absorber = (typeof findUnitById === 'function' && prevAbsorber) ? findUnitById(prevAbsorber) : null;
     const absorberErosion = eroGetErosionLayers(absorber);
-    const threshold = parseInt(prevThreshold) || ERO_DEFAULT_THRESHOLD;
+    const threshold = parseInt(prevThreshold, 10) || ERO_DEFAULT_THRESHOLD;
     const overloadReady = absorber && absorberErosion >= threshold;
 
     body.innerHTML = `
@@ -253,7 +253,7 @@ function eroDrainSin() {
 function eroRollTarget() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
     const absorberId = document.getElementById('ero-absorber')?.value || '';
-    const threshold = parseInt(document.getElementById('ero-threshold')?.value) || ERO_DEFAULT_THRESHOLD;
+    const threshold = parseInt(document.getElementById('ero-threshold')?.value, 10) || ERO_DEFAULT_THRESHOLD;
     const absorber = (typeof findUnitById === 'function') ? findUnitById(absorberId) : null;
     if (!absorber) { if (typeof showToast === 'function') showToast('請先選擇吸收者'); return; }
     if (eroGetErosionLayers(absorber) < threshold) { if (typeof showToast === 'function') showToast('尚未達到暴走閾值'); return; }

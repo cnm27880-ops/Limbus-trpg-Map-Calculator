@@ -304,7 +304,10 @@ function cqOnSTReview(data) {
     const counterPhaseDpBonus = Number(atk.counterPhaseDpBonus) || 0;
     const ctx = document.getElementById('st-review-context');
     if (ctx) {
-        const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
+        // 以 DOM 節點 + textContent 建構（不用 innerHTML），從根本杜絕 XSS：
+        // data.* 來自跨客戶端的戰鬥隊列，可能含使用者輸入的人格卡/狀態名稱。
+        ctx.textContent = '';
+
         // 卡片清單：每筆修正獨立色塊，依語意上色（加成=綠 / 減益=紅 / 資源類=藍），
         // ST 可一眼用顏色判斷修正方向，不必逐字閱讀。
         const rows = [];
@@ -318,17 +321,38 @@ function cqOnSTReview(data) {
         if (Array.isArray(atk.identityStatusNotes) && atk.identityStatusNotes.length)
             rows.push({ label: '對目標施加', value: atk.identityStatusNotes.join('、'), cls: 'is-penalty' });
 
-        let html = '';
         if (rows.length) {
-            html += '<div class="calc-detail-list">' + rows.map(r =>
-                `<div class="calc-detail-row ${r.cls}"><span class="calc-detail-label">${esc(r.label)}</span><span class="calc-detail-value">${esc(r.value)}</span></div>`
-            ).join('') + '</div>';
+            const list = document.createElement('div');
+            list.className = 'calc-detail-list';
+            rows.forEach(r => {
+                const row = document.createElement('div');
+                row.className = 'calc-detail-row ' + r.cls;
+                const label = document.createElement('span');
+                label.className = 'calc-detail-label';
+                label.textContent = r.label;
+                const value = document.createElement('span');
+                value.className = 'calc-detail-value';
+                value.textContent = r.value;
+                row.appendChild(label);
+                row.appendChild(value);
+                list.appendChild(row);
+            });
+            ctx.appendChild(list);
         }
+
         // 動態隱藏：完整公式流水帳預設收合，點「展開」才看到，減少視覺噪音
         if (data.debugStr) {
-            html += `<details class="calc-detail-collapse"><summary>展開完整計算公式</summary><div class="calc-detail-raw">${esc(data.debugStr)}</div></details>`;
+            const details = document.createElement('details');
+            details.className = 'calc-detail-collapse';
+            const summary = document.createElement('summary');
+            summary.textContent = '展開完整計算公式';
+            const raw = document.createElement('div');
+            raw.className = 'calc-detail-raw';
+            raw.textContent = data.debugStr;
+            details.appendChild(summary);
+            details.appendChild(raw);
+            ctx.appendChild(details);
         }
-        ctx.innerHTML = html;
     }
 
     document.getElementById('st-review-modifier').value = 0;

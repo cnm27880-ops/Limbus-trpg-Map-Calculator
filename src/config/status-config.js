@@ -1180,4 +1180,31 @@ function removeFromFavorites(statusId) {
     localStorage.setItem(FAVORITE_STATUS_KEY, JSON.stringify(favorites));
 }
 
+/**
+ * 「常用」與「人格卡」分類混有增益與減益，沒有明確 isDebuff 標記的狀態以此白名單回退判斷。
+ * debuff／mental 分類預設視為負面狀態；custom 自訂狀態若未勾選 isDebuff 則預設非負面。
+ */
+const STATUS_DEBUFF_ID_FALLBACK = [
+    'burn', 'bleed', 'fragile', 'stun', 'paralyze', 'freeze', 'entangle', 'tremor', 'nails',
+    'weakness', 'flaw', 'dazzled', 'helpless', 'unconscious', 'paralyzed', 'stunned', 'sleep',
+    'exhausted', 'blind', 'deaf', 'tinnitus', 'airborne', 'prone', 'immobilized', 'slow',
+    'limb_impair', 'fatigue', 'pain', 'weak', 'banish', 'frozen_solid', 'limb_disabled', 'fear',
+    'mental_bind', 'depression', 'charmed', 'fascinated', 'silence', 'seal', 'addiction',
+    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking'
+];
+
+/**
+ * 判斷某狀態是否為「負面狀態」（供罪業抽取等 AI 相關功能使用）。
+ * 優先順序：狀態定義明確的 isDebuff 欄位 ＞ 分類預設（debuff/mental＝負面）＞ ID 白名單回退。
+ * @param {string} statusId - 狀態 ID
+ * @returns {boolean}
+ */
+function isDebuffStatus(statusId) {
+    const def = getStatusById(statusId);
+    if (def && typeof def.isDebuff === 'boolean') return def.isDebuff;
+    const cat = getStatusCategory(statusId);
+    if (cat === 'debuff' || cat === 'mental') return true;
+    return STATUS_DEBUFF_ID_FALLBACK.includes(statusId);
+}
+
 console.log('📋 狀態效果資料庫已載入');

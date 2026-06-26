@@ -819,6 +819,10 @@ function openCustomStatusModal() {
                     </div>
 
                     <div class="form-group">
+                        <label><input type="checkbox" id="custom-status-isDebuff"> 這是負面狀態（可被罪業抽取等功能視為減益）</label>
+                    </div>
+
+                    <div class="form-group">
                         <label>簡短描述：</label>
                         <input type="text" id="custom-status-desc" placeholder="例如：受到詛咒影響">
                     </div>
@@ -879,13 +883,14 @@ function createCustomStatus() {
     const desc = document.getElementById('custom-status-desc')?.value.trim() || '自訂狀態';
     const fullDesc = document.getElementById('custom-status-fullDesc')?.value.trim();
     const category = document.getElementById('custom-status-category')?.value || 'custom';
+    const isDebuff = !!document.getElementById('custom-status-isDebuff')?.checked;
 
     if (!name) {
         showToast('請輸入狀態名稱');
         return;
     }
 
-    // 建立自訂狀態物件（category 決定顯示在哪個分類網格）
+    // 建立自訂狀態物件（category 決定顯示在哪個分類網格；isDebuff 供罪業抽取等 AI 功能判斷負面狀態）
     const newStatus = {
         id: 'custom_' + Date.now(),
         name,
@@ -894,6 +899,7 @@ function createCustomStatus() {
         desc,
         fullDesc: fullDesc || desc,
         category,
+        isDebuff,
         isCustom: true
     };
 

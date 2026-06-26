@@ -301,6 +301,18 @@
                     <span class="calc-label">嚴重轉惡性點數</span>
                     <input type="number" id="attack-crit-vicious" value="0" min="0">
                 </div>
+                <div class="calc-field">
+                    <span class="calc-label">破甲（等效 DP）</span>
+                    <input type="number" id="attack-armor-pierce" value="0" min="0">
+                </div>
+                <div class="calc-field">
+                    <span class="calc-label">高速（等效 DP）</span>
+                    <input type="number" id="attack-haste-pierce" value="0" min="0">
+                </div>
+                <div class="calc-field">
+                    <span class="calc-label">破魔（等效 DP）</span>
+                    <input type="number" id="attack-magic-pierce" value="0" min="0">
+                </div>
             </div>
         </div>
         <div class="modal-footer">
@@ -404,6 +416,15 @@
     </div>
 </div>
 
+<!-- 本回合對抗分配：浮動面板（玩家端，送出後仍可查看，可雙擊縮放、可關閉、可由快捷球重開） -->
+<div id="counter-float-panel" class="counter-float-panel hidden" ondblclick="cpToggleZoomFloatPanel(event)">
+    <div class="counter-float-header">
+        <span class="counter-float-title">⚔️ 本回合對抗分配</span>
+        <button class="counter-float-close" onclick="cpCloseFloatPanel(event)">×</button>
+    </div>
+    <div class="counter-float-body" id="counter-float-body">尚未開始本輪徵詢</div>
+</div>
+
 <!-- 快速操作球 (Quick Action Ball) -->
 <div id="quick-action-ball" class="qab-container">
     <!-- 彈出選單 -->
@@ -423,6 +444,10 @@
         <div class="qab-menu-item" id="qab-erosion-item" style="display:none;" onclick="toggleErosionHud(); closeQABMenu();">
             <span class="qab-menu-icon">🔥</span>
             <span class="qab-menu-text">侵蝕控制台</span>
+        </div>
+        <div class="qab-menu-item" id="qab-counter-panel-item" style="display:none;" onclick="cpToggleFloatPanel(); closeQABMenu();">
+            <span class="qab-menu-icon">⚔️</span>
+            <span class="qab-menu-text">本回合對抗分配</span>
         </div>
         <div class="qab-menu-item" onclick="toggleHotkeyHelp(); closeQABMenu();">
             <span class="qab-menu-icon">⌨</span>

@@ -11,12 +11,8 @@ const ERO_CLOCK_MAX = 24;
 const ERO_STATUS_ID = 'erosion_amplify';
 const ERO_STATUS_NAME = '侵蝕增幅';
 const ERO_DEFAULT_THRESHOLD = 20;
-// 「負面狀態」判定：可被抽取的罪業 =
-//   (a) 分類屬於「負面與失能 / 精神與心智」者，或
-//   (b) 分類為「常用」但本質為負面減益的狀態（燃燒/流血/麻痺…，常用分類混有增益故需白名單）。
-// 排除增益與資源類（人民之盾/再生/充能/迅捷…）與侵蝕增幅自身，避免把吸收者的能量也算進去。
-const ERO_DEBUFF_CATEGORIES = ['debuff', 'mental'];
-const ERO_DEBUFF_COMMON_IDS = ['burn', 'bleed', 'fragile', 'stun', 'paralyze', 'freeze', 'entangle', 'tremor', 'nails', 'weakness', 'flaw', 'dazzled'];
+// 「負面狀態」判定統一委派給 status-config.js 的 isDebuffStatus()，
+// 以支援狀態定義明確標記 isDebuff，以及自訂狀態建立時的負面標記。
 
 let eroClockTicks = ERO_CLOCK_MAX;
 
@@ -257,13 +253,11 @@ function eroResetClock() { eroWriteClock(ERO_CLOCK_MAX); }
 
 // ===== 罪業抽取 =====
 function eroIsDebuffStatusName(name) {
-    if (typeof getStatusByName !== 'function' || typeof getStatusCategory !== 'function') return false;
+    if (typeof getStatusByName !== 'function' || typeof isDebuffStatus !== 'function') return false;
     const def = getStatusByName(name);
     if (!def) return false;
     if (def.id === ERO_STATUS_ID) return false; // 侵蝕增幅本身不算罪業
-    const cat = getStatusCategory(def.id);
-    if (ERO_DEBUFF_CATEGORIES.includes(cat)) return true;
-    return ERO_DEBUFF_COMMON_IDS.includes(def.id);
+    return isDebuffStatus(def.id);
 }
 
 function eroDrainSin() {
@@ -275,21 +269,26 @@ function eroDrainSin() {
     const source = (typeof findUnitById === 'function') ? findUnitById(sourceId) : null;
     if (!source || !source.status) { if (typeof showToast === 'function') showToast('來源沒有任何狀態'); return; }
 
-    // 加總來源所有「負面狀態」層數，並記下要清除的狀態鍵
+    // 只抽取每個負面狀態層數的一半（向下取整），保留另一半在來源身上；
+    // gained 以實際被扣除的層數總和為準，避免與「扣除量」不一致。
     let total = 0;
-    const drainedKeys = [];
+    let gained = 0;
     for (const [name, val] of Object.entries(source.status)) {
         if (!eroIsDebuffStatusName(name)) continue;
         const layers = parseInt(val) || 0;
-        if (layers > 0) { total += layers; drainedKeys.push(name); }
+        if (layers <= 0) continue;
+        total += layers;
+        const removeAmt = Math.floor(layers / 2);
+        if (removeAmt <= 0) continue;
+        gained += removeAmt;
+        const remaining = layers - removeAmt;
+        if (remaining > 0) source.status[name] = String(remaining);
+        else delete source.status[name];
     }
 
     if (total <= 0) { if (typeof showToast === 'function') showToast('來源沒有可抽取的負面狀態'); return; }
+    if (gained <= 0) { if (typeof showToast === 'function') showToast('負面狀態層數不足以抽取（至少需 2 層）'); return; }
 
-    const gained = Math.floor(total / 2);
-
-    // 扣除（清空）來源被抽取的負面狀態層數
-    drainedKeys.forEach(k => { delete source.status[k]; });
     if (typeof syncUnitStatus === 'function') syncUnitStatus(sourceId);
 
     // 轉化為吸收者的侵蝕增幅層數：同回合多人復活時，由所有已選吸收者均攤（無法整除的餘數依序分給前幾位，避免層數憑空消失）

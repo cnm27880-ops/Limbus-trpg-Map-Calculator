@@ -719,7 +719,31 @@ function refreshIdentityResult() {
     if (identityHudState.lastResult) computeIdentityResult(true);
 }
 
-// ===== 套用 =====
+// ===== 套用（含二次確認防誤觸） =====
+
+/**
+ * 套用目標/自身狀態按鈕的二次確認：第一次點擊只將按鈕文字改為「確認套用？」並武裝（armed），
+ * 第二次點擊（仍處於武裝狀態）才真正執行 actionFnName；點擊其他地方使按鈕失焦（onblur）會還原。
+ * @param {HTMLElement} btn
+ * @param {string} actionFnName - 要執行的函式名稱（如 'applyIdentityTargetStatus'）
+ */
+function idtConfirmClick(btn, actionFnName) {
+    if (!btn) return;
+    if (btn.dataset.armed === '1') {
+        idtResetConfirmBtn(btn);
+        if (typeof window[actionFnName] === 'function') window[actionFnName]();
+        return;
+    }
+    btn.dataset.armed = '1';
+    btn.textContent = '⚠️ 確認套用？';
+}
+
+/** 還原確認按鈕的武裝狀態與文字（失焦或執行後呼叫）。 */
+function idtResetConfirmBtn(btn) {
+    if (!btn) return;
+    btn.dataset.armed = '0';
+    btn.textContent = btn.dataset.label || btn.textContent;
+}
 
 function applyIdentityTargetStatus() {
     const r = identityHudState.lastResult;
@@ -871,8 +895,8 @@ function renderIdentityResult() {
     if (selfStatus) html += `<div class="idt-statline">🔵 預計施加自身：<b>${selfStatus}</b></div>`;
 
     html += '<div class="idt-apply-row">'
-        + '<button class="idt-btn idt-btn-mini" onclick="applyIdentityTargetStatus()">🎯 套用目標狀態</button>'
-        + '<button class="idt-btn idt-btn-mini" onclick="applyIdentitySelfStatus()">🔵 套用自身狀態</button>'
+        + '<button type="button" class="idt-btn idt-btn-mini" data-label="🎯 套用目標狀態" onclick="idtConfirmClick(this, \'applyIdentityTargetStatus\')" onblur="idtResetConfirmBtn(this)">🎯 套用目標狀態</button>'
+        + '<button type="button" class="idt-btn idt-btn-mini" data-label="🔵 套用自身狀態" onclick="idtConfirmClick(this, \'applyIdentitySelfStatus\')" onblur="idtResetConfirmBtn(this)">🔵 套用自身狀態</button>'
         + '</div>';
 
     if (autoLogs.length) {

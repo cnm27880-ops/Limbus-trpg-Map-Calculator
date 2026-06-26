@@ -39,6 +39,9 @@ function openAttackModal(unitId) {
     document.getElementById('attack-auto').value = memo.auto ?? 0;
     document.getElementById('attack-ignore-def').value = memo.ignoreDef ?? 0;
     document.getElementById('attack-crit-vicious').value = memo.critVicious ?? 0;
+    document.getElementById('attack-armor-pierce').value = memo.armorPierce ?? 0;
+    document.getElementById('attack-haste-pierce').value = memo.hastePierce ?? 0;
+    document.getElementById('attack-magic-pierce').value = memo.magicPierce ?? 0;
 
     // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
     threatPendingStatuses = [];
@@ -169,8 +172,12 @@ function submitAttackModal() {
     const auto = parseInt(document.getElementById('attack-auto').value, 10) || 0;
     const ignoreDef = Math.max(0, parseInt(document.getElementById('attack-ignore-def').value, 10) || 0);
     const critVicious = Math.max(0, parseInt(document.getElementById('attack-crit-vicious').value, 10) || 0);
+    // 破甲/高速/破魔：簡化為直接等效 DP，併入黑箱計算的攻擊 DP 桶（見 black-box-engine.js）
+    const armorPierce = Math.max(0, parseInt(document.getElementById('attack-armor-pierce').value, 10) || 0);
+    const hastePierce = Math.max(0, parseInt(document.getElementById('attack-haste-pierce').value, 10) || 0);
+    const magicPierce = Math.max(0, parseInt(document.getElementById('attack-magic-pierce').value, 10) || 0);
 
-    cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious });
+    cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious, armorPierce, hastePierce, magicPierce });
 
     // 攻擊方單位：玩家＝自己控制的單位；ST 發起威脅＝目前作用中的 BOSS（用於套用 BOSS 攻擊修正）
     let attackerUnit = null;
@@ -195,6 +202,7 @@ function submitAttackModal() {
         // 火力統計／AI 遭遇構築需以此區分，避免 ST 擲骰污染玩家平均火力。
         attackerRole: (myRole === 'st') ? 'enemy' : 'player',
         dp, auto, ignoreDef, critVicious,
+        armorPierce, hastePierce, magicPierce,
         identityDpBonus: identityBonus.dpBonus,
         identityExtraSuccess: identityBonus.extraSuccess,
         identityNotes: identityBonus.names,
@@ -341,46 +349,97 @@ function cqOnIdle() {
 }
 
 /**
- * counter-phase.js 偵測到本回合徵詢已開始、且自己尚未送出分配時自動呼叫（玩家端）。
- * 列出本回合 BOSS 的所有行動供玩家勾選要對抗哪些。
+ * counter-phase.js 偵測到本回合徵詢已開始、且自己尚未送出分配時自動呼叫（玩家端）：
+ * 開啟（並渲染）浮動面板，供玩家勾選要對抗哪些 BOSS 行動。
+ * 面板送出後不會關閉，會持續顯示每個行動目前被誰對抗（以棋子名稱顯示）或「等待對抗中……」，
+ * 玩家可雙擊縮放、可關閉，並能由右下快捷球「本回合對抗分配」重新開啟。
  */
 function openCounterAssignModal() {
-    const existing = document.getElementById('counter-assign-modal');
-    if (existing) existing.remove();
+    cpShowFloatPanel();
+    cpRenderFloatPanel();
+}
 
-    const boss = (typeof findUnitById === 'function') ? findUnitById(counterPhaseState.bossId) : null;
+/**
+ * 渲染浮動面板內容。尚未送出：顯示可勾選的行動清單與送出按鈕；
+ * 已送出：顯示唯讀狀態（行動對應的棋子名稱，或「等待對抗中……」），並持續即時更新。
+ */
+function cpRenderFloatPanel() {
+    const body = document.getElementById('counter-float-body');
+    if (!body) return;
+    const item = document.getElementById('qab-counter-panel-item');
+
+    if (typeof counterPhaseState === 'undefined' || !counterPhaseState.started) {
+        body.textContent = '尚未開始本輪徵詢';
+        if (item) item.style.display = 'none';
+        return;
+    }
+    if (item && myRole !== 'st') item.style.display = 'flex';
+
     const actions = counterPhaseState.actions || [];
-    const rows = actions.map(a => `
-        <label class="counter-assign-row">
-            <input type="checkbox" value="${a.id}" class="counter-assign-check">
-            <span>${escapeHtml(a.label)}（先攻 ${a.init}）</span>
-        </label>
-    `).join('');
+    const assignments = counterPhaseState.assignments || {};
+    const mine = (myRole !== 'st') ? assignments[myPlayerId] : undefined;
+    const hasSubmitted = mine !== undefined;
 
-    const html = `
-        <div class="modal-overlay show" id="counter-assign-modal">
-            <div class="modal" style="max-width:380px;">
-                <div class="modal-header">
-                    <span style="font-weight:bold;">⚔️ 本回合對抗分配${boss ? '：' + escapeHtml(boss.name || '') : ''}</span>
-                </div>
-                <div class="modal-body">
-                    <p style="font-size:0.85rem;color:var(--text-dim);">勾選你這回合要對抗的 BOSS 行動（可複選，可不選）。未勾選任何行動，本回合你的攻擊 DP 會自動加成。</p>
-                    ${rows || '<div class="bb-hint">尚無行動資料</div>'}
-                </div>
-                <div class="modal-footer">
-                    <button class="modal-btn" onclick="submitCounterAssign()" style="background:var(--accent-green);width:100%;">送出</button>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', html);
+    if (!hasSubmitted && myRole !== 'st') {
+        const rows = actions.map(a => `
+            <label class="counter-assign-row">
+                <input type="checkbox" value="${a.id}" class="counter-float-check counter-assign-check">
+                <span>${escapeHtml(a.label)}（先攻 ${a.init}）</span>
+            </label>
+        `).join('');
+        body.innerHTML = `
+            <p style="font-size:0.8rem;color:var(--text-dim);margin:0 0 6px;">勾選你這回合要對抗的 BOSS 行動（可複選，可不選）。未勾選任何行動，本回合你的攻擊 DP 會自動加成。</p>
+            ${rows || '<div class="bb-hint">尚無行動資料</div>'}
+            <button class="modal-btn" onclick="submitCounterAssign()" style="background:var(--accent-green);width:100%;margin-top:8px;">送出</button>
+        `;
+        return;
+    }
+
+    // 已送出（或 ST 檢視）：唯讀顯示每個行動目前對抗狀態
+    const rows = actions.map(a => {
+        const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
+        const statusHtml = r.playerId
+            ? `<span class="ca-taken">${escapeHtml(r.playerName)}（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）</span>`
+            : `<span class="ca-waiting">等待對抗中……</span>`;
+        return `<div class="counter-float-row"><span>${escapeHtml(a.label)}</span>${statusHtml}</div>`;
+    }).join('');
+    const submittedCount = Object.keys(assignments).length;
+    body.innerHTML = `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">已送出 ${submittedCount} 人</div>${rows}`;
 }
 
 function submitCounterAssign() {
-    const checks = document.querySelectorAll('#counter-assign-modal .counter-assign-check:checked');
+    const checks = document.querySelectorAll('#counter-float-body .counter-assign-check:checked');
     const ids = Array.from(checks).map(c => c.value);
     cpSubmitAssignment(ids);
-    const modal = document.getElementById('counter-assign-modal');
-    if (modal) modal.remove();
     if (typeof showToast === 'function') showToast('已送出本回合對抗分配');
+    // assignments 會透過 Firebase 監聽回流並自動重新渲染為唯讀狀態，這裡先樂觀渲染避免畫面延遲
+    cpRenderFloatPanel();
+}
+
+/** 顯示浮動面板（不重置縮放狀態）。 */
+function cpShowFloatPanel() {
+    const panel = document.getElementById('counter-float-panel');
+    if (panel) panel.classList.remove('hidden');
+}
+
+/** 關閉浮動面板（玩家可隨時關閉，之後可由快捷球重新開啟）。 */
+function cpCloseFloatPanel(event) {
+    if (event) event.stopPropagation();
+    const panel = document.getElementById('counter-float-panel');
+    if (panel) panel.classList.add('hidden');
+}
+
+/** 快捷球「本回合對抗分配」選單項：重新開啟並渲染浮動面板。 */
+function cpToggleFloatPanel() {
+    const panel = document.getElementById('counter-float-panel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    cpRenderFloatPanel();
+}
+
+/** 雙擊面板標頭區域切換縮放（zoomed）大小，方便詳細查看。 */
+function cpToggleZoomFloatPanel(event) {
+    if (event && event.target && event.target.closest('.counter-float-close')) return;
+    const panel = document.getElementById('counter-float-panel');
+    if (panel) panel.classList.toggle('zoomed');
 }

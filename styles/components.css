@@ -1418,6 +1418,78 @@
     z-index: 155;
 }
 
+/* ===== 本回合對抗分配：浮動面板 ===== */
+.counter-float-panel {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 320px;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    z-index: 160;
+    transition: width 0.2s, max-height 0.2s, transform 0.2s;
+}
+
+.counter-float-panel.hidden {
+    display: none;
+}
+
+.counter-float-panel.zoomed {
+    width: 520px;
+    max-height: 80vh;
+}
+
+.counter-float-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, var(--bg-card), rgba(229, 57, 53, 0.12));
+    border-bottom: 1px solid var(--border);
+    cursor: default;
+    user-select: none;
+}
+
+.counter-float-title {
+    font-weight: bold;
+    color: var(--accent-red);
+    font-size: 0.95rem;
+}
+
+.counter-float-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.counter-float-body {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+}
+
+.counter-float-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.counter-float-row:last-child { border-bottom: none; }
+
+.counter-float-row .ca-waiting { color: var(--text-dim); font-style: italic; }
+.counter-float-row .ca-taken { color: var(--accent-green); font-weight: bold; }
+
+.counter-float-check {
+    margin-right: 6px;
+}
+
 /* ===== Hotkey Help ===== */
 .hotkey-help-panel {
     width: 280px;

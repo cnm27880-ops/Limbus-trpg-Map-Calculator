@@ -8,7 +8,8 @@
  * 本檔保留下列跨面板共用的函式：
  *   - 通用可拖曳 / 雙擊摺疊 / 位置夾限
  *   - 狀態名稱顯示輔助（getStatusName / getStatusDisplayName）
- *   - ST 群體操作 (AOE)（已整合進「多重行動設定」面板）
+ *
+ * 群體操作 (AOE) 已改為「長按 T 鍵」的選取模式，邏輯移至 src/ui/aoe-select.js。
  */
 
 // ===== Position Clamping =====
@@ -136,156 +137,9 @@ function getStatusDisplayName(statusId) {
 }
 
 
-// ===== ST AOE Manager =====
-
-let stAoePanelOpen = false;
-
-function toggleStAoePanel() {
-    const content = document.getElementById('st-aoe-panel-content');
-    const icon = document.getElementById('st-aoe-toggle-icon');
-    if (!content || !icon) return;
-
-    stAoePanelOpen = !stAoePanelOpen;
-    if (stAoePanelOpen) {
-        content.style.display = 'block';
-        icon.innerText = '▲';
-        renderStAoeTargetList();
-    } else {
-        content.style.display = 'none';
-        icon.innerText = '▼';
-    }
-}
-
-/**
- * 建立 AOE 狀態名稱自動補全清單（含自訂狀態）
- */
-function buildStAoeStatusDatalist() {
-    let dl = document.getElementById('st-aoe-status-options');
-    if (!dl) {
-        dl = document.createElement('datalist');
-        dl.id = 'st-aoe-status-options';
-        document.body.appendChild(dl);
-    }
-    const names = [];
-    if (typeof getAllStatuses === 'function') {
-        getAllStatuses().forEach(s => names.push(s.name));
-    }
-    if (typeof state !== 'undefined' && Array.isArray(state.customStatuses)) {
-        state.customStatuses.forEach(s => { if (s && s.name) names.push(s.name); });
-    }
-    dl.innerHTML = [...new Set(names)].map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
-}
-
-function renderStAoeTargetList() {
-    const listContainer = document.getElementById('st-aoe-target-list');
-    if (!listContainer) return;
-    listContainer.innerHTML = '';
-    buildStAoeStatusDatalist();
-
-    // 排除多重行動條目（沒有自己的血量，傷害應打在 BOSS 本體）
-    const targetableUnits = (state.units || []).filter(u => !u.actionSlotOf);
-
-    if (targetableUnits.length === 0) {
-        listContainer.innerHTML = '<div style="color:var(--text-dim);">場上無單位</div>';
-        return;
-    }
-
-    targetableUnits.forEach(u => {
-        const item = document.createElement('label');
-        item.style.display = 'flex';
-        item.style.alignItems = 'center';
-        item.style.padding = '2px 0';
-        item.style.cursor = 'pointer';
-
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.className = 'st-aoe-unit-checkbox';
-        cb.value = u.id;
-        cb.dataset.type = u.type || 'enemy'; // 'player', 'enemy', 'boss'
-
-        const nameSpan = document.createElement('span');
-        nameSpan.innerText = `${u.name || '未命名'} (${u.type === 'player' ? '玩家' : '敵人'})`;
-        nameSpan.style.marginLeft = '5px';
-
-        item.appendChild(cb);
-        item.appendChild(nameSpan);
-        listContainer.appendChild(item);
-    });
-}
-
-function stAoeSelect(mode) {
-    const checkboxes = document.querySelectorAll('.st-aoe-unit-checkbox');
-    checkboxes.forEach(cb => {
-        if (mode === 'players') {
-            cb.checked = (cb.dataset.type === 'player');
-        } else if (mode === 'enemies') {
-            cb.checked = (cb.dataset.type === 'enemy' || cb.dataset.type === 'boss');
-        } else if (mode === 'all') {
-            cb.checked = true;
-        } else if (mode === 'none') {
-            cb.checked = false;
-        } else if (mode === 'invert') {
-            cb.checked = !cb.checked;
-        }
-    });
-}
-
-function executeStAoeAction(type) {
-    const checkboxes = document.querySelectorAll('.st-aoe-unit-checkbox:checked');
-    const unitIds = Array.from(checkboxes).map(cb => cb.value);
-
-    if (unitIds.length === 0) {
-        if (typeof showToast === 'function') showToast('請先勾選目標單位');
-        return;
-    }
-
-    let actionData = { type };
-
-    if (type === 'damage' || type === 'heal') {
-        const val = parseInt(document.getElementById('st-aoe-value-input').value);
-        if (isNaN(val) || val <= 0) {
-            if (typeof showToast === 'function') showToast('請輸入有效數值');
-            return;
-        }
-        actionData.value = val;
-        if (type === 'damage') {
-            actionData.dmgType = document.getElementById('st-aoe-dmg-type')?.value || 'l';
-        }
-    } else if (type === 'status') {
-        const statusId = document.getElementById('st-aoe-status-id').value.trim();
-        const val = parseInt(document.getElementById('st-aoe-status-val').value) || 0;
-        if (!statusId) {
-            if (typeof showToast === 'function') showToast('請輸入狀態名稱');
-            return;
-        }
-        actionData.statusId = statusId;
-        actionData.value = val;
-    }
-
-    if (typeof applyBatchAction === 'function') {
-        applyBatchAction(unitIds, actionData);
-        if (typeof showToast === 'function') {
-            if (type === 'damage') {
-                const typeLabel = { b: 'B', l: 'L', a: 'A' }[actionData.dmgType] || '';
-                showToast(`對 ${unitIds.length} 個目標造成 ${actionData.value} 點 ${typeLabel} 傷`);
-            }
-            else if (type === 'heal') showToast(`為 ${unitIds.length} 個目標治癒 ${actionData.value} 點`);
-            else if (type === 'status') showToast(`對 ${unitIds.length} 個目標套用狀態 ${actionData.statusId}`);
-        }
-
-        if (typeof renderMap === 'function') renderMap();
-        if (typeof updateSidebarUnits === 'function') updateSidebarUnits();
-    }
-}
-
-function undoStAoe() {
-    if (typeof undoLastBatch === 'function') {
-        undoLastBatch();
-        if (typeof showToast === 'function') showToast('已復原上一步 AOE 操作');
-        if (typeof renderMap === 'function') renderMap();
-        if (typeof updateSidebarUnits === 'function') updateSidebarUnits();
-    }
-}
+// 註：舊版「ST AOE Manager」（多重行動面板內的勾選式群體操作）已移除，
+// 群體操作改由「長按 T 鍵」的選取模式處理，邏輯見 src/ui/aoe-select.js。
+// 核心結算（applyBatchAction / undoLastBatch）仍位於 src/core/state.js。
 
 // ===== Window bindings =====
 window.clampHudPosition = clampHudPosition;
@@ -293,10 +147,5 @@ window.setupPanelDrag = setupPanelDrag;
 window.setupPanelCollapse = setupPanelCollapse;
 window.getStatusName = getStatusName;
 window.getStatusDisplayName = getStatusDisplayName;
-window.toggleStAoePanel = toggleStAoePanel;
-window.renderStAoeTargetList = renderStAoeTargetList;
-window.stAoeSelect = stAoeSelect;
-window.executeStAoeAction = executeStAoeAction;
-window.undoStAoe = undoStAoe;
 
-console.log('戰鬥面板共用工具 + AOE 已載入');
+console.log('戰鬥面板共用工具已載入');

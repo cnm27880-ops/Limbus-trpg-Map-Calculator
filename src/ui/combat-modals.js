@@ -304,16 +304,31 @@ function cqOnSTReview(data) {
     const counterPhaseDpBonus = Number(atk.counterPhaseDpBonus) || 0;
     const ctx = document.getElementById('st-review-context');
     if (ctx) {
-        const notes = [];
-        if (ignoreDef > 0) notes.push(`無視防禦 ${ignoreDef} 點`);
-        if (critVicious > 0) notes.push(`嚴重轉惡性 ${critVicious} 點`);
-        if (identityDpBonus > 0) notes.push(`人格卡 DP +${identityDpBonus}`);
-        if (identityExtraSuccess > 0) notes.push(`人格卡額外成功 +${identityExtraSuccess}`);
-        if (counterPhaseDpBonus > 0) notes.push(`未對抗任何行動 DP +${counterPhaseDpBonus}`);
-        if (Array.isArray(atk.identityNotes) && atk.identityNotes.length) notes.push(`套用人格卡：${atk.identityNotes.join('、')}`);
-        if (Array.isArray(atk.identityStatusNotes) && atk.identityStatusNotes.length) notes.push(`人格已自動對目標施加：${atk.identityStatusNotes.join('、')}`);
-        const debugLine = data.debugStr ? `\n${data.debugStr}` : '';
-        ctx.innerText = (notes.length ? `攻擊方宣告：${notes.join('、')}` : '') + debugLine;
+        const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
+        // 卡片清單：每筆修正獨立色塊，依語意上色（加成=綠 / 減益=紅 / 資源類=藍），
+        // ST 可一眼用顏色判斷修正方向，不必逐字閱讀。
+        const rows = [];
+        if (ignoreDef > 0)            rows.push({ label: '無視防禦', value: `${ignoreDef} 點`, cls: 'is-resource' });
+        if (critVicious > 0)          rows.push({ label: '嚴重轉惡性', value: `${critVicious} 點`, cls: 'is-resource' });
+        if (identityDpBonus > 0)      rows.push({ label: '人格卡 DP', value: `+${identityDpBonus}`, cls: 'is-bonus' });
+        if (identityExtraSuccess > 0) rows.push({ label: '人格卡額外成功', value: `+${identityExtraSuccess}`, cls: 'is-bonus' });
+        if (counterPhaseDpBonus > 0)  rows.push({ label: '未對抗加成 DP', value: `+${counterPhaseDpBonus}`, cls: 'is-bonus' });
+        if (Array.isArray(atk.identityNotes) && atk.identityNotes.length)
+            rows.push({ label: '套用人格卡', value: atk.identityNotes.join('、'), cls: 'is-bonus' });
+        if (Array.isArray(atk.identityStatusNotes) && atk.identityStatusNotes.length)
+            rows.push({ label: '對目標施加', value: atk.identityStatusNotes.join('、'), cls: 'is-penalty' });
+
+        let html = '';
+        if (rows.length) {
+            html += '<div class="calc-detail-list">' + rows.map(r =>
+                `<div class="calc-detail-row ${r.cls}"><span class="calc-detail-label">${esc(r.label)}</span><span class="calc-detail-value">${esc(r.value)}</span></div>`
+            ).join('') + '</div>';
+        }
+        // 動態隱藏：完整公式流水帳預設收合，點「展開」才看到，減少視覺噪音
+        if (data.debugStr) {
+            html += `<details class="calc-detail-collapse"><summary>展開完整計算公式</summary><div class="calc-detail-raw">${esc(data.debugStr)}</div></details>`;
+        }
+        ctx.innerHTML = html;
     }
 
     document.getElementById('st-review-modifier').value = 0;

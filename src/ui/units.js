@@ -116,14 +116,14 @@ function renderUnitsList() {
             const isStView = myRole === 'st';
             const parent = findUnitById(u.actionSlotOf);
             const label = parent ? `${parent.name}・行動${u.slotIndex || ''}` : (u.name || '行動');
-            const slotClasses = ['unit-card', 'action-slot', u.type, isTurn ? 'active-turn' : ''].filter(Boolean).join(' ');
+            const slotClasses = ['unit-card', 'unit-card-subaction', 'action-slot', u.type, isTurn ? 'active-turn' : ''].filter(Boolean).join(' ');
             const slotInit = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${isStView ? '' : 'readonly'}>`;
             const slotDel = isStView ? `<button class="action-btn" onclick="deleteUnit('${u.id}')" title="刪除此行動條目">✕</button>` : '';
             return `
                 <div class="${slotClasses}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
                     <div class="unit-header" style="min-height:auto;">
                         <span class="slot-icon">⚔</span>
-                        <div style="flex:1;font-size:0.85rem;font-weight:600;color:var(--text-dim);">${escapeHtml(label)}</div>
+                        <div class="unit-name" title="${escapeHtml(label)}" style="flex:1;font-size:0.85rem;font-weight:600;color:var(--text-dim);">${escapeHtml(label)}</div>
                         ${slotDel}
                         ${slotInit}
                     </div>
@@ -220,7 +220,10 @@ function renderUnitsList() {
                 const escapedName = escapeHtml(statusName);
                 const encodedName = encodeURIComponent(statusName).replace(/'/g, '%27');
                 const displayValue = statusValue ? ` ${escapeHtml(statusValue)}` : '';
-                return `<span class="status-badge"
+                // 色彩編碼：負面狀態淡紅底、其餘（增益）淡綠底，讓 ST 用顏色快速判讀
+                const statusKey = statusDef ? statusDef.id : statusName;
+                const catCls = (typeof isDebuffStatus === 'function' && isDebuffStatus(statusKey)) ? 'cat-negative' : 'cat-positive';
+                return `<span class="status-badge ${catCls}"
                              data-tooltip="${escapedName}"
                              style="--badge-color: ${color}"
                              onclick="event.stopPropagation();onStatusTagClick(event, '${u.id}', '${encodedName}')">
@@ -302,8 +305,8 @@ function renderUnitsList() {
             <div class="${cardClasses}" style="${myUnitStyle}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
                 <div class="unit-header">
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
-                    <div style="flex:1;">
-                        <div style="font-weight:600;">${escapeHtml(u.name)}${hiddenBadge}${ownerTag}${shieldBadges}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div title="${escapeHtml(u.name)}" style="font-weight:600;">${escapeHtml(u.name)}${hiddenBadge}${ownerTag}${shieldBadges}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
@@ -333,16 +336,16 @@ function renderSidebarUnits() {
         // 隱形棋子：非 ST 玩家完全看不到
         if (myRole !== 'st' && u.hidden === true) return '';
 
-        // 多重行動條目：側欄精簡列
+        // 多重行動條目：側欄極簡子項目（縮排 + 左邊框，僅顯示行動代號與先攻）
         if (u.actionSlotOf) {
             const parent = findUnitById(u.actionSlotOf);
             const label = parent ? `${parent.name}・行動${u.slotIndex || ''}` : (u.name || '行動');
-            const slotClasses = ['unit-card', 'action-slot', u.type, isTurn ? 'active-turn' : ''].filter(Boolean).join(' ');
+            const slotClasses = ['unit-card', 'unit-card-subaction', 'action-slot', u.type, isTurn ? 'active-turn' : ''].filter(Boolean).join(' ');
             return `
                 <div class="${slotClasses}">
                     <div class="unit-header">
                         <div class="unit-info">
-                            <div class="unit-name" style="color:var(--text-dim);">⚔ ${escapeHtml(label)}</div>
+                            <div class="unit-name" title="${escapeHtml(label)}">⚔ ${escapeHtml(label)}</div>
                         </div>
                         <div class="unit-init-box">
                             <span class="unit-init-value">${u.init || 0}</span>
@@ -421,7 +424,7 @@ function renderSidebarUnits() {
             <div class="${cardClasses}" style="${sidebarHiddenStyle}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
                 <div class="unit-header">
                     <div class="unit-info">
-                        <div class="unit-name">${escapeHtml(unitName)}${hiddenSidebarBadge}</div>
+                        <div class="unit-name" title="${escapeHtml(unitName)}">${escapeHtml(unitName)}${hiddenSidebarBadge}</div>
                         <div class="unit-status">${statusTxt}</div>
                     </div>
                     <div class="hp-tactical-container">${tacticalBar}</div>
@@ -1212,40 +1215,12 @@ function openMultiActionModal(bossId) {
                         <div id="ma-counter-status" style="font-size:0.78rem;color:var(--text-dim);"></div>
                     </div>
 
-                    <!-- 群體操作 (AOE) -->
-                    <div class="skill-hud-aoe-section" id="skill-hud-aoe" style="padding:8px; border:1px solid var(--border); margin-top:10px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="toggleStAoePanel()">
-                            <span style="font-weight:bold; color:var(--accent-red);">💥 群體操作 (AOE)</span>
-                            <span id="st-aoe-toggle-icon">▼</span>
-                        </div>
-                        <div id="st-aoe-panel-content" style="display:none; margin-top:8px;">
-                            <div style="display:flex; gap:5px; margin-bottom:5px; flex-wrap:wrap;">
-                                <button class="skill-action-btn" style="flex:1; min-width:70px;" onclick="stAoeSelect('players')">全選玩家</button>
-                                <button class="skill-action-btn" style="flex:1; min-width:70px;" onclick="stAoeSelect('enemies')">全選敵人</button>
-                                <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('all')">全選</button>
-                                <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('none')">取消全選</button>
-                                <button class="skill-action-btn" style="flex:1; min-width:60px;" onclick="stAoeSelect('invert')">反選</button>
-                            </div>
-                            <div id="st-aoe-target-list" style="max-height:100px; overflow-y:auto; border:1px solid var(--border); padding:5px; margin-bottom:5px; font-size:0.8rem;"></div>
-                            <div style="display:flex; gap:5px; margin-bottom:5px; align-items:center;">
-                                <label style="font-size:0.8rem; color:var(--text-dim); flex-shrink:0;">數值</label>
-                                <input type="number" id="st-aoe-value-input" value="1" min="1" style="flex:1; min-width:0; padding:4px;">
-                                <select id="st-aoe-dmg-type" style="flex:0 0 auto; padding:4px;" title="傷害類型">
-                                    <option value="b">B傷</option>
-                                    <option value="l" selected>L傷</option>
-                                    <option value="a">A傷</option>
-                                </select>
-                                <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-red); color:#fff;" onclick="executeStAoeAction('damage')">傷害</button>
-                                <button class="skill-action-btn" style="flex:0 0 auto; background:var(--accent-green); color:#fff;" onclick="executeStAoeAction('heal')">治癒</button>
-                            </div>
-                            <div style="display:flex; gap:5px; margin-bottom:5px;">
-                                <input type="text" id="st-aoe-status-id" list="st-aoe-status-options" placeholder="狀態名稱（例：流血）" style="flex:2; min-width:0; padding:4px;">
-                                <input type="number" id="st-aoe-status-val" value="1" placeholder="層數" title="層數（負數可減層）" style="flex:1; min-width:0; padding:4px;">
-                                <button class="skill-action-btn" style="flex:0 0 auto;" onclick="executeStAoeAction('status')">套用狀態</button>
-                            </div>
-                            <div style="display:flex; gap:5px;">
-                                <button class="skill-action-btn" style="flex:1; background:#555; color:#fff;" onclick="undoStAoe()">復原上一步</button>
-                            </div>
+                    <!-- 群體操作 (AOE)：已改為「長按 T 鍵」的選取模式 -->
+                    <div class="skill-hud-aoe-section aoe-hint-card" style="padding:8px; border:1px solid var(--border); margin-top:10px;">
+                        <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">💥 群體操作 (AOE)</div>
+                        <div style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;">
+                            AOE 結算已移至全新的「<b>長按 T 鍵</b>」選取模式：長按 T → 點擊棋子選取（紅色光暈）→ 鬆開 T 結算。
+                            勾選為 <b>AOE</b> 的行動，其 DP / 狀態會在結算視窗自動帶入。
                         </div>
                     </div>
                 </div>
@@ -1340,23 +1315,6 @@ function maToggleAoe(index, checked) {
     renderMultiActionList();
 }
 
-/** 把指定行動的 DP / 狀態帶入下方的群體操作 (AOE) 區塊，供 ST 勾選目標後一次套用 */
-function maFillAoeFromAction(index) {
-    if (!maEdit || !maEdit.actions[index]) return;
-    const a = maEdit.actions[index];
-    if (!stAoePanelOpen && typeof toggleStAoePanel === 'function') toggleStAoePanel();
-    const valInput = document.getElementById('st-aoe-value-input');
-    if (valInput) valInput.value = a.dp || 0;
-    if (a.statuses.length) {
-        const s = a.statuses[0];
-        const nameInput = document.getElementById('st-aoe-status-id');
-        const stackInput = document.getElementById('st-aoe-status-val');
-        if (nameInput) nameInput.value = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
-        if (stackInput) stackInput.value = s.stacks;
-    }
-    if (typeof showToast === 'function') showToast(`已帶入行動${index + 1}數值，請於下方勾選目標後套用`);
-}
-
 /** 由輸入框（狀態名稱 + 層數）新增一個狀態到指定行動 */
 function maAddStatus(index) {
     if (!maEdit || !maEdit.actions[index]) return;
@@ -1408,7 +1366,6 @@ function renderMultiActionList() {
             <div class="ma-action-fields">
                 <label>先攻<input type="number" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
                 <label>DP<input type="number" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
-                <button class="ma-mini-btn" type="button" title="帶入下方群體操作(AOE)區塊" onclick="maFillAoeFromAction(${i})">↓ 帶入AOE</button>
             </div>
             <div class="ma-status-row">
                 <input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="狀態名稱（例：破裂）">

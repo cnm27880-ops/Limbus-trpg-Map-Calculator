@@ -267,6 +267,64 @@ test('防禦方走 QTE（data.defense）時不動用資源池', () => {
     assert.strictEqual(boss.defAutoRemaining, 3, '資源池不應被 QTE 流程改動');
 });
 
+// ====================================================================
+console.log('\n[Phase 1B] Firebase 寫入粒度優化：syncUnits 欄位級 diff');
+// ====================================================================
+// 在獨立沙箱載入真實的 firebase-connection.js，stub 掉 DOM/Firebase/設定，
+// 並以 roomRef.update 擷取實際寫出的多路徑 payload，驗證只寫變動欄位。
+(function () {
+    const fbSandbox = {
+        console, JSON, Object, Set, Array,
+        state: { units: [] },
+        window: { addEventListener() {} },
+        document: { getElementById: () => null, addEventListener() {} },
+        localStorage: { getItem: () => null, setItem() {} },
+        CONNECTION_CONFIG: { STORAGE_KEY: 'k' },
+    };
+    vm.createContext(fbSandbox);
+    const fbSrc = fs.readFileSync(path.join(ROOT, 'src/data/firebase-connection.js'), 'utf8')
+        + '\n;\nvar __fb = { syncUnits, setRoom: (r) => { roomRef = r; }, setSynced: (m) => { _syncedUnits = m; } };';
+    vm.runInContext(fbSrc, fbSandbox, { filename: 'firebase-connection.js' });
+    const fb = fbSandbox.__fb;
+
+    let calls = [];
+    fb.setRoom({ update: (u) => calls.push(u), child: () => ({ set() {} }) });
+
+    // 基準單位（含 base64 頭像，驗證不變時不重寫）
+    const mk = (o) => Object.assign({
+        id: 'u1', name: 'A', hp: 10, maxHp: 10, x: 1, y: 1,
+        avatar: 'data:image/png;base64,AAAA', status: { burn: '3' }, sortOrder: 0
+    }, o);
+    const eq = (a, b) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
+
+    test('無變動 → 不寫入', () => {
+        calls = []; fbSandbox.state.units = [mk()]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); assert.strictEqual(calls.length, 0);
+    });
+    test('只改 hp → 只寫 units/u1/hp（不動其他欄位/頭像）', () => {
+        calls = []; fbSandbox.state.units = [mk({ hp: 5 })]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); eq(calls[0], { 'units/u1/hp': 5 });
+    });
+    test('改 status 物件 → 整個 status 欄位', () => {
+        calls = []; fbSandbox.state.units = [mk({ status: { burn: '5' } })]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); eq(calls[0], { 'units/u1/status': { burn: '5' } });
+    });
+    test('新單位 → 整筆寫入', () => {
+        calls = []; fbSandbox.state.units = [mk(), mk({ id: 'u2', sortOrder: 1 })]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); assert.ok('units/u2' in calls[0] && calls[0]['units/u2'].id === 'u2');
+    });
+    test('移除單位 → units/u1 = null', () => {
+        calls = []; fbSandbox.state.units = []; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); eq(calls[0], { 'units/u1': null });
+    });
+    test('順序改變 → 只寫 sortOrder', () => {
+        calls = [];
+        fbSandbox.state.units = [mk({ id: 'b', sortOrder: 1 }), mk({ id: 'a', sortOrder: 0 })];
+        fb.setSynced({ a: mk({ id: 'a', sortOrder: 0 }), b: mk({ id: 'b', sortOrder: 1 }) });
+        fb.syncUnits(); eq(calls[0], { 'units/b/sortOrder': 0, 'units/a/sortOrder': 1 });
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

@@ -1,0 +1,15 @@
+{
+  "name": "limbus-command",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Limbus Command - TRPG 戰棋地圖與戰鬥計算工具",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node tests/unit-tests.js"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}

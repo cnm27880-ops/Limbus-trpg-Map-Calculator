@@ -325,6 +325,54 @@ console.log('\n[Phase 1B] Firebase 寫入粒度優化：syncUnits 欄位級 diff
     });
 })();
 
+// ====================================================================
+console.log('\n[Phase 3A] WindowManager：z-index 分層與點擊置頂');
+// ====================================================================
+(function () {
+    const handlers = new Map();
+    const mkEl = () => {
+        const el = { style: {}, addEventListener: (t, h) => { if (t === 'pointerdown') handlers.set(el, h); } };
+        return el;
+    };
+    const wmSandbox = {
+        console, Map, parseInt, String,
+        window: {},
+        document: { readyState: 'complete', getElementById: () => null, addEventListener() {} },
+    };
+    vm.createContext(wmSandbox);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/ui/window-manager.js'), 'utf8'), wmSandbox, { filename: 'window-manager.js' });
+    const WM = wmSandbox.window.WindowManager;
+    const click = (el) => handlers.get(el)();
+
+    test('同 tier 註冊後 z-index 依序遞增', () => {
+        const a = mkEl(), b = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(b, { tier: 'float' });
+        assert.ok(+b.style.zIndex > +a.style.zIndex);
+    });
+    test('點擊較低面板 → 在同 tier 內置頂', () => {
+        const a = mkEl(), b = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(b, { tier: 'float' });
+        click(a);
+        assert.ok(+a.style.zIndex > +b.style.zIndex);
+    });
+    test('各 tier 的 z-index 落在自己的區間（不跨層）', () => {
+        const a = mkEl(), c = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(c, { tier: 'panel' });
+        assert.ok(+a.style.zIndex >= 150 && +a.style.zIndex <= 199);
+        assert.ok(+c.style.zIndex >= 9400 && +c.style.zIndex <= 9690);
+    });
+    test('區間用盡 → renormalize 壓回 base 且保留相對順序', () => {
+        const a = mkEl(), b = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(b, { tier: 'float' });
+        WM._tiers.float.counter = 199; click(b);
+        assert.ok(+a.style.zIndex <= 199 && +b.style.zIndex <= 199 && +b.style.zIndex > +a.style.zIndex);
+    });
+    test('WM_Z 層級常數單調遞增（modal < panel < login < warning < broadcast）', () => {
+        const Z = wmSandbox.window.WM_Z;
+        assert.ok(Z.MODAL < Z.PANEL && Z.PANEL < Z.LOGIN && Z.LOGIN < Z.WARNING && Z.WARNING < Z.BROADCAST);
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

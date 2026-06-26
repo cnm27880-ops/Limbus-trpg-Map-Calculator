@@ -73,13 +73,20 @@ function bbRunBlackBoxCalculation(data) {
     const atkDpDeclared = bbSafeNumber(attacker.dp);
     const atkIdentityDp = bbSafeNumber(attacker.identityDpBonus);
     const atkCounterDp = bbSafeNumber(attacker.counterPhaseDpBonus);
-    let atkDpTotal = atkDpDeclared + atkIdentityDp + atkCounterDp;
+    // 破甲/高速/破魔：簡化為直接等效 DP，併入攻擊 DP 桶
+    const atkArmorPierce = bbSafeNumber(attacker.armorPierce);
+    const atkHastePierce = bbSafeNumber(attacker.hastePierce);
+    const atkMagicPierce = bbSafeNumber(attacker.magicPierce);
+    let atkDpTotal = atkDpDeclared + atkIdentityDp + atkCounterDp + atkArmorPierce + atkHastePierce + atkMagicPierce;
 
-    // 明細分項：把「宣告 DP」與「人格引擎加成」「未對抗加成」拆開列出，
+    // 明細分項：把「宣告 DP」與「人格引擎加成」「未對抗加成」「破甲/高速/破魔」拆開列出，
     // 讓 ST 在審核明細中看得到人格引擎實際貢獻多少，而非只看到一個合併後的數字。
     const atkBaseParts = [`宣告${atkDpDeclared}`];
     if (atkIdentityDp) atkBaseParts.push(`人格${atkIdentityDp >= 0 ? '+' : ''}${atkIdentityDp}`);
     if (atkCounterDp) atkBaseParts.push(`未對抗+${atkCounterDp}`);
+    if (atkArmorPierce) atkBaseParts.push(`破甲+${atkArmorPierce}`);
+    if (atkHastePierce) atkBaseParts.push(`高速+${atkHastePierce}`);
+    if (atkMagicPierce) atkBaseParts.push(`破魔+${atkMagicPierce}`);
     const atkDpBaseLabel = atkBaseParts.join('+');
 
     const attackerUnit = (typeof findUnitById === 'function' && attacker.unitId) ? findUnitById(attacker.unitId) : null;
@@ -118,8 +125,28 @@ function bbRunBlackBoxCalculation(data) {
     const atkAutoDeclared = bbSafeNumber(attacker.auto);
     const atkIdentityExtra = bbSafeNumber(attacker.identityExtraSuccess);
     const atkExtraTotal = atkAutoDeclared + atkIdentityExtra;
-    const defExtraTotal = data.defense ? bbSafeNumber(data.defense.auto) : bbSafeNumber(targetUnit && targetUnit.defAuto);
+
+    // BOSS 防禦附加成功（無防禦 QTE 時）是回合刷新資源，非每次攻擊都全額重新提供：
+    // defAutoRemaining 由 nextTurn() 在輪到 BOSS 主體行動時重置為 defAuto，
+    // 每次被攻擊只消耗「實際被攻擊方附加成功抵銷掉」的量，未用完的部分留到本回合下一次攻擊。
+    let defExtraTotal;
+    if (data.defense) {
+        defExtraTotal = bbSafeNumber(data.defense.auto);
+    } else if (targetUnit) {
+        if (typeof targetUnit.defAutoRemaining !== 'number') targetUnit.defAutoRemaining = bbSafeNumber(targetUnit.defAuto);
+        defExtraTotal = Math.max(0, bbSafeNumber(targetUnit.defAutoRemaining));
+    } else {
+        defExtraTotal = 0;
+    }
     const baseExtraSuccess = Math.max(0, bbSafeNumber(atkExtraTotal - defExtraTotal));
+
+    // 消耗防禦資源池：扣除「實際被用掉抵銷攻擊附加成功」的量，剩餘留到本回合下次攻擊；
+    // 防禦方走 QTE（data.defense 存在）時不涉及資源池，跳過。
+    if (!data.defense && targetUnit) {
+        const consumed = Math.min(defExtraTotal, atkExtraTotal);
+        targetUnit.defAutoRemaining = defExtraTotal - consumed;
+        if (typeof syncUnitStatus === 'function') syncUnitStatus(targetUnit.id);
+    }
 
     // 攻擊方只取會影響「攻擊 DP」的標籤；防禦方只取會影響「防禦 DP」的標籤——
     // 避免列出不影響本次計算的負面狀態（例如只扣攻擊 DP 的暈眩出現在目標的防禦計算說明中）。

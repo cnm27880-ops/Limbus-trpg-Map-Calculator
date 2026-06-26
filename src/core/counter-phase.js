@@ -57,6 +57,8 @@ function cpSetupListener() {
 
 function cpHandleUpdate() {
     if (typeof renderMultiActionCounterStatus === 'function') renderMultiActionCounterStatus();
+    // 浮動面板（玩家端持久面板）每次狀態變動都重新渲染，讓所有人即時看到彼此的對抗分配
+    if (typeof cpRenderFloatPanel === 'function') cpRenderFloatPanel();
 
     if (myRole === 'st' || !counterPhaseState.started) return;
     const mine = (counterPhaseState.assignments || {})[myPlayerId];

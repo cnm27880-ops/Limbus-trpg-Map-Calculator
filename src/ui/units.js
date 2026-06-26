@@ -646,14 +646,19 @@ function nextTurn() {
             showToast(`🛡 ${activeUnit.name || '單位'} 的自動護盾已回滿（${activeUnit.shieldAutoMax}）`);
         }
 
+        // 防禦附加成功是回合刷新資源：輪到 BOSS 主體（非多重行動子條目）的行動時重置滿額，
+        // 而非每次被攻擊都視為全額可用——本回合內被消耗殆盡後要到下回合才會重置。
+        if (activeUnit && !activeUnit.actionSlotOf && (activeUnit.defAuto || 0) > 0) {
+            activeUnit.defAutoRemaining = activeUnit.defAuto;
+        }
+
         broadcastState();
 
-        // 回合結束狀態結算提醒（燃燒/流血/再生等）
-        // 多重行動條目結束時，結算對象是本體 BOSS（規則：每次結束行動時結算）
-        let settleUnit = endingUnit;
-        if (endingUnit && endingUnit.actionSlotOf) {
-            settleUnit = findUnitById(endingUnit.actionSlotOf) || null;
-        }
+        // 回合結束狀態結算提醒（燃燒/流血/尖釘等）：
+        // BOSS 多重行動的各條目（actionSlotOf 指向本體）僅代表同一回合內的多次行動，
+        // 規則上應只在輪到 BOSS 主體的行動結束時結算一次，其餘子行動結束時不結算，
+        // 避免同一回合的 DOT 傷害被重複觸發多次。
+        const settleUnit = (endingUnit && !endingUnit.actionSlotOf) ? endingUnit : null;
         if (settleUnit) showTurnEndSettlement(settleUnit);
 
         setTimeout(() => {

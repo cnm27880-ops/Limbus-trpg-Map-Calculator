@@ -356,6 +356,8 @@ input[type="number"] {
     position: relative;
     overflow: hidden;
     cursor: grab;
+    /* 由我們自行處理平移/縮放手勢，停用瀏覽器原生的觸控滑動與縮放，避免衝突/跳動 */
+    touch-action: none;
 }
 
 .map-viewport:active {

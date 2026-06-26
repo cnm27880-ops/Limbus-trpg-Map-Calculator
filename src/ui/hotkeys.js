@@ -53,7 +53,7 @@ const HOTKEYS = {
     // 長按 T 的實際邏輯由 aoe-select.js 處理；此處僅作為說明選單中的條目（action 留空避免重複觸發）
     't': {
         action: () => {},
-        description: '長按：群體選取模式 (AOE)',
+        description: '長按：群體選取模式 (AOE，僅 ST)',
         category: 'actions'
     },
 

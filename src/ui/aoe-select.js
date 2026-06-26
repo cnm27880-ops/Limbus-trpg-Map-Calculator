@@ -40,6 +40,9 @@ function aoeIsTypingTarget(el) {
 function aoeOnKeyDown(e) {
     if (e.key !== 't' && e.key !== 'T') return;
     if (e.repeat) return; // 忽略按住時的自動重複
+    // 群體操作為 ST 限定工具：玩家端結算無法透過 sendState 同步（會造成本地改動後消失），
+    // 因此只允許 ST 進入選取模式，與舊版 AOE（ST 限定多重行動面板）行為一致。
+    if (typeof myRole !== 'undefined' && myRole !== 'st') return;
     if (aoeIsTypingTarget(document.activeElement)) return;
     // 有其他 Modal 開啟時不啟動（避免與審核／攻擊／設定視窗衝突）
     if (document.querySelector('.modal-overlay.show')) return;
@@ -383,14 +386,22 @@ function aoeUndo() {
 
 // ===== 初始化 =====
 
+/** 取消選取模式（不結算）：供視窗失焦等異常情境清理，避免卡在選取狀態 */
+function aoeCancelSelectMode() {
+    aoeKeyHeld = false;
+    clearTimeout(aoeLongPressTimer);
+    if (aoeSelectMode) {
+        aoeExitSelectMode();
+        aoeSelectedIds.clear();
+    }
+}
+
 function initAoeSelect() {
     document.addEventListener('keydown', aoeOnKeyDown);
     document.addEventListener('keyup', aoeOnKeyUp);
-    // 視窗失焦時保險：清掉長按計時器，避免卡在「半長按」狀態
-    window.addEventListener('blur', () => {
-        aoeKeyHeld = false;
-        clearTimeout(aoeLongPressTimer);
-    });
+    // 視窗失焦時保險：若 T 在按住中（keyup 可能不會送達），取消選取模式，
+    // 避免長按計時器或選取狀態卡死。
+    window.addEventListener('blur', aoeCancelSelectMode);
     console.log('💥 AOE 群體選取模式（長按 T）已初始化');
 }
 

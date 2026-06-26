@@ -20,6 +20,19 @@ const assert = require('assert');
 
 const ROOT = path.resolve(__dirname, '..');
 
+// 部分原始碼已改為 ES module（Phase 2）。本測試以 vm 在 script 模式載入原始檔，
+// 故先移除 ESM 專屬語法（import / export），只保留可在 script 模式執行的函式本體。
+// 被轉換檔案的 `if (typeof window !== 'undefined')` 相容層在沙箱中因無 window 而自動略過。
+function stripModuleSyntax(src) {
+    return src
+        .replace(/^\s*import\s.*?;?\s*$/gm, '')        // 移除 import 陳述式
+        .replace(/export\s*\{[\s\S]*?\}\s*;?/g, '')     // 移除 export { ... };
+        .replace(/^\s*export\s+(default\s+)?/gm, '');   // 移除 export default / export const 前綴
+}
+function readSource(relPath) {
+    return stripModuleSyntax(fs.readFileSync(path.join(ROOT, relPath), 'utf8'));
+}
+
 // ===== 測試計分 =====
 let passed = 0;
 let failed = 0;
@@ -88,7 +101,7 @@ const files = [
     'src/core/black-box-engine.js',
     'src/ui/erosion-hud.js'
 ];
-const combined = files.map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
+const combined = files.map(f => readSource(f)).join('\n;\n')
     + '\n;\nvar __exports = { STATUS_LIBRARY, isDebuffStatus, eroDrainSin, bbRunBlackBoxCalculation };';
 vm.runInContext(combined, sandbox, { filename: 'combined-sources.js' });
 
@@ -282,7 +295,7 @@ console.log('\n[Phase 1B] Firebase 寫入粒度優化：syncUnits 欄位級 diff
         CONNECTION_CONFIG: { STORAGE_KEY: 'k' },
     };
     vm.createContext(fbSandbox);
-    const fbSrc = fs.readFileSync(path.join(ROOT, 'src/data/firebase-connection.js'), 'utf8')
+    const fbSrc = readSource('src/data/firebase-connection.js')
         + '\n;\nvar __fb = { syncUnits, setRoom: (r) => { roomRef = r; }, setSynced: (m) => { _syncedUnits = m; } };';
     vm.runInContext(fbSrc, fbSandbox, { filename: 'firebase-connection.js' });
     const fb = fbSandbox.__fb;
@@ -340,7 +353,7 @@ console.log('\n[Phase 3A] WindowManager：z-index 分層與點擊置頂');
         document: { readyState: 'complete', getElementById: () => null, addEventListener() {} },
     };
     vm.createContext(wmSandbox);
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/ui/window-manager.js'), 'utf8'), wmSandbox, { filename: 'window-manager.js' });
+    vm.runInContext(readSource('src/ui/window-manager.js'), wmSandbox, { filename: 'window-manager.js' });
     const WM = wmSandbox.window.WindowManager;
     const click = (el) => handlers.get(el)();
 

@@ -12,5 +12,10 @@
  * 因此只能轉換「沒有任何 classic script 在載入時就引用其符號」的檔案。
  * 目前批次：utils/security、utils/utils（皆為純函式、僅在執行期被呼叫）。
  */
+// 配置層（純資料葉子，無 classic 載入時消費者）
+import './config/status-config.js';
+import './config/roulette-config.js';
+import './config/identity-config.js';
+// 工具層
 import './utils/security.js';
 import './utils/utils.js';

@@ -847,3 +847,16 @@ function getIdentityOwners() {
 }
 
 console.log('🃏 人格卡牌資料庫已載入（' + Object.keys(IDENTITY_LIBRARY).length + ' 張）');
+
+// ===== ES Module 匯出 + 全域相容層（Phase 2 漸進模組化 A1）=====
+export {
+    IDENTITY_STATUS_KEYMAP, IDENTITY_LIBRARY, getIdentityById,
+    getAllIdentities, getIdentitiesByOwner, getIdentityOwners,
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        IDENTITY_STATUS_KEYMAP, IDENTITY_LIBRARY, getIdentityById,
+        getAllIdentities, getIdentitiesByOwner, getIdentityOwners,
+    });
+}

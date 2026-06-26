@@ -626,16 +626,14 @@
 
 <!-- JS 檔案 - 分層載入，順序很重要！ -->
 <!-- 配置層 -->
+<!-- status-config / roulette-config / identity-config 已轉為 ES Module，改由 src/entry.js 匯入 -->
 <script src="src/config/config.js"></script>
-<script src="src/config/status-config.js"></script>
-<script src="src/config/roulette-config.js"></script>
 <script src="src/config/firebase-config.js"></script>
 
 <!-- 核心層 -->
 <script src="src/core/state.js"></script>
 
 <!-- 人格卡牌與條件觸發引擎 -->
-<script src="src/config/identity-config.js"></script>
 <script src="src/core/identity-engine.js"></script>
 
 <!-- 工具層（已轉為 ES Module，經 src/entry.js 匯入並掛回 window 相容層）。

@@ -267,3 +267,21 @@ function safeMerge(target, source) {
 }
 
 console.log('[Security] 安全模組已載入');
+
+// ===== ES Module 匯出 + 全域相容層（Phase 2 漸進模組化）=====
+// 本檔已轉為 ES module，經 src/entry.js 匯入。匯出供未來模組 import 使用；
+// 同時掛回 window，確保仍為 classic script 的既有檔案（如 firebase-connection.js）
+// 透過全域呼叫 validateUnitData / sanitizeHTML 等仍正常運作。
+export {
+    sanitizeHTML, sanitizeName, isValidRoomCode, isValidRecoveryCode, RateLimiter,
+    validateUnitData, validateAvatarData, validateStatusObject, clampInt,
+    validateMapData, isValidMusicUrl, safeSetProperty, safeMerge,
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        sanitizeHTML, sanitizeName, isValidRoomCode, isValidRecoveryCode, RateLimiter,
+        validateUnitData, validateAvatarData, validateStatusObject, clampInt,
+        validateMapData, isValidMusicUrl, safeSetProperty, safeMerge,
+    });
+}

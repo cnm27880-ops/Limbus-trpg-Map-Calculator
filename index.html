@@ -638,9 +638,10 @@
 <script src="src/config/identity-config.js"></script>
 <script src="src/core/identity-engine.js"></script>
 
-<!-- 工具層 -->
-<script src="src/utils/security.js"></script>
-<script src="src/utils/utils.js"></script>
+<!-- 工具層（已轉為 ES Module，經 src/entry.js 匯入並掛回 window 相容層）。
+     注意：type=module 會 defer 到所有 classic script 之後執行，僅適用於
+     「無 classic script 在載入時引用其符號」的檔案（security/utils 皆符合）。 -->
+<script type="module" src="src/entry.js"></script>
 
 <!-- 資料層 -->
 <script src="src/data/storage.js"></script>

@@ -515,6 +515,14 @@ function renderMap() {
                 return;
             }
 
+            // 群體選取模式（長按 T）：點擊改為切換 AOE 選取，不走一般選取/移動流程
+            if (typeof aoeIsSelecting === 'function' && aoeIsSelecting()) {
+                if (typeof aoeToggleUnit === 'function') aoeToggleUnit(u.id);
+                tokenClickStartX = null;
+                tokenClickStartY = null;
+                return;
+            }
+
             // 有效點擊：選取該單位；再點一次同一單位則取消選取
             // 移動邏輯：選取後點擊地圖格子來移動（見 cell.onpointerdown）
             if (selectedUnitId === u.id) {

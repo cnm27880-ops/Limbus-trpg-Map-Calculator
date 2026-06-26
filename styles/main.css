@@ -17,8 +17,56 @@
     --text-dim: #6e6e78;
     --text-muted: #48484f;
     --grid-size: 50px;
-    --sidebar-width: 340px;
+    --sidebar-width: 320px;
     --nav-height: 56px;
+
+    /* ===== 字體堆疊（Typography）=====
+       名稱／標題使用古典襯線體；數值／狀態使用等寬體以提升對齊度與科技感 */
+    --font-sans: 'Noto Sans TC', sans-serif;
+    --font-serif: 'Noto Serif TC', 'Georgia', 'Times New Roman', serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+
+    /* ===== 傷害類型統一色（B / L / A）=====
+       全站只要是 B/L/A 傷害數字，都引用這組變數，確保視覺一致 */
+    --dmg-b: #29b6f6;   /* B 傷：藍 */
+    --dmg-l: #fb8c00;   /* L 傷：橙 */
+    --dmg-a: #e53935;   /* A 傷：紅 */
+
+    /* ===== 加成 / 減益 / 資源 語意色 ===== */
+    --bonus-color: #66bb6a;    /* 加成（正向）：綠 */
+    --penalty-color: #ef5350;  /* 減益（負向）：紅 */
+    --resource-color: #42a5f5; /* 資源類：藍 */
+
+    /* ===== 狀態色彩編碼底色（淡色背景，供明細卡片色塊使用）===== */
+    --tint-negative: rgba(229, 57, 53, 0.14);   /* 負面狀態：淡紅 */
+    --tint-positive: rgba(67, 160, 71, 0.14);   /* 正面增益：淡綠 */
+    --tint-resource: rgba(30, 136, 229, 0.14);  /* 資源類：淡藍 */
+    --tint-neutral: rgba(255, 255, 255, 0.04);  /* 中性：淡灰 */
+}
+
+/* ===== 全域字體升級 ===== */
+body {
+    font-family: var(--font-sans);
+}
+
+/* 標題與單位名稱：襯線體，帶古典文學氣質 */
+h1, h2, h3, h4,
+.modal-header span,
+.unit-name,
+.identity-card-title {
+    font-family: var(--font-serif);
+    letter-spacing: 0.2px;
+}
+
+/* 數值類（血量 / DP / 先攻 / 等寬對齊）統一等寬體 */
+.unit-init,
+.unit-init-value,
+.unit-status,
+.combat-broadcast-dice,
+.dps-value,
+.calc-field input,
+.aoe-target-chip {
+    font-family: var(--font-mono);
 }
 
 /* ===== Reset & Base ===== */

@@ -201,6 +201,53 @@ function renderCombatLogs() {
 }
 
 /**
+ * 群體操作 (AOE) 戰鬥日誌：由 aoe-select.js 在結算 AOE 傷害／治療／狀態時呼叫。
+ * 自動把攻擊者與「選取清單中的所有單位名稱」寫成一行日誌，例如：
+ *   「【BOSS】對 [單位A, 單位B, 單位C] 發動了 AOE 攻擊，造成 12 L傷害」
+ * 實際寫入沿用 bbPushCombatLog（ST 單一寫入者、try-catch 防呆），不影響戰鬥主流程。
+ * @param {string} attackerName - 攻擊者名稱（ST 為作用中 BOSS，玩家為自身單位）
+ * @param {string[]} targetNames - 被選取的所有單位名稱
+ * @param {{type:string, value?:number, dmgType?:string, statusId?:string}} actionData
+ */
+function logAoeAction(attackerName, targetNames, actionData) {
+    try {
+        const names = (Array.isArray(targetNames) ? targetNames : []).filter(Boolean);
+        if (!names.length) return;
+        const namesStr = names.join(', ');
+        const atk = attackerName || '未知';
+        const data = actionData || {};
+
+        let effect;
+        if (data.type === 'damage') {
+            const typeLabel = { b: 'B', l: 'L', a: 'A' }[data.dmgType] || '';
+            effect = `造成 ${Number(data.value) || 0} ${typeLabel}傷害`;
+        } else if (data.type === 'heal') {
+            effect = `治療 ${Number(data.value) || 0} 點生命`;
+        } else if (data.type === 'status') {
+            const stacks = parseInt(data.value, 10) || 0;
+            effect = `施加狀態「${data.statusId}」${stacks ? ' x' + stacks : ''}`;
+        } else {
+            effect = '發動了群體效果';
+        }
+
+        const verb = data.type === 'heal' ? '進行了 AOE 支援' : '發動了 AOE 攻擊';
+        const text = `【${atk}】對 [${namesStr}] ${verb}，${effect}`;
+
+        if (typeof bbPushCombatLog === 'function') {
+            bbPushCombatLog({
+                attackerName: atk,
+                defenderName: namesStr,
+                finalDice: 0,
+                attackerRole: (typeof myRole !== 'undefined' && myRole === 'st') ? 'enemy' : 'player',
+                broadcastText: text
+            });
+        }
+    } catch (e) {
+        /* 日誌寫入失敗不影響戰鬥 */
+    }
+}
+
+/**
  * 最近 N 筆「玩家攻擊」的平均擲骰數。供 DPS 統計與 AI 遭遇生成器參考。
  * @param {number} n
  * @returns {{ avg: number, count: number }}
@@ -427,6 +474,7 @@ if (typeof window !== 'undefined') {
     window.logViewSetupListener = logViewSetupListener;
     window.renderCombatLogs = renderCombatLogs;
     window.getRecentPlayerAverageDice = getRecentPlayerAverageDice;
+    window.logAoeAction = logAoeAction;
     window.requestAIEncounter = requestAIEncounter;
     window.saveEncounterToLibrary = saveEncounterToLibrary;
     window.lvDeployMonster = lvDeployMonster;

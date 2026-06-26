@@ -14,7 +14,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js" crossorigin="anonymous"></script>
 
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" crossorigin="anonymous">
     <!-- CSS 檔案 -->
     <link rel="stylesheet" href="styles/main.css">
     <link rel="stylesheet" href="styles/components.css">
@@ -284,34 +284,46 @@
         <div class="modal-body">
             <div class="combat-modal-target" id="attack-target-name">目標：---</div>
             <div class="attack-boss-actions" id="attack-boss-actions" style="display:none;"></div>
-            <div class="calc-grid">
-                <div class="calc-field">
-                    <span class="calc-label">總攻擊 DP</span>
-                    <input type="number" id="attack-dp" value="0" min="0">
+
+            <!-- 攻擊動作：基礎判定數值 -->
+            <div class="identity-card">
+                <div class="identity-card-title">⚔️ 攻擊判定</div>
+                <div class="calc-grid">
+                    <div class="calc-field">
+                        <span class="calc-label">總攻擊 DP</span>
+                        <input type="number" id="attack-dp" value="0" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">攻擊附加成功</span>
+                        <input type="number" id="attack-auto" value="0" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">無視防禦點數</span>
+                        <input type="number" id="attack-ignore-def" value="0" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">嚴重轉惡性點數</span>
+                        <input type="number" id="attack-crit-vicious" value="0" min="0">
+                    </div>
                 </div>
-                <div class="calc-field">
-                    <span class="calc-label">攻擊附加成功</span>
-                    <input type="number" id="attack-auto" value="0" min="0">
-                </div>
-                <div class="calc-field">
-                    <span class="calc-label">無視防禦點數</span>
-                    <input type="number" id="attack-ignore-def" value="0" min="0">
-                </div>
-                <div class="calc-field">
-                    <span class="calc-label">嚴重轉惡性點數</span>
-                    <input type="number" id="attack-crit-vicious" value="0" min="0">
-                </div>
-                <div class="calc-field">
-                    <span class="calc-label">破甲（等效 DP）</span>
-                    <input type="number" id="attack-armor-pierce" value="0" min="0">
-                </div>
-                <div class="calc-field">
-                    <span class="calc-label">高速（等效 DP）</span>
-                    <input type="number" id="attack-haste-pierce" value="0" min="0">
-                </div>
-                <div class="calc-field">
-                    <span class="calc-label">破魔（等效 DP）</span>
-                    <input type="number" id="attack-magic-pierce" value="0" min="0">
+            </div>
+
+            <!-- 資源狀態：穿透（等效 DP），與攻擊動作分開擺放 -->
+            <div class="identity-card is-resource">
+                <div class="identity-card-title">🔮 穿透 / 等效 DP</div>
+                <div class="calc-grid">
+                    <div class="calc-field">
+                        <span class="calc-label">破甲（等效 DP）</span>
+                        <input type="number" id="attack-armor-pierce" value="0" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">高速（等效 DP）</span>
+                        <input type="number" id="attack-haste-pierce" value="0" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">破魔（等效 DP）</span>
+                        <input type="number" id="attack-magic-pierce" value="0" min="0">
+                    </div>
                 </div>
             </div>
         </div>
@@ -665,6 +677,7 @@
 <script src="src/ui/combat-modals.js"></script>
 <script src="src/ui/combat-broadcast.js"></script>
 <script src="src/ui/st-skill-hud.js"></script>
+<script src="src/ui/aoe-select.js"></script>
 <script src="src/ui/boss-battle-hud.js"></script>
 <script src="src/ui/identity-hud.js"></script>
 <!-- 戰鬥日誌 / 構築室（系統 A）與 E.G.O 侵蝕系統（系統 B）：依賴 status-manager / firebase-connection，於 main 之前載入 -->

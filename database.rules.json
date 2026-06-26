@@ -1,0 +1,33 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      ".read": true,
+
+      "$roomCode": {
+        ".write": true,
+        ".validate": "$roomCode.matches(/^[A-Za-z0-9]{4,8}$/)",
+
+        "mapBg": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 3000000)"
+        },
+
+        "units": {
+          "$unitId": {
+            "name":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+            "avatar": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500000)" },
+            "type":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 20)" },
+            "hp":     { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999)" },
+            "maxHp":  { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 9999)" },
+            "x":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -1 && newData.val() <= 9999)" },
+            "y":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -1 && newData.val() <= 9999)" },
+            "init":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -9999 && newData.val() <= 9999)" },
+            "size":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 3)" }
+          }
+        }
+      }
+    }
+  }
+}

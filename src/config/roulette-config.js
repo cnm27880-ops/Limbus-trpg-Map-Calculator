@@ -42,3 +42,10 @@ const FRAGMENT_SYNTHESIS_RULES = [
     { grade: 'A', prefix: 'A級支線碎片', required: 20, result: 'A級支線' },
     { grade: 'S', prefix: 'S級支線碎片', required: 25, result: 'S級支線' }
 ];
+
+// ===== ES Module 匯出 + 全域相容層（Phase 2 漸進模組化 A1）=====
+export { ROULETTE_PRIZES, FRAGMENT_SYNTHESIS_RULES };
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, { ROULETTE_PRIZES, FRAGMENT_SYNTHESIS_RULES });
+}

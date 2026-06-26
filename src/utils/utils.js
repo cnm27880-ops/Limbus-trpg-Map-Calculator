@@ -304,3 +304,21 @@ function modifyHPInternal(unit, type, amount) {
         unit.hpArr.sort((a, b) => b - a);
     }
 }
+
+// ===== ES Module 匯出 + 全域相容層（Phase 2 漸進模組化）=====
+// 本檔已轉為 ES module，經 src/entry.js 匯入。匯出供未來模組 import 使用；
+// 同時掛回 window，確保仍為 classic script 的既有檔案以全域呼叫 showToast / escapeHtml /
+// createUnit 等仍正常運作。
+export {
+    escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
+    generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
+    calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
+        generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
+        calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
+    });
+}

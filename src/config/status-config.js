@@ -1208,3 +1208,20 @@ function isDebuffStatus(statusId) {
 }
 
 console.log('📋 狀態效果資料庫已載入');
+
+// ===== ES Module 匯出 + 全域相容層（Phase 2 漸進模組化 A1）=====
+export {
+    STATUS_CATEGORIES, STATUS_LIBRARY, applyStatusOverride, getStatusById, getStatusCategory,
+    getAllStatusDefs, getOrderedStatusesForCategory, searchStatuses, getAllStatuses,
+    STATUS_USAGE_KEY, FAVORITE_STATUS_KEY, getStatusUsage, trackStatusUsage,
+    getFavoriteStatuses, addToFavorites, removeFromFavorites, STATUS_DEBUFF_ID_FALLBACK, isDebuffStatus,
+};
+
+if (typeof window !== 'undefined') {
+    Object.assign(window, {
+        STATUS_CATEGORIES, STATUS_LIBRARY, applyStatusOverride, getStatusById, getStatusCategory,
+        getAllStatusDefs, getOrderedStatusesForCategory, searchStatuses, getAllStatuses,
+        STATUS_USAGE_KEY, FAVORITE_STATUS_KEY, getStatusUsage, trackStatusUsage,
+        getFavoriteStatuses, addToFavorites, removeFromFavorites, STATUS_DEBUFF_ID_FALLBACK, isDebuffStatus,
+    });
+}

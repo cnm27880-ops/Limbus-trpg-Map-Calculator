@@ -11,6 +11,13 @@ let heartbeatInterval = null;  // 心跳計時器
 let isConnected = false;       // Firebase 連線狀態
 let roomUsers = {};            // 房間內的使用者列表（用於分配權限）
 
+// ===== Phase 1B：寫入粒度優化用的快照 =====
+// 這些快照記錄「Firebase 上目前已知的狀態」，由各監聽器在收到資料時更新（確認寫入後才更新），
+// 讓 sync 函式只需寫出「有變動」的部分，避免每次都整包覆寫。
+let _syncedUnits = {};          // id -> 上次 Firebase 已知的單位（深拷貝），供 syncUnits 做 diff
+let _syncedMapDataStr = null;   // 上次 Firebase 已知的 mapData（JSON 字串）
+let _syncedPaletteStr = null;   // 上次 Firebase 已知的 mapPalette（JSON 字串）
+
 // ===== 連線狀態 UI =====
 /**
  * 更新連線狀態 UI
@@ -601,6 +608,11 @@ function loadRoomData(data) {
  * 設置 Firebase 監聯器
  */
 function setupRoomListeners() {
+    // 進入新房間：重置寫入粒度快照（由下方各監聽器在收到資料後重新填入）
+    _syncedUnits = {};
+    _syncedMapDataStr = null;
+    _syncedPaletteStr = null;
+
     // 監聽地圖資料變更
     const mapDataListener = roomRef.child('mapData').on('value', snapshot => {
         if (snapshot.exists()) {
@@ -617,6 +629,8 @@ function setupRoomListeners() {
             } else {
                 state.mapData = raw;
             }
+            // 記錄 Firebase 已確認的 mapData，供 syncMapData 判斷是否需要再寫入
+            _syncedMapDataStr = JSON.stringify(state.mapData);
             renderMap();
         }
     });
@@ -631,6 +645,8 @@ function setupRoomListeners() {
             state.mapPalette = [];
             if (typeof initMapPalette === 'function') initMapPalette();
         }
+        // 記錄 Firebase 已確認的 palette，供 syncMapPalette 判斷是否需要再寫入
+        _syncedPaletteStr = JSON.stringify(state.mapPalette || []);
         updateToolbar();
         renderMap();
     });
@@ -662,6 +678,7 @@ function setupRoomListeners() {
             const rawVal = snapshot.val();
             if (!rawVal || typeof rawVal !== 'object') {
                 state.units = [];
+                _syncedUnits = {};
                 return;
             }
             // 將物件轉換為陣列，過濾無效資料，並根據 sortOrder 排序以維持順序
@@ -701,8 +718,11 @@ function setupRoomListeners() {
                 return orderA - orderB;
             });
             state.units = unitsArray;
+            // 記錄 Firebase 已確認的單位狀態（深拷貝），供 syncUnits 做欄位級 diff
+            _syncedUnits = _snapshotUnits(unitsArray);
         } else {
             state.units = [];
+            _syncedUnits = {};
         }
         renderUnitsList();
         renderSidebarUnits();
@@ -1074,7 +1094,12 @@ function getAllUsers() {
  */
 function syncMapData() {
     if (!roomRef) return;
+    // 只有在 mapData 真的變動時才寫入，避免移動單位等操作也整張地圖覆寫
+    const str = JSON.stringify(state.mapData);
+    if (str === _syncedMapDataStr) return;
     roomRef.child('mapData').set(state.mapData);
+    // 樂觀更新；若寫入成功，mapData 監聽器也會以 Firebase 確認值再次校正
+    _syncedMapDataStr = str;
 }
 
 /**
@@ -1082,7 +1107,51 @@ function syncMapData() {
  */
 function syncMapPalette() {
     if (!roomRef) return;
+    const str = JSON.stringify(state.mapPalette || []);
+    if (str === _syncedPaletteStr) return;
     roomRef.child('mapPalette').set(state.mapPalette || []);
+    _syncedPaletteStr = str;
+}
+
+// ===== 寫入粒度優化：輔助函式 =====
+
+/**
+ * 深拷貝單位（用於快照）
+ */
+function _cloneUnit(u) {
+    return JSON.parse(JSON.stringify(u));
+}
+
+/**
+ * 將單位陣列轉成 id -> 深拷貝 的快照表
+ */
+function _snapshotUnits(arr) {
+    const map = {};
+    (arr || []).forEach(u => { if (u && u.id) map[u.id] = _cloneUnit(u); });
+    return map;
+}
+
+/**
+ * 與順序無關的深度比較（避免因物件鍵順序不同而誤判為變動）
+ */
+function _deepEqual(a, b) {
+    if (a === b) return true;
+    if (a === null || b === null) return a === b;
+    if (typeof a !== 'object' || typeof b !== 'object') return a === b;
+    const aArr = Array.isArray(a), bArr = Array.isArray(b);
+    if (aArr !== bArr) return false;
+    if (aArr) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) if (!_deepEqual(a[i], b[i])) return false;
+        return true;
+    }
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) {
+        if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+        if (!_deepEqual(a[k], b[k])) return false;
+    }
+    return true;
 }
 
 /**
@@ -1100,16 +1169,47 @@ function syncMapBg() {
 function syncUnits() {
     if (!roomRef) return;
 
-    // 將陣列轉換為物件（使用單位 ID 作為 key）
-    // 同時保存 sortOrder 以維持排序順序
-    const unitsObj = {};
+    // 以快照（_syncedUnits = Firebase 已知狀態）做欄位級 diff，只寫出有變動的部分，
+    // 改用單次 multi-path update() 取代整包 set()，大幅減少頻寬（尤其是 base64 頭像）。
+    const updates = {};   // 相對 roomRef 的多路徑更新
+    const seen = new Set();
+
     state.units.forEach((unit, index) => {
-        // 設定 sortOrder 以保持陣列順序
-        unit.sortOrder = index;
-        unitsObj[unit.id] = unit;
+        unit.sortOrder = index;          // 維持排序順序（變動時只會寫 sortOrder 一個欄位）
+        seen.add(unit.id);
+
+        const prev = _syncedUnits[unit.id];
+        if (!prev) {
+            // 新單位：整筆寫入
+            updates['units/' + unit.id] = unit;
+            return;
+        }
+
+        // 既有單位：逐欄位比對
+        for (const key of Object.keys(unit)) {
+            if (!_deepEqual(unit[key], prev[key])) {
+                // Firebase 不接受 undefined；以 null 代表刪除
+                updates['units/' + unit.id + '/' + key] = (unit[key] === undefined) ? null : unit[key];
+            }
+        }
+        // 快照有、但目前單位已不存在的欄位 → 刪除
+        for (const key of Object.keys(prev)) {
+            if (!Object.prototype.hasOwnProperty.call(unit, key)) {
+                updates['units/' + unit.id + '/' + key] = null;
+            }
+        }
     });
 
-    roomRef.child('units').set(unitsObj);
+    // 已被移除的單位 → 刪除整筆
+    for (const id of Object.keys(_syncedUnits)) {
+        if (!seen.has(id)) updates['units/' + id] = null;
+    }
+
+    if (Object.keys(updates).length === 0) return;   // 無變動，省下一次寫入
+
+    roomRef.update(updates);
+    // 註：不在此處更新 _syncedUnits，改由 units 監聽器在 Firebase 確認後更新，
+    // 確保快照永遠反映「實際寫入 Firebase 的狀態」，避免寫入失敗時漏寫。
 }
 
 /**

@@ -1,0 +1,14 @@
+# 依賴
+node_modules/
+
+# Vite 建置產物與快取
+dist/
+.vite/
+*.local
+
+# 編輯器 / 系統檔
+.DS_Store
+.idea/
+.vscode/
+*.log
+npm-debug.log*

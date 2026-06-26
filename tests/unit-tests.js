@@ -20,6 +20,19 @@ const assert = require('assert');
 
 const ROOT = path.resolve(__dirname, '..');
 
+// 部分原始碼已改為 ES module（Phase 2）。本測試以 vm 在 script 模式載入原始檔，
+// 故先移除 ESM 專屬語法（import / export），只保留可在 script 模式執行的函式本體。
+// 被轉換檔案的 `if (typeof window !== 'undefined')` 相容層在沙箱中因無 window 而自動略過。
+function stripModuleSyntax(src) {
+    return src
+        .replace(/^\s*import\s.*?;?\s*$/gm, '')        // 移除 import 陳述式
+        .replace(/export\s*\{[\s\S]*?\}\s*;?/g, '')     // 移除 export { ... };
+        .replace(/^\s*export\s+(default\s+)?/gm, '');   // 移除 export default / export const 前綴
+}
+function readSource(relPath) {
+    return stripModuleSyntax(fs.readFileSync(path.join(ROOT, relPath), 'utf8'));
+}
+
 // ===== 測試計分 =====
 let passed = 0;
 let failed = 0;
@@ -88,7 +101,7 @@ const files = [
     'src/core/black-box-engine.js',
     'src/ui/erosion-hud.js'
 ];
-const combined = files.map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
+const combined = files.map(f => readSource(f)).join('\n;\n')
     + '\n;\nvar __exports = { STATUS_LIBRARY, isDebuffStatus, eroDrainSin, bbRunBlackBoxCalculation };';
 vm.runInContext(combined, sandbox, { filename: 'combined-sources.js' });
 
@@ -266,6 +279,112 @@ test('防禦方走 QTE（data.defense）時不動用資源池', () => {
     assert.strictEqual(captured.stReview.baseExtraSuccess, 4);
     assert.strictEqual(boss.defAutoRemaining, 3, '資源池不應被 QTE 流程改動');
 });
+
+// ====================================================================
+console.log('\n[Phase 1B] Firebase 寫入粒度優化：syncUnits 欄位級 diff');
+// ====================================================================
+// 在獨立沙箱載入真實的 firebase-connection.js，stub 掉 DOM/Firebase/設定，
+// 並以 roomRef.update 擷取實際寫出的多路徑 payload，驗證只寫變動欄位。
+(function () {
+    const fbSandbox = {
+        console, JSON, Object, Set, Array,
+        state: { units: [] },
+        window: { addEventListener() {} },
+        document: { getElementById: () => null, addEventListener() {} },
+        localStorage: { getItem: () => null, setItem() {} },
+        CONNECTION_CONFIG: { STORAGE_KEY: 'k' },
+    };
+    vm.createContext(fbSandbox);
+    const fbSrc = readSource('src/data/firebase-connection.js')
+        + '\n;\nvar __fb = { syncUnits, setRoom: (r) => { roomRef = r; }, setSynced: (m) => { _syncedUnits = m; } };';
+    vm.runInContext(fbSrc, fbSandbox, { filename: 'firebase-connection.js' });
+    const fb = fbSandbox.__fb;
+
+    let calls = [];
+    fb.setRoom({ update: (u) => calls.push(u), child: () => ({ set() {} }) });
+
+    // 基準單位（含 base64 頭像，驗證不變時不重寫）
+    const mk = (o) => Object.assign({
+        id: 'u1', name: 'A', hp: 10, maxHp: 10, x: 1, y: 1,
+        avatar: 'data:image/png;base64,AAAA', status: { burn: '3' }, sortOrder: 0
+    }, o);
+    const eq = (a, b) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b));
+
+    test('無變動 → 不寫入', () => {
+        calls = []; fbSandbox.state.units = [mk()]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); assert.strictEqual(calls.length, 0);
+    });
+    test('只改 hp → 只寫 units/u1/hp（不動其他欄位/頭像）', () => {
+        calls = []; fbSandbox.state.units = [mk({ hp: 5 })]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); eq(calls[0], { 'units/u1/hp': 5 });
+    });
+    test('改 status 物件 → 整個 status 欄位', () => {
+        calls = []; fbSandbox.state.units = [mk({ status: { burn: '5' } })]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); eq(calls[0], { 'units/u1/status': { burn: '5' } });
+    });
+    test('新單位 → 整筆寫入', () => {
+        calls = []; fbSandbox.state.units = [mk(), mk({ id: 'u2', sortOrder: 1 })]; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); assert.ok('units/u2' in calls[0] && calls[0]['units/u2'].id === 'u2');
+    });
+    test('移除單位 → units/u1 = null', () => {
+        calls = []; fbSandbox.state.units = []; fb.setSynced({ u1: mk() });
+        fb.syncUnits(); eq(calls[0], { 'units/u1': null });
+    });
+    test('順序改變 → 只寫 sortOrder', () => {
+        calls = [];
+        fbSandbox.state.units = [mk({ id: 'b', sortOrder: 1 }), mk({ id: 'a', sortOrder: 0 })];
+        fb.setSynced({ a: mk({ id: 'a', sortOrder: 0 }), b: mk({ id: 'b', sortOrder: 1 }) });
+        fb.syncUnits(); eq(calls[0], { 'units/b/sortOrder': 0, 'units/a/sortOrder': 1 });
+    });
+})();
+
+// ====================================================================
+console.log('\n[Phase 3A] WindowManager：z-index 分層與點擊置頂');
+// ====================================================================
+(function () {
+    const handlers = new Map();
+    const mkEl = () => {
+        const el = { style: {}, addEventListener: (t, h) => { if (t === 'pointerdown') handlers.set(el, h); } };
+        return el;
+    };
+    const wmSandbox = {
+        console, Map, parseInt, String,
+        window: {},
+        document: { readyState: 'complete', getElementById: () => null, addEventListener() {} },
+    };
+    vm.createContext(wmSandbox);
+    vm.runInContext(readSource('src/ui/window-manager.js'), wmSandbox, { filename: 'window-manager.js' });
+    const WM = wmSandbox.window.WindowManager;
+    const click = (el) => handlers.get(el)();
+
+    test('同 tier 註冊後 z-index 依序遞增', () => {
+        const a = mkEl(), b = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(b, { tier: 'float' });
+        assert.ok(+b.style.zIndex > +a.style.zIndex);
+    });
+    test('點擊較低面板 → 在同 tier 內置頂', () => {
+        const a = mkEl(), b = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(b, { tier: 'float' });
+        click(a);
+        assert.ok(+a.style.zIndex > +b.style.zIndex);
+    });
+    test('各 tier 的 z-index 落在自己的區間（不跨層）', () => {
+        const a = mkEl(), c = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(c, { tier: 'panel' });
+        assert.ok(+a.style.zIndex >= 150 && +a.style.zIndex <= 199);
+        assert.ok(+c.style.zIndex >= 9400 && +c.style.zIndex <= 9690);
+    });
+    test('區間用盡 → renormalize 壓回 base 且保留相對順序', () => {
+        const a = mkEl(), b = mkEl();
+        WM.register(a, { tier: 'float' }); WM.register(b, { tier: 'float' });
+        WM._tiers.float.counter = 199; click(b);
+        assert.ok(+a.style.zIndex <= 199 && +b.style.zIndex <= 199 && +b.style.zIndex > +a.style.zIndex);
+    });
+    test('WM_Z 層級常數單調遞增（modal < panel < login < warning < broadcast）', () => {
+        const Z = wmSandbox.window.WM_Z;
+        assert.ok(Z.MODAL < Z.PANEL && Z.PANEL < Z.LOGIN && Z.LOGIN < Z.WARNING && Z.WARNING < Z.BROADCAST);
+    });
+})();
 
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);

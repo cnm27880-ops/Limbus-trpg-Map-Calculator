@@ -5,251 +5,143 @@
  */
 
 // ===== 全域互動狀態變數 =====
-// 注意：isDraggingMap, isPaintingDrag 已在 state.js 中定義
-// 此處不需要重複宣告
+// 注意：isDraggingMap, isPaintingDrag, isPinchZooming 等已在 state.js 中定義
 
 // ===== 相機事件初始化 =====
 /**
  * 初始化相機控制事件
+ *
+ * Phase 3B：統一手勢模型
+ * 過去用「pointer 事件做平移 + 另一套 touch 事件做捏合縮放 + isPinchZooming 全域旗標互相抑制」，
+ * 在行動裝置上容易有相容性問題，且放開其中一指時會因參考點未更新而「瞬間跳動」。
+ * 現改為單一的 Pointer Events 模型，以 activePointers 追蹤所有指標：
+ *   - 1 個指標：單指/滑鼠平移（超過 threshold 才算拖曳）
+ *   - 2 個指標：雙指捏合縮放（以雙指中心為焦點做位置補償）
+ *   - 2 指 → 1 指：以剩餘指標重設平移基準，消除跳動
  */
 function initCameraEvents() {
     const vp = document.getElementById('map-viewport');
     if (!vp) return;
 
-    // 滾輪縮放
+    // 滾輪縮放（桌面）
     vp.addEventListener('wheel', e => {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        zoomCamera(delta);
+        zoomCamera(e.deltaY > 0 ? -0.1 : 0.1);
     }, { passive: false });
 
-    // 指標按下 (pointerdown) - 決定互動模式
-    // 新增：追蹤是否開始拖曳的標記
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let isPotentialDrag = false;  // 是否可能是拖曳（尚未確定）
+    // ===== 統一的指標手勢狀態 =====
+    const pointers = new Map();        // pointerId -> { x, y }
+    const DRAG_THRESHOLD = 5;          // 單指：位移超過此值才視為平移（與點擊區分）
+    const ZOOM_SENSITIVITY = 0.002;    // 捏合縮放靈敏度（沿用舊值）
+    let dragStartX = 0, dragStartY = 0;
+    let pinchPrevDist = 0;             // 上一次雙指距離
+
+    // 計算雙指距離與中心點（螢幕座標）
+    function pinchInfo() {
+        const pts = [...pointers.values()];
+        return {
+            dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+            cx: (pts[0].x + pts[1].x) / 2,
+            cy: (pts[0].y + pts[1].y) / 2,
+        };
+    }
 
     vp.addEventListener('pointerdown', e => {
-        // 0. 測距尺啟動時，不啟動相機拖曳
+        // 測距尺啟用時不啟動相機
         if (isMeasuring || e.altKey) return;
-
-        // 1. 如果點擊到 Token，忽略此處，由 Token 自己的 handler (在 map.js) 處理
+        // 點到 Token：交給 Token 自己的 handler（map.js）
         if (e.target.classList.contains('token')) return;
-
-        // 2. 如果是繪製工具 (且點擊到格子)，標記繪製開始，不移動相機
-        if (currentTool !== 'cursor' && e.target.classList.contains('cell')) {
-            // 注意：實際繪製邏輯在 map.js 的 handleMapInput
+        // 繪製工具且點在地圖層：canvas 會自行處理並 stopPropagation，這裡保險再擋一次
+        if (currentTool !== 'cursor' &&
+            (e.target.id === 'map-canvas' || e.target.classList.contains('cell'))) {
             isPaintingDrag = true;
             return;
         }
 
-        // 3. 記錄起始位置，準備可能的地圖平移
-        // 🔥 修復：不立即設置 isDraggingMap，等待實際移動後再設置
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        isPotentialDrag = true;
-        isDraggingMap = false;  // 確保初始狀態為 false
-        lastPointer = { x: e.clientX, y: e.clientY };
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        try { vp.setPointerCapture(e.pointerId); } catch (err) {}
 
-        // 鎖定指針到視口，優化平移體驗
-        vp.setPointerCapture(e.pointerId);
+        if (pointers.size === 1) {
+            // 準備單指/滑鼠平移（先不啟動，待超過 threshold 才確認是拖曳）
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            lastPointer = { x: e.clientX, y: e.clientY };
+            isPotentialDrag = true;
+            isDraggingMap = false;
+        } else if (pointers.size === 2) {
+            // 進入雙指捏合：中斷任何單指平移
+            isPinchZooming = true;
+            isPotentialDrag = false;
+            isDraggingMap = false;
+            pinchPrevDist = pinchInfo().dist;
+        }
     });
 
-    // 指標移動 (pointermove) - 綁定到 window 以防止滑鼠移出視口失效
-    const CAMERA_DRAG_THRESHOLD = 5;  // 開始拖曳的閾值（像素）
-
     window.addEventListener('pointermove', e => {
-        // 測距尺啟動時，忽略所有拖曳操作
-        if (isMeasuring) {
+        if (isMeasuring) return;
+        if (!pointers.has(e.pointerId)) return;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        // 繪製拖曳由 map-canvas 處理，這裡不平移
+        if (isPaintingDrag) return;
+
+        // 雙指捏合縮放（以雙指中心為焦點，縮放時中心點在螢幕上保持不動）
+        if (pointers.size >= 2) {
+            e.preventDefault();
+            const info = pinchInfo();
+            if (pinchPrevDist > 0) {
+                const zoomDelta = (info.dist - pinchPrevDist) * ZOOM_SENSITIVITY;
+                const vpRect = vp.getBoundingClientRect();
+                zoomCameraAt(zoomDelta, info.cx - vpRect.left, info.cy - vpRect.top);
+            }
+            pinchPrevDist = info.dist;
             return;
         }
 
-        // 🔥 關鍵修復：檢查全域 isPinchZooming 標記
-        // PointerEvent 沒有 touches 屬性，所以需要使用全域變數來追蹤多點觸控狀態
-        // 當正在進行雙指縮放時，忽略所有拖曳操作
-        if (isPinchZooming) {
-            return;
-        }
-
-        // A. 處理繪製拖曳 (邏輯主要由 map.js 的 cell:pointerenter 處理，這裡只需阻擋相機)
-        if (isPaintingDrag) {
-            return;
-        }
-
-        // B. 處理地圖平移
-        // 🔥 修復：只有在移動超過閾值後才開始實際拖曳
+        // 單指/滑鼠平移
         if (isPotentialDrag && !isDraggingMap) {
-            const moveDistance = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
-            if (moveDistance > CAMERA_DRAG_THRESHOLD) {
-                isDraggingMap = true;  // 現在確認是拖曳操作
+            if (Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) > DRAG_THRESHOLD) {
+                isDraggingMap = true;   // 確認為拖曳
             }
         }
-
         if (isDraggingMap) {
             e.preventDefault();
-            const dx = e.clientX - lastPointer.x;
-            const dy = e.clientY - lastPointer.y;
-            cam.x += dx;
-            cam.y += dy;
+            cam.x += e.clientX - lastPointer.x;
+            cam.y += e.clientY - lastPointer.y;
             lastPointer = { x: e.clientX, y: e.clientY };
             applyCamera();
         }
     });
 
-    // 指標放開 (pointerup) - 綁定到 window 確保能夠捕捉到釋放
-    window.addEventListener('pointerup', e => {
-        // A. 結束繪製
+    function endPointer(e) {
+        pointers.delete(e.pointerId);
+        try { vp.releasePointerCapture(e.pointerId); } catch (err) {}
+
+        // 結束繪製（繪製不在 pointers 內，但需在此收尾）
         if (isPaintingDrag) {
             isPaintingDrag = false;
-            // 繪製結束後，如果是 ST，發送狀態更新
-            if (myRole === 'st') sendState();
-            isPotentialDrag = false;  // 重置潛在拖曳狀態
-            return;
+            if (myRole === 'st' && typeof sendState === 'function') sendState();
         }
 
-        // B. 結束地圖平移
-        if (isDraggingMap || isPotentialDrag) {
-            isDraggingMap = false;
-            isPotentialDrag = false;  // 🔥 修復：重置潛在拖曳狀態
-            try { vp.releasePointerCapture(e.pointerId); } catch(err){}
-        }
-    });
-
-    // ===== 觸控捏合縮放 (Touch Pinch) - 以雙指中心點為縮放中心 =====
-    let lastPinchCenter = null;
-
-    // ===== 觸控開始 (touchstart) - 關鍵修復：立即初始化雙指縮放參數 =====
-    vp.addEventListener('touchstart', e => {
-        // 檢測到雙指觸控：立即進入縮放模式
-        if (e.touches.length >= 2) {
-            // 🔥 關鍵修復：設置全域標記，通知 pointermove 忽略拖曳操作
-            isPinchZooming = true;
-            // 強制中斷單指拖曳模式
-            isDraggingMap = false;
-            isPotentialDrag = false;
-
-            // 立即計算雙指中心點（螢幕座標）
-            const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-            // 立即計算雙指初始距離
-            const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-
-            // 🎯 目的：確保手指開始移動前，已有正確的基準距離
-            // 這樣 touchmove 觸發時就不會因為缺少參考值而產生跳動
-            lastDist = dist;
-            lastPinchCenter = { x: centerX, y: centerY };
-
-            // 阻止瀏覽器預設行為
-            e.preventDefault();
-        }
-    }, { passive: false });
-
-    vp.addEventListener('touchmove', e => {
-        // 雙指操作：進行縮放
-        if (e.touches.length >= 2) {
-            // 🔥 確保 isPinchZooming 標記被設置（防止 touchstart 沒有正確觸發的情況）
-            isPinchZooming = true;
-            // 防抖動處理：強制停止地圖拖曳
-            isDraggingMap = false;
-            isPotentialDrag = false;
-
-            // 阻止瀏覽器預設行為（防止頁面縮放或滾動）
-            e.preventDefault();
-
-            // ===== Step 1: 計算雙指中心點（螢幕座標）=====
-            const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-            // ===== Step 2: 計算雙指距離 =====
-            const dist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-
-            // ===== 防呆檢查：確保 lastDist 有效 =====
-            // 如果 lastDist 無效（= 0 或 null），代表 touchstart 沒有正確初始化
-            // 此時只初始化參數，不執行縮放，避免產生錯誤的距離變化量
-            if (!lastDist || lastDist === 0) {
-                // 僅初始化，不縮放
-                lastDist = dist;
-                lastPinchCenter = { x: centerX, y: centerY };
-                return;
-            }
-
-            // 只有在有上一次記錄時才執行縮放
-            if (lastPinchCenter) {
-                // ===== Step 3: 計算距離變化量 =====
-                const distanceDelta = dist - lastDist;
-
-                // ===== Step 4: 設定靈敏度 (0.002 = 細膩縮放) =====
-                const ZOOM_SENSITIVITY = 0.002;
-                const zoomDelta = distanceDelta * ZOOM_SENSITIVITY;
-
-                // ===== Step 5: 位置補償（關鍵邏輯）=====
-                // 取得視口的邊界矩形
-                const vpRect = vp.getBoundingClientRect();
-
-                // 計算中心點相對於視口左上角的偏移量（視口座標系）
-                const focusX = centerX - vpRect.left;
-                const focusY = centerY - vpRect.top;
-
-                // 呼叫縮放函數，傳入雙指中心點作為縮放焦點
-                // 這會確保縮放時，雙指中心點在螢幕上的位置保持不變
-                zoomCameraAt(zoomDelta, focusX, focusY);
-            }
-
-            // 記錄當前狀態供下一次計算使用
-            lastDist = dist;
-            lastPinchCenter = { x: centerX, y: centerY };
-        }
-    }, { passive: false });
-
-    // ===== 觸控結束 (touchend) - 強化：處理單指殘留與狀態重置 =====
-    vp.addEventListener('touchend', e => {
-        // 重置雙指縮放參數
-        lastDist = 0;
-        lastPinchCenter = null;
-
-        // 🔥 關鍵修復：處理從「雙指縮放」切換到「單指拖曳」的情況
-        // 當一根手指離開螢幕，還剩一根手指在螢幕上時（e.touches.length === 1）
-        // 必須更新 lastPointer 為剩餘手指的當前位置
-        // 否則下一次移動時，會從舊的 lastPointer 位置計算位移，導致地圖瞬間飛到錯誤位置
-        if (e.touches.length === 1) {
-            // 🔥 重要：延遲重置 isPinchZooming，防止立即觸發拖曳
-            // 使用 setTimeout 確保 pointermove 不會在手指離開的瞬間處理拖曳
-            setTimeout(() => {
-                isPinchZooming = false;
-            }, 50);
-
-            // 更新單指拖曳的參考點為剩餘手指的位置
-            lastPointer = {
-                x: e.touches[0].clientX,
-                y: e.touches[0].clientY
-            };
-            // 重置拖曳狀態，等待新的拖曳操作
-            isDraggingMap = false;
-            isPotentialDrag = false;
-        } else if (e.touches.length === 0) {
-            // 所有手指都離開螢幕，完全重置所有狀態
+        if (pointers.size === 1) {
+            // 雙指 → 單指：以剩餘手指作為新的平移基準，避免座標跳動。
+            // 與舊版一致：放開一指後不自動接續平移，需重新按下才會平移。
+            const rest = [...pointers.values()][0];
+            lastPointer = { x: rest.x, y: rest.y };
             isPinchZooming = false;
+            pinchPrevDist = 0;
+            isDraggingMap = false;
+            isPotentialDrag = false;
+        } else if (pointers.size === 0) {
+            isPinchZooming = false;
+            pinchPrevDist = 0;
             isDraggingMap = false;
             isPotentialDrag = false;
         }
-    });
+    }
 
-    // ===== 觸控取消 (touchcancel) - 處理中斷情況 =====
-    vp.addEventListener('touchcancel', e => {
-        // 當觸控被中斷時（例如來電、系統手勢等），重置所有狀態
-        lastDist = 0;
-        lastPinchCenter = null;
-        isPinchZooming = false;
-        isDraggingMap = false;
-        isPotentialDrag = false;
-    });
+    window.addEventListener('pointerup', endPointer);
+    window.addEventListener('pointercancel', endPointer);
 }
 
 // ===== 相機操作 =====

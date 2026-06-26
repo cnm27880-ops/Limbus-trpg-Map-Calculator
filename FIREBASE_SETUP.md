@@ -162,19 +162,41 @@ limbus-trpg-map (您的專案)
 
 ## 第五步：設定安全規則（重要！）
 
-為了保護您的資料庫，請設定正確的安全規則：
+為了保護您的資料庫，請設定正確的安全規則。
+
+> ⚠️ **請勿使用測試模式的 `".read": true, ".write": true`**：那等於任何人都能任意寫入/刪除/灌爆資料庫。
+> 本專案改用「結構/型別/長度驗證」的規則（無需登入），規則檔為專案根目錄的 [`database.rules.json`](database.rules.json)。
 
 1. 在 Firebase Console 中，進入「Realtime Database」
 2. 點擊「規則」標籤
-3. 將規則改為：
+3. 將規則改為 `database.rules.json` 的內容：
 
 ```json
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "rooms": {
+      ".read": true,
       "$roomCode": {
-        ".read": true,
-        ".write": true
+        ".write": true,
+        ".validate": "$roomCode.matches(/^[A-Za-z0-9]{4,8}$/)",
+        "mapBg": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 3000000)"
+        },
+        "units": {
+          "$unitId": {
+            "name":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
+            "avatar": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500000)" },
+            "type":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 20)" },
+            "hp":     { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999)" },
+            "maxHp":  { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 9999)" },
+            "x":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -1 && newData.val() <= 9999)" },
+            "y":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -1 && newData.val() <= 9999)" },
+            "init":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -9999 && newData.val() <= 9999)" },
+            "size":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 3)" }
+          }
+        }
       }
     }
   }
@@ -183,7 +205,22 @@ limbus-trpg-map (您的專案)
 
 4. 點擊「發布」
 
-**說明**：這個規則允許任何人讀寫房間資料。未來如果需要更嚴格的安全控制，可以加入驗證規則。
+也可用 Firebase CLI 部署（根目錄已附 `firebase.json`）：
+
+```bash
+firebase deploy --only database
+```
+
+**規則說明**：
+- **預設拒絕**：根節點 `.read/.write` 皆為 `false`，只開放 `rooms` 之下。
+- **房號格式**：`$roomCode` 必須是 4–8 位英數字（對應 `security.js` 的 `isValidRoomCode`），擋掉任意路徑灌入。
+- **長度上限**：頭像 base64 ≤ 500KB、地圖背景圖 ≤ 3MB、單位名稱 ≤ 200 字，避免惡意灌爆。
+- **型別/範圍**：單位的 hp/maxHp/x/y/init/size 限定為合理數值範圍（對應 client 端 `validateUnitData`）。
+- **相容性**：每條驗證皆以「不存在則略過」包裹，相容 Phase 1B 的欄位級寫入（只寫 `units/$id/hp` 等）與刪除操作；未列出的欄位不額外限制，避免誤擋既有寫入。
+
+> **註（無需登入的取捨）**：此規則不需帳號即可遊玩（沿用現有體驗），因此「讀取」與「同房寫入」仍對所有人開放，
+> 無法阻止知道房號者改動該房資料。若日後要強制「只有房主能改特定節點」，可再導入 Firebase Anonymous Auth
+> 並加上 `auth != null` 與擁有者比對（屬後續強化項目）。
 
 ---
 

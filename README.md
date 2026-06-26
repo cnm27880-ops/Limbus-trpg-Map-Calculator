@@ -291,17 +291,29 @@ Data 層    Utils 層      ← Firebase 同步、localStorage、工具函數
 
 ### 本地開發
 
-使用任意本地伺服器開啟：
+**建議：使用 Vite 開發伺服器**（支援熱更新，並作為後續模組化／打包的地基）：
 
 ```bash
-# Python
-python -m http.server 8080
+npm install      # 第一次先安裝相依（僅 Vite，dev-only）
+npm run dev      # 啟動開發伺服器（預設 http://localhost:5173）
+npm run build    # 產出 dist/（壓縮 CSS、可部署的靜態檔）
+npm run preview  # 在本機預覽 dist/ 的建置結果
+npm test         # 執行純邏輯單元測試（node tests/unit-tests.js）
+```
 
-# Node.js
-npx serve .
+或使用任意靜態伺服器（不需 Node）：
+
+```bash
+python -m http.server 8080   # Python
+npx serve .                  # Node.js
 ```
 
 > 也可直接用瀏覽器開啟 `index.html`，但多人連線功能需要 Firebase 配置。
+>
+> **關於 Vite（過渡說明）**：目前專案仍是「全域變數 + classic `<script>` 嚴格載入順序」架構，
+> Vite 在此階段屬於**非破壞性的附加能力**——原始檔案直接開啟或以靜態主機部署仍可正常運作。
+> `npm run build` 會經 `vite.config.mjs` 的 `copy-legacy-scripts` 外掛把 `src/` 複製進 `dist/`；
+> 待後續逐步改為 ES6 module（`import`/`export`）後，Vite 即可自動 bundle，該過渡外掛屆時可移除。
 
 ### Firebase 配置
 

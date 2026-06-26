@@ -32,6 +32,11 @@ function setupPanelDrag(panelId, headerId, stateObj, saveFn) {
     const header = document.getElementById(headerId);
     if (!panel || !header) return;
 
+    // 交由 WindowManager 管理層級：點擊面板即在其 tier 內置頂（最後點擊者在上）
+    if (typeof WindowManager !== 'undefined') {
+        WindowManager.register(panel, { tier: 'panel' });
+    }
+
     let isDragging = false, hasMoved = false;
     const THRESHOLD = 5;
     let startX, startY, startPosX, startPosY;

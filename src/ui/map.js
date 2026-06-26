@@ -329,9 +329,6 @@ function renderMap() {
 
     const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
 
-    grid.style.gridTemplateColumns = `repeat(${state.mapW}, var(--grid-size))`;
-    grid.innerHTML = '';
-
     // 套用背景圖
     applyMapBg();
 
@@ -365,154 +362,17 @@ function renderMap() {
         document.getElementById('map-viewport').appendChild(rulerLabel);
     }
 
-    // 使用 DocumentFragment 提升效能（減少 DOM 重繪次數）
-    const fragment = document.createDocumentFragment();
+    // ===== Canvas 地圖層（取代 2500 個 .cell DOM 節點，效能優化）=====
+    // 確保 canvas 存在並符合目前地圖尺寸；指標互動（選取/部署/移動/繪製）已在
+    // map-canvas.js 的 attachMapCanvasEvents 內處理，行為與舊版 .cell 完全一致。
+    ensureMapCanvas();
 
-    // 渲染格子
-    for (let y = 0; y < state.mapH; y++) {
-        for (let x = 0; x < state.mapW; x++) {
-            const val = state.mapData[y][x];
-            const div = document.createElement('div');
-            div.className = 'cell';
+    // 移除上一輪的動態 DOM（Token / 回合符文），保留 canvas 地圖層
+    grid.querySelectorAll('.token, .turn-indicator-rune').forEach(n => n.remove());
 
-            // 部署高亮邏輯
-            if (currentTool === 'cursor' && selectedUnitId !== null) {
-                const u = findUnitById(selectedUnitId);
-                const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
-                if (u && u.x === -1 && controllable) {
-                    div.classList.add('deploy-target');
-                }
-            }
+    // 在 canvas 上繪製格子地形、格線與部署高亮
+    drawMapCanvas();
 
-            // 從調色盤查找地形定義（內含舊存檔回退邏輯）
-            let tileDef = (typeof getTileFromPalette === 'function')
-                ? getTileFromPalette(val)
-                : null;
-
-            // 舊存檔相容性（ID 1~3 的舊格式）
-            if (!tileDef && state.themeId === 0) {
-                const theme = getCurrentTheme();
-                if (val === 1) tileDef = theme.tiles.find(t => t.name === '牆壁');
-                else if (val === 2) tileDef = theme.tiles.find(t => t.name === '掩體');
-                else if (val === 3) tileDef = theme.tiles.find(t => t.name === '險地');
-            }
-
-            if (tileDef) {
-                div.style.backgroundColor = tileDef.color;
-                if (tileDef.name.includes('牆') || tileDef.name.includes('掩體')) {
-                    div.style.backgroundImage = 'repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.2) 4px,rgba(0,0,0,0.2) 8px)';
-                }
-            }
-
-            // --- 互動事件綁定 ---
-
-            // 儲存點擊起始座標（用於判斷是拖曳還是點擊）
-            let clickStartX = null;
-            let clickStartY = null;
-            let cellTargetX = x;
-            let cellTargetY = y;
-
-            div.onpointerdown = (e) => {
-                // 只處理左鍵（右鍵留給快速選單，不參與繪製/選取）
-                if (e.button !== undefined && e.button !== 0) return;
-
-                // 記錄起始座標
-                clickStartX = e.clientX;
-                clickStartY = e.clientY;
-
-                // 游標模式
-                if (currentTool === 'cursor') {
-                    // 🔥 修復：如果有選中單位（準備部署或移動），阻止事件冒泡，避免觸發相機拖曳
-                    if (selectedUnitId !== null) {
-                        e.stopPropagation();
-                        return;
-                    }
-
-                    // 游標模式下沒有選中單位時，ST 可查看該格的地形資訊
-                    if (myRole === 'st') {
-                        updateTileInfo(x, y);
-                    }
-                    // 允許事件冒泡以觸發地圖拖曳
-                }
-                // 繪製工具模式 (ST Only)
-                else if (myRole === 'st') {
-                    // 標記為開始繪製
-                    isPaintingDrag = true;
-                    handleMapInput(x, y, e);
-                    // 阻止事件冒泡，避免觸發相機平移
-                    e.stopPropagation();
-                }
-            };
-
-            div.onpointerup = (e) => {
-                // 只處理左鍵
-                if (e.button !== undefined && e.button !== 0) return;
-
-                // 游標模式 + 有選中單位 → 檢查是否為有效點擊（非拖曳）
-                if (currentTool === 'cursor' && selectedUnitId !== null) {
-                    // 計算拖曳距離
-                    const dragDistance = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
-
-                    // 拖曳距離閾值：10px
-                    const DRAG_THRESHOLD = 10;
-
-                    // 如果是拖曳操作（超過閾值），忽略單位移動
-                    if (dragDistance > DRAG_THRESHOLD) {
-                        return;
-                    }
-
-                    // 如果 isDraggingMap 為 true，表示正在拖曳地圖，也要忽略
-                    if (isDraggingMap) {
-                        return;
-                    }
-
-                    // 有效點擊：移動單位
-                    const u = findUnitById(selectedUnitId);
-                    const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
-
-                    if (u && controllable) {
-                        if (myRole === 'st') {
-                            u.x = cellTargetX;
-                            u.y = cellTargetY;
-                            selectedUnitId = null;
-                            broadcastState();
-                        } else {
-                            sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: cellTargetX, y: cellTargetY });
-                            // 玩家端預先更新本地顯示
-                            u.x = cellTargetX;
-                            u.y = cellTargetY;
-                            selectedUnitId = null;
-                            renderAll();
-                        }
-                        // 點擊移動後阻止事件冒泡
-                        e.stopPropagation();
-                        return;
-                    }
-
-                    // 選中的是無法控制的單位（例如查看敵人）→ 點擊地面取消選取
-                    if (u && !controllable) {
-                        clearSelection();
-                        e.stopPropagation();
-                        return;
-                    }
-                }
-            };
-
-            // 實現拖曳繪製 (Mouse Drag Paint)
-            div.onpointerenter = (e) => {
-                // 條件：必須是 ST + 非游標工具 + 正在繪製中（已按下 pointerdown）
-                if (myRole === 'st' && currentTool !== 'cursor' && isPaintingDrag) {
-                    handleMapInput(x, y, e);
-                }
-            };
-
-            fragment.appendChild(div);
-        }
-    }
-
-    // 一次性添加所有格子到 DOM，避免多次重繪
-    grid.appendChild(fragment);
-    
     // 渲染 Tokens（先渲染大型單位，再渲染小型單位，確保小單位不被遮蓋）
     const sortedUnits = state.units.filter(u => u.x >= 0).sort((a, b) => {
         const sizeA = a.size || 1;
@@ -833,24 +693,11 @@ function handleMapInput(x, y, e) {
     if (state.mapData[y][x] !== newVal) {
         state.mapData[y][x] = newVal;
 
-        // 優化：直接修改 DOM 樣式，而不是重繪整個地圖 (效能提升)
-        if (e && e.target && e.target.classList.contains('cell')) {
-            const tileDef = (typeof getTileFromPalette === 'function')
-                ? getTileFromPalette(newVal) : null;
-
-            if (tileDef) {
-                e.target.style.backgroundColor = tileDef.color;
-                if (tileDef.name.includes('牆') || tileDef.name.includes('掩體')) {
-                    e.target.style.backgroundImage = 'repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.2) 4px,rgba(0,0,0,0.2) 8px)';
-                } else {
-                    e.target.style.backgroundImage = '';
-                }
-            } else {
-                e.target.style.backgroundColor = '';
-                e.target.style.backgroundImage = '';
-            }
+        // Canvas 模式：直接重繪 canvas 地圖層（取代逐格 DOM 操作）。
+        // 單一 canvas 的 2D 填色重繪成本極低，繪製拖曳時也能維持流暢。
+        if (typeof drawMapCanvas === 'function') {
+            drawMapCanvas();
         } else {
-            // 如果無法直接操作 DOM，則回退到重繪
             renderAll();
         }
 

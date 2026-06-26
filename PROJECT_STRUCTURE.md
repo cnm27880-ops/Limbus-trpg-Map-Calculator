@@ -27,7 +27,8 @@ Limbus-trpg-Map-Calculator/
 │   │
 │   ├── ui/                  # UI 層 - 用戶界面與互動
 │   │   ├── main.js          # 應用入口、快速操作球
-│   │   ├── map.js           # 地圖渲染與互動
+│   │   ├── map.js           # 地圖渲染與互動（Token、測距尺、BOSS HUD 等）
+│   │   ├── map-canvas.js    # 地圖 Canvas 渲染層（格子/格線/部署高亮，取代 2500 個 DOM 節點）
 │   │   ├── units.js         # 單位列表渲染與操作
 │   │   ├── modals.js        # 彈窗管理
 │   │   ├── camera.js        # 地圖視角控制

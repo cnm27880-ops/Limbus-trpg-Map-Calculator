@@ -1294,6 +1294,22 @@ body.aoe-select-active .token {
     resize: vertical;
 }
 
+/* 「BOSS 設定」合併視窗（units.js openMultiActionModal）內的區塊分隔標題 */
+.ma-section-title {
+    font-weight: bold;
+    color: var(--accent-orange, #e67e22);
+    margin: 14px 0 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.95rem;
+}
+
+.ma-section-title:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
 .emoji-picker {
     display: flex;
     flex-wrap: wrap;

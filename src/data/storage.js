@@ -264,12 +264,16 @@ function getUnitTemplates() {
 
 /**
  * 保存單位模板
- * @param {Object} template - 模板數據 {name, hp, type, size, avatar}
+ * @param {Object} template - 模板數據 {name, hp, type, size, avatar, combat}
+ *   combat（選填，通常來自「戰鬥數值設定」Modal 的既有單位另存）：
+ *     { defDp, defAuto, saveWill, saveReflex, saveTenacity, allAttr, allSkill, sideLevel,
+ *       actionDp, actionAoe, actionStatuses:[{id,stacks}] }
  * @returns {Object} 保存的模板（含 ID）
  */
 function saveUnitTemplate(template) {
     try {
         const templates = getUnitTemplates();
+        const combat = (template.combat && typeof template.combat === 'object') ? template.combat : {};
 
         const newTemplate = {
             id: Date.now().toString() + '_' + Math.floor(Math.random() * 10000).toString(),
@@ -278,6 +282,24 @@ function saveUnitTemplate(template) {
             type: template.type || 'enemy',
             size: template.size || 1,
             avatar: template.avatar || null,
+            // 完整戰鬥數值：讓 ST 設定好一隻小怪後可直接套用到其他同類小怪，不必每隻重新填一次
+            combat: {
+                defDp: parseInt(combat.defDp) || 0,
+                defAuto: parseInt(combat.defAuto) || 0,
+                saveWill: parseInt(combat.saveWill) || 0,
+                saveReflex: parseInt(combat.saveReflex) || 0,
+                saveTenacity: parseInt(combat.saveTenacity) || 0,
+                allAttr: parseInt(combat.allAttr) || 0,
+                allSkill: parseInt(combat.allSkill) || 0,
+                sideLevel: Math.max(1, parseInt(combat.sideLevel) || 1),
+                actionDp: parseInt(combat.actionDp) || 0,
+                actionAoe: !!combat.actionAoe,
+                actionStatuses: Array.isArray(combat.actionStatuses)
+                    ? combat.actionStatuses
+                        .filter(s => s && s.id)
+                        .map(s => ({ id: String(s.id), stacks: parseInt(s.stacks) || 0 }))
+                    : []
+            },
             createdAt: Date.now()
         };
 

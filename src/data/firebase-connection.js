@@ -747,12 +747,28 @@ function setupRoomListeners() {
                 state.themeId = validThemeId;
                 updateToolbar();
             }
+            const prevTurnIdx = state.turnIdx;
             state.turnIdx = (typeof newState.turnIdx === 'number') ? Math.max(-1, Math.floor(newState.turnIdx)) : 0;
             state.isCombatActive = newState.isCombatActive === true;
             state.activeBossId = (typeof newState.activeBossId === 'string') ? newState.activeBossId : null;
             renderUnitsList();
             renderUnitsToolbar();
             renderMap();
+
+            // 回合開始技能自動觸發：偵測到 turnIdx「真的改變」且新的當前行動單位是自己的單位時，
+            // 由本客戶端自行用本地端 identityHudState（存在各玩家自己瀏覽器 localStorage）
+            // 觸發回合開始資源結算。刻意不放在 ST 專用的 nextTurn()（units.js），因為 ST 端
+            // 沒有玩家的 identityHudState 資料；每個玩家的客戶端各自判斷「現在是不是輪到我」。
+            // prevTurnIdx 剛加入房間時已由 loadRoomData 設成與本次相同的值，故不會在剛連線/
+            // 重新整理時誤觸發（此時兩者相等，不算「改變」）。
+            if (state.turnIdx !== prevTurnIdx && state.isCombatActive && Array.isArray(state.units) &&
+                typeof myPlayerId !== 'undefined' && myPlayerId &&
+                typeof autoTriggerIdentityTurnStart === 'function') {
+                const activeUnit = state.units[state.turnIdx];
+                if (activeUnit && activeUnit.ownerId === myPlayerId) {
+                    autoTriggerIdentityTurnStart(activeUnit);
+                }
+            }
         }
     });
     unsubscribeListeners.push(() => roomRef.child('state').off('value', stateListener));
@@ -1377,6 +1393,8 @@ function sendToHost(message) {
         case 'addUnit':
             const newUnit = createUnit(message.name, message.hp, message.unitType, message.playerId, message.playerName, message.size || 1);
             if (message.avatar) newUnit.avatar = message.avatar;
+            // 模板帶來的完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態）
+            if (message.combat && typeof message.combat === 'object') Object.assign(newUnit, message.combat);
             roomRef.child(`units/${newUnit.id}`).set(newUnit);
             break;
 

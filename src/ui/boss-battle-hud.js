@@ -30,56 +30,67 @@ function openBossUnitModal(unitId) {
     if (existing) existing.remove();
 
     const html = `
-        <div class="modal-overlay show" id="boss-unit-modal" onclick="if(event.target.id==='boss-unit-modal')closeBossUnitModal()">
-            <div class="modal" style="max-width:420px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <span style="font-weight:bold;">👹 戰鬥數值設定 - ${escapeHtml(u.name || '單位')}</span>
-                    <button onclick="closeBossUnitModal()" style="background:none;font-size:1.2rem;">×</button>
+        <div class="float-modal" id="boss-unit-modal">
+            <div class="modal-header" id="boss-unit-float-header">
+                <span style="font-weight:bold;">👹 戰鬥數值設定 - ${escapeHtml(u.name || '單位')}</span>
+                <span class="float-modal-btns">
+                    <button class="float-modal-icon-btn" id="boss-unit-collapse-btn" title="收起">▾</button>
+                    <button class="float-modal-icon-btn" onclick="closeBossUnitModal()" title="關閉">×</button>
+                </span>
+            </div>
+            <div class="modal-body">
+                <div class="stat-grid cols-2">
+                    <label class="stat-field"><span>先攻加值</span><input type="number" id="boss-unit-init" value="${u.init || 0}"></label>
+                    <label class="stat-field"><span>生命上限</span><input type="number" id="boss-unit-max-hp" value="${u.maxHp || 1}" min="1"></label>
                 </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label>先攻加值</label>
-                        <input type="number" id="boss-unit-init" value="${u.init || 0}">
-                    </div>
-                    <div class="form-group">
-                        <label>生命上限</label>
-                        <input type="number" id="boss-unit-max-hp" value="${u.maxHp || 1}" min="1">
-                    </div>
-                    <div class="form-group" style="display:flex;gap:8px;">
-                        <label style="flex:1;">防禦<input type="number" id="boss-unit-def-dp" value="${u.defDp || 0}"></label>
-                        <label style="flex:1;">防禦附加成功<input type="number" id="boss-unit-def-auto" value="${u.defAuto || 0}"></label>
-                    </div>
-                    <div class="form-group">
-                        <label>三豁免（意志 / 反射 / 強韌）</label>
-                        <div style="display:flex;gap:6px;">
-                            <input type="number" id="boss-unit-save-will" value="${u.saveWill || 0}" placeholder="意志">
-                            <input type="number" id="boss-unit-save-reflex" value="${u.saveReflex || 0}" placeholder="反射">
-                            <input type="number" id="boss-unit-save-tenacity" value="${u.saveTenacity || 0}" placeholder="強韌">
-                        </div>
-                    </div>
-                    <div class="form-group" style="display:flex;gap:8px;">
-                        <label style="flex:1;">全屬性<input type="number" id="boss-unit-all-attr" value="${u.allAttr || 0}"></label>
-                        <label style="flex:1;">全技能<input type="number" id="boss-unit-all-skill" value="${u.allSkill || 0}"></label>
-                    </div>
-                    <div class="form-group">
-                        <label>支線等級（多重行動「對抗分配」修正基數 = 等級 × 10）</label>
-                        <input type="number" id="boss-unit-side-level" value="${u.sideLevel || 1}" min="1" max="99">
-                    </div>
-                    <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
-                        防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
-                        三豁免／全屬性／全技能目前僅記錄＋顯示，供套用狀態或臨場判定參考，不會自動套入計算。
+                <div class="stat-grid cols-2">
+                    <label class="stat-field"><span>防禦</span><input type="number" id="boss-unit-def-dp" value="${u.defDp || 0}"></label>
+                    <label class="stat-field"><span>防禦附加成功</span><input type="number" id="boss-unit-def-auto" value="${u.defAuto || 0}"></label>
+                </div>
+                <div class="stat-field">
+                    <span>三豁免（意志 / 反射 / 強韌）</span>
+                    <div class="stat-grid cols-3">
+                        <input type="number" id="boss-unit-save-will" value="${u.saveWill || 0}" placeholder="意志">
+                        <input type="number" id="boss-unit-save-reflex" value="${u.saveReflex || 0}" placeholder="反射">
+                        <input type="number" id="boss-unit-save-tenacity" value="${u.saveTenacity || 0}" placeholder="強韌">
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="modal-btn" onclick="saveBossUnitAsTemplate('${u.id}')" style="background:var(--accent-purple);color:#fff;margin-right:auto;" title="把目前設定的完整戰鬥數值存為模板，之後套用到其他同類小怪不必重新填一次">💾 存為模板</button>
-                    <button class="modal-btn" onclick="closeBossUnitModal()" style="background:var(--bg-card);">取消</button>
-                    <button class="modal-btn" onclick="saveBossUnitModal('${u.id}')" style="background:var(--accent-green);color:#000;">儲存</button>
+                <div class="stat-grid cols-2">
+                    <label class="stat-field"><span>全屬性</span><input type="number" id="boss-unit-all-attr" value="${u.allAttr || 0}"></label>
+                    <label class="stat-field"><span>全技能</span><input type="number" id="boss-unit-all-skill" value="${u.allSkill || 0}"></label>
                 </div>
+                <label class="stat-field">
+                    <span>支線等級（對抗分配修正基數 = 等級 × 10）</span>
+                    <input type="number" id="boss-unit-side-level" value="${u.sideLevel || 1}" min="1" max="99">
+                </label>
+                <label class="stat-field">
+                    <span>被動能力／特性（自由填寫，供 ST 臨場參考）</span>
+                    <textarea id="boss-unit-passive" rows="2" placeholder="例：每回合結束回復 10 HP；免疫流血；受火焰傷害 +50%……">${escapeHtml(u.passive || '')}</textarea>
+                </label>
+                <div class="ma-hint">
+                    防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
+                    三豁免／全屬性／全技能／被動能力目前僅記錄＋顯示，供套用狀態或臨場判定參考，不會自動套入計算。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="saveBossUnitAsTemplate('${u.id}')" style="background:var(--accent-purple);color:#fff;margin-right:auto;" title="把目前設定的完整戰鬥數值存為模板，之後套用到其他同類小怪不必重新填一次">💾 存為模板</button>
+                <button class="modal-btn" onclick="closeBossUnitModal()" style="background:var(--bg-card);">取消</button>
+                <button class="modal-btn" onclick="saveBossUnitModal('${u.id}')" style="background:var(--accent-green);color:#000;">儲存</button>
             </div>
         </div>
     `;
     const container = document.getElementById('modals-container') || document.body;
     container.insertAdjacentHTML('beforeend', html);
+    // 轉為可拖曳 / 雙擊收起的浮動面板（記憶位置與收合狀態），預設落在右側不擋戰場
+    if (typeof makeFloatingPanel === 'function') {
+        makeFloatingPanel({
+            panelId: 'boss-unit-modal',
+            headerId: 'boss-unit-float-header',
+            collapseBtnId: 'boss-unit-collapse-btn',
+            storageKey: 'limbus_boss_unit_panel',
+            defaultPos: { x: Math.max(20, window.innerWidth - 400), y: 64 },
+        });
+    }
 }
 
 function closeBossUnitModal() {
@@ -102,6 +113,7 @@ function saveBossUnitModal(unitId) {
     u.allAttr = parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0;
     u.allSkill = parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0;
     u.sideLevel = Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1);
+    u.passive = (document.getElementById('boss-unit-passive')?.value || '').trim();
 
     if (Array.isArray(u.hpArr) && u.hpArr.length !== u.maxHp) {
         const old = u.hpArr;
@@ -143,6 +155,7 @@ function saveBossUnitAsTemplate(unitId) {
             allAttr: parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0,
             allSkill: parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0,
             sideLevel: Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1),
+            passive: (document.getElementById('boss-unit-passive')?.value || '').trim(),
             actionDp: u.actionDp || 0,
             actionAoe: !!u.actionAoe,
             actionStatuses: Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : []

@@ -115,6 +115,77 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
     });
 }
 
+// ===== Generic Floating Panel（可拖曳 + 雙擊/按鈕收合 + 位置記憶）=====
+
+/**
+ * 把一個浮動面板元素設定為：標頭可拖曳、雙擊標頭或點收起鈕可收合、
+ * 位置與收合狀態記憶到 localStorage，並交由 WindowManager 管理層級。
+ * 供 ST 的「BOSS 設定」「戰鬥數值設定」等面板共用，取代固定置中的遮罩式 modal，
+ * 讓 ST 在戰鬥中把面板拖到一旁、隨時對照戰場。
+ *
+ * @param {Object} opts
+ * @param {string} opts.panelId       浮動面板根元素 id
+ * @param {string} opts.headerId      標頭（拖曳把手）id
+ * @param {string} opts.storageKey    localStorage 記憶位置/收合狀態的 key
+ * @param {string} [opts.collapseBtnId] 標頭收起鈕 id（可選）
+ * @param {{x:number,y:number}} [opts.defaultPos] 首次開啟的預設座標
+ * @returns {Object|undefined} stateObj（含 position / isCollapsed）
+ */
+function makeFloatingPanel(opts) {
+    const o = opts || {};
+    const panel = document.getElementById(o.panelId);
+    const header = document.getElementById(o.headerId);
+    if (!panel || !header) return;
+
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(o.storageKey) || '{}') || {}; } catch (e) { saved = {}; }
+    const def = o.defaultPos || { x: 40, y: 70 };
+    const stateObj = {
+        position: {
+            x: (saved.position && Number.isFinite(saved.position.x)) ? saved.position.x : def.x,
+            y: (saved.position && Number.isFinite(saved.position.y)) ? saved.position.y : def.y,
+        },
+        isCollapsed: !!saved.isCollapsed,
+    };
+    const saveFn = () => {
+        try { localStorage.setItem(o.storageKey, JSON.stringify(stateObj)); } catch (e) { /* 忽略配額/隱私模式錯誤 */ }
+    };
+
+    panel.style.left = stateObj.position.x + 'px';
+    panel.style.top = stateObj.position.y + 'px';
+
+    const collapseBtn = o.collapseBtnId ? document.getElementById(o.collapseBtnId) : null;
+    function syncCollapse() {
+        panel.classList.toggle('collapsed', stateObj.isCollapsed);
+        if (collapseBtn) {
+            collapseBtn.textContent = stateObj.isCollapsed ? '▸' : '▾';
+            collapseBtn.title = stateObj.isCollapsed ? '展開' : '收起';
+        }
+    }
+    function toggleCollapse() {
+        stateObj.isCollapsed = !stateObj.isCollapsed;
+        syncCollapse();
+        saveFn();
+    }
+    syncCollapse();
+
+    // 標頭拖曳 + WindowManager 置頂（同 tier 內最後點擊者在最上層）
+    setupPanelDrag(o.panelId, o.headerId, stateObj, saveFn);
+
+    // 雙擊標頭收合／展開（點標頭上的按鈕時不觸發）
+    header.addEventListener('dblclick', (e) => {
+        if (e.target.closest('button')) return;
+        toggleCollapse();
+    });
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleCollapse(); });
+    }
+
+    // 夾限，避免記憶座標來自更大的視窗、開啟時整個面板落到螢幕外
+    clampHudPosition(stateObj, o.panelId);
+    return stateObj;
+}
+
 // ===== Status Name Helpers =====
 
 function getStatusName(statusId) {
@@ -145,6 +216,7 @@ function getStatusDisplayName(statusId) {
 window.clampHudPosition = clampHudPosition;
 window.setupPanelDrag = setupPanelDrag;
 window.setupPanelCollapse = setupPanelCollapse;
+window.makeFloatingPanel = makeFloatingPanel;
 window.getStatusName = getStatusName;
 window.getStatusDisplayName = getStatusDisplayName;
 

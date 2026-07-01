@@ -258,14 +258,34 @@ function renderUnitsList() {
                 ? `<button class="action-btn" onclick="toggleUnitVisibility('${u.id}')" title="切換隱藏/現身">👁️ ${isHidden ? '現身' : '隱藏'}</button>`
                 : '';
 
-            // ST 專屬的多重行動設定（BOSS 一回合多次行動）
+            // ST 專屬的 BOSS 設定（戰鬥數值＋一回合多次行動，合併於同一 Modal）
             const multiActionBtn = (isSt && u.type === 'boss')
-                ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="多重行動設定（一回合多次行動）">⚔×</button>`
+                ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="BOSS 設定（戰鬥數值＋多重行動）">⚔×</button>`
                 : '';
 
+            // B/L/A 快速傷害/治療步進器：沿用狀態庫「目前狀態」的膠囊樣式（.current-status-tag / .stack-adjust-btn），
+            // 取代原本要跳出 Modal 才能操作的「❤️ 管理」按鈕，讓最常見的單點傷害/治療一鍵完成。
+            // ＋＝造成傷害、－＝治療同類型傷害，語意與 modifyHP() 的 dmgType/'heal-x' 對應一致。
+            const hpStepper = (type, label, count, colorVar) => `
+                <span class="current-status-tag" style="--status-color:var(${colorVar})">
+                    <button class="stack-adjust-btn" onclick="modifyHP('${u.id}','heal-${type}',1)" title="治療 1 點 ${label} 傷">−</button>
+                    <span class="stack-value">${count} ${label}</span>
+                    <button class="stack-adjust-btn" onclick="modifyHP('${u.id}','${type}',1)" title="造成 1 點 ${label} 傷">+</button>
+                </span>`;
+
+            const hpQuickAdjust = `
+                <div class="hp-quick-adjust">
+                    ${hpStepper('b', 'B', b, '--dmg-b')}
+                    ${hpStepper('l', 'L', l, '--dmg-l')}
+                    ${hpStepper('a', 'A', a, '--dmg-a')}
+                    <button class="action-btn" onclick="showToast('再點一次確認重置')" ondblclick="resetUnitHp('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
+                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡</button>
+                </div>
+            `;
+
             actions = `
+                ${hpQuickAdjust}
                 <div class="unit-actions">
-                    <button class="action-btn heal" onclick="openVitalityModal('${u.id}')" title="生存管理 (血量/護盾)">❤️ 管理</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
@@ -1067,25 +1087,24 @@ function openUnitContextMenu(event, unitId) {
     if (canControl && u.actionSlotOf) {
         // 多重行動條目：只提供設定與刪除
         items = [
-            { icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.actionSlotOf}')` },
+            { icon: '⚔', label: 'BOSS 設定（數值＋多重行動）', fn: `openMultiActionModal('${u.actionSlotOf}')` },
             { icon: '✕', label: '刪除此行動', cls: 'danger', fn: `deleteUnit('${u.id}')` }
         ];
     } else {
         items = [];
         if (canControl) {
             items.push(
-                { icon: '❤️', label: '生存管理', fn: `openVitalityModal('${u.id}')` },
                 { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
                 { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` }
             );
             if (isSt) {
+                // BOSS：戰鬥數值＋多重行動已合併進同一個 Modal，只需一個入口，不必來回切換兩個視窗
                 if (u.type === 'boss') {
-                    items.push({ icon: '⚔', label: '多重行動設定', fn: `openMultiActionModal('${u.id}')` });
-                }
-                items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
-                if (isBoss || u.type === 'enemy') {
+                    items.push({ icon: '👹', label: 'BOSS 設定（數值＋多重行動）', fn: `openMultiActionModal('${u.id}')` });
+                } else if (isBoss || u.type === 'enemy') {
                     items.push({ icon: '👹', label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });
                 }
+                items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
                 if (isBoss) {
                     items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
                 }
@@ -1189,10 +1208,43 @@ function openMultiActionModal(bossId) {
         <div class="modal-overlay show" id="multi-action-modal" onclick="if(event.target.id==='multi-action-modal')closeMultiActionModal()">
             <div class="modal" style="max-width:460px;" onclick="event.stopPropagation()">
                 <div class="modal-header">
-                    <span style="font-weight:bold;">⚔ 多重行動設定 - ${escapeHtml(boss.name || '單位')}</span>
+                    <span style="font-weight:bold;">👹 BOSS 設定 - ${escapeHtml(boss.name || '單位')}</span>
                     <button onclick="closeMultiActionModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">
+                    <!-- 區塊一：戰鬥數值（原獨立的「戰鬥數值設定」Modal，併入同一視窗以免來回切換） -->
+                    <div class="ma-section-title">👹 戰鬥數值</div>
+                    <div class="form-group">
+                        <label>生命上限</label>
+                        <input type="number" id="ma-boss-max-hp" value="${boss.maxHp || 1}" min="1">
+                    </div>
+                    <div class="form-group" style="display:flex;gap:8px;">
+                        <label style="flex:1;">防禦<input type="number" id="ma-boss-def-dp" value="${boss.defDp || 0}"></label>
+                        <label style="flex:1;">防禦附加成功<input type="number" id="ma-boss-def-auto" value="${boss.defAuto || 0}"></label>
+                    </div>
+                    <div class="form-group">
+                        <label>三豁免（意志 / 反射 / 強韌）</label>
+                        <div style="display:flex;gap:6px;">
+                            <input type="number" id="ma-boss-save-will" value="${boss.saveWill || 0}" placeholder="意志">
+                            <input type="number" id="ma-boss-save-reflex" value="${boss.saveReflex || 0}" placeholder="反射">
+                            <input type="number" id="ma-boss-save-tenacity" value="${boss.saveTenacity || 0}" placeholder="強韌">
+                        </div>
+                    </div>
+                    <div class="form-group" style="display:flex;gap:8px;">
+                        <label style="flex:1;">全屬性<input type="number" id="ma-boss-all-attr" value="${boss.allAttr || 0}"></label>
+                        <label style="flex:1;">全技能<input type="number" id="ma-boss-all-skill" value="${boss.allSkill || 0}"></label>
+                    </div>
+                    <div class="form-group">
+                        <label>支線等級（下方「對抗分配」修正基數 = 等級 × 10）</label>
+                        <input type="number" id="ma-boss-side-level" value="${boss.sideLevel || 1}" min="1" max="99">
+                    </div>
+                    <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;margin-bottom:4px;">
+                        防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
+                        三豁免／全屬性／全技能目前僅記錄＋顯示，供套用狀態或臨場判定參考，不會自動套入計算。
+                    </div>
+
+                    <!-- 區塊二：多重行動設定（原獨立的「多重行動設定」Modal） -->
+                    <div class="ma-section-title">⚔ 多重行動設定</div>
                     <div class="form-group">
                         <label>總行動次數（含本體，例：七招式 BOSS 填 7）</label>
                         <input type="number" id="ma-count" value="${maEdit.actions.length}" min="1" max="12"
@@ -1204,7 +1256,7 @@ function openMultiActionModal(bossId) {
                     </div>
                     <datalist id="ma-status-options"></datalist>
                     <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
-                        行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上。
+                        行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上（本體生命上限見上方「戰鬥數值」）。
                         DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加；勾選「AOE」的行動請改用下方群體操作套用。
                     </div>
 
@@ -1225,7 +1277,8 @@ function openMultiActionModal(bossId) {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="modal-btn" onclick="removeMultiAction('${bossId}')" style="background:var(--accent-red);margin-right:auto;">移除全部行動</button>
+                    <button class="modal-btn" onclick="removeMultiAction('${bossId}')" style="background:var(--accent-red);">移除全部行動</button>
+                    <button class="modal-btn" onclick="saveMultiActionAsTemplate('${bossId}')" style="background:var(--accent-purple);color:#fff;margin-right:auto;" title="把目前設定的完整戰鬥數值存為模板，之後套用到其他同類小怪不必重新填一次">💾 存為模板</button>
                     <button class="modal-btn" onclick="closeMultiActionModal()" style="background:var(--bg-card);">取消</button>
                     <button class="modal-btn" onclick="saveMultiAction('${bossId}')" style="background:var(--accent-green);color:#000;">儲存</button>
                 </div>
@@ -1385,6 +1438,21 @@ function saveMultiAction(bossId) {
     const boss = findUnitById(bossId);
     if (!boss || !maEdit) return;
 
+    // 戰鬥數值區塊（原獨立的「戰鬥數值設定」Modal，併入同一視窗一併儲存）
+    boss.maxHp = Math.max(1, parseInt(document.getElementById('ma-boss-max-hp')?.value) || 1);
+    boss.defDp = parseInt(document.getElementById('ma-boss-def-dp')?.value) || 0;
+    boss.defAuto = parseInt(document.getElementById('ma-boss-def-auto')?.value) || 0;
+    boss.saveWill = parseInt(document.getElementById('ma-boss-save-will')?.value) || 0;
+    boss.saveReflex = parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0;
+    boss.saveTenacity = parseInt(document.getElementById('ma-boss-save-tenacity')?.value) || 0;
+    boss.allAttr = parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0;
+    boss.allSkill = parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0;
+    boss.sideLevel = Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1);
+    if (Array.isArray(boss.hpArr) && boss.hpArr.length !== boss.maxHp) {
+        const old = boss.hpArr;
+        boss.hpArr = Array.from({ length: boss.maxHp }, (_, i) => old[i] || 0);
+    }
+
     const actions = maEdit.actions;
     const count = actions.length;
 
@@ -1424,6 +1492,51 @@ function saveMultiAction(bossId) {
     broadcastState();
     closeMultiActionModal();
     showToast(`⚔ ${boss.name || '單位'} 已設定 ${count} 次行動`);
+}
+
+/**
+ * 把「BOSS 設定」Modal 目前輸入框的完整資料（基礎欄位＋戰鬥數值＋本體行動 DP/狀態）
+ * 另存為「單位模板」，供之後套用到其他同類小怪，不必每隻重新填一次。
+ * 讀取的是 Modal 目前輸入框的值（尚未儲存也可先存模板），而非單位物件上的舊值；
+ * 多重行動的行動 2 以後（各別行動條目）不納入模板，模板只代表「本體」的一份完整資料卡。
+ * @param {string} bossId - 本體單位 ID
+ */
+function saveMultiActionAsTemplate(bossId) {
+    if (myRole !== 'st') return;
+    const boss = findUnitById(bossId);
+    if (!boss || !maEdit) return;
+    if (typeof saveUnitTemplate !== 'function') {
+        showToast('模板功能不可用');
+        return;
+    }
+
+    const action0 = maEdit.actions[0] || { dp: 0, statuses: [], aoe: false };
+    const saved = saveUnitTemplate({
+        name: boss.name || 'Template',
+        hp: Math.max(1, parseInt(document.getElementById('ma-boss-max-hp')?.value) || boss.maxHp || 10),
+        type: boss.type || 'enemy',
+        size: boss.size || 1,
+        avatar: boss.avatar || null,
+        combat: {
+            defDp: parseInt(document.getElementById('ma-boss-def-dp')?.value) || 0,
+            defAuto: parseInt(document.getElementById('ma-boss-def-auto')?.value) || 0,
+            saveWill: parseInt(document.getElementById('ma-boss-save-will')?.value) || 0,
+            saveReflex: parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0,
+            saveTenacity: parseInt(document.getElementById('ma-boss-save-tenacity')?.value) || 0,
+            allAttr: parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0,
+            allSkill: parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0,
+            sideLevel: Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1),
+            actionDp: action0.dp || 0,
+            actionAoe: !!action0.aoe,
+            actionStatuses: action0.statuses.map(s => ({ ...s }))
+        }
+    });
+
+    if (saved) {
+        showToast(`已將「${boss.name || '單位'}」的完整戰鬥數值存為模板：${saved.name}`);
+    } else {
+        showToast('儲存模板失敗');
+    }
 }
 
 /**

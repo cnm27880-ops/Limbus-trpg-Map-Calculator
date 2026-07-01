@@ -227,53 +227,6 @@
 <div id="modals-container"></div>
 
 
-<!-- 生存管理 Modal (Vitality Modal) -->
-<div class="modal-overlay" id="vitality-modal" onclick="if(event.target.id==='vitality-modal')closeModal('vitality-modal')">
-    <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
-            <span id="vitality-modal-title">❤️ 生存管理</span>
-            <button onclick="closeModal('vitality-modal')">×</button>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom:15px;text-align:center;color:var(--text-dim);" id="vitality-modal-hp-desc">
-                選擇傷害/治療類型，輸入數量後執行。
-            </div>
-
-            <div style="display:flex;gap:10px;margin-bottom:15px;">
-                <button class="action-btn dmg-b" style="flex:1;padding:12px;" onclick="setVitalityType('b', this)">B 傷</button>
-                <button class="action-btn dmg-l" style="flex:1;padding:12px;" onclick="setVitalityType('l', this)">L 傷</button>
-                <button class="action-btn dmg-a" style="flex:1;padding:12px;" onclick="setVitalityType('a', this)">A 傷</button>
-            </div>
-            <div style="display:flex;gap:10px;margin-bottom:15px;">
-                <button class="action-btn heal" style="flex:1;padding:12px;box-shadow:inset 0 0 5px rgba(50,255,50,0.3);" onclick="setVitalityType('heal-b', this)">治療 B 傷</button>
-                <button class="action-btn heal" style="flex:1;padding:12px;box-shadow:inset 0 0 5px rgba(50,255,50,0.3);" onclick="setVitalityType('heal-l', this)">治療 L 傷</button>
-                <button class="action-btn heal" style="flex:1;padding:12px;box-shadow:inset 0 0 5px rgba(50,255,50,0.3);" onclick="setVitalityType('heal-a', this)">治療 A 傷</button>
-            </div>
-
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;">
-                <span class="calc-label" style="white-space:nowrap;">數量：</span>
-                <input type="number" id="vitality-amount" value="1" min="1" style="flex:1;text-align:center;font-size:1.2rem;">
-            </div>
-
-            <hr style="border:0;border-top:1px solid #333;margin:15px 0;">
-
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;">
-                <span class="calc-label" style="white-space:nowrap;">護盾：</span>
-                <input type="number" id="vitality-shield" min="0" style="flex:1;text-align:center;font-size:1.2rem;" placeholder="輸入護盾值">
-                <button class="modal-btn" style="padding:10px 15px;" onclick="submitVitalityShield()">設定護盾</button>
-            </div>
-
-            <input type="hidden" id="vitality-target-id">
-            <input type="hidden" id="vitality-action-type" value="b">
-        </div>
-        <div class="modal-footer">
-            <button class="modal-btn" onclick="closeModal('vitality-modal')" style="background:var(--bg-card);">取消</button>
-            <button class="modal-btn" onclick="submitVitalityHp()" style="background:var(--accent-red);">執行</button>
-        </div>
-    </div>
-</div>
-
-
 <!-- 發起攻擊 Modal -->
 <div class="modal-overlay" id="attack-modal" onclick="if(event.target.id==='attack-modal')closeAttackModal()">
     <div class="modal" onclick="event.stopPropagation()">

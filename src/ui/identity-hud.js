@@ -761,15 +761,42 @@ function applyIdentitySelfStatus() {
     if (typeof showToast === 'function') showToast(n ? `已對我方套用 ${n} 種狀態` : '無可套用的自身狀態');
 }
 
+/**
+ * 執行「回合開始資源獲取」的核心邏輯（手動按鈕與自動觸發共用）。
+ * 沿用目前人格卡面板選中角色（identityHudState.owner）已勾選持有的卡片。
+ * @param {string} unitId - 要代入引擎與實際套用狀態的單位 id
+ * @returns {number} 實際套用的狀態種類數
+ */
+function performIdentityTurnStart(unitId) {
+    if (typeof evaluatePlayerTurnStart !== 'function') return 0;
+    const owned = collectOwnedIdentities();
+    const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    const res = evaluatePlayerTurnStart(owned, buildEngineUnitState(attackerUnit));
+    return applyEngineStatusesToUnit(unitId, res.expectedSelfStatus);
+}
+
 function runIdentityTurnStart() {
     if (typeof evaluatePlayerTurnStart !== 'function') return;
     if (!identityHudState.attackerId) { if (typeof showToast === 'function') showToast('請先指定我方單位'); return; }
-    const owned = collectOwnedIdentities();
-    const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(identityHudState.attackerId) : null;
-    const res = evaluatePlayerTurnStart(owned, buildEngineUnitState(attackerUnit));
-    const n = applyEngineStatusesToUnit(identityHudState.attackerId, res.expectedSelfStatus);
+    const n = performIdentityTurnStart(identityHudState.attackerId);
     if (typeof showToast === 'function') {
         showToast(n ? `回合開始：已對我方套用 ${n} 種資源` : '本組人格卡無回合開始資源');
+    }
+}
+
+/**
+ * 各玩家客戶端偵測到「現在輪到自己的單位行動」時自動呼叫（見 firebase-connection.js
+ * 對 state.turnIdx 的監聽）。ST 端沒有玩家的 identityHudState（存在各玩家自己瀏覽器的
+ * localStorage），故完全依賴每個玩家自行判斷並在本地觸發，不走 ST 專用的 nextTurn()。
+ * @param {object} unit - 剛輪到行動、且 ownerId 為自己的單位
+ */
+function autoTriggerIdentityTurnStart(unit) {
+    if (!unit || typeof myRole === 'undefined' || myRole === 'st') return;
+    if (typeof evaluatePlayerTurnStart !== 'function') return;
+    if (!identityHudState.owner) return; // 尚未在人格卡面板選擇角色，無從得知持有卡片
+    const n = performIdentityTurnStart(unit.id);
+    if (n > 0 && typeof showToast === 'function') {
+        showToast(`🔄 回合開始：已自動對「${unit.name || '你的單位'}」套用 ${n} 種資源`);
     }
 }
 
@@ -1078,6 +1105,7 @@ if (typeof window !== 'undefined') {
     window.updateIdentityField = updateIdentityField;
     window.runIdentityCalc = runIdentityCalc;
     window.runIdentityTurnStart = runIdentityTurnStart;
+    window.autoTriggerIdentityTurnStart = autoTriggerIdentityTurnStart;
     window.applyIdentityTargetStatus = applyIdentityTargetStatus;
     window.applyIdentitySelfStatus = applyIdentitySelfStatus;
     window.renderIdentityModal = renderIdentityModal;

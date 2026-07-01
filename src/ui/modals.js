@@ -57,8 +57,9 @@ function initModals() {
                         </div>
                     </div>
 
-                    <!-- 隱藏欄位：儲存模板頭像 -->
+                    <!-- 隱藏欄位：儲存模板頭像 / 完整戰鬥數值（JSON） -->
                     <input type="hidden" id="add-template-avatar" value="">
+                    <input type="hidden" id="add-template-combat" value="">
                 </div>
                 <div class="modal-footer">
                     <button class="modal-btn" onclick="closeModal('modal-add-unit')" style="background:var(--bg-card);">取消</button>
@@ -235,6 +236,7 @@ function openAddUnitModal() {
     document.getElementById('add-size').value = '1';
     document.getElementById('add-avatar').checked = false;
     document.getElementById('add-template-avatar').value = '';
+    document.getElementById('add-template-combat').value = '';
     document.getElementById('template-select').value = '';
 
     // 隱藏頭像預覽
@@ -269,8 +271,9 @@ function refreshTemplateSelect() {
  */
 function loadUnitTemplate(templateId) {
     if (!templateId) {
-        // 選擇了空選項，重置頭像預覽
+        // 選擇了空選項，重置頭像預覽與戰鬥數值暫存
         document.getElementById('add-template-avatar').value = '';
+        document.getElementById('add-template-combat').value = '';
         document.getElementById('template-avatar-preview').style.display = 'none';
         return;
     }
@@ -288,6 +291,11 @@ function loadUnitTemplate(templateId) {
     document.getElementById('add-hp').value = template.hp || 10;
     document.getElementById('add-type').value = template.type || 'enemy';
     document.getElementById('add-size').value = template.size || 1;
+
+    // 完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態）：
+    // Add-Unit 表單本身沒有對應欄位，暫存於隱藏欄位，待 confirmAddUnit() 建立單位後一併套用。
+    document.getElementById('add-template-combat').value =
+        (template.combat && typeof template.combat === 'object') ? JSON.stringify(template.combat) : '';
 
     // 處理頭像
     if (template.avatar) {
@@ -408,6 +416,13 @@ function confirmAddUnit() {
     const size = parseInt(document.getElementById('add-size').value) || 1;
     const useAvatar = document.getElementById('add-avatar').checked;
     const templateAvatar = document.getElementById('add-template-avatar').value || '';
+    // 模板可能帶有完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態），
+    // Add-Unit 表單本身沒有對應欄位，故從 loadUnitTemplate() 暫存的隱藏欄位讀回。
+    let templateCombat = null;
+    try {
+        const raw = document.getElementById('add-template-combat').value;
+        templateCombat = raw ? JSON.parse(raw) : null;
+    } catch (e) { templateCombat = null; }
 
     if (myRole === 'st') {
         const u = createUnit(name, hp, type, myPlayerId, myName, size);
@@ -418,6 +433,10 @@ function confirmAddUnit() {
         } else if (useAvatar) {
             uploadTargetId = u.id;
             document.getElementById('file-upload').click();
+        }
+
+        if (templateCombat && typeof templateCombat === 'object') {
+            Object.assign(u, templateCombat);
         }
 
         state.units.push(u);
@@ -432,7 +451,8 @@ function confirmAddUnit() {
             unitType: type,
             playerName: myName,
             size: size,
-            avatar: templateAvatar || null  // 傳送模板頭像給 ST
+            avatar: templateAvatar || null,  // 傳送模板頭像給 ST
+            combat: templateCombat || null   // 傳送模板戰鬥數值給 ST
         });
         closeModal('modal-add-unit');
         showToast('已請求新增單位');
@@ -951,74 +971,4 @@ function confirmMaxHpModify() {
     }
 }
 
-
-
-// ===== 生存管理 (Vitality) Modal =====
-function openVitalityModal(id) {
-    const u = findUnitById(id);
-    if (!u) return;
-
-    if (typeof canControlUnit === 'function' && !canControlUnit(u)) {
-        showToast('你無法修改其他人的單位');
-        return;
-    }
-
-    document.getElementById('vitality-target-id').value = id;
-    document.getElementById('vitality-amount').value = 1;
-    document.getElementById('vitality-action-type').value = 'b';
-    document.getElementById('vitality-shield').value = u.shield || 0;
-
-    document.getElementById('vitality-modal-title').innerText = `❤️ 生存管理：${u.name}`;
-
-    // 重置按鈕高亮
-    document.querySelectorAll('#vitality-modal .action-btn').forEach(btn => {
-        btn.style.boxShadow = btn.classList.contains('heal') ? 'inset 0 0 5px rgba(50,255,50,0.3)' : '';
-    });
-
-    // 高亮第一個選項 (B 傷)
-    const firstBtn = document.querySelector('#vitality-modal .dmg-b');
-    if (firstBtn) firstBtn.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
-
-    openModal('vitality-modal');
-}
-
-function setVitalityType(type, btnElement) {
-    document.getElementById('vitality-action-type').value = type;
-
-    // 更新按鈕高亮
-    document.querySelectorAll('#vitality-modal .action-btn').forEach(btn => {
-        btn.style.boxShadow = btn.classList.contains('heal') ? 'inset 0 0 5px rgba(50,255,50,0.3)' : '';
-    });
-    if (btnElement) {
-        btnElement.style.boxShadow = '0 0 0 2px var(--accent-yellow)';
-    }
-}
-
-function submitVitalityHp() {
-    const id = document.getElementById('vitality-target-id').value;
-    const amount = parseInt(document.getElementById('vitality-amount').value) || 1;
-    const type = document.getElementById('vitality-action-type').value;
-
-    if (typeof modifyHP === 'function') {
-        modifyHP(id, type, amount);
-    }
-    showToast(`已套用：${type} (${amount})`);
-}
-
-function submitVitalityShield() {
-    const id = document.getElementById('vitality-target-id').value;
-    const shieldVal = parseInt(document.getElementById('vitality-shield').value) || 0;
-
-    const u = findUnitById(id);
-    if (u) {
-        if (typeof roomRef !== 'undefined' && roomRef) {
-            roomRef.child(`units/${id}/shield`).set(shieldVal);
-        } else if (typeof state !== 'undefined') {
-            const stU = state.units.find(x => x.id === id);
-            if (stU) stU.shield = shieldVal;
-            if (typeof renderUnitsList === 'function') renderUnitsList();
-        }
-        showToast(`已設定護盾為 ${shieldVal}`);
-    }
-}
 

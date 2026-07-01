@@ -339,6 +339,53 @@ console.log('\n[Phase 1B] Firebase 寫入粒度優化：syncUnits 欄位級 diff
 })();
 
 // ====================================================================
+console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 selfStatus');
+// ====================================================================
+// 在獨立沙箱載入真實的 status-config / identity-config / identity-engine / identity-hud /
+// combat-modals，驗證修正前遺漏的 result.expectedSelfStatus 現在會被 cmResolveIdentityBonus()
+// 一併整理成 selfStatus / selfStatusNotes 回傳（供 submitAttackModal 套用到攻擊者自己身上）。
+(function () {
+    const idSandbox = {
+        console, Object, Array, Math, JSON, Set, parseInt,
+        window: undefined,
+        document: { getElementById: () => null },
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'player',
+        state: { units: [] },
+        findUnitById: (id) => idSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        escapeHtml: (s) => s,
+    };
+    vm.createContext(idSandbox);
+    const identityFiles = [
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/core/identity-engine.js',
+        'src/ui/identity-hud.js',
+        'src/ui/combat-modals.js'
+    ];
+    const combinedIdentity = identityFiles.map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState };';
+    vm.runInContext(combinedIdentity, idSandbox, { filename: 'combined-identity.js' });
+    const { cmResolveIdentityBonus, identityHudState } = idSandbox.__identityExports;
+
+    test('唐吉訶德「延續進攻」命中同時算出 targetStatus 與 selfStatus，兩者皆不遺漏', () => {
+        identityHudState.owner = '唐吉訶德';
+        identityHudState.cards = { don_cinq: { owned: true, unlocked: false } };
+        const attacker = { id: 'atk1', status: {}, init: 10 };
+        const target = { id: 'tgt1', status: {}, init: 5 };
+
+        const result = cmResolveIdentityBonus(attacker, target);
+
+        // 命中：延續進攻（selfStatus.swiftness+1／targetStatus.bind+1）+ 雙旋飛刺（targetStatus.bind+1）
+        assert.strictEqual(result.selfStatus.swiftness, 1, '攻擊者自身應算出 +1 迅捷（修正前這裡會是空物件）');
+        assert.ok(result.selfStatusNotes.length > 0, 'selfStatusNotes 不應為空');
+        assert.ok(result.selfStatusNotes.some(n => n.includes('+1')), 'selfStatusNotes 應包含層數敘述');
+        assert.strictEqual(result.targetStatus.bind, 2, '目標應疊加 2 層束縛（延續進攻+雙旋飛刺）');
+    });
+})();
+
+// ====================================================================
 console.log('\n[Phase 3A] WindowManager：z-index 分層與點擊置頂');
 // ====================================================================
 (function () {

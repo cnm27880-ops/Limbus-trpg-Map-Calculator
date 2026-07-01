@@ -127,7 +127,7 @@ function openThreatModal(unitId) {
  */
 function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     // 所有欄位都給預設值，確保呼叫端（submitAttackModal / cqOnSTReview）即使走早退路徑也能安全存取
-    const empty = { dpBonus: 0, extraSuccess: 0, names: [], targetStatus: {}, statusNotes: [] };
+    const empty = { dpBonus: 0, extraSuccess: 0, names: [], targetStatus: {}, statusNotes: [], selfStatus: {}, selfStatusNotes: [] };
     if (myRole === 'st') return empty;
     if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
 
@@ -143,22 +143,26 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     const targetState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(targetUnit) : (targetUnit || {});
     const result = evaluatePlayerAttack(ownedCards, attackerState, targetState);
 
-    // 人格引擎在攻擊／命中時會對目標施加的負面狀態（沮喪、流血、破裂…）。
+    // 人格引擎在攻擊／命中時會對目標（減益）與攻擊者自身（如迅捷/呼吸法等資源）施加的狀態。
     // 整理成「中文狀態名＋層數」清單，供發起攻擊時自動施加並在 ST 明細中列出。
-    const targetStatus = result.expectedTargetStatus || {};
-    const statusNotes = Object.entries(targetStatus).map(([engKey, layers]) => {
+    const buildStatusNotes = (statusMap) => Object.entries(statusMap).map(([engKey, layers]) => {
         const amount = parseInt(layers) || 0;
         if (!amount) return '';
         const name = (typeof identityStatusName === 'function') ? identityStatusName(engKey) : engKey;
         return `${name}+${amount}`;
     }).filter(Boolean);
 
+    const targetStatus = result.expectedTargetStatus || {};
+    const selfStatus = result.expectedSelfStatus || {};
+
     return {
         dpBonus: result.totalDpBonus || 0,
         extraSuccess: result.totalExtraSuccess || 0,
         names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))],
         targetStatus,
-        statusNotes
+        statusNotes: buildStatusNotes(targetStatus),
+        selfStatus,
+        selfStatusNotes: buildStatusNotes(selfStatus)
     };
 }
 
@@ -207,6 +211,7 @@ function submitAttackModal() {
         identityExtraSuccess: identityBonus.extraSuccess,
         identityNotes: identityBonus.names,
         identityStatusNotes: identityBonus.statusNotes || [],
+        identitySelfStatusNotes: identityBonus.selfStatusNotes || [],
         counterPhaseDpBonus
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
@@ -234,6 +239,15 @@ function submitAttackModal() {
             const applied = applyEngineStatusesToUnit(target.id, identityBonus.targetStatus);
             if (applied && identityBonus.statusNotes.length && typeof showToast === 'function') {
                 showToast('人格效果已對目標施加：' + identityBonus.statusNotes.join('、'));
+            }
+        }
+
+        // 對稱處理：人格引擎判定本次攻擊／命中會對攻擊者自身施加的狀態（如迅捷、呼吸法等資源），
+        // 同樣於發起攻擊時自動套用到攻擊者自己的單位。
+        if (identityBonus.selfStatus && attackerUnit && typeof applyEngineStatusesToUnit === 'function') {
+            const appliedSelf = applyEngineStatusesToUnit(attackerUnit.id, identityBonus.selfStatus);
+            if (appliedSelf && identityBonus.selfStatusNotes.length && typeof showToast === 'function') {
+                showToast('已對自己套用：' + identityBonus.selfStatusNotes.join('、'));
             }
         }
 
@@ -320,6 +334,8 @@ function cqOnSTReview(data) {
             rows.push({ label: '套用人格卡', value: atk.identityNotes.join('、'), cls: 'is-bonus' });
         if (Array.isArray(atk.identityStatusNotes) && atk.identityStatusNotes.length)
             rows.push({ label: '對目標施加', value: atk.identityStatusNotes.join('、'), cls: 'is-penalty' });
+        if (Array.isArray(atk.identitySelfStatusNotes) && atk.identitySelfStatusNotes.length)
+            rows.push({ label: '對自己施加', value: atk.identitySelfStatusNotes.join('、'), cls: 'is-bonus' });
 
         if (rows.length) {
             const list = document.createElement('div');

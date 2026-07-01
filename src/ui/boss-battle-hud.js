@@ -71,6 +71,7 @@ function openBossUnitModal(unitId) {
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button class="modal-btn" onclick="saveBossUnitAsTemplate('${u.id}')" style="background:var(--accent-purple);color:#fff;margin-right:auto;" title="把目前設定的完整戰鬥數值存為模板，之後套用到其他同類小怪不必重新填一次">💾 存為模板</button>
                     <button class="modal-btn" onclick="closeBossUnitModal()" style="background:var(--bg-card);">取消</button>
                     <button class="modal-btn" onclick="saveBossUnitModal('${u.id}')" style="background:var(--accent-green);color:#000;">儲存</button>
                 </div>
@@ -112,7 +113,51 @@ function saveBossUnitModal(unitId) {
     if (typeof showToast === 'function') showToast(`已更新 ${u.name || '單位'} 的戰鬥數值`);
 }
 
+/**
+ * 把目前這個單位的完整資料（基礎欄位＋戰鬥數值）另存為「單位模板」，
+ * 讓 ST 設定好一隻小怪後可直接套用到其他同類小怪，不必每隻重新填一次。
+ * 讀取的是 Modal 目前輸入框的值（尚未儲存也可先存模板），而非單位物件上的舊值。
+ * @param {string} unitId
+ */
+function saveBossUnitAsTemplate(unitId) {
+    if (myRole !== 'st') return;
+    const u = findUnitById(unitId);
+    if (!u) return;
+    if (typeof saveUnitTemplate !== 'function') {
+        if (typeof showToast === 'function') showToast('模板功能不可用');
+        return;
+    }
+
+    const saved = saveUnitTemplate({
+        name: u.name || 'Template',
+        hp: Math.max(1, parseInt(document.getElementById('boss-unit-max-hp')?.value) || u.maxHp || 10),
+        type: u.type || 'enemy',
+        size: u.size || 1,
+        avatar: u.avatar || null,
+        combat: {
+            defDp: parseInt(document.getElementById('boss-unit-def-dp')?.value) || 0,
+            defAuto: parseInt(document.getElementById('boss-unit-def-auto')?.value) || 0,
+            saveWill: parseInt(document.getElementById('boss-unit-save-will')?.value) || 0,
+            saveReflex: parseInt(document.getElementById('boss-unit-save-reflex')?.value) || 0,
+            saveTenacity: parseInt(document.getElementById('boss-unit-save-tenacity')?.value) || 0,
+            allAttr: parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0,
+            allSkill: parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0,
+            sideLevel: Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1),
+            actionDp: u.actionDp || 0,
+            actionAoe: !!u.actionAoe,
+            actionStatuses: Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : []
+        }
+    });
+
+    if (saved) {
+        if (typeof showToast === 'function') showToast(`已將「${u.name || '單位'}」的完整戰鬥數值存為模板：${saved.name}`);
+    } else {
+        if (typeof showToast === 'function') showToast('儲存模板失敗');
+    }
+}
+
 // ===== Window bindings =====
 window.openBossUnitModal = openBossUnitModal;
 window.closeBossUnitModal = closeBossUnitModal;
 window.saveBossUnitModal = saveBossUnitModal;
+window.saveBossUnitAsTemplate = saveBossUnitAsTemplate;

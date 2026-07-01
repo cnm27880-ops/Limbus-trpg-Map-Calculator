@@ -263,9 +263,29 @@ function renderUnitsList() {
                 ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="BOSS 設定（戰鬥數值＋多重行動）">⚔×</button>`
                 : '';
 
+            // B/L/A 快速傷害/治療步進器：沿用狀態庫「目前狀態」的膠囊樣式（.current-status-tag / .stack-adjust-btn），
+            // 取代原本要跳出 Modal 才能操作的「❤️ 管理」按鈕，讓最常見的單點傷害/治療一鍵完成。
+            // ＋＝造成傷害、－＝治療同類型傷害，語意與 modifyHP() 的 dmgType/'heal-x' 對應一致。
+            const hpStepper = (type, label, count, colorVar) => `
+                <span class="current-status-tag" style="--status-color:var(${colorVar})">
+                    <button class="stack-adjust-btn" onclick="modifyHP('${u.id}','heal-${type}',1)" title="治療 1 點 ${label} 傷">−</button>
+                    <span class="stack-value">${count} ${label}</span>
+                    <button class="stack-adjust-btn" onclick="modifyHP('${u.id}','${type}',1)" title="造成 1 點 ${label} 傷">+</button>
+                </span>`;
+
+            const hpQuickAdjust = `
+                <div class="hp-quick-adjust">
+                    ${hpStepper('b', 'B', b, '--dmg-b')}
+                    ${hpStepper('l', 'L', l, '--dmg-l')}
+                    ${hpStepper('a', 'A', a, '--dmg-a')}
+                    <button class="action-btn" onclick="showToast('再點一次確認重置')" ondblclick="resetUnitHp('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
+                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡</button>
+                </div>
+            `;
+
             actions = `
+                ${hpQuickAdjust}
                 <div class="unit-actions">
-                    <button class="action-btn heal" onclick="openVitalityModal('${u.id}')" title="生存管理 (血量/護盾)">❤️ 管理</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
@@ -1074,7 +1094,6 @@ function openUnitContextMenu(event, unitId) {
         items = [];
         if (canControl) {
             items.push(
-                { icon: '❤️', label: '生存管理', fn: `openVitalityModal('${u.id}')` },
                 { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
                 { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` }
             );

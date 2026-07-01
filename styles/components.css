@@ -506,6 +506,21 @@ body.aoe-select-active .token {
     margin-top: 4px;
 }
 
+/* B/L/A 快速傷害/治療步進器：沿用 .current-status-tag / .stack-adjust-btn 的膠囊樣式 */
+.hp-quick-adjust {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.hp-quick-adjust .action-btn {
+    flex: 0 0 auto;
+    min-width: 32px;
+    padding: 4px 8px;
+}
+
 .action-btn {
     flex: 1;
     min-width: 40px;

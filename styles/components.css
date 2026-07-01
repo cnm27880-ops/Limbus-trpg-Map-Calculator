@@ -506,96 +506,125 @@ body.aoe-select-active .token {
     margin-top: 4px;
 }
 
-/* B/L/A 快速傷害/治療步進器：－/中間套用鈕/＋ 合成一顆大膠囊按鈕，與 収回/隱藏等按鈕並列同一排 */
-.hp-pill {
+/* ===== 戰術步進器 (HP Steppers) ===== */
+/* －/中央數字/＋ 一體膠囊：－/＋ 只調整待套用量，中央數字點擊一次性套用（提交）。 */
+.hp-stepper {
     display: inline-flex;
-    align-items: stretch;
+    align-items: center;
     flex: 0 0 auto;
-    border: 1px solid var(--pill-color, #666);
-    border-radius: 8px;
+    background: var(--bg-input, #0d0d0f);
+    border: 1px solid var(--border, #2a2a30);
+    border-radius: 6px;
+    height: 28px;
     overflow: hidden;
-    background: rgba(0, 0, 0, 0.3);
+    transition: border-color 0.2s;
 }
 
-.hp-pill-step {
-    width: 26px;
-    border: none;
+/* 讓容器在 Hover 時根據對應屬性發光 */
+.hp-stepper.stepper-b:hover { border-color: var(--accent-blue); box-shadow: 0 0 8px rgba(30, 136, 229, 0.2); }
+.hp-stepper.stepper-l:hover { border-color: var(--accent-orange); box-shadow: 0 0 8px rgba(251, 140, 0, 0.2); }
+.hp-stepper.stepper-a:hover { border-color: var(--accent-red); box-shadow: 0 0 8px rgba(229, 57, 53, 0.2); }
+
+.stepper-btn {
     background: transparent;
-    color: var(--pill-color, #666);
-    font-weight: bold;
-    font-size: 1rem;
+    border: none;
+    color: var(--text-dim);
+    width: 28px;
+    height: 100%;
+    font-size: 1.1rem;
     line-height: 1;
     cursor: pointer;
-    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
     touch-action: manipulation; /* 長按快速輸入時，避免行動裝置瀏覽器誤觸選字/縮放 */
     -webkit-user-select: none;
     user-select: none;
 }
 
-.hp-pill-step:hover {
-    background: var(--pill-color, #666);
-    color: #000;
-}
+.stepper-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.stepper-btn:active { background: rgba(255, 255, 255, 0.2); }
 
-.hp-pill-commit {
-    min-width: 44px;
-    padding: 6px 8px;
+/* 中央數字同時是「提交」按鈕：保留為 <button> 可點擊，故不使用範本的 pointer-events:none */
+.stepper-val {
+    min-width: 32px;
+    height: 100%;
+    padding: 0 4px;
+    background: transparent;
     border: none;
-    border-left: 1px solid var(--pill-color, #666);
-    border-right: 1px solid var(--pill-color, #666);
-    background: rgba(0, 0, 0, 0.15);
-    color: var(--pill-color, var(--text-main));
-    font-weight: bold;
-    font-size: 0.95rem;
+    text-align: center;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700;
+    font-size: 0.85rem;
     cursor: pointer;
+    transition: background 0.15s;
 }
 
-.hp-pill-commit:hover {
-    background: var(--pill-color, #666);
-    color: #000;
-}
+.stepper-val:hover { background: rgba(255, 255, 255, 0.08); }
 
-/* 扣血／治療模式切換開關：預設扣血（紅），切換後治療（綠） */
-.hp-mode-switch {
+/* 根據屬性給予文字顏色 */
+.stepper-b .stepper-val { color: var(--accent-blue); }
+.stepper-l .stepper-val { color: var(--accent-orange); }
+.stepper-a .stepper-val { color: var(--accent-red); }
+
+/* ===== 戰術切換開關 (Tactical Toggle) ===== */
+.tactical-toggle {
     position: relative;
     display: inline-flex;
     align-items: center;
-    width: 38px;
-    height: 20px;
     flex: 0 0 auto;
     cursor: pointer;
 }
 
-.hp-mode-switch input {
-    display: none;
-}
-
-.hp-mode-slider {
+.tactical-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
     position: absolute;
-    inset: 0;
-    background: var(--dmg-a, #e53935);
-    border-radius: 999px;
-    transition: background 0.15s;
 }
 
-.hp-mode-slider::before {
-    content: '';
+.toggle-track {
+    width: 42px;
+    height: 22px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px; /* 工業風微圓角，非完全圓形 */
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.toggle-track::before {
+    content: "";
     position: absolute;
-    width: 14px;
-    height: 14px;
-    left: 3px;
-    top: 3px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.15s;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: var(--text-dim);
+    border-radius: 2px;
+    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
-.hp-mode-switch input:checked + .hp-mode-slider {
-    background: var(--accent-green, #2ecc71);
+/* 傷害模式 (預設/未勾選) - 紅色微光 */
+.tactical-toggle input:not(:checked) ~ .toggle-track {
+    border-color: rgba(229, 57, 53, 0.5);
+    background-color: rgba(229, 57, 53, 0.1);
+}
+.tactical-toggle input:not(:checked) ~ .toggle-track::before {
+    background-color: var(--accent-red);
+    box-shadow: 0 0 6px var(--accent-red);
 }
 
-.hp-mode-switch input:checked + .hp-mode-slider::before {
-    transform: translateX(18px);
+/* 治療模式 (勾選) - 綠色微光 */
+.tactical-toggle input:checked ~ .toggle-track {
+    border-color: rgba(67, 160, 71, 0.5);
+    background-color: rgba(67, 160, 71, 0.1);
+}
+.tactical-toggle input:checked ~ .toggle-track::before {
+    transform: translateX(20px);
+    background-color: var(--accent-green);
+    box-shadow: 0 0 6px var(--accent-green);
 }
 
 .action-btn {

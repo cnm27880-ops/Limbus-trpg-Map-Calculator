@@ -266,7 +266,7 @@ function getUnitTemplates() {
  * 保存單位模板
  * @param {Object} template - 模板數據 {name, hp, type, size, avatar, combat}
  *   combat（選填，通常來自「戰鬥數值設定」Modal 的既有單位另存）：
- *     { defDp, defAuto, saveWill, saveReflex, saveTenacity, allAttr, allSkill, sideLevel,
+ *     { defDp, defAuto, saveWill, saveReflex, saveTenacity, allAttr, allSkill, sideLevel, passive,
  *       actionDp, actionAoe, actionStatuses:[{id,stacks}] }
  * @returns {Object} 保存的模板（含 ID）
  */
@@ -292,6 +292,7 @@ function saveUnitTemplate(template) {
                 allAttr: parseInt(combat.allAttr) || 0,
                 allSkill: parseInt(combat.allSkill) || 0,
                 sideLevel: Math.max(1, parseInt(combat.sideLevel) || 1),
+                passive: String(combat.passive || ''),
                 actionDp: parseInt(combat.actionDp) || 0,
                 actionAoe: !!combat.actionAoe,
                 actionStatuses: Array.isArray(combat.actionStatuses)

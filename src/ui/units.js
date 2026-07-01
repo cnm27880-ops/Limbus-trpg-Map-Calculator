@@ -1295,83 +1295,85 @@ function openMultiActionModal(bossId) {
     if (existing) existing.remove();
 
     const html = `
-        <div class="modal-overlay show" id="multi-action-modal" onclick="if(event.target.id==='multi-action-modal')closeMultiActionModal()">
-            <div class="modal" style="max-width:460px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <span style="font-weight:bold;">👹 BOSS 設定 - ${escapeHtml(boss.name || '單位')}</span>
-                    <button onclick="closeMultiActionModal()" style="background:none;font-size:1.2rem;">×</button>
+        <div class="float-modal ma-float-panel" id="multi-action-modal">
+            <div class="modal-header" id="ma-float-header">
+                <span style="font-weight:bold;">👹 BOSS 設定 - ${escapeHtml(boss.name || '單位')}</span>
+                <span class="float-modal-btns">
+                    <button class="float-modal-icon-btn" id="ma-collapse-btn" title="收起">▾</button>
+                    <button class="float-modal-icon-btn" onclick="closeMultiActionModal()" title="關閉">×</button>
+                </span>
+            </div>
+            <div class="modal-body">
+                <!-- 區塊一：戰鬥數值（原獨立的「戰鬥數值設定」Modal，併入同一視窗以免來回切換） -->
+                <div class="ma-section-title">👹 戰鬥數值</div>
+                <div class="stat-grid cols-2">
+                    <label class="stat-field"><span>生命上限</span><input type="number" id="ma-boss-max-hp" value="${boss.maxHp || 1}" min="1"></label>
+                    <label class="stat-field"><span>支線等級</span><input type="number" id="ma-boss-side-level" value="${boss.sideLevel || 1}" min="1" max="99"></label>
                 </div>
-                <div class="modal-body">
-                    <!-- 區塊一：戰鬥數值（原獨立的「戰鬥數值設定」Modal，併入同一視窗以免來回切換） -->
-                    <div class="ma-section-title">👹 戰鬥數值</div>
-                    <div class="form-group">
-                        <label>生命上限</label>
-                        <input type="number" id="ma-boss-max-hp" value="${boss.maxHp || 1}" min="1">
-                    </div>
-                    <div class="form-group" style="display:flex;gap:8px;">
-                        <label style="flex:1;">防禦<input type="number" id="ma-boss-def-dp" value="${boss.defDp || 0}"></label>
-                        <label style="flex:1;">防禦附加成功<input type="number" id="ma-boss-def-auto" value="${boss.defAuto || 0}"></label>
-                    </div>
-                    <div class="form-group">
-                        <label>三豁免（意志 / 反射 / 強韌）</label>
-                        <div style="display:flex;gap:6px;">
-                            <input type="number" id="ma-boss-save-will" value="${boss.saveWill || 0}" placeholder="意志">
-                            <input type="number" id="ma-boss-save-reflex" value="${boss.saveReflex || 0}" placeholder="反射">
-                            <input type="number" id="ma-boss-save-tenacity" value="${boss.saveTenacity || 0}" placeholder="強韌">
-                        </div>
-                    </div>
-                    <div class="form-group" style="display:flex;gap:8px;">
-                        <label style="flex:1;">全屬性<input type="number" id="ma-boss-all-attr" value="${boss.allAttr || 0}"></label>
-                        <label style="flex:1;">全技能<input type="number" id="ma-boss-all-skill" value="${boss.allSkill || 0}"></label>
-                    </div>
-                    <div class="form-group">
-                        <label>支線等級（下方「對抗分配」修正基數 = 等級 × 10）</label>
-                        <input type="number" id="ma-boss-side-level" value="${boss.sideLevel || 1}" min="1" max="99">
-                    </div>
-                    <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;margin-bottom:4px;">
-                        防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
-                        三豁免／全屬性／全技能目前僅記錄＋顯示，供套用狀態或臨場判定參考，不會自動套入計算。
-                    </div>
-
-                    <!-- 區塊二：多重行動設定（原獨立的「多重行動設定」Modal） -->
-                    <div class="ma-section-title">⚔ 多重行動設定</div>
-                    <div class="form-group">
-                        <label>總行動次數（含本體，例：七招式 BOSS 填 7）</label>
-                        <input type="number" id="ma-count" value="${maEdit.actions.length}" min="1" max="12"
-                               onchange="maSetCount(this.value)">
-                    </div>
-                    <div class="form-group">
-                        <label>各行動：先攻 / DP / 命中時對目標施加的狀態</label>
-                        <div id="ma-action-list"></div>
-                    </div>
-                    <datalist id="ma-status-options"></datalist>
-                    <div style="font-size:0.72rem;color:var(--text-dim);line-height:1.5;">
-                        行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上（本體生命上限見上方「戰鬥數值」）。
-                        DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加；勾選「AOE」的行動請改用下方群體操作套用。
-                    </div>
-
-                    <!-- 對抗分配（先攻對抗計算自動化） -->
-                    <div class="skill-hud-aoe-section" style="padding:8px; border:1px solid var(--border); margin-top:10px;">
-                        <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">🎲 對抗分配</div>
-                        <button class="skill-action-btn" style="width:100%;margin-bottom:6px;" onclick="cpStartRound('${bossId}')">開始新輪次：徵詢玩家對抗行動</button>
-                        <div id="ma-counter-status" style="font-size:0.78rem;color:var(--text-dim);"></div>
-                    </div>
-
-                    <!-- 群體操作 (AOE)：已改為「長按 T 鍵」的選取模式 -->
-                    <div class="skill-hud-aoe-section aoe-hint-card" style="padding:8px; border:1px solid var(--border); margin-top:10px;">
-                        <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">💥 群體操作 (AOE)</div>
-                        <div style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;">
-                            AOE 結算已移至全新的「<b>長按 T 鍵</b>」選取模式：長按 T → 點擊棋子選取（紅色光暈）→ 鬆開 T 結算。
-                            勾選為 <b>AOE</b> 的行動，其 DP / 狀態會在結算視窗自動帶入。
-                        </div>
+                <div class="stat-grid cols-2">
+                    <label class="stat-field"><span>防禦</span><input type="number" id="ma-boss-def-dp" value="${boss.defDp || 0}"></label>
+                    <label class="stat-field"><span>防禦附加成功</span><input type="number" id="ma-boss-def-auto" value="${boss.defAuto || 0}"></label>
+                </div>
+                <div class="stat-field">
+                    <span>三豁免（意志 / 反射 / 強韌）</span>
+                    <div class="stat-grid cols-3">
+                        <input type="number" id="ma-boss-save-will" value="${boss.saveWill || 0}" placeholder="意志">
+                        <input type="number" id="ma-boss-save-reflex" value="${boss.saveReflex || 0}" placeholder="反射">
+                        <input type="number" id="ma-boss-save-tenacity" value="${boss.saveTenacity || 0}" placeholder="強韌">
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="modal-btn" onclick="removeMultiAction('${bossId}')" style="background:var(--accent-red);">移除全部行動</button>
-                    <button class="modal-btn" onclick="saveMultiActionAsTemplate('${bossId}')" style="background:var(--accent-purple);color:#fff;margin-right:auto;" title="把目前設定的完整戰鬥數值存為模板，之後套用到其他同類小怪不必重新填一次">💾 存為模板</button>
-                    <button class="modal-btn" onclick="closeMultiActionModal()" style="background:var(--bg-card);">取消</button>
-                    <button class="modal-btn" onclick="saveMultiAction('${bossId}')" style="background:var(--accent-green);color:#000;">儲存</button>
+                <div class="stat-grid cols-2">
+                    <label class="stat-field"><span>全屬性</span><input type="number" id="ma-boss-all-attr" value="${boss.allAttr || 0}"></label>
+                    <label class="stat-field"><span>全技能</span><input type="number" id="ma-boss-all-skill" value="${boss.allSkill || 0}"></label>
                 </div>
+                <label class="stat-field">
+                    <span>被動能力／特性（自由填寫，供 ST 臨場參考）</span>
+                    <textarea id="ma-boss-passive" rows="2" placeholder="例：每回合結束回復 10 HP；免疫流血；受火焰傷害 +50%……">${escapeHtml(boss.passive || '')}</textarea>
+                </label>
+                <div class="ma-hint">
+                    防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
+                    三豁免／全屬性／全技能／被動能力目前僅記錄＋顯示，供臨場判定參考，不會自動套入計算。
+                    支線等級為下方「對抗分配」修正基數（= 等級 × 10）。
+                </div>
+
+                <!-- 區塊二：多重行動設定（原獨立的「多重行動設定」Modal） -->
+                <div class="ma-section-title">⚔ 多重行動設定</div>
+                <div class="form-group">
+                    <label>總行動次數（含本體，例：七招式 BOSS 填 7）</label>
+                    <input type="number" id="ma-count" value="${maEdit.actions.length}" min="1" max="12"
+                           onchange="maSetCount(this.value)">
+                </div>
+                <div class="form-group">
+                    <label>各行動：先攻 / DP / 命中時對目標施加的狀態</label>
+                    <div id="ma-action-list"></div>
+                </div>
+                <datalist id="ma-status-options"></datalist>
+                <div class="ma-hint">
+                    行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上（本體生命上限見上方「戰鬥數值」）。
+                    DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加；勾選「AOE」的行動請改用下方群體操作套用。
+                </div>
+
+                <!-- 對抗分配（先攻對抗計算自動化） -->
+                <div class="skill-hud-aoe-section" style="padding:8px; border:1px solid var(--border); margin-top:8px;">
+                    <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">🎲 對抗分配</div>
+                    <button class="skill-action-btn" style="width:100%;margin-bottom:6px;" onclick="cpStartRound('${bossId}')">開始新輪次：徵詢玩家對抗行動</button>
+                    <div id="ma-counter-status" style="font-size:0.78rem;color:var(--text-dim);"></div>
+                </div>
+
+                <!-- 群體操作 (AOE)：已改為「長按 T 鍵」的選取模式 -->
+                <div class="skill-hud-aoe-section aoe-hint-card" style="padding:8px; border:1px solid var(--border); margin-top:8px;">
+                    <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">💥 群體操作 (AOE)</div>
+                    <div style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;">
+                        AOE 結算已移至全新的「<b>長按 T 鍵</b>」選取模式：長按 T → 點擊棋子選取（紅色光暈）→ 鬆開 T 結算。
+                        勾選為 <b>AOE</b> 的行動，其 DP / 狀態會在結算視窗自動帶入。
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="removeMultiAction('${bossId}')" style="background:var(--accent-red);">移除全部行動</button>
+                <button class="modal-btn" onclick="saveMultiActionAsTemplate('${bossId}')" style="background:var(--accent-purple);color:#fff;margin-right:auto;" title="把目前設定的完整戰鬥數值存為模板，之後套用到其他同類小怪不必重新填一次">💾 存為模板</button>
+                <button class="modal-btn" onclick="closeMultiActionModal()" style="background:var(--bg-card);">取消</button>
+                <button class="modal-btn" onclick="saveMultiAction('${bossId}')" style="background:var(--accent-green);color:#000;">儲存</button>
             </div>
         </div>
     `;
@@ -1379,6 +1381,16 @@ function openMultiActionModal(bossId) {
     maBuildStatusDatalist();
     renderMultiActionList();
     renderMultiActionCounterStatus();
+    // 轉為可拖曳 / 雙擊收起的浮動面板（記憶位置與收合狀態），預設落在右側不擋戰場
+    if (typeof makeFloatingPanel === 'function') {
+        makeFloatingPanel({
+            panelId: 'multi-action-modal',
+            headerId: 'ma-float-header',
+            collapseBtnId: 'ma-collapse-btn',
+            storageKey: 'limbus_boss_setup_panel',
+            defaultPos: { x: Math.max(20, window.innerWidth - 400), y: 64 },
+        });
+    }
 }
 
 /**
@@ -1538,6 +1550,7 @@ function saveMultiAction(bossId) {
     boss.allAttr = parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0;
     boss.allSkill = parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0;
     boss.sideLevel = Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1);
+    boss.passive = (document.getElementById('ma-boss-passive')?.value || '').trim();
     if (Array.isArray(boss.hpArr) && boss.hpArr.length !== boss.maxHp) {
         const old = boss.hpArr;
         boss.hpArr = Array.from({ length: boss.maxHp }, (_, i) => old[i] || 0);
@@ -1616,6 +1629,7 @@ function saveMultiActionAsTemplate(bossId) {
             allAttr: parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0,
             allSkill: parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0,
             sideLevel: Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1),
+            passive: (document.getElementById('ma-boss-passive')?.value || '').trim(),
             actionDp: action0.dp || 0,
             actionAoe: !!action0.aoe,
             actionStatuses: action0.statuses.map(s => ({ ...s }))

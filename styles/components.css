@@ -506,19 +506,96 @@ body.aoe-select-active .token {
     margin-top: 4px;
 }
 
-/* B/L/A 快速傷害/治療步進器：沿用 .current-status-tag / .stack-adjust-btn 的膠囊樣式 */
-.hp-quick-adjust {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 6px;
+/* B/L/A 快速傷害/治療步進器：－/中間套用鈕/＋ 合成一顆大膠囊按鈕，與 収回/隱藏等按鈕並列同一排 */
+.hp-pill {
+    display: inline-flex;
+    align-items: stretch;
+    flex: 0 0 auto;
+    border: 1px solid var(--pill-color, #666);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
 }
 
-.hp-quick-adjust .action-btn {
+.hp-pill-step {
+    width: 26px;
+    border: none;
+    background: transparent;
+    color: var(--pill-color, #666);
+    font-weight: bold;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    touch-action: manipulation; /* 長按快速輸入時，避免行動裝置瀏覽器誤觸選字/縮放 */
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.hp-pill-step:hover {
+    background: var(--pill-color, #666);
+    color: #000;
+}
+
+.hp-pill-commit {
+    min-width: 44px;
+    padding: 6px 8px;
+    border: none;
+    border-left: 1px solid var(--pill-color, #666);
+    border-right: 1px solid var(--pill-color, #666);
+    background: rgba(0, 0, 0, 0.15);
+    color: var(--pill-color, var(--text-main));
+    font-weight: bold;
+    font-size: 0.95rem;
+    cursor: pointer;
+}
+
+.hp-pill-commit:hover {
+    background: var(--pill-color, #666);
+    color: #000;
+}
+
+/* 扣血／治療模式切換開關：預設扣血（紅），切換後治療（綠） */
+.hp-mode-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 38px;
+    height: 20px;
     flex: 0 0 auto;
-    min-width: 32px;
-    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.hp-mode-switch input {
+    display: none;
+}
+
+.hp-mode-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--dmg-a, #e53935);
+    border-radius: 999px;
+    transition: background 0.15s;
+}
+
+.hp-mode-slider::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 3px;
+    top: 3px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s;
+}
+
+.hp-mode-switch input:checked + .hp-mode-slider {
+    background: var(--accent-green, #2ecc71);
+}
+
+.hp-mode-switch input:checked + .hp-mode-slider::before {
+    transform: translateX(18px);
 }
 
 .action-btn {

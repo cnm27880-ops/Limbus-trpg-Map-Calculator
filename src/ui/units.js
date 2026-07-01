@@ -263,29 +263,32 @@ function renderUnitsList() {
                 ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="BOSS 設定（戰鬥數值＋多重行動）">⚔×</button>`
                 : '';
 
-            // B/L/A 快速傷害/治療步進器：沿用狀態庫「目前狀態」的膠囊樣式（.current-status-tag / .stack-adjust-btn），
-            // 取代原本要跳出 Modal 才能操作的「❤️ 管理」按鈕，讓最常見的單點傷害/治療一鍵完成。
-            // ＋＝造成傷害、－＝治療同類型傷害，語意與 modifyHP() 的 dmgType/'heal-x' 對應一致。
-            const hpStepper = (type, label, count, colorVar) => `
-                <span class="current-status-tag" style="--status-color:var(${colorVar})">
-                    <button class="stack-adjust-btn" onclick="modifyHP('${u.id}','heal-${type}',1)" title="治療 1 點 ${label} 傷">−</button>
-                    <span class="stack-value">${count} ${label}</span>
-                    <button class="stack-adjust-btn" onclick="modifyHP('${u.id}','${type}',1)" title="造成 1 點 ${label} 傷">+</button>
+            // B/L/A 快速傷害/治療步進器：+/- 只調整「待套用量」（暫存於 hpPending，不碰血量），
+            // 按下中間的大按鈕才一次性套用，避免每按一次 +/- 就重算/重繪一次血條。
+            // 最左邊的開關切換「扣血／治療」模式，決定套用時是造成傷害還是治療（預設扣血）。
+            const mode = hpAdjustMode[u.id] || 'damage';
+            const pending = hpPending[u.id] || { b: 0, l: 0, a: 0 };
+            const modeSwitch = `
+                <label class="hp-mode-switch" title="切換扣血／治療模式（目前：${mode === 'heal' ? '治療' : '扣血'}）">
+                    <input type="checkbox" ${mode === 'heal' ? 'checked' : ''} onchange="toggleHpAdjustMode('${u.id}')">
+                    <span class="hp-mode-slider"></span>
+                </label>`;
+
+            const hpPill = (type, label, colorVar) => `
+                <span class="hp-pill" style="--pill-color:var(${colorVar})">
+                    <button class="hp-pill-step" onpointerdown="hpHoldStart('${u.id}','${type}',-1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 －1（按住可快速輸入）">－</button>
+                    <button class="hp-pill-commit" id="hp-pending-${u.id}-${type}" onclick="commitHpPending('${u.id}','${type}')" title="點擊套用目前待套用量（${mode === 'heal' ? '治療' : '扣血'}）">${pending[type] || 0}${label}</button>
+                    <button class="hp-pill-step" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">＋</button>
                 </span>`;
 
-            const hpQuickAdjust = `
-                <div class="hp-quick-adjust">
-                    ${hpStepper('b', 'B', b, '--dmg-b')}
-                    ${hpStepper('l', 'L', l, '--dmg-l')}
-                    ${hpStepper('a', 'A', a, '--dmg-a')}
-                    <button class="action-btn" onclick="showToast('再點一次確認重置')" ondblclick="resetUnitHp('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
-                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡</button>
-                </div>
-            `;
-
             actions = `
-                ${hpQuickAdjust}
                 <div class="unit-actions">
+                    ${modeSwitch}
+                    ${hpPill('b', 'B', '--dmg-b')}
+                    ${hpPill('l', 'L', '--dmg-l')}
+                    ${hpPill('a', 'A', '--dmg-a')}
+                    <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
+                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
@@ -457,6 +460,86 @@ function renderSidebarUnits() {
     }).join('');
 }
 
+// ===== BLA 快速傷害/治療步進器 =====
+// 純本地端 UI 暫存（不寫入 state/Firebase），故不會隨其他玩家的操作同步重置；
+// 只有「提交」「重置血量」時才清空，讓 +/- 步進不必每次都重算/重繪血條。
+let hpPending = {};      // { [unitId]: { b, l, a } } 尚未套用的待套用量
+let hpAdjustMode = {};   // { [unitId]: 'damage' | 'heal' }，預設 'damage'（扣血）
+let hpHoldTimer = null;
+let hpHoldInterval = null;
+
+/**
+ * 切換某單位的傷害/治療模式（開關預設扣血，切換後改為治療）。
+ * @param {string} unitId
+ */
+function toggleHpAdjustMode(unitId) {
+    hpAdjustMode[unitId] = (hpAdjustMode[unitId] === 'heal') ? 'damage' : 'heal';
+    renderUnitsList();
+}
+
+/**
+ * 調整某單位某傷害類型的「待套用量」（不動血量），並直接更新該顯示元素，
+ * 避免每次 +/- 都整個單位列表重繪（長按快速輸入時尤其重要）。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a'
+ * @param {number} delta - +1 或 -1
+ */
+function hpPendingAdjust(unitId, type, delta) {
+    if (!hpPending[unitId]) hpPending[unitId] = { b: 0, l: 0, a: 0 };
+    const cur = hpPending[unitId][type] || 0;
+    const next = Math.max(0, Math.min(999, cur + delta));
+    if (next === cur) return;
+    hpPending[unitId][type] = next;
+    const el = document.getElementById(`hp-pending-${unitId}-${type}`);
+    if (el) el.textContent = next + type.toUpperCase();
+}
+
+/**
+ * 按住 +/- 按鈕時啟動長按快速輸入：先立即調整一次，短暫延遲後轉為持續重複，
+ * 不必一下一下點擊就能快速堆疊出較大的待套用量。
+ */
+function hpHoldStart(unitId, type, delta) {
+    hpHoldStop();
+    hpPendingAdjust(unitId, type, delta);
+    hpHoldTimer = setTimeout(() => {
+        hpHoldInterval = setInterval(() => hpPendingAdjust(unitId, type, delta), 110);
+    }, 450);
+}
+
+/** 放開或移出按鈕時停止長按重複（pointerup/pointerleave/pointercancel 共用）。 */
+function hpHoldStop() {
+    if (hpHoldTimer) { clearTimeout(hpHoldTimer); hpHoldTimer = null; }
+    if (hpHoldInterval) { clearInterval(hpHoldInterval); hpHoldInterval = null; }
+}
+
+/**
+ * 提交「待套用量」：依目前扣血/治療開關狀態一次性呼叫 modifyHP()，並清空待套用量。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a'
+ */
+function commitHpPending(unitId, type) {
+    const amount = (hpPending[unitId] && hpPending[unitId][type]) || 0;
+    if (amount <= 0) return;
+    const mode = hpAdjustMode[unitId] || 'damage';
+    const dmgType = (mode === 'heal') ? ('heal-' + type) : type;
+
+    hpPending[unitId][type] = 0;
+    const el = document.getElementById(`hp-pending-${unitId}-${type}`);
+    if (el) el.textContent = '0' + type.toUpperCase();
+
+    modifyHP(unitId, dmgType, amount);
+}
+
+/** 雙擊 ♻ 重置血量：一併清空該單位尚未提交的待套用量，避免顯示與實際血量脫鉤。 */
+function hpResetAll(unitId) {
+    hpPending[unitId] = { b: 0, l: 0, a: 0 };
+    ['b', 'l', 'a'].forEach(t => {
+        const el = document.getElementById(`hp-pending-${unitId}-${t}`);
+        if (el) el.textContent = '0' + t.toUpperCase();
+    });
+    resetUnitHp(unitId);
+}
+
 // ===== 單位操作 =====
 /**
  * 重置單位血量（清除所有傷害）
@@ -529,6 +612,10 @@ function deleteUnit(id) {
     }
 
     if (!confirm('刪除?')) return;
+
+    // 清除該單位的 BLA 步進器本地暫存（待套用量/扣血治療模式），避免殘留無主資料
+    delete hpPending[id];
+    delete hpAdjustMode[id];
 
     if (myRole === 'st') {
         // 連同其多重行動條目一起刪除

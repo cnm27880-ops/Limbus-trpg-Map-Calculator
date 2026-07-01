@@ -268,25 +268,28 @@ function renderUnitsList() {
             // 最左邊的開關切換「扣血／治療」模式，決定套用時是造成傷害還是治療（預設扣血）。
             const mode = hpAdjustMode[u.id] || 'damage';
             const pending = hpPending[u.id] || { b: 0, l: 0, a: 0 };
+            // 戰術切換開關（暗黑工業風方塊切換器）：未勾選＝傷害（紅光）、勾選＝治療（綠光）
             const modeSwitch = `
-                <label class="hp-mode-switch" title="切換扣血／治療模式（目前：${mode === 'heal' ? '治療' : '扣血'}）">
+                <label class="tactical-toggle" title="切換扣血／治療模式（目前：${mode === 'heal' ? '治療' : '扣血'}）">
                     <input type="checkbox" ${mode === 'heal' ? 'checked' : ''} onchange="toggleHpAdjustMode('${u.id}')">
-                    <span class="hp-mode-slider"></span>
+                    <span class="toggle-track"></span>
                 </label>`;
 
-            const hpPill = (type, label, colorVar) => `
-                <span class="hp-pill" style="--pill-color:var(${colorVar})">
-                    <button class="hp-pill-step" onpointerdown="hpHoldStart('${u.id}','${type}',-1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 －1（按住可快速輸入）">－</button>
-                    <button class="hp-pill-commit" id="hp-pending-${u.id}-${type}" onclick="commitHpPending('${u.id}','${type}')" title="點擊套用目前待套用量（${mode === 'heal' ? '治療' : '扣血'}）">${pending[type] || 0}${label}</button>
-                    <button class="hp-pill-step" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">＋</button>
-                </span>`;
+            // 戰術步進器：－/＋ 只調整待套用量，中央數字（stepper-val）點擊一次性套用（依 mode 扣血或治療）。
+            // 中央保留為可點擊的 <button>，是本 App 的「提交」入口，故不套用範本 CSS 的 pointer-events:none。
+            const hpStepper = (type, label) => `
+                <div class="hp-stepper stepper-${type}">
+                    <button class="stepper-btn minus" onpointerdown="hpHoldStart('${u.id}','${type}',-1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 －1（按住可快速輸入）">−</button>
+                    <button class="stepper-val" id="hp-pending-${u.id}-${type}" onclick="commitHpPending('${u.id}','${type}')" title="點擊套用目前待套用量（${mode === 'heal' ? '治療' : '扣血'}）">${pending[type] || 0}${label}</button>
+                    <button class="stepper-btn plus" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">+</button>
+                </div>`;
 
             actions = `
                 <div class="unit-actions">
                     ${modeSwitch}
-                    ${hpPill('b', 'B', '--dmg-b')}
-                    ${hpPill('l', 'L', '--dmg-l')}
-                    ${hpPill('a', 'A', '--dmg-a')}
+                    ${hpStepper('b', 'B')}
+                    ${hpStepper('l', 'L')}
+                    ${hpStepper('a', 'A')}
                     <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
                     <button class="action-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡</button>
                     ${deployBtn}

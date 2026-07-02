@@ -169,7 +169,10 @@ function bbRunBlackBoxCalculation(data) {
  * Firebase /rooms/{roomId}/combatLogs，供「戰鬥日誌 / 構築室」分頁渲染。
  * 採單一寫入者（ST）避免重複，並維持最多 100 筆（FIFO）。
  * 本函式為附屬功能，全程 try-catch，任何失敗都不可影響戰鬥主流程。
- * @param {object} entry - { attackerName, defenderName, finalDice, attackerRole: 'player'|'enemy', broadcastText }
+ * @param {object} entry - { attackerName, defenderName, finalDice, attackerRole: 'player'|'enemy', broadcastText,
+ *                           entryType, round, extraSuccess, atkDp, defDp, defAuto, targetDebuffs, targetDebuffTotal }
+ *   entryType: 'attack'（預設）| 'aoe' | 'battle_start' | 'battle_end'，供回合分析切分戰鬥區段。
+ *   其餘為回合分析欄位（見 log-view.js lvComputeBattleAnalysis），舊日誌缺這些欄位時以 0/空字串處理。
  */
 function bbPushCombatLog(entry) {
     try {
@@ -186,7 +189,16 @@ function bbPushCombatLog(entry) {
             defenderName: String(entry.defenderName || '').slice(0, 60),
             finalDice: Number(entry.finalDice) || 0,
             attackerRole: (entry.attackerRole === 'player') ? 'player' : 'enemy',
-            broadcastText: String(entry.broadcastText || '').slice(0, 300)
+            broadcastText: String(entry.broadcastText || '').slice(0, 300),
+            // ===== 回合分析欄位（供 AI 遭遇構築精細評估玩家實力）=====
+            entryType: String(entry.entryType || 'attack').slice(0, 20),
+            round: Number(entry.round) || 0,
+            extraSuccess: Number(entry.extraSuccess) || 0,
+            atkDp: Number(entry.atkDp) || 0,
+            defDp: Number(entry.defDp) || 0,
+            defAuto: Number(entry.defAuto) || 0,
+            targetDebuffs: String(entry.targetDebuffs || '').slice(0, 200),
+            targetDebuffTotal: Number(entry.targetDebuffTotal) || 0
         });
 
         // FIFO：以 .once 讀取（非監聽，不會造成無限迴圈），超過 100 筆時移除最舊者。

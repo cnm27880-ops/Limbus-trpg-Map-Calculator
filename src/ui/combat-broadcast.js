@@ -57,12 +57,46 @@ function cqOnBroadcasting(data) {
         // 以攻擊發起時記下的 attackerRole 區分玩家／ST 操作怪物，而非用 id 前綴猜測
         // （ST 發起威脅時 attacker.id 仍是 ST 自己的 myPlayerId，用前綴判斷會誤判為玩家攻擊）。
         const attackerRole = (data.attacker && data.attacker.attackerRole === 'player') ? 'player' : 'enemy';
+
+        // ===== 回合分析欄位（bbPushCombatLog 僅 ST 端會實際寫入）=====
+        const atk = data.attacker || {};
+        // 攻擊方總 DP（宣告＋人格卡＋未對抗加成＋穿透等效 DP），口徑與黑箱攻擊桶一致
+        const atkDp = (Number(atk.dp) || 0) + (Number(atk.identityDpBonus) || 0)
+            + (Number(atk.counterPhaseDpBonus) || 0) + (Number(atk.armorPierce) || 0)
+            + (Number(atk.hastePierce) || 0) + (Number(atk.magicPierce) || 0);
+        // 防禦方數值：威脅路徑取玩家防禦 QTE 填報值；玩家攻擊路徑取目標單位的基礎防禦
+        const targetUnit = (typeof findUnitById === 'function' && data.target) ? findUnitById(data.target.id) : null;
+        const defDp = data.defense ? (Number(data.defense.dp) || 0) : (targetUnit ? (Number(targetUnit.defDp) || 0) : 0);
+        const defAuto = data.defense ? (Number(data.defense.auto) || 0) : (targetUnit ? (Number(targetUnit.defAuto) || 0) : 0);
+        // 結算當下防禦方身上的負面狀態摘要（觀察 BOSS 被玩家疊 debuff 的速度）
+        let targetDebuffs = '', targetDebuffTotal = 0;
+        if (targetUnit && targetUnit.status && typeof isDebuffStatus === 'function' && typeof getStatusByName === 'function') {
+            const parts = [];
+            for (const [name, raw] of Object.entries(targetUnit.status)) {
+                const def = getStatusByName(name);
+                if (!def || !isDebuffStatus(def.id)) continue;
+                const stacks = parseInt(raw) || 0;
+                if (stacks <= 0) continue;
+                parts.push(`${name}x${stacks}`);
+                targetDebuffTotal += stacks;
+            }
+            targetDebuffs = parts.join('、');
+        }
+
         bbPushCombatLog({
             attackerName: attackerName,
             defenderName: defenderName,
             finalDice: finalDice,
             attackerRole: attackerRole,
-            broadcastText: banner.textContent || ''
+            broadcastText: banner.textContent || '',
+            entryType: 'attack',
+            round: (typeof state !== 'undefined' && state.roundNum) || 0,
+            extraSuccess: finalExtraSuccess,
+            atkDp: atkDp,
+            defDp: defDp,
+            defAuto: defAuto,
+            targetDebuffs: targetDebuffs,
+            targetDebuffTotal: targetDebuffTotal
         });
     }
 

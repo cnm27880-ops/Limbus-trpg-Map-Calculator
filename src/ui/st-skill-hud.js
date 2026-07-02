@@ -193,9 +193,20 @@ function makeFloatingPanel(opts) {
                 icon: o.dock.icon,
                 title: o.dock.title,
                 onRestore: () => {
-                    // 還原時把面板從右緣拉回可視範圍
+                    // 程式化還原（快捷球重開等）：把面板從右緣拉回可視範圍
                     stateObj.position.x = Math.max(8, window.innerWidth - (panel.offsetWidth || 340) - 24);
                     panel.style.left = stateObj.position.x + 'px';
+                    clampHudPosition(stateObj, o.panelId);
+                    saveFn();
+                },
+                // 圖標拖出：面板標頭跟著指標走
+                onDragOut: (x, y) => {
+                    stateObj.position.x = x - Math.min(120, (panel.offsetWidth || 340) / 2);
+                    stateObj.position.y = y - 16;
+                    panel.style.left = stateObj.position.x + 'px';
+                    panel.style.top = stateObj.position.y + 'px';
+                },
+                onDragOutEnd: () => {
                     clampHudPosition(stateObj, o.panelId);
                     saveFn();
                 },

@@ -172,11 +172,23 @@ function renderCombatLogs() {
         const contentDiv = document.createElement('div');
         contentDiv.style.flex = '1';
 
+        // 戰鬥起訖標記列：置中顯示，方便一眼看出戰鬥區段
+        if (log.entryType === 'battle_start' || log.entryType === 'battle_end') {
+            row.classList.add('log-row-marker');
+        }
+
         const head = document.createElement('div');
         head.className = 'log-row-head';
         const attacker = document.createElement('span');
         attacker.className = 'log-attacker';
         attacker.textContent = log.attackerName || '未知';
+        // 回合徽章：顯示這筆攻擊發生在第幾回合
+        if ((Number(log.round) || 0) > 0 && log.entryType !== 'battle_start' && log.entryType !== 'battle_end') {
+            const roundChip = document.createElement('span');
+            roundChip.className = 'log-round-chip';
+            roundChip.textContent = `R${log.round}`;
+            head.appendChild(roundChip);
+        }
         const time = document.createElement('span');
         time.className = 'log-time';
         time.textContent = timeStr;
@@ -239,7 +251,9 @@ function logAoeAction(attackerName, targetNames, actionData) {
                 defenderName: namesStr,
                 finalDice: 0,
                 attackerRole: (typeof myRole !== 'undefined' && myRole === 'st') ? 'enemy' : 'player',
-                broadcastText: text
+                broadcastText: text,
+                entryType: 'aoe',
+                round: (typeof state !== 'undefined' && state.roundNum) || 0
             });
         }
     } catch (e) {
@@ -262,20 +276,112 @@ function getRecentPlayerAverageDice(n) {
     return { avg: Math.round((sum / recent.length) * 10) / 10, count: recent.length };
 }
 
+/**
+ * 回合分析：取「最近一場戰鬥」（最後一個 battle_start 之後的日誌；沒有標記則退回全部日誌），
+ * 統計玩家攻擊、附加成功、防禦、敵方負面狀態疊層曲線等，供 ST 檢視與 AI 遭遇構築使用。
+ * @returns {object|null} 無資料時回傳 null
+ */
+function lvComputeBattleAnalysis() {
+    if (!lvCombatLogs.length) return null;
+
+    // 切出最近一場戰鬥的區段
+    let startIdx = -1, endIdx = lvCombatLogs.length;
+    for (let i = lvCombatLogs.length - 1; i >= 0; i--) {
+        const t = lvCombatLogs[i] && lvCombatLogs[i].entryType;
+        if (t === 'battle_start') { startIdx = i; break; }
+    }
+    if (startIdx >= 0) {
+        const endMark = lvCombatLogs.findIndex((l, i) => i > startIdx && l && l.entryType === 'battle_end');
+        if (endMark >= 0) endIdx = endMark + 1;
+    }
+    const segment = lvCombatLogs.slice(Math.max(0, startIdx), endIdx);
+    const attacks = segment.filter(l => l && (l.entryType === 'attack' || l.entryType === undefined));
+    if (!attacks.length) return null;
+
+    const ended = segment.some(l => l && l.entryType === 'battle_end');
+    const rounds = Math.max(0, ...segment.map(l => Number(l.round) || 0));
+
+    const avgOf = (arr, key) => arr.length
+        ? Math.round(arr.reduce((a, l) => a + (Number(l[key]) || 0), 0) / arr.length * 10) / 10 : 0;
+    const maxOf = (arr, key) => arr.length ? Math.max(...arr.map(l => Number(l[key]) || 0)) : 0;
+
+    const playerAtk = attacks.filter(l => l.attackerRole === 'player');
+    const enemyAtk = attacks.filter(l => l.attackerRole !== 'player');
+
+    // 每回合曲線：玩家骰數均值 + 敵方（被玩家攻擊的目標）負面狀態最高總層數
+    const byRound = [];
+    for (let r = 1; r <= rounds; r++) {
+        const pa = playerAtk.filter(l => (Number(l.round) || 0) === r);
+        const debuffPeak = maxOf(playerAtk.filter(l => (Number(l.round) || 0) <= r), 'targetDebuffTotal');
+        byRound.push({ round: r, playerAttacks: pa.length, avgDice: avgOf(pa, 'finalDice'), debuffPeak });
+    }
+
+    return {
+        ended, rounds,
+        playerAttackCount: playerAtk.length,
+        playerAvgDice: avgOf(playerAtk, 'finalDice'),
+        playerMaxDice: maxOf(playerAtk, 'finalDice'),
+        playerAvgExtra: avgOf(playerAtk, 'extraSuccess'),
+        playerAvgAtkDp: avgOf(playerAtk, 'atkDp'),
+        // 玩家被威脅時的防禦（敵方攻擊列的 defDp/defAuto 即玩家防禦 QTE 填報值）
+        enemyAttackCount: enemyAtk.length,
+        enemyAvgDice: avgOf(enemyAtk, 'finalDice'),
+        playerAvgDefDp: avgOf(enemyAtk, 'defDp'),
+        playerAvgDefAuto: avgOf(enemyAtk, 'defAuto'),
+        // 敵方被疊 debuff 的速度：最終峰值與首次超過 10 層的回合
+        debuffPeak: maxOf(playerAtk, 'targetDebuffTotal'),
+        debuffFastRound: (byRound.find(r => r.debuffPeak >= 10) || {}).round || 0,
+        lastTargetDebuffs: (playerAtk.slice(-1)[0] || {}).targetDebuffs || '',
+        byRound
+    };
+}
+
+/** 把回合分析整理成給 AI 的文字摘要（也用於 ST 檢視） */
+function lvAnalysisSummaryText(a) {
+    if (!a) return '';
+    const lines = [
+        `本場戰鬥${a.ended ? '已結束' : '進行中'}，共 ${a.rounds || '?'} 回合。`,
+        `玩家攻擊 ${a.playerAttackCount} 次：平均擲骰 ${a.playerAvgDice} 顆（最高 ${a.playerMaxDice}）、平均附加成功 ${a.playerAvgExtra}、平均宣告攻擊 DP ${a.playerAvgAtkDp}。`,
+        `敵方攻擊 ${a.enemyAttackCount} 次（平均骰數 ${a.enemyAvgDice}）；玩家防禦 QTE 平均：防禦 DP ${a.playerAvgDefDp}、防禦附加成功 ${a.playerAvgDefAuto}。`,
+        `敵方單位被玩家疊負面狀態的峰值為 ${a.debuffPeak} 層` +
+            (a.debuffFastRound ? `（第 ${a.debuffFastRound} 回合即突破 10 層——玩家疊 debuff 速度快）` : '') +
+            (a.lastTargetDebuffs ? `；最近一次結算時目標身上：${a.lastTargetDebuffs}` : '') + '。'
+    ];
+    if (a.byRound.length) {
+        lines.push('逐回合（玩家攻擊次數/平均骰數/敵方累積 debuff 峰值）：' +
+            a.byRound.map(r => `R${r.round}: ${r.playerAttacks}次/${r.avgDice}顆/${r.debuffPeak}層`).join('；'));
+    }
+    return lines.join('\n');
+}
+
 function lvRenderDpsStat() {
     const el = document.getElementById('log-dps-stat');
     if (!el) return;
     if (typeof myRole === 'undefined' || myRole !== 'st') { el.style.display = 'none'; return; }
     el.style.display = 'block';
     const { avg, count } = getRecentPlayerAverageDice(20);
-    el.innerHTML = `🎯 玩家火力統計：最近 <b>${count}</b> 筆攻擊，平均擲骰數 <b class="dps-value">${avg}</b> 顆`;
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
+    let html = `🎯 玩家火力統計：最近 <b>${count}</b> 筆攻擊，平均擲骰數 <b class="dps-value">${avg}</b> 顆`;
+
+    // 最近一場戰鬥的回合分析（可展開）
+    const a = lvComputeBattleAnalysis();
+    if (a) {
+        html += `
+        <details class="log-analysis">
+            <summary>📊 回合分析（${a.ended ? '最近一場' : '本場進行中'}｜${a.rounds || '?'} 回合）</summary>
+            <div class="log-analysis-body">${esc(lvAnalysisSummaryText(a)).replace(/\n/g, '<br>')}</div>
+        </details>`;
+    }
+    el.innerHTML = html;
 }
 
 // ===== AI 動態遭遇生成器（ST） =====
 function lvEncounterSchemaExample() {
     return {
         monsters: [
-            { name: '腐化的協會清掃工', hp: 18, defDp: 9, defAuto: 1, atkDp: 11, init: 6, notes: '近戰；命中時施加 2 點流血。' }
+            { name: '腐化的協會清掃工', hp: 18, defDp: 9, defAuto: 1, atkDp: 11, init: 6,
+              passive: '腐化滲出：每回合結束時，對交戰中的玩家施加 1 點流血；自身流血免疫。',
+              notes: '近戰；命中時施加 2 點流血。' }
         ]
     };
 }
@@ -293,7 +399,7 @@ function lvPickBestiaryExamples() {
     const examples = picked.map(m => ({
         monsters: [{
             name: m.name, hp: m.hp, defDp: m.defDp, defAuto: m.defAuto,
-            atkDp: m.atkDp, init: m.init, notes: m.notes || ''
+            atkDp: m.atkDp, init: m.init, passive: m.passive || '', notes: m.notes || ''
         }]
     }));
     return { examples, fromBestiary: true };
@@ -302,6 +408,11 @@ function lvPickBestiaryExamples() {
 function lvBuildEncounterSystemPrompt(avgDice, theme, difficulty) {
     const { examples, fromBestiary } = lvPickBestiaryExamples();
     const exampleText = examples.map(e => JSON.stringify(e, null, 2)).join('\n');
+
+    // 最近一場戰鬥的回合分析：讓 AI 依實戰數據（含 debuff 疊速）設計反制被動
+    const analysis = (typeof lvComputeBattleAnalysis === 'function') ? lvComputeBattleAnalysis() : null;
+    const analysisText = analysis ? lvAnalysisSummaryText(analysis) : '';
+
     return [
         '你是一個 TRPG 遭遇設計器。請依使用者提供的主題與難度，產生一組怪物的 JSON 資料，且只輸出 JSON 本體、不要任何說明文字或 markdown 圍欄。',
         '',
@@ -313,12 +424,25 @@ function lvBuildEncounterSystemPrompt(avgDice, theme, difficulty) {
         '欄位說明：',
         '- monsters：陣列，每個怪物物件包含：',
         '  - name（字串）、hp（最大生命，整數）、defDp（防禦 DP，整數）、defAuto（防禦附加成功，整數）、',
-        '    atkDp（行動攻擊 DP，整數）、init（先攻值，整數）、notes（特殊說明，字串，可空）。',
+        '    atkDp（行動攻擊 DP，整數）、init（先攻值，整數）、',
+        '    passive（被動能力，字串：1~3 條以分號分隔的被動效果，需針對下方實戰數據設計出「有挑戰性但可被破解」的反制）、',
+        '    notes（特殊說明，字串，可空）。',
         '',
         `數學平衡要求：目前玩家的平均攻擊擲骰數約為 ${avgDice} 顆。請依此火力設計怪物，使其「能承受該火力但不會無敵」：`,
         `防禦 defDp 通常略低於玩家平均擲骰數、生命 hp 約為平均擲骰數的 2~4 倍（依難度調整）。`,
-        `主題：「${theme || '未指定'}」；難度：「${difficulty || '普通'}」。難度越高，hp / defDp / atkDp 越高、怪物數量可酌增（建議 1~4 隻）。`
-    ].join('\n');
+        analysisText ? '' : null,
+        analysisText ? '===== 最近一場戰鬥的實戰數據（回合分析）=====' : null,
+        analysisText || null,
+        analysisText ? [
+            '請針對上述數據設計被動能力（passive），例如：',
+            '- 玩家附加成功高 → 給怪物「附加成功抵銷」或「防禦附加成功隨回合成長」類被動；',
+            '- 玩家疊負面狀態速度快（debuff 峰值高／早） → 給「每回合清除 N 層負面」「負面狀態達 X 層時反擊」或「特定狀態免疫」類被動；',
+            '- 玩家防禦 QTE 偏低 → 提高 atkDp 或給「攻擊附帶狀態」的被動施壓；',
+            '- 戰鬥回合數過短（玩家速殺） → 提高 hp 或給「首回合承傷減半」等展開型被動。',
+            '被動必須留有可破解的弱點（例如免疫單一狀態而非全部、清除量有限），不可設計成無敵。'
+        ].join('\n') : null,
+        `主題：「${theme || '未指定'}」；難度：「${difficulty || '普通'}」。難度越高，hp / defDp / atkDp 越高、被動越刁鑽、怪物數量可酌增（建議 1~4 隻）。`
+    ].filter(l => l !== null).join('\n');
 }
 
 async function requestAIEncounter() {
@@ -398,6 +522,7 @@ function lvNormalizeMonsters(parsed) {
         defAuto: Math.max(0, parseInt(m.defAuto) || 0),
         atkDp: Math.max(0, parseInt(m.atkDp) || 0),
         init: parseInt(m.init) || 0,
+        passive: String(m.passive || '').slice(0, 400),
         notes: String(m.notes || '').slice(0, 300)
     }));
 }
@@ -438,6 +563,8 @@ function lvDeployMonster(id) {
     u.defDp = mon.defDp || 0;
     u.defAuto = mon.defAuto || 0;
     u.actionDp = mon.atkDp || 0;
+    // 被動能力直接寫入單位（BOSS/小怪設定面板的「被動能力」欄位會顯示）
+    if (mon.passive) u.passive = mon.passive;
     if (mon.notes) u.actionNote = mon.notes;
 
     if (typeof state !== 'undefined' && Array.isArray(state.units)) state.units.push(u);
@@ -460,6 +587,7 @@ function lvRenderMonsterLibrary() {
             <div class="monster-lib-info">
                 <div class="monster-lib-name">${esc(m.name)}</div>
                 <div class="monster-lib-stats">HP ${m.hp}｜防 ${m.defDp}(+${m.defAuto})｜攻DP ${m.atkDp}｜先攻 ${m.init}</div>
+                ${m.passive ? `<div class="monster-lib-passive">🧬 ${esc(m.passive)}</div>` : ''}
                 ${m.notes ? `<div class="monster-lib-notes">${esc(m.notes)}</div>` : ''}
             </div>
             <div class="monster-lib-actions">

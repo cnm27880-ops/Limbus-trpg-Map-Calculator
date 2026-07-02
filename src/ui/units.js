@@ -20,24 +20,45 @@ function toggleCombat() {
 
     if (state.isCombatActive) {
         // 結束戰鬥：重置先攻、回合、BOSS HUD
+        const totalRounds = state.roundNum || 1;
         state.isCombatActive = false;
         state.units.forEach(u => u.init = 0);
         state.turnIdx = -1;
+        state.roundNum = 0;
         state.activeBossId = null;
         broadcastState();
         showToast('戰鬥已結束，先攻已歸零');
+        // 戰鬥日誌：寫入結束標記（供回合分析切分戰鬥區段）
+        if (typeof bbPushCombatLog === 'function') {
+            bbPushCombatLog({
+                entryType: 'battle_end',
+                attackerName: 'ST', attackerRole: 'enemy',
+                broadcastText: `🏁 戰鬥結束（共 ${totalRounds} 回合）`,
+                round: totalRounds
+            });
+        }
     } else {
         // 開始戰鬥：排序並設定第一回合
         state.isCombatActive = true;
         // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
+        state.roundNum = 1;
         // 戰鬥開始時所有自動護盾回滿
         state.units.forEach(u => {
             if ((u.shieldAutoMax || 0) > 0) u.shieldAuto = u.shieldAutoMax;
         });
         broadcastState();
         showToast('戰鬥開始！');
+        // 戰鬥日誌：寫入開始標記
+        if (typeof bbPushCombatLog === 'function') {
+            bbPushCombatLog({
+                entryType: 'battle_start',
+                attackerName: 'ST', attackerRole: 'enemy',
+                broadcastText: '⚔️ 戰鬥開始！第 1 回合',
+                round: 1
+            });
+        }
     }
 }
 
@@ -751,6 +772,12 @@ function nextTurn() {
         const endingUnit = state.units[state.turnIdx];
 
         state.turnIdx = (state.turnIdx + 1) % state.units.length;
+
+        // 先攻列表輪完一圈 → 新回合（供戰鬥日誌回合分析使用）
+        if (state.turnIdx === 0 && state.isCombatActive) {
+            state.roundNum = (state.roundNum || 1) + 1;
+            showToast(`🔄 第 ${state.roundNum} 回合開始`);
+        }
 
         // 輪到的單位自動護盾回滿
         const activeUnit = state.units[state.turnIdx];

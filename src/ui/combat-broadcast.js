@@ -30,13 +30,14 @@ function cqOnBroadcasting(data) {
             banner.appendChild(extraSpan);
         }
     } else if (roll) {
-        // 自動擲骰：直接公佈擲骰結果與最終傷害
+        // 自動擲骰：直接公佈擲骰結果與最終傷害（含 10 的數量，供人格卡觸發判定）
         const targetName = String((data.target && data.target.name) || '目標');
-        const explodeNote = roll.exploded > 0 ? `（爆骰 +${roll.exploded}）` : '';
-        let text = `【${attackerName}】攻擊【${targetName}】！🎲 擲 ${finalDice} 顆${explodeNote}成功 ${roll.successes}`;
+        const explodeNote = roll.exploded > 0 ? `，爆骰 +${roll.exploded}` : '';
+        const tensNote = (Number(roll.tens) || 0) > 0 ? `，🔟×${roll.tens}` : '';
+        let text = `【${attackerName}】攻擊【${targetName}】！🎲 擲 ${roll.totalRolled || finalDice} 顆${explodeNote}${tensNote} → 成功 ${roll.successes}`;
         if (roll.extraSuccess > 0) text += ` ＋ 附加 ${roll.extraSuccess}`;
-        if (roll.capApplied) text += `（上限 ${roll.cap}）`;
-        if (roll.statusBonus > 0) text += `，${roll.statusBonusText}`;
+        if (roll.statusBonus > 0) text += ` ＋ ${roll.statusBonusText}`;
+        if (roll.capApplied) text += ` ＝ ${roll.totalBeforeCap}，上限 ${roll.cap}`;
         banner.appendChild(document.createTextNode(text + ' ➡️ 總傷害 '));
         const dmgSpan = document.createElement('span');
         dmgSpan.className = 'combat-broadcast-dice';
@@ -115,7 +116,10 @@ function cqOnBroadcasting(data) {
             // 自動擲骰結果（手動擲骰時為 0，分析端視為無傷害資料）
             damage: roll ? (Number(roll.damage) || 0) : 0,
             rollSuccesses: roll ? (Number(roll.successes) || 0) : 0,
-            rollExploded: roll ? (Number(roll.exploded) || 0) : 0
+            rollExploded: roll ? (Number(roll.exploded) || 0) : 0,
+            rollTens: roll ? (Number(roll.tens) || 0) : 0,
+            // 各骰點數明細：供玩家核對「骰到 N 個 10 觸發」類人格卡
+            rollDetail: (roll && Array.isArray(roll.rolls)) ? roll.rolls.join(',') : ''
         });
     }
 

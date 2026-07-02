@@ -234,6 +234,8 @@ function bbPushCombatLog(entry) {
             damage: Number(entry.damage) || 0,           // 實際造成（套用）的傷害
             rollSuccesses: Number(entry.rollSuccesses) || 0, // 擲骰成功數（未含附加成功）
             rollExploded: Number(entry.rollExploded) || 0,   // 爆骰追加的骰數
+            rollTens: Number(entry.rollTens) || 0,           // 骰出 10 的數量（人格卡觸發判定）
+            rollDetail: String(entry.rollDetail || '').slice(0, 600), // 各骰點數明細（逗號分隔）
             targetCount: Number(entry.targetCount) || 1,     // 目標數（AOE 用；單體=1）
             clockTicks: Number.isFinite(Number(entry.clockTicks)) ? Number(entry.clockTicks) : -1 // 戰鬥起訖標記記錄的時鐘刻度（-1=無資料）
         });

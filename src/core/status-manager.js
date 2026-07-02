@@ -740,18 +740,36 @@ function listConsumeOnAttackedStatuses(unit) {
 
 /**
  * 攻擊結算完成後（ST 確認廣播時呼叫）：自動消耗目標身上的受擊消耗狀態並同步。
+ * 標記 consumeReducesMaxHp 的狀態（震顫）：消耗時同步削減目標生命上限等同層數
+ * （昏迷閾值前移），hpArr 依新上限截短（已排序，保留最嚴重的傷害）。
  * @param {string} unitId - 防禦方單位 ID
- * @returns {Array<{name:string, stacks:number}>} 實際被消耗的狀態
+ * @returns {{consumed: Array<{name:string, stacks:number}>, maxHpCut: number}}
  */
 function consumeOnAttackedStatuses(unitId) {
     const unit = findUnitById(unitId);
     const consumed = listConsumeOnAttackedStatuses(unit);
-    if (!consumed.length) return [];
-    consumed.forEach(s => { delete unit.status[s.name]; });
+    if (!consumed.length) return { consumed: [], maxHpCut: 0 };
+
+    let maxHpCut = 0;
+    consumed.forEach(s => {
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(s.name) : null;
+        if (def && def.consumeReducesMaxHp) {
+            const before = Math.max(1, parseInt(unit.maxHp) || 1);
+            unit.maxHp = Math.max(1, before - s.stacks);
+            maxHpCut += before - unit.maxHp;
+            if (Array.isArray(unit.hpArr) && unit.hpArr.length !== unit.maxHp) {
+                const old = unit.hpArr;
+                unit.hpArr = Array.from({ length: unit.maxHp }, (_, i) => old[i] || 0);
+            }
+        }
+        delete unit.status[s.name];
+    });
+
     syncUnitStatus(unitId);
+    if (maxHpCut > 0 && typeof broadcastState === 'function') broadcastState();
     renderUnitsList();
     renderSidebarUnits();
-    return consumed;
+    return { consumed, maxHpCut };
 }
 
 /**

@@ -204,6 +204,14 @@ function renderCombatLogs() {
 
         contentDiv.appendChild(head);
         contentDiv.appendChild(body);
+
+        // 自動擲骰明細：各骰點數（供玩家核對「骰到 N 個 10 觸發」類人格卡）
+        if (log.rollDetail) {
+            const detail = document.createElement('div');
+            detail.className = 'log-roll-detail';
+            detail.textContent = `🎲 [${log.rollDetail}]` + ((Number(log.rollTens) || 0) > 0 ? `｜🔟×${log.rollTens}` : '');
+            contentDiv.appendChild(detail);
+        }
         row.appendChild(contentDiv);
         frag.appendChild(row);
     }

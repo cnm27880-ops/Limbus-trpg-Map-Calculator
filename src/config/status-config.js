@@ -271,8 +271,9 @@ const STATUS_LIBRARY = {
             icon: '🔔',
             type: 'stack',
             desc: '受擊時消耗，削減昏迷閾值',
-            fullDesc: '受到攻擊時消耗所有層數，削減同等數值的昏迷閾值／生命上限。（ST 確認攻擊結算後，系統會自動清除層數）',
+            fullDesc: '受到攻擊時消耗所有層數，削減同等數值的昏迷閾值／生命上限。（ST 確認攻擊結算後，系統會自動清除層數並同步扣減目標生命上限）',
             consumeOnAttacked: true,
+            consumeReducesMaxHp: true,
             keyResist: null,
             effects: {
                 light: '被震顫爆發引爆',

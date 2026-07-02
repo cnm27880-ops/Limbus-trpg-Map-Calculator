@@ -94,6 +94,7 @@ let identityHudState = {
     atkSevere: false,   // 我方嚴重槽已滿
     tgtSevere: false,   // 目標嚴重槽已滿
     notActed: false,    // 目標本回合未行動
+    cardFilter: '',     // 卡片清單篩選字串（不持久化）
     lastResult: null
 };
 
@@ -843,12 +844,45 @@ function renderIdentityUnitOptions(selectedId) {
     return opts;
 }
 
+/** 取得某卡關鍵狀態的中文名稱清單（引擎英文鍵 → 狀態庫中文名） */
+function idtKeyStatusNames(card) {
+    if (!Array.isArray(card.keyStatuses)) return [];
+    return card.keyStatuses.map(key => {
+        const sid = (typeof IDENTITY_STATUS_KEYMAP !== 'undefined' && IDENTITY_STATUS_KEYMAP[key]) || key;
+        const def = (typeof getStatusById === 'function') ? getStatusById(sid) : null;
+        return def ? { icon: def.icon || '', name: def.name } : { icon: '', name: key };
+    });
+}
+
+/** 卡片是否符合目前的篩選字串（比對名稱／解鎖技名／各技能名／關鍵狀態中文名） */
+function idtCardMatchesFilter(card) {
+    const q = (identityHudState.cardFilter || '').trim().toLowerCase();
+    if (!q) return true;
+    const parts = [card.name || '', card.repeatUnlockSkill || ''];
+    idtKeyStatusNames(card).forEach(s => parts.push(s.name));
+    if (card.hooks) {
+        Object.values(card.hooks).forEach(hookArr => {
+            if (Array.isArray(hookArr)) hookArr.forEach(h => { if (h && h.skill) parts.push(h.skill); });
+        });
+    }
+    return parts.join('\n').toLowerCase().includes(q);
+}
+
+/** 篩選輸入：只重繪卡片清單，避免整個面板重繪造成輸入框失焦 */
+function idtSetCardFilter(value) {
+    identityHudState.cardFilter = value || '';
+    const list = document.querySelector('#identity-modal .idt-card-list');
+    if (list) list.innerHTML = renderIdentityCardList();
+}
+
 function renderIdentityCardList() {
     if (typeof getIdentitiesByOwner !== 'function' || !identityHudState.owner) return '';
     const ids = getIdentitiesByOwner(identityHudState.owner);
-    return ids.map(cardId => {
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+    const items = ids.map(cardId => {
         const card = (typeof getIdentityById === 'function') ? getIdentityById(cardId) : null;
         if (!card) return '';
+        if (!idtCardMatchesFilter(card)) return '';
         const c = identityHudState.cards[cardId] || { owned: false, unlocked: false };
         const name = (typeof escapeHtml === 'function') ? escapeHtml(card.name) : card.name;
         const unlockName = card.repeatUnlockSkill ? ((typeof escapeHtml === 'function') ? escapeHtml(card.repeatUnlockSkill) : card.repeatUnlockSkill) : '';
@@ -861,16 +895,24 @@ function renderIdentityCardList() {
         const delCtrl = card.custom
             ? `<button class="idt-card-del" title="刪除自訂人格卡" onclick="deleteCustomIdentity('${cardId}')">🗑️ 刪除</button>`
             : '';
+        // 關鍵狀態小標籤：一眼看出這張卡圍繞哪些狀態運作
+        const chips = idtKeyStatusNames(card).map(s =>
+            `<span class="idt-key-chip">${esc(s.icon)}${esc(s.name)}</span>`).join('');
         return `
             <div class="idt-card ${c.owned ? 'idt-owned' : ''}">
                 <label class="idt-own">
                     <input type="checkbox" ${c.owned ? 'checked' : ''} onchange="toggleIdentityCard('${cardId}')">
                     <span class="idt-card-name">${name}${card.custom ? ' <span class="idt-custom-tag">自訂</span>' : ''}</span>
                 </label>
+                ${chips ? `<div class="idt-key-chips">${chips}</div>` : ''}
                 ${unlockCtrl}
                 ${delCtrl}
             </div>`;
     }).join('');
+    if (items.replace(/\s/g, '') === '' && (identityHudState.cardFilter || '').trim()) {
+        return '<div class="idt-no-unlock" style="padding:6px 2px;">沒有符合篩選的人格卡</div>';
+    }
+    return items;
 }
 
 /**
@@ -1009,6 +1051,9 @@ function renderIdentityModal() {
                 <div class="idt-section">
                     <div class="idt-section-title">① 選擇角色與持有的人格卡</div>
                     <select class="idt-select" onchange="selectIdentityOwner(this.value)">${ownerOpts}</select>
+                    <input class="idt-input idt-card-filter" type="text" placeholder="🔍 篩選人格卡（名稱／技能／關鍵狀態）"
+                           value="${(typeof escapeHtml === 'function') ? escapeHtml(identityHudState.cardFilter || '') : ''}"
+                           oninput="idtSetCardFilter(this.value)">
                     <div class="idt-card-list">${renderIdentityCardList()}</div>
                 </div>
 
@@ -1062,7 +1107,10 @@ function injectIdentityStyles() {
         .idt-section{margin-bottom:14px;}
         .idt-section-title{font-size:.9rem;color:var(--accent-purple,#9b59b6);margin-bottom:8px;font-weight:bold;}
         .idt-select,.idt-input{width:100%;background:var(--bg-input,#111);border:1px solid var(--border,#33333a);color:var(--text,#eee);border-radius:6px;padding:7px 8px;font-size:.9rem;}
+        .idt-card-filter{margin-top:8px;}
         .idt-card-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
+        .idt-key-chips{display:flex;flex-wrap:wrap;gap:4px;padding-left:24px;}
+        .idt-key-chip{font-size:.68rem;color:var(--text-dim,#aaa);background:var(--bg-panel,#22222a);border:1px solid var(--border,#33333a);border-radius:8px;padding:1px 7px;white-space:nowrap;}
         .idt-card{border:1px solid var(--border,#33333a);border-radius:8px;padding:8px 10px;background:var(--bg-input,#15151b);display:flex;flex-direction:column;gap:4px;opacity:.6;}
         .idt-card.idt-owned{opacity:1;border-color:var(--accent-purple,#7e57c2);}
         .idt-own{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:bold;}

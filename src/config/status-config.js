@@ -865,6 +865,16 @@ const STATUS_LIBRARY = {
             effects: { light: '防禦附加成功 -層數', heavy: null, destruction: null }
         },
         {
+            id: 'vulnerable',
+            name: '易損',
+            icon: '💔',
+            type: 'stack',
+            desc: '受到傷害增加',
+            fullDesc: '目標受到的最終傷害增加等同於層數的數值；當施加者具有造成惡性傷害的能力時，此效果也可造成惡性傷害。',
+            keyResist: null,
+            effects: { light: '最終傷害 +層數', heavy: null, destruction: null }
+        },
+        {
             id: 'sinking',
             name: '沉淪',
             icon: '🌊',
@@ -1190,7 +1200,7 @@ const STATUS_DEBUFF_ID_FALLBACK = [
     'exhausted', 'blind', 'deaf', 'tinnitus', 'airborne', 'prone', 'immobilized', 'slow',
     'limb_impair', 'fatigue', 'pain', 'weak', 'banish', 'frozen_solid', 'limb_disabled', 'fear',
     'mental_bind', 'depression', 'charmed', 'fascinated', 'silence', 'seal', 'addiction',
-    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking'
+    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking', 'vulnerable'
 ];
 
 /**

@@ -51,7 +51,7 @@ const IDENTITY_STATUS_KEYMAP = {
     knowledge: 'knowledge', trueKnowledge: 'trueKnowledge', bind: 'bind', provoke: 'provoke',
     paralyze: 'paralyze', stun: 'stun', flaw: 'flaw', defenseDown: 'defenseDown',
     nails: 'nails', echo: 'echo', commandTarget: 'command_target',
-    duelOtis: 'duelOtis', duelDon: 'duelDon'
+    duelOtis: 'duelOtis', duelDon: 'duelDon', vulnerable: 'vulnerable'
 };
 
 const IDENTITY_LIBRARY = {
@@ -310,6 +310,36 @@ const IDENTITY_LIBRARY = {
         }
     },
 
+    // 奧提斯 - 環指點彩派學徒 ── 流血 / 迅捷
+    otis_pointillist: {
+        id: 'otis_pointillist',
+        name: '奧提斯 - 環指點彩派學徒',
+        owner: '奧提斯',
+        repeatUnlockSkill: '檢查作品',
+        keyStatuses: ['bleed', 'swiftness'],
+        hooks: {
+            onAttack: [
+                // 點畫：目標流血 6+ → +3 DP
+                { condition: (t) => (t.status.bleed || 0) >= 6, dpBonus: 3, source: '點畫', skill: '點畫' },
+                // 血描畫：目標流血 12+ → 再 +3 DP
+                { condition: (t) => (t.status.bleed || 0) >= 12, dpBonus: 3, source: '血描畫', skill: '血描畫' },
+                // 檢查作品：目標流血 18+ → 再 +3 DP
+                { condition: (t) => (t.status.bleed || 0) >= 18, dpBonus: 3, source: '檢查作品', skill: '檢查作品', locked: true },
+                // 檢查作品：宣告攻擊 → 先攻最低兩名友方 +1 迅捷（需指定友軍，手動）
+                { condition: () => true, manual: true, source: '檢查作品', skill: '檢查作品', locked: true,
+                  desc: '宣告攻擊動作時，使我方先攻值最低的兩名友方單位獲得 1 層迅捷。' },
+                // 檢查作品：目標每 1 種不同類型的負面狀態 → 武器傷害 +1（需盤點狀態種類，手動）
+                { condition: () => true, manual: true, source: '檢查作品', skill: '檢查作品', locked: true,
+                  desc: '目標身上每帶有 1 種「不同類型的負面狀態」，本次攻擊武器傷害 +1。' }
+            ],
+            onHit: [
+                { condition: () => true, targetStatus: { bleed: 3 }, source: '點畫', skill: '點畫' },
+                { condition: () => true, manual: true, source: '血描畫', skill: '血描畫',
+                  desc: '命中可進行一次「連擊判定」：擲 1D10，擲到 10 → 額外進行一次攻擊；目標每帶有一種負面狀態，成功閾值下降 1；每回合最多觸發 2 次。' }
+            ]
+        }
+    },
+
     // ========================================================================
     // 浮士德（Faust）
     // ========================================================================
@@ -478,6 +508,42 @@ const IDENTITY_LIBRARY = {
             ],
             onHit: [
                 { condition: () => true, targetStatus: { bleed: 3 }, source: '散亂之舞', skill: '散亂之舞' }
+            ]
+        }
+    },
+
+    // 羅佳 - Zwei 協會南部5科 ── 挑釁 / 呼吸法 / 護盾 / 易損
+    ryoshu_zwei_south5: {
+        id: 'ryoshu_zwei_south5',
+        name: '羅佳 - Zwei 協會南部5科',
+        owner: '羅佳',
+        repeatUnlockSkill: '威脅鎮壓',
+        keyStatuses: ['provoke', 'breathing', 'shield', 'vulnerable'],
+        hooks: {
+            onTurnStart: [
+                // 穩紮穩打（被動）：每 15 層呼吸法 → 1 點護盾（不會自動回復）
+                { condition: () => true, selfStatus: { shield: (t, a) => Math.floor((a.status.breathing || 0) / 15) },
+                  source: '穩紮穩打（被動）', skill: '（被動）' }
+            ],
+            onAttack: [
+                // 牽制戰術：宣告攻擊 → 目標 +1 挑釁
+                { condition: () => true, targetStatus: { provoke: 1 }, source: '牽制戰術', skill: '牽制戰術' },
+                // 專注防禦：宣告攻擊 → 目標 +2 挑釁、自身 +2 呼吸法
+                { condition: () => true, targetStatus: { provoke: 2 }, selfStatus: { breathing: 2 }, source: '專注防禦', skill: '專注防禦' },
+                // 專注防禦：護盾不為 0 → 再 +2 呼吸法
+                { condition: (t, a) => (a.status.shield || 0) > 0, selfStatus: { breathing: 2 }, source: '專注防禦（護盾不為 0）', skill: '專注防禦' },
+                // 威脅鎮壓：護盾不為 0 → +6 DP
+                { condition: (t, a) => (a.status.shield || 0) > 0, dpBonus: 6, source: '威脅鎮壓', skill: '威脅鎮壓', locked: true }
+            ],
+            onHit: [
+                { condition: () => true, selfStatus: { breathing: 2 }, source: '牽制戰術', skill: '牽制戰術' },
+                { condition: () => true, selfStatus: { breathing: 2 }, source: '專注防禦', skill: '專注防禦' },
+                { condition: () => true, manual: true, source: '威脅鎮壓', skill: '威脅鎮壓', locked: true,
+                  desc: '命中時若骰子中具有兩個以上的數字 10，對目標施加 1 層易損。' }
+            ],
+            onActive: [
+                { name: '牽制戰術（失手回氣）', source: '牽制戰術', skill: '牽制戰術',
+                  desc: '若你在對抗檢定中失敗（或攻擊未命中），使自身獲得 2 層呼吸法。' }
             ]
         }
     },
@@ -798,6 +864,39 @@ const IDENTITY_LIBRARY = {
                 { condition: (t) => (t.status.rupture || 0) <= 3, targetStatus: { rupture: 3 }, source: '閃爍誘餌（破裂 ≤3 加成）', skill: '閃爍誘餌' },
                 // 嚼嚼旋風【重複抽取解鎖】：命中時再附加 3 層挑釁
                 { condition: () => true, targetStatus: { provoke: 3 }, source: '嚼嚼旋風！', skill: '嚼嚼旋風！', locked: true }
+            ]
+        }
+    },
+
+    // 唐吉訶德 - T公司3級徵收人員 ── 震顫 / 束縛 / 挑釁
+    don_tcorp: {
+        id: 'don_tcorp',
+        name: '唐吉訶德 - T公司3級徵收人員',
+        owner: '唐吉訶德',
+        repeatUnlockSkill: '那位，請止步！',
+        keyStatuses: ['tremor', 'bind', 'provoke'],
+        hooks: {
+            onAttack: [
+                // 鎖鏈光環（被動）：敵方攻擊檢定受其震顫層數減值——引擎不運算敵方檢定，保留提示
+                { condition: () => true, manual: true, source: '鎖鏈光環', skill: '（被動）',
+                  desc: '只要你與目標處於交戰狀態，目標進行攻擊檢定時受到等同其【震顫】層數的 DP 減值。' },
+                // 該徵收了：宣告攻擊 → 目標 +2 挑釁
+                { condition: () => true, targetStatus: { provoke: 2 }, source: '該徵收了', skill: '該徵收了' },
+                // 該徵收了：目標震顫 6+ → +5 DP
+                { condition: (t) => (t.status.tremor || 0) >= 6, dpBonus: 5, source: '該徵收了', skill: '該徵收了' },
+                // 那位，請止步！：目標帶有束縛 → +3 DP
+                { condition: (t) => (t.status.bind || 0) > 0, dpBonus: 3, source: '那位，請止步！', skill: '那位，請止步！', locked: true }
+            ],
+            onHit: [
+                { condition: () => true, targetStatus: { tremor: 2, provoke: 1 }, source: '該徵收了', skill: '該徵收了' },
+                { condition: () => true, targetStatus: { tremor: 2 }, source: 'T公司產加速切斷器', skill: 'T公司產加速切斷器' },
+                { condition: () => true, targetStatus: { tremor: 2 }, source: '那位，請止步！', skill: '那位，請止步！', locked: true }
+            ],
+            onActive: [
+                { name: '震顫引爆（加速切斷）', source: 'T公司產加速切斷器', skill: 'T公司產加速切斷器',
+                  desc: '命中時可宣告引爆目標身上最多 5 層震顫：對目標造成等同引爆層數的嚴重傷害，並施加等同消耗層數的【束縛】（若為 BOSS，可自選其行動條目承受）。' },
+                { name: '時間延付', source: '那位，請止步！', skill: '那位，請止步！', locked: true,
+                  desc: '命中時若目標震顫達 10 層以上，可宣告消耗其 10 層震顫：目標立即受到 10 點惡性傷害 (A)，且直到下一回合開始，其防禦檢定受到 10 DP 減值。' }
             ]
         }
     }

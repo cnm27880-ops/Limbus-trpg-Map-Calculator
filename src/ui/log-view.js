@@ -731,25 +731,70 @@ function lvDeployMonster(id) {
 function lvRenderMonsterLibrary() {
     const box = document.getElementById('monster-library-list');
     if (!box) return;
-    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
     const lib = lvLoadMonsterLibrary();
+
+    // 怪物庫已改為 Firebase 房間共享（跨客戶端資料），全程以 DOM 節點 + textContent
+    // 建構，不經 innerHTML，從根本杜絕 XSS。
+    box.textContent = '';
     if (!lib.length) {
-        box.innerHTML = '<div class="log-empty">怪物庫是空的。用上方 AI 構築或手動貼上 JSON 後存入。</div>';
+        const empty = document.createElement('div');
+        empty.className = 'log-empty';
+        empty.textContent = '怪物庫是空的。用上方 AI 構築或手動貼上 JSON 後存入。';
+        box.appendChild(empty);
         return;
     }
-    box.innerHTML = lib.map(m => `
-        <div class="monster-lib-card">
-            <div class="monster-lib-info">
-                <div class="monster-lib-name">${esc(m.name)}</div>
-                <div class="monster-lib-stats">HP ${m.hp}｜防 ${m.defDp}(+${m.defAuto})｜攻DP ${m.atkDp}｜先攻 ${m.init}</div>
-                ${m.passive ? `<div class="monster-lib-passive">🧬 ${esc(m.passive)}</div>` : ''}
-                ${m.notes ? `<div class="monster-lib-notes">${esc(m.notes)}</div>` : ''}
-            </div>
-            <div class="monster-lib-actions">
-                <button class="lv-btn lv-btn-deploy" onclick="lvDeployMonster('${m.id}')" title="建立此敵方單位">⚔ 部署</button>
-                <button class="lv-btn lv-btn-del" onclick="lvDeleteMonster('${m.id}')" title="從怪物庫刪除">🗑️</button>
-            </div>
-        </div>`).join('');
+
+    const frag = document.createDocumentFragment();
+    for (const m of lib) {
+        const card = document.createElement('div');
+        card.className = 'monster-lib-card';
+
+        const info = document.createElement('div');
+        info.className = 'monster-lib-info';
+
+        const name = document.createElement('div');
+        name.className = 'monster-lib-name';
+        name.textContent = String(m.name || '無名怪物');
+        info.appendChild(name);
+
+        const stats = document.createElement('div');
+        stats.className = 'monster-lib-stats';
+        stats.textContent = `HP ${Number(m.hp) || 0}｜防 ${Number(m.defDp) || 0}(+${Number(m.defAuto) || 0})｜攻DP ${Number(m.atkDp) || 0}｜先攻 ${Number(m.init) || 0}`;
+        info.appendChild(stats);
+
+        if (m.passive) {
+            const passive = document.createElement('div');
+            passive.className = 'monster-lib-passive';
+            passive.textContent = '🧬 ' + String(m.passive);
+            info.appendChild(passive);
+        }
+        if (m.notes) {
+            const notes = document.createElement('div');
+            notes.className = 'monster-lib-notes';
+            notes.textContent = String(m.notes);
+            info.appendChild(notes);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'monster-lib-actions';
+        const deployBtn = document.createElement('button');
+        deployBtn.className = 'lv-btn lv-btn-deploy';
+        deployBtn.title = '建立此敵方單位';
+        deployBtn.textContent = '⚔ 部署';
+        deployBtn.addEventListener('click', () => lvDeployMonster(m.id));
+        const delBtn = document.createElement('button');
+        delBtn.className = 'lv-btn lv-btn-del';
+        delBtn.title = '從怪物庫刪除';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => lvDeleteMonster(m.id));
+        actions.appendChild(deployBtn);
+        actions.appendChild(delBtn);
+
+        card.appendChild(info);
+        card.appendChild(actions);
+        frag.appendChild(card);
+    }
+    box.appendChild(frag);
 }
 
 // ===== Window bindings =====

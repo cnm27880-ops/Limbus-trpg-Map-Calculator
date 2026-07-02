@@ -18,6 +18,7 @@ function cqOnBroadcasting(data) {
     const finalExtraSuccess = Number(data.finalExtraSuccess) || 0;
 
     banner.textContent = '';
+    const roll = data.rollResult || null;
 
     if (finalDice <= 0) {
         banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！👉 🎲 骰數歸零！請投擲機運骰！`));
@@ -28,6 +29,20 @@ function cqOnBroadcasting(data) {
             extraSpan.textContent = String(finalExtraSuccess);
             banner.appendChild(extraSpan);
         }
+    } else if (roll) {
+        // 自動擲骰：直接公佈擲骰結果與最終傷害
+        const targetName = String((data.target && data.target.name) || '目標');
+        const explodeNote = roll.exploded > 0 ? `（爆骰 +${roll.exploded}）` : '';
+        let text = `【${attackerName}】攻擊【${targetName}】！🎲 擲 ${finalDice} 顆${explodeNote}成功 ${roll.successes}`;
+        if (roll.extraSuccess > 0) text += ` ＋ 附加 ${roll.extraSuccess}`;
+        if (roll.capApplied) text += `（上限 ${roll.cap}）`;
+        if (roll.statusBonus > 0) text += `，${roll.statusBonusText}`;
+        banner.appendChild(document.createTextNode(text + ' ➡️ 總傷害 '));
+        const dmgSpan = document.createElement('span');
+        dmgSpan.className = 'combat-broadcast-dice';
+        dmgSpan.textContent = String(roll.damage);
+        banner.appendChild(dmgSpan);
+        banner.appendChild(document.createTextNode(' 點（已自動套用）'));
     } else {
         banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！👉 請投擲 `));
         const diceSpan = document.createElement('span');
@@ -96,7 +111,11 @@ function cqOnBroadcasting(data) {
             defDp: defDp,
             defAuto: defAuto,
             targetDebuffs: targetDebuffs,
-            targetDebuffTotal: targetDebuffTotal
+            targetDebuffTotal: targetDebuffTotal,
+            // 自動擲骰結果（手動擲骰時為 0，分析端視為無傷害資料）
+            damage: roll ? (Number(roll.damage) || 0) : 0,
+            rollSuccesses: roll ? (Number(roll.successes) || 0) : 0,
+            rollExploded: roll ? (Number(roll.exploded) || 0) : 0
         });
     }
 

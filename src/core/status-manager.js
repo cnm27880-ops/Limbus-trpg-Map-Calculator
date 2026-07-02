@@ -755,6 +755,28 @@ function consumeOnAttackedStatuses(unitId) {
 }
 
 /**
+ * 戰鬥結束能量池歸零：移除全場所有單位身上標記 battleEndReset 的狀態
+ * （呼吸法／充能／學識等「戰鬥結束後重置」的特殊能量池）。
+ * 呼叫端（toggleCombat 結束分支）隨後會 broadcastState() 同步。
+ * @returns {string[]} 被清除的狀態名稱清單（去重）
+ */
+function clearBattleEndStatuses() {
+    const clearedNames = new Set();
+    if (typeof state === 'undefined' || !Array.isArray(state.units)) return [];
+    state.units.forEach(unit => {
+        if (!unit || !unit.status) return;
+        for (const statusName of Object.keys(unit.status)) {
+            const def = (typeof getStatusByName === 'function') ? getStatusByName(statusName) : null;
+            if (def && def.battleEndReset) {
+                delete unit.status[statusName];
+                clearedNames.add(statusName);
+            }
+        }
+    });
+    return [...clearedNames];
+}
+
+/**
  * 更新狀態堆疊數值
  * @param {string} unitId - 單位 ID
  * @param {string} statusName - 狀態名稱

@@ -3877,6 +3877,22 @@ body.combat-mode .boss-hud-container {
     box-sizing: border-box;
 }
 
+/* ST 審核：自動擲骰開關 */
+.st-review-autoroll-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    font-size: 0.82rem;
+    color: var(--accent-green);
+    background: rgba(67, 160, 71, 0.08);
+    border: 1px solid rgba(67, 160, 71, 0.35);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
 .st-review-context {
     text-align: left;
     color: var(--accent-yellow);

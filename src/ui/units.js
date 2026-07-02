@@ -26,15 +26,20 @@ function toggleCombat() {
         state.turnIdx = -1;
         state.roundNum = 0;
         state.activeBossId = null;
+
+        // 戰鬥結束能量池歸零（呼吸法/充能/學識等標記 battleEndReset 的狀態）
+        const cleared = (typeof clearBattleEndStatuses === 'function') ? clearBattleEndStatuses() : [];
+
         broadcastState();
-        showToast('戰鬥已結束，先攻已歸零');
-        // 戰鬥日誌：寫入結束標記（供回合分析切分戰鬥區段）
+        showToast('戰鬥已結束，先攻已歸零' + (cleared.length ? `；能量池已重置（${cleared.join('、')}）` : ''));
+        // 戰鬥日誌：寫入結束標記（供回合分析切分戰鬥區段；附當下時鐘刻度供刻度消耗統計）
         if (typeof bbPushCombatLog === 'function') {
             bbPushCombatLog({
                 entryType: 'battle_end',
                 attackerName: 'ST', attackerRole: 'enemy',
                 broadcastText: `🏁 戰鬥結束（共 ${totalRounds} 回合）`,
-                round: totalRounds
+                round: totalRounds,
+                clockTicks: (typeof eroClockTicks === 'number') ? eroClockTicks : -1
             });
         }
     } else {
@@ -56,7 +61,8 @@ function toggleCombat() {
                 entryType: 'battle_start',
                 attackerName: 'ST', attackerRole: 'enemy',
                 broadcastText: '⚔️ 戰鬥開始！第 1 回合',
-                round: 1
+                round: 1,
+                clockTicks: (typeof eroClockTicks === 'number') ? eroClockTicks : -1
             });
         }
     }

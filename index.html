@@ -276,6 +276,20 @@
                         <input type="number" id="attack-magic-pierce" value="0" min="0">
                     </div>
                 </div>
+                <div class="calc-grid cols-2" style="margin-top:8px;">
+                    <div class="calc-field">
+                        <span class="calc-label">攻擊上限（0=無上限）</span>
+                        <input type="number" id="attack-damage-cap" value="0" min="0" title="一次攻擊最多造成的傷害；BOSS 不受上限影響">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">加骰等級</span>
+                        <select id="attack-explode">
+                            <option value="10" selected>10 加骰（預設）</option>
+                            <option value="9">9 加骰</option>
+                            <option value="8">8 加骰</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="modal-footer">
@@ -323,6 +337,10 @@
                 <span class="calc-label">最終微調增減</span>
                 <input type="number" id="st-review-modifier" value="0">
             </div>
+            <label class="st-review-autoroll-row" title="由系統代擲 D10（8/9/10 成功、加骰門檻依攻擊方宣告），加上附加成功與破裂/易損加成後自動對目標扣血並寫入日誌">
+                <input type="checkbox" id="st-review-autoroll" checked>
+                🎲 自動擲骰並套用傷害（關閉＝維持玩家手動擲骰）
+            </label>
         </div>
         <div class="modal-footer">
             <button class="modal-btn" onclick="confirmSTReview()" style="background:var(--accent-green);width:100%;">確認並廣播</button>

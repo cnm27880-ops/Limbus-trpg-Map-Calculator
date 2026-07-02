@@ -89,9 +89,17 @@ function renderClockDisplay() {
 function toggleErosionHud() {
     const hud = document.getElementById('erosion-hud');
     if (!hud) return;
+    // 若被收納在右緣邊條，開啟時先還原
+    if (typeof PanelDock !== 'undefined' && PanelDock.isDocked('erosion-hud')) {
+        PanelDock.restore('erosion-hud');
+        renderErosionConsole();
+        hud.classList.remove('hidden');
+        return;
+    }
     if (hud.classList.contains('hidden')) {
         renderErosionConsole();
         hud.classList.remove('hidden');
+        if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(hud);
     } else {
         hud.classList.add('hidden');
     }
@@ -99,6 +107,24 @@ function toggleErosionHud() {
 function closeErosionHud() {
     const hud = document.getElementById('erosion-hud');
     if (hud) hud.classList.add('hidden');
+}
+
+/** 初始化：侵蝕控制台接上通用浮動面板（拖曳／雙擊收起／右緣磁鐵收納） */
+function eroInitFloatPanel() {
+    if (typeof makeFloatingPanel !== 'function') return;
+    makeFloatingPanel({
+        panelId: 'erosion-hud',
+        headerId: 'erosion-hud-header',
+        collapseBtnId: 'erosion-hud-collapse',
+        storageKey: 'limbus_erosion_hud_panel',
+        defaultPos: { x: Math.max(20, window.innerWidth - 370), y: Math.max(60, window.innerHeight - 560) },
+        dock: { icon: '🔥', title: 'E.G.O 侵蝕控制台' },
+    });
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', eroInitFloatPanel);
+} else {
+    eroInitFloatPanel();
 }
 
 /**

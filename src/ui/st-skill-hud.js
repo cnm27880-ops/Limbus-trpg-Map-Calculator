@@ -28,7 +28,7 @@ function clampHudPosition(stateObj, panelId) {
 
 // ===== Generic Draggable Panel Setup =====
 
-function setupPanelDrag(panelId, headerId, stateObj, saveFn) {
+function setupPanelDrag(panelId, headerId, stateObj, saveFn, hooks) {
     const panel = document.getElementById(panelId);
     const header = document.getElementById(headerId);
     if (!panel || !header) return;
@@ -41,6 +41,7 @@ function setupPanelDrag(panelId, headerId, stateObj, saveFn) {
     let isDragging = false, hasMoved = false;
     const THRESHOLD = 5;
     let startX, startY, startPosX, startPosY;
+    let lastX = 0, lastY = 0; // 拖曳結束時的指標座標（供右緣磁鐵收納判斷）
 
     header.addEventListener('mousedown', startDrag);
     header.addEventListener('touchstart', startDrag, { passive: false });
@@ -53,6 +54,7 @@ function setupPanelDrag(panelId, headerId, stateObj, saveFn) {
         } else {
             startX = e.clientX; startY = e.clientY;
         }
+        lastX = startX; lastY = startY;
         const rect = panel.getBoundingClientRect();
         startPosX = rect.left; startPosY = rect.top;
         document.addEventListener('mousemove', onDrag);
@@ -70,19 +72,23 @@ function setupPanelDrag(panelId, headerId, stateObj, saveFn) {
         const dx = cx - startX, dy = cy - startY;
         if (!hasMoved && Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
         if (!hasMoved) { hasMoved = true; panel.classList.add('dragging'); }
+        lastX = cx; lastY = cy;
         const w = panel.offsetWidth || 340, h = panel.offsetHeight || 200;
         stateObj.position.x = Math.max(-w + 100, Math.min(window.innerWidth - 100, startPosX + dx));
         stateObj.position.y = Math.max(0, Math.min(window.innerHeight - 50, startPosY + dy));
         panel.style.left = stateObj.position.x + 'px';
         panel.style.top = stateObj.position.y + 'px';
+        if (hooks && typeof hooks.onDragMove === 'function') hooks.onDragMove(cx, cy);
         e.preventDefault();
     }
 
     function stopDrag() {
         if (isDragging) {
             isDragging = false;
+            const moved = hasMoved;
             if (hasMoved) { panel.classList.remove('dragging'); saveFn(); }
             hasMoved = false;
+            if (hooks && typeof hooks.onDragEnd === 'function') hooks.onDragEnd(lastX, lastY, moved);
         }
         document.removeEventListener('mousemove', onDrag);
         document.removeEventListener('mouseup', stopDrag);
@@ -129,6 +135,8 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
  * @param {string} opts.storageKey    localStorage 記憶位置/收合狀態的 key
  * @param {string} [opts.collapseBtnId] 標頭收起鈕 id（可選）
  * @param {{x:number,y:number}} [opts.defaultPos] 首次開啟的預設座標
+ * @param {{icon:string, title:string}} [opts.dock] 提供時啟用右緣磁鐵收納（PanelDock）：
+ *        拖到畫面右緣放開即收納成邊條圖標，點圖標還原
  * @returns {Object|undefined} stateObj（含 position / isCollapsed）
  */
 function makeFloatingPanel(opts) {
@@ -136,6 +144,11 @@ function makeFloatingPanel(opts) {
     const panel = document.getElementById(o.panelId);
     const header = document.getElementById(o.headerId);
     if (!panel || !header) return;
+
+    // 部分既有面板以 CSS right/bottom 定位；改用 left/top 前先中和，
+    // 避免四邊同時生效把面板拉伸變形
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
 
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(o.storageKey) || '{}') || {}; } catch (e) { saved = {}; }
@@ -169,8 +182,29 @@ function makeFloatingPanel(opts) {
     }
     syncCollapse();
 
+    // 右緣磁鐵收納：拖曳到畫面右緣 DOCK_ZONE 內放開 → 收納成邊條圖標
+    const DOCK_ZONE = 44;
+    const dockHooks = (o.dock && typeof PanelDock !== 'undefined') ? {
+        onDragMove: (cx) => PanelDock.setHint(cx > window.innerWidth - DOCK_ZONE),
+        onDragEnd: (cx, cy, moved) => {
+            PanelDock.setHint(false);
+            if (!moved || cx <= window.innerWidth - DOCK_ZONE) return;
+            PanelDock.dock(o.panelId, {
+                icon: o.dock.icon,
+                title: o.dock.title,
+                onRestore: () => {
+                    // 還原時把面板從右緣拉回可視範圍
+                    stateObj.position.x = Math.max(8, window.innerWidth - (panel.offsetWidth || 340) - 24);
+                    panel.style.left = stateObj.position.x + 'px';
+                    clampHudPosition(stateObj, o.panelId);
+                    saveFn();
+                },
+            });
+        },
+    } : undefined;
+
     // 標頭拖曳 + WindowManager 置頂（同 tier 內最後點擊者在最上層）
-    setupPanelDrag(o.panelId, o.headerId, stateObj, saveFn);
+    setupPanelDrag(o.panelId, o.headerId, stateObj, saveFn, dockHooks);
 
     // 雙擊標頭收合／展開（點標頭上的按鈕時不觸發）
     header.addEventListener('dblclick', (e) => {

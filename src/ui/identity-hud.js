@@ -470,9 +470,12 @@ function renderAIForge() {
 
     el.innerHTML = `
         <div class="identity-modal-box">
-            <div class="idt-header">
+            <div class="idt-header" id="identity-float-header">
                 <span>🤖 AI 人格鍛造爐</span>
-                <button class="idt-close" onclick="cancelAddIdentity()">×</button>
+                <div class="idt-header-actions">
+                    <button class="idt-close" id="identity-float-collapse" title="收起">▾</button>
+                    <button class="idt-close" onclick="cancelAddIdentity()">×</button>
+                </div>
             </div>
             <div class="idt-body">
                 <div class="idt-section">
@@ -509,6 +512,7 @@ function renderAIForge() {
                 </div>
             </div>
         </div>`;
+    idtMountFloatPanel();
 }
 
 // ===== 開關 =====
@@ -519,8 +523,11 @@ function openIdentityModal() {
         el = document.createElement('div');
         el.id = 'identity-modal';
         el.className = 'identity-modal-overlay';
-        el.addEventListener('click', (e) => { if (e.target === el) closeIdentityModal(); });
         document.body.appendChild(el);
+    }
+    // 若被收納在右緣邊條，先還原
+    if (typeof PanelDock !== 'undefined' && PanelDock.isDocked('identity-modal')) {
+        PanelDock.restore('identity-modal');
     }
     // 沿用上次選擇的角色；若沒有（或先前選的角色已不存在）才退回第一個
     if (typeof getIdentityOwners === 'function') {
@@ -536,18 +543,39 @@ function openIdentityModal() {
         if (mine) identityHudState.attackerId = mine.id;
     }
     renderIdentityModal();
-    el.style.display = 'flex';
+    el.style.display = 'block';
+    if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(el);
 }
 
 function closeIdentityModal() {
+    if (typeof PanelDock !== 'undefined') PanelDock.remove('identity-modal');
     const el = document.getElementById('identity-modal');
     if (el) el.style.display = 'none';
 }
 
 function toggleIdentityModal() {
     const el = document.getElementById('identity-modal');
-    if (el && el.style.display === 'flex') closeIdentityModal();
+    const visible = el && el.style.display !== 'none' && el.style.display !== ''
+        && !el.classList.contains('dock-hidden');
+    if (visible) closeIdentityModal();
     else openIdentityModal();
+}
+
+/**
+ * 每次重繪後把面板掛上通用浮動面板（標頭拖曳／雙擊收起／右緣磁鐵收納）。
+ * renderIdentityModal / renderAIForge 都會整個重寫 innerHTML（標頭是新元素），
+ * 故每次渲染後都需重新綁定；位置與收合狀態由 localStorage 記憶，重繪不會跳位。
+ */
+function idtMountFloatPanel() {
+    if (typeof makeFloatingPanel !== 'function') return;
+    makeFloatingPanel({
+        panelId: 'identity-modal',
+        headerId: 'identity-float-header',
+        collapseBtnId: 'identity-float-collapse',
+        storageKey: 'limbus_identity_panel',
+        defaultPos: { x: 60, y: 60 },
+        dock: { icon: '🃏', title: '人格卡引擎' },
+    });
 }
 
 // ===== 選取操作 =====
@@ -969,10 +997,11 @@ function renderIdentityModal() {
 
     el.innerHTML = `
         <div class="identity-modal-box">
-            <div class="idt-header">
+            <div class="idt-header" id="identity-float-header">
                 <span>🃏 人格卡引擎</span>
                 <div class="idt-header-actions">
                     <button class="idt-add-btn" title="新增自訂人格卡" onclick="openAddIdentityForm()">＋</button>
+                    <button class="idt-close" id="identity-float-collapse" title="收起">▾</button>
                     <button class="idt-close" onclick="closeIdentityModal()">×</button>
                 </div>
             </div>
@@ -1014,6 +1043,7 @@ function renderIdentityModal() {
                 </div>
             </div>
         </div>`;
+    idtMountFloatPanel();
 }
 
 // ===== 樣式（一次性注入，沿用網站 CSS 變數） =====
@@ -1022,9 +1052,11 @@ function injectIdentityStyles() {
     const s = document.createElement('style');
     s.id = 'identity-hud-styles';
     s.textContent = `
-        .identity-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9000;display:none;align-items:center;justify-content:center;padding:16px;}
-        .identity-modal-box{background:var(--bg-panel,#1b1b22);border:1px solid var(--border,#33333a);border-radius:12px;width:min(560px,96vw);max-height:90vh;display:flex;flex-direction:column;color:var(--text,#eee);box-shadow:0 10px 40px rgba(0,0,0,.5);}
-        .idt-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border,#33333a);font-weight:bold;font-size:1.05rem;}
+        /* 浮動面板：不再是全螢幕遮罩，可拖曳/收起/拖到右緣收納，戰鬥中可與其他視窗並用 */
+        .identity-modal-overlay{position:fixed;left:60px;top:60px;z-index:9400;display:none;width:min(560px,94vw);}
+        .identity-modal-box{background:var(--bg-panel,#1b1b22);border:1px solid var(--border,#33333a);border-radius:12px;width:100%;max-height:82vh;display:flex;flex-direction:column;color:var(--text,#eee);box-shadow:0 10px 40px rgba(0,0,0,.5);}
+        .identity-modal-overlay.collapsed .idt-body{display:none;}
+        .idt-header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border,#33333a);font-weight:bold;font-size:1.05rem;cursor:move;user-select:none;}
         .idt-close{background:none;border:none;color:var(--text-dim,#999);font-size:1.5rem;cursor:pointer;line-height:1;}
         .idt-body{padding:12px 16px;overflow-y:auto;}
         .idt-section{margin-bottom:14px;}

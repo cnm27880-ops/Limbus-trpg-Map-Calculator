@@ -83,11 +83,14 @@ function openBossUnitModal(unitId) {
             collapseBtnId: 'boss-unit-collapse-btn',
             storageKey: 'limbus_boss_unit_panel',
             defaultPos: { x: Math.max(20, window.innerWidth - 400), y: 64 },
+            dock: { icon: '🗡️', title: `戰鬥數值 - ${u.name || '單位'}` },
         });
     }
 }
 
 function closeBossUnitModal() {
+    // 面板被程式關閉（儲存）時，若已收納在右緣邊條需一併清掉圖標
+    if (typeof PanelDock !== 'undefined') PanelDock.remove('boss-unit-modal');
     const modal = document.getElementById('boss-unit-modal');
     if (modal) modal.remove();
 }

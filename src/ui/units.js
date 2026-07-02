@@ -1367,12 +1367,15 @@ function openMultiActionModal(bossId) {
             collapseBtnId: 'ma-collapse-btn',
             storageKey: 'limbus_boss_setup_panel',
             defaultPos: { x: Math.max(20, window.innerWidth - 400), y: 64 },
+            dock: { icon: '👹', title: `BOSS 設定 - ${boss.name || '單位'}` },
         });
     }
 }
 
 /**
- * 渲染多重行動 Modal 內的「對抗分配」狀態（counter-phase.js 狀態更新時呼叫）
+ * 渲染多重行動 Modal 內的「對抗分配」狀態（counter-phase.js 狀態更新時呼叫）。
+ * ST 可用每列的下拉手動指定／改派對抗者（玩家還沒討論好就先點了也能改回來），
+ * 調整完按「公佈最終結果」推送給所有玩家並鎖定本輪分配。
  */
 function renderMultiActionCounterStatus() {
     const box = document.getElementById('ma-counter-status');
@@ -1384,13 +1387,38 @@ function renderMultiActionCounterStatus() {
     const actions = counterPhaseState.actions || [];
     const assignments = counterPhaseState.assignments || {};
     const submitted = Object.keys(assignments);
+    const finalized = !!counterPhaseState.finalized;
+
+    // 玩家候選清單（每位玩家取其第一個棋子的名稱），供 ST 手動指定對抗者
+    const candidates = [];
+    const seenOwners = new Set();
+    (state.units || []).forEach(u => {
+        if (u.type === 'player' && u.ownerId && !u.actionSlotOf && !seenOwners.has(u.ownerId)) {
+            seenOwners.add(u.ownerId);
+            candidates.push({ id: u.ownerId, name: u.name || u.ownerName || u.ownerId });
+        }
+    });
+
     const rows = actions.map(a => {
-        const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
-        return r.playerId
-            ? `${escapeHtml(a.label)}：${escapeHtml(r.playerName)} 對抗（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）`
-            : `${escapeHtml(a.label)}：無人對抗`;
-    }).join('<br>');
-    box.innerHTML = `已送出 ${submitted.length} 人<br>${rows}`;
+        const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerId: null, playerName: '', mod: 0 };
+        const options = ['<option value="">— 無人對抗 —</option>']
+            .concat(candidates.map(p =>
+                `<option value="${escapeHtml(p.id)}" ${r.playerId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`))
+            .join('');
+        const modTxt = r.playerId ? `DP ${r.mod >= 0 ? '+' : ''}${r.mod}` : '';
+        return `<div class="cp-st-row">
+            <span class="cp-st-label">${escapeHtml(a.label)}</span>
+            <select onchange="cpSTAssign('${a.id}', this.value)" title="手動指定／改派此行動的對抗者">${options}</select>
+            <span class="cp-st-mod">${modTxt}</span>
+        </div>`;
+    }).join('');
+
+    box.innerHTML = `
+        <div style="margin-bottom:4px;">已送出 ${submitted.length} 人${finalized ? '｜<span style="color:var(--accent-green);">✅ 已公佈</span>' : ''}</div>
+        ${rows}
+        <button class="skill-action-btn" style="width:100%;margin-top:6px;" onclick="cpFinalizeRound()" ${finalized ? 'disabled' : ''}>
+            ${finalized ? '✅ 已公佈最終結果' : '📢 公佈最終結果給玩家'}
+        </button>`;
 }
 
 /** 從單位讀取行動設定（先攻 / DP / 狀態 / 是否為AOE行動），含舊資料相容 */
@@ -1404,6 +1432,8 @@ function maReadActionFrom(unit) {
 }
 
 function closeMultiActionModal() {
+    // 面板被程式關閉（儲存/移除）時，若已收納在右緣邊條需一併清掉圖標
+    if (typeof PanelDock !== 'undefined') PanelDock.remove('multi-action-modal');
     const modal = document.getElementById('multi-action-modal');
     if (modal) modal.remove();
     maEdit = null;

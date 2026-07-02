@@ -1548,6 +1548,70 @@ body.aoe-select-active .token {
     line-height: 1;
     padding: 0;
 }
+/* ==================================================================
+   PanelDock：右緣磁鐵收納邊條（panel-dock.js）
+   浮動面板拖到右緣放開 → 收納成圖標；平時縮成細邊，滑過外滑
+   ================================================================== */
+.panel-dock {
+    position: fixed;
+    right: 0;
+    top: 40%;
+    transform: translateY(-50%) translateX(calc(100% - 8px));
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-right: none;
+    border-radius: 12px 0 0 12px;
+    padding: 8px 6px 8px 4px;
+    z-index: 9700; /* 高於 panel tier 上限（9690），收納邊條永遠可及 */
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+}
+.panel-dock.empty { display: none; }
+.panel-dock.expanded,
+.panel-dock.drop-hint {
+    transform: translateY(-50%) translateX(0);
+}
+.panel-dock.drop-hint {
+    display: flex; /* 空邊條在拖曳提示時也要現身當放置目標 */
+    border-color: var(--accent-yellow);
+    box-shadow: 0 0 16px rgba(253, 216, 53, 0.4);
+}
+.panel-dock-grip {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 2px 1px;
+    user-select: none;
+}
+.panel-dock-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.panel-dock-icon {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: transform 0.12s, border-color 0.12s;
+}
+.panel-dock-icon:hover {
+    border-color: var(--accent-yellow);
+    transform: translateX(-2px);
+}
+/* 被收納面板的隱藏狀態（覆蓋任何 inline display） */
+.dock-hidden { display: none !important; }
+
 .passive-entry-add { display: flex; gap: 5px; margin-top: 4px; }
 .passive-entry-add input {
     flex: 1;
@@ -1766,9 +1830,9 @@ body.aoe-select-active .token {
     display: none;
 }
 
-.counter-float-panel.zoomed {
-    width: 520px;
-    max-height: 80vh;
+/* 收起：僅剩標頭（雙擊標頭或 ▾ 鈕切換） */
+.counter-float-panel.collapsed .counter-float-body {
+    display: none;
 }
 
 .counter-float-header {
@@ -1778,7 +1842,7 @@ body.aoe-select-active .token {
     padding: 10px 12px;
     background: linear-gradient(135deg, var(--bg-card), rgba(229, 57, 53, 0.12));
     border-bottom: 1px solid var(--border);
-    cursor: default;
+    cursor: move;
     user-select: none;
 }
 
@@ -1816,6 +1880,57 @@ body.aoe-select-active .token {
 
 .counter-float-check {
     margin-right: 6px;
+}
+
+/* 對抗分配：公佈結果徽章與玩家自身修正摘要 */
+.cp-final-badge {
+    font-size: 0.82rem;
+    font-weight: bold;
+    color: var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.08);
+    border: 1px solid rgba(253, 216, 53, 0.4);
+    border-radius: 6px;
+    padding: 5px 8px;
+    margin-bottom: 6px;
+    text-align: center;
+}
+.cp-self-bonus {
+    font-size: 0.8rem;
+    color: var(--accent-green);
+    background: rgba(67, 160, 71, 0.08);
+    border: 1px solid rgba(67, 160, 71, 0.35);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
+/* 對抗分配：ST 端每行動的手動指定列（BOSS 設定面板內） */
+.cp-st-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+}
+.cp-st-row .cp-st-label {
+    flex: 0 0 auto;
+    min-width: 72px;
+    color: var(--text-main);
+}
+.cp-st-row select {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    padding: 3px 6px;
+    font-size: 0.78rem;
+}
+.cp-st-row .cp-st-mod {
+    flex: 0 0 auto;
+    color: var(--accent-green);
+    font-size: 0.75rem;
 }
 
 /* ===== Hotkey Help ===== */
@@ -4978,6 +5093,8 @@ body.combat-mode .boss-hud-container {
     overflow: hidden;
 }
 .floating-hud.hidden { display: none; }
+/* 收起：僅剩標頭（雙擊標頭或 ▾ 鈕切換） */
+.floating-hud.collapsed .floating-hud-body { display: none; }
 .floating-hud-header {
     display: flex;
     justify-content: space-between;
@@ -4986,6 +5103,8 @@ body.combat-mode .boss-hud-container {
     font-weight: 700;
     color: #ff6b6b;
     background: linear-gradient(135deg, #1a0a0c, #101012);
+    cursor: move;
+    user-select: none;
     border-bottom: 1px solid #6b0d12;
 }
 .floating-hud-close {

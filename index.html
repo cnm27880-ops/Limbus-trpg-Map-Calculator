@@ -216,9 +216,12 @@
 
 <!-- E.G.O 侵蝕控制台（ST 專屬浮動面板） -->
 <div id="erosion-hud" class="floating-hud hidden">
-    <div class="floating-hud-header">
+    <div class="floating-hud-header" id="erosion-hud-header">
         <span>🔥 E.G.O 侵蝕控制台</span>
-        <button class="floating-hud-close" onclick="closeErosionHud()">×</button>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" id="erosion-hud-collapse" title="收起">▾</button>
+            <button class="floating-hud-close" onclick="closeErosionHud()">×</button>
+        </span>
     </div>
     <div id="erosion-hud-body" class="floating-hud-body"></div>
 </div>
@@ -376,11 +379,14 @@
     </div>
 </div>
 
-<!-- 本回合對抗分配：浮動面板（玩家端，送出後仍可查看，可雙擊縮放、可關閉、可由快捷球重開） -->
-<div id="counter-float-panel" class="counter-float-panel hidden" ondblclick="cpToggleZoomFloatPanel(event)">
-    <div class="counter-float-header">
+<!-- 本回合對抗分配：浮動面板（玩家端，可拖曳、雙擊標頭收起、拖到右緣收納、可由快捷球重開） -->
+<div id="counter-float-panel" class="counter-float-panel hidden">
+    <div class="counter-float-header" id="counter-float-header">
         <span class="counter-float-title">⚔️ 本回合對抗分配</span>
-        <button class="counter-float-close" onclick="cpCloseFloatPanel(event)">×</button>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" id="counter-float-collapse" title="收起">▾</button>
+            <button class="counter-float-close" onclick="cpCloseFloatPanel(event)">×</button>
+        </span>
     </div>
     <div class="counter-float-body" id="counter-float-body">尚未開始本輪徵詢</div>
 </div>
@@ -612,6 +618,7 @@
 
 <!-- UI 層 -->
 <script src="src/ui/window-manager.js"></script>
+<script src="src/ui/panel-dock.js"></script>
 <script src="src/ui/camera.js"></script>
 <script src="src/ui/map-canvas.js"></script>
 <script src="src/ui/map.js"></script>

@@ -1573,19 +1573,30 @@ body.aoe-select-active .token {
     position: fixed;
     right: 0;
     top: 40%;
-    transform: translateY(-50%) translateX(calc(100% - 8px));
+    transform: translateY(-50%) translateX(calc(100% - 10px));
     display: flex;
     align-items: center;
     gap: 4px;
     background: var(--bg-panel);
-    border: 1px solid var(--border);
+    border: 1px solid var(--accent-orange);
     border-right: none;
     border-radius: 12px 0 0 12px;
-    padding: 8px 6px 8px 4px;
+    padding: 8px 6px 8px 12px;
     z-index: 9700; /* 高於 panel tier 上限（9690），收納邊條永遠可及 */
     transition: transform 0.2s ease, box-shadow 0.2s ease;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-    cursor: pointer;
+}
+/* 收合時露出的 10px 彩色握把：琥珀漸層＋微光，跟深色捲軸做出區隔 */
+.panel-dock::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 10px;
+    border-radius: 12px 0 0 12px;
+    background: linear-gradient(180deg, var(--accent-yellow), var(--accent-orange), var(--accent-red));
+    box-shadow: -2px 0 8px rgba(251, 140, 0, 0.55);
 }
 .panel-dock.empty { display: none; }
 .panel-dock.expanded,
@@ -1619,13 +1630,16 @@ body.aoe-select-active .token {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 9px;
-    cursor: pointer;
+    cursor: grab;
     transition: transform 0.12s, border-color 0.12s;
+    touch-action: none; /* 圖標以拖曳取出面板，禁用瀏覽器手勢攔截 */
+    user-select: none;
 }
 .panel-dock-icon:hover {
     border-color: var(--accent-yellow);
     transform: translateX(-2px);
 }
+.panel-dock-icon:active { cursor: grabbing; }
 /* 被收納面板的隱藏狀態（覆蓋任何 inline display） */
 .dock-hidden { display: none !important; }
 
@@ -5085,10 +5099,13 @@ body.combat-mode .boss-hud-container {
     border: 1px solid #ff3b3b;
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
-    transform: translate(-50%, -130%);
+    /* -130% 對空內容的矮元素移不夠遠，紅色圓角會露在畫面頂端（「神秘紅色小方格」bug） */
+    transform: translate(-50%, -200%);
     transition: transform .35s cubic-bezier(.2, 1.2, .3, 1);
     pointer-events: none;
 }
+/* 尚無廣播內容時整個隱藏，杜絕露出殘影 */
+#erosion-warning-toast:empty { display: none; }
 #erosion-warning-toast.show {
     transform: translate(-50%, 0);
 }
@@ -5227,9 +5244,46 @@ body.combat-mode .boss-hud-container {
 .log-row-editable { cursor: pointer; transition: background 0.15s ease; }
 .log-row-editable:hover { background: rgba(255, 255, 255, 0.08); }
 .log-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
-.log-attacker { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); }
+.log-attacker { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); flex: 1; }
 .log-time { font-size: .72rem; color: var(--text-dim, #777); }
 .log-row-body { font-size: .82rem; color: var(--text-dim, #bbb); line-height: 1.45; }
+
+/* 回合徽章：標示這筆攻擊發生於第幾回合 */
+.log-round-chip {
+    font-size: .66rem;
+    font-weight: 700;
+    color: var(--accent-yellow, #fdd835);
+    background: rgba(253, 216, 53, 0.1);
+    border: 1px solid rgba(253, 216, 53, 0.4);
+    border-radius: 6px;
+    padding: 0 5px;
+    margin-right: 6px;
+    flex: 0 0 auto;
+}
+
+/* 戰鬥起訖標記列 */
+.log-row-marker {
+    border-left-color: var(--accent-yellow, #fdd835) !important;
+    background: rgba(253, 216, 53, 0.06);
+}
+.log-row-marker .log-row-body { color: var(--accent-yellow, #fdd835); font-weight: 700; }
+
+/* 回合分析（DPS 統計下方可展開） */
+.log-analysis { margin-top: 6px; }
+.log-analysis summary {
+    cursor: pointer;
+    font-size: .8rem;
+    color: var(--accent-orange, #fb8c00);
+    user-select: none;
+}
+.log-analysis-body {
+    margin-top: 6px;
+    font-size: .76rem;
+    color: var(--text-dim, #bbb);
+    line-height: 1.7;
+    border-left: 2px solid var(--border, #2a2a30);
+    padding-left: 8px;
+}
 
 /* ===== AI 遭遇生成面板 ===== */
 .encounter-panel {
@@ -5288,6 +5342,7 @@ body.combat-mode .boss-hud-container {
 .monster-lib-name { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); }
 .monster-lib-stats { font-size: .75rem; color: var(--accent-orange, #fb8c00); margin-top: 2px; }
 .monster-lib-notes { font-size: .72rem; color: var(--text-dim, #999); margin-top: 2px; }
+.monster-lib-passive { font-size: .72rem; color: var(--accent-purple, #8e24aa); margin-top: 2px; line-height: 1.5; }
 .monster-lib-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .lv-btn-deploy { background: #14301a; border-color: var(--accent-green, #43a047); color: #8fe08f; white-space: nowrap; }
 .lv-btn-del { background: #2a1414; border-color: var(--accent-red, #e53935); color: #ff8080; }

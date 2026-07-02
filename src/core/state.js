@@ -18,6 +18,7 @@ let state = {
     statusOverrides: {}, // 常駐狀態的覆寫（id → 修改後的狀態物件，透過 Firebase 同步）
     statusOrder: {},     // 狀態庫各分類的自訂排序（category → [statusId...]，透過 Firebase 同步）
     isCombatActive: false,      // 是否處於戰鬥狀態
+    roundNum: 0,                // 戰鬥回合數（開戰=1，先攻列表輪完一圈 +1；未開戰=0）
     activeBossId: null,         // 當前顯示大血條的 BOSS 單位 ID
     lastBatchState: null        // 用於 AOE 的備份狀態
 };
@@ -74,6 +75,7 @@ function resetState() {
         statusOverrides: {},
         statusOrder: {},
         isCombatActive: false,
+        roundNum: 0,
         activeBossId: null
     };
 }

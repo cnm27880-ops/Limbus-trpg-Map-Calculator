@@ -406,6 +406,7 @@ function initializeNewRoom() {
             themeId: state.themeId,
             turnIdx: state.turnIdx,
             isCombatActive: false,
+            roundNum: 0,
             activeBossId: null
         },
         mapData: state.mapData,
@@ -544,6 +545,7 @@ function loadRoomData(data) {
         state.themeId = data.state.themeId || 0;
         state.turnIdx = data.state.turnIdx || 0;
         state.isCombatActive = data.state.isCombatActive || false;
+        state.roundNum = data.state.roundNum || 0;
         state.activeBossId = data.state.activeBossId || null;
     }
 
@@ -750,6 +752,7 @@ function setupRoomListeners() {
             const prevTurnIdx = state.turnIdx;
             state.turnIdx = (typeof newState.turnIdx === 'number') ? Math.max(-1, Math.floor(newState.turnIdx)) : 0;
             state.isCombatActive = newState.isCombatActive === true;
+            state.roundNum = (typeof newState.roundNum === 'number') ? Math.max(0, Math.floor(newState.roundNum)) : 0;
             state.activeBossId = (typeof newState.activeBossId === 'string') ? newState.activeBossId : null;
             renderUnitsList();
             renderUnitsToolbar();
@@ -1240,6 +1243,7 @@ function syncState() {
         themeId: state.themeId,
         turnIdx: state.turnIdx,
         isCombatActive: state.isCombatActive || false,
+        roundNum: state.roundNum || 0,
         activeBossId: state.activeBossId || null
     });
 }

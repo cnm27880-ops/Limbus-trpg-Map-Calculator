@@ -57,9 +57,14 @@ const PanelDock = (function () {
     }
 
     /**
-     * 收納面板：隱藏面板並在邊條加入圖標
+     * 收納面板：隱藏面板並在邊條加入圖標。
+     * 取出方式為「按住圖標往外拖」：拖出邊條即還原面板並跟著指標走，放開落定。
      * @param {string} panelId
-     * @param {{icon?:string, title?:string, onRestore?:Function}} opts
+     * @param {{icon?:string, title?:string, onRestore?:Function,
+     *          onDragOut?:Function, onDragOutEnd?:Function}} opts
+     *   onRestore()            程式化還原（快捷球重開等）時把面板拉回可視範圍
+     *   onDragOut(x, y)        拖出過程中把面板定位到指標下方（由 makeFloatingPanel 提供）
+     *   onDragOutEnd()         拖出放開後夾限位置並存檔
      */
     function dock(panelId, opts) {
         const panel = document.getElementById(panelId);
@@ -71,21 +76,63 @@ const PanelDock = (function () {
 
         const btn = document.createElement('button');
         btn.className = 'panel-dock-icon';
-        btn.title = o.title || panelId;
+        btn.title = `${o.title || panelId}（按住拖出以取出面板）`;
         btn.textContent = o.icon || '📋';
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            restore(panelId);
-        });
+        btn.addEventListener('pointerdown', (e) => startIconDrag(e, panelId));
         bar.querySelector('.panel-dock-items').appendChild(btn);
-        items.set(panelId, { btn, onRestore: o.onRestore });
+        items.set(panelId, { btn, onRestore: o.onRestore, onDragOut: o.onDragOut, onDragOutEnd: o.onDragOutEnd });
         refresh();
 
         // 短暫外滑讓使用者看到收納結果，再自動收合
         expand();
         scheduleCollapse();
-        if (typeof showToast === 'function') showToast(`已收納「${o.title || '面板'}」到右側邊條`);
+        if (typeof showToast === 'function') showToast(`已收納「${o.title || '面板'}」，按住圖標拖出即可取回`);
         return true;
+    }
+
+    /**
+     * 圖標拖出還原：按住圖標移動超過門檻 → 立即還原面板並讓面板跟著指標，
+     * 放開時夾限位置存檔。原地點一下（沒拖動）不還原，只提示操作方式。
+     */
+    function startIconDrag(e, panelId) {
+        const it = items.get(panelId);
+        if (!it) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const startX = e.clientX, startY = e.clientY;
+        const THRESHOLD = 10;
+        let draggingOut = false;
+
+        function onMove(ev) {
+            if (!draggingOut) {
+                if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < THRESHOLD) return;
+                draggingOut = true;
+                // 取出面板：移除圖標、解除隱藏，改由指標拖行
+                items.delete(panelId);
+                it.btn.remove();
+                refresh();
+                collapse();
+                const panel = document.getElementById(panelId);
+                if (panel) {
+                    panel.classList.remove('dock-hidden');
+                    if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);
+                }
+            }
+            if (typeof it.onDragOut === 'function') it.onDragOut(ev.clientX, ev.clientY);
+        }
+        function onUp() {
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            document.removeEventListener('pointercancel', onUp);
+            if (draggingOut) {
+                if (typeof it.onDragOutEnd === 'function') it.onDragOutEnd();
+            } else if (typeof showToast === 'function') {
+                showToast('按住圖標往地圖方向拖出，即可取回面板');
+            }
+        }
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
     }
 
     /** 點圖標還原面板（面板已不存在時僅清掉圖標） */

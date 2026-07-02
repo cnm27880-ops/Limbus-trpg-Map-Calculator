@@ -360,19 +360,41 @@ function lvRenderDpsStat() {
     if (typeof myRole === 'undefined' || myRole !== 'st') { el.style.display = 'none'; return; }
     el.style.display = 'block';
     const { avg, count } = getRecentPlayerAverageDice(20);
-    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
-    let html = `🎯 玩家火力統計：最近 <b>${count}</b> 筆攻擊，平均擲骰數 <b class="dps-value">${avg}</b> 顆`;
+
+    // 全程以 DOM 節點 + textContent 建構：分析摘要含跨客戶端的狀態名稱／單位名稱
+    // （lastTargetDebuffs 等），不可經 innerHTML 注入，從根本杜絕 XSS。
+    el.textContent = '';
+    const statLine = document.createElement('span');
+    statLine.append('🎯 玩家火力統計：最近 ');
+    const countB = document.createElement('b');
+    countB.textContent = String(count);
+    statLine.appendChild(countB);
+    statLine.append(' 筆攻擊，平均擲骰數 ');
+    const avgB = document.createElement('b');
+    avgB.className = 'dps-value';
+    avgB.textContent = String(avg);
+    statLine.appendChild(avgB);
+    statLine.append(' 顆');
+    el.appendChild(statLine);
 
     // 最近一場戰鬥的回合分析（可展開）
     const a = lvComputeBattleAnalysis();
     if (a) {
-        html += `
-        <details class="log-analysis">
-            <summary>📊 回合分析（${a.ended ? '最近一場' : '本場進行中'}｜${a.rounds || '?'} 回合）</summary>
-            <div class="log-analysis-body">${esc(lvAnalysisSummaryText(a)).replace(/\n/g, '<br>')}</div>
-        </details>`;
+        const details = document.createElement('details');
+        details.className = 'log-analysis';
+        const summary = document.createElement('summary');
+        summary.textContent = `📊 回合分析（${a.ended ? '最近一場' : '本場進行中'}｜${a.rounds || '?'} 回合）`;
+        const body = document.createElement('div');
+        body.className = 'log-analysis-body';
+        lvAnalysisSummaryText(a).split('\n').forEach(line => {
+            const row = document.createElement('div');
+            row.textContent = line;
+            body.appendChild(row);
+        });
+        details.appendChild(summary);
+        details.appendChild(body);
+        el.appendChild(details);
     }
-    el.innerHTML = html;
 }
 
 // ===== AI 動態遭遇生成器（ST） =====

@@ -184,11 +184,13 @@ function processHooks(hooks, phase, card, unlocked, target, attacker, result) {
 
             // 累加狀態
             if (hook.targetStatus) {
-                accumulateStatus(result.expectedTargetStatus, hook.targetStatus, target, attacker);
+                if (phase === 'attack') accumulateStatus(result.onAttackTargetStatus, hook.targetStatus, target, attacker);
+                else accumulateStatus(result.onHitTargetStatus, hook.targetStatus, target, attacker);
                 log.targetStatus = hook.targetStatus;
             }
             if (hook.selfStatus) {
-                accumulateStatus(result.expectedSelfStatus, hook.selfStatus, target, attacker);
+                if (phase === 'attack') accumulateStatus(result.onAttackSelfStatus, hook.selfStatus, target, attacker);
+                else accumulateStatus(result.onHitSelfStatus, hook.selfStatus, target, attacker);
                 log.selfStatus = hook.selfStatus;
             }
 
@@ -224,8 +226,10 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
     const result = {
         totals: makeZeroTotals(),
         triggerLogs: [],
-        expectedTargetStatus: {},
-        expectedSelfStatus: {}
+        onAttackTargetStatus: {},
+        onAttackSelfStatus: {},
+        onHitTargetStatus: {},
+        onHitSelfStatus: {}
     };
 
     if (Array.isArray(playerIdentities)) {

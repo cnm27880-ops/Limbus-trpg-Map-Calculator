@@ -32,7 +32,7 @@ function cqOnBroadcasting(data) {
     } else if (roll) {
         // 自動擲骰：直接公佈擲骰結果與最終傷害（含 10 的數量，供人格卡觸發判定）
         const targetName = String((data.target && data.target.name) || '目標');
-        const explodeNote = roll.exploded > 0 ? `，爆骰 +${roll.exploded}` : '';
+        const explodeNote = '';
         const tensNote = (Number(roll.tens) || 0) > 0 ? `，🔟×${roll.tens}` : '';
         let text = `【${attackerName}】攻擊【${targetName}】！🎲 擲 ${roll.totalRolled || finalDice} 顆${explodeNote}${tensNote} → 成功 ${roll.successes}`;
         if (roll.extraSuccess > 0) text += ` ＋ 附加 ${roll.extraSuccess}`;

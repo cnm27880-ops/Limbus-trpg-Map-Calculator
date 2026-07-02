@@ -135,12 +135,18 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     if (myRole === 'st') return empty;
     if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
 
-    const owner = identityHudState.owner;
+    let owner = identityHudState.owner;
+    if (!owner && typeof getIdentityOwners === 'function') {
+        const allOwners = getIdentityOwners();
+        if (attackerUnit && allOwners.includes(attackerUnit.name)) owner = attackerUnit.name;
+        else if (allOwners.includes(myName)) owner = myName;
+    }
     if (!owner || typeof getIdentitiesByOwner !== 'function') return empty;
 
-    const ownedCards = getIdentitiesByOwner(owner)
-        .filter(id => identityHudState.cards[id] && identityHudState.cards[id].owned)
-        .map(id => ({ id, unlocked: !!identityHudState.cards[id].unlocked }));
+    const ownedCards = getIdentitiesByOwner(owner).map(id => {
+        const c = identityHudState.cards[id];
+        return { id, owned: c ? c.owned : true, unlocked: c ? !!c.unlocked : false };
+    }).filter(c => c.owned).map(c => ({ id: c.id, unlocked: c.unlocked }));
     if (!ownedCards.length) return empty;
 
     const attackerState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(attackerUnit) : (attackerUnit || {});
@@ -156,17 +162,23 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         return `${name}+${amount}`;
     }).filter(Boolean);
 
-    const targetStatus = result.expectedTargetStatus || {};
-    const selfStatus = result.expectedSelfStatus || {};
+    const onAttackTargetStatus = result.onAttackTargetStatus || {};
+    const onAttackSelfStatus = result.onAttackSelfStatus || {};
+    const onHitTargetStatus = result.onHitTargetStatus || {};
+    const onHitSelfStatus = result.onHitSelfStatus || {};
 
     return {
         dpBonus: result.totalDpBonus || 0,
         extraSuccess: result.totalExtraSuccess || 0,
         names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))],
-        targetStatus,
-        statusNotes: buildStatusNotes(targetStatus),
-        selfStatus,
-        selfStatusNotes: buildStatusNotes(selfStatus)
+        onAttackTargetStatus,
+        statusNotes: buildStatusNotes(onAttackTargetStatus),
+        onAttackSelfStatus,
+        selfStatusNotes: buildStatusNotes(onAttackSelfStatus),
+        onHitTargetStatus,
+        onHitTargetStatusNotes: buildStatusNotes(onHitTargetStatus),
+        onHitSelfStatus,
+        onHitSelfStatusNotes: buildStatusNotes(onHitSelfStatus)
     };
 }
 
@@ -220,6 +232,10 @@ function submitAttackModal() {
         identityNotes: identityBonus.names,
         identityStatusNotes: identityBonus.statusNotes || [],
         identitySelfStatusNotes: identityBonus.selfStatusNotes || [],
+        onHitTargetStatus: identityBonus.onHitTargetStatus || {},
+        onHitTargetStatusNotes: identityBonus.onHitTargetStatusNotes || [],
+        onHitSelfStatus: identityBonus.onHitSelfStatus || {},
+        onHitSelfStatusNotes: identityBonus.onHitSelfStatusNotes || [],
         counterPhaseDpBonus
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
@@ -241,19 +257,19 @@ function submitAttackModal() {
     } else {
         cqInitiateAttack({ attacker, target });
 
-        // 人格引擎判定本次攻擊／命中會對目標施加的負面狀態，於發起攻擊時自動套用到目標單位，
+        // 人格引擎判定本次攻擊會對目標施加的負面狀態，於發起攻擊時自動套用到目標單位，
         // 讓 ST 不需在審核時手動補上玩家人格給予的減益。
-        if (identityBonus.targetStatus && typeof applyEngineStatusesToUnit === 'function') {
-            const applied = applyEngineStatusesToUnit(target.id, identityBonus.targetStatus);
+        if (identityBonus.onAttackTargetStatus && typeof applyEngineStatusesToUnit === 'function') {
+            const applied = applyEngineStatusesToUnit(target.id, identityBonus.onAttackTargetStatus);
             if (applied && identityBonus.statusNotes.length && typeof showToast === 'function') {
-                showToast('人格效果已對目標施加：' + identityBonus.statusNotes.join('、'));
+                showToast('攻擊宣告效果已對目標施加：' + identityBonus.statusNotes.join('、'));
             }
         }
 
-        // 對稱處理：人格引擎判定本次攻擊／命中會對攻擊者自身施加的狀態（如迅捷、呼吸法等資源），
+        // 對稱處理：人格引擎判定本次攻擊會對攻擊者自身施加的狀態（如迅捷、呼吸法等資源），
         // 同樣於發起攻擊時自動套用到攻擊者自己的單位。
-        if (identityBonus.selfStatus && attackerUnit && typeof applyEngineStatusesToUnit === 'function') {
-            const appliedSelf = applyEngineStatusesToUnit(attackerUnit.id, identityBonus.selfStatus);
+        if (identityBonus.onAttackSelfStatus && attackerUnit && typeof applyEngineStatusesToUnit === 'function') {
+            const appliedSelf = applyEngineStatusesToUnit(attackerUnit.id, identityBonus.onAttackSelfStatus);
             if (appliedSelf && identityBonus.selfStatusNotes.length && typeof showToast === 'function') {
                 showToast('已對自己套用：' + identityBonus.selfStatusNotes.join('、'));
             }
@@ -346,6 +362,10 @@ function cqOnSTReview(data) {
             rows.push({ label: '對目標施加', value: atk.identityStatusNotes.join('、'), cls: 'is-penalty' });
         if (Array.isArray(atk.identitySelfStatusNotes) && atk.identitySelfStatusNotes.length)
             rows.push({ label: '對自己施加', value: atk.identitySelfStatusNotes.join('、'), cls: 'is-bonus' });
+        if (Array.isArray(atk.onHitTargetStatusNotes) && atk.onHitTargetStatusNotes.length)
+            rows.push({ label: '命中對目標施加', value: atk.onHitTargetStatusNotes.join('、'), cls: 'is-penalty' });
+        if (Array.isArray(atk.onHitSelfStatusNotes) && atk.onHitSelfStatusNotes.length)
+            rows.push({ label: '命中對自己施加', value: atk.onHitSelfStatusNotes.join('、'), cls: 'is-bonus' });
 
         // 防禦方身上的「受擊消耗」狀態（破裂/震顫）：提示 ST 本次結算需計入其效果，
         // 確認廣播後會自動清除層數
@@ -437,6 +457,24 @@ function confirmSTReview() {
 
     closeModal('st-review-modal');
     cqBroadcastResult(finalDice, baseExtraSuccess, modifier, rollResult);
+
+    // 如果判定攻擊成功（傷害/成功數 > 0，或自動擲骰且產生了傷害），則套用「命中」狀態
+    // ST 也可由提示手動於事後套用。自動模式下我們就依據 successes 是否大於 0 來判斷命中。
+    if (autoroll && rollResult && rollResult.successes > 0 && combatQueueLast && combatQueueLast.attacker) {
+        const atk = combatQueueLast.attacker;
+        if (atk.onHitTargetStatus && typeof applyEngineStatusesToUnit === 'function' && targetId) {
+            const appliedTgt = applyEngineStatusesToUnit(targetId, atk.onHitTargetStatus);
+            if (appliedTgt && atk.onHitTargetStatusNotes && atk.onHitTargetStatusNotes.length && typeof showToast === 'function') {
+                showToast('命中效果已對目標施加：' + atk.onHitTargetStatusNotes.join('、'));
+            }
+        }
+        if (atk.onHitSelfStatus && typeof applyEngineStatusesToUnit === 'function' && atk.unitId) {
+            const appliedSelf = applyEngineStatusesToUnit(atk.unitId, atk.onHitSelfStatus);
+            if (appliedSelf && atk.onHitSelfStatusNotes && atk.onHitSelfStatusNotes.length && typeof showToast === 'function') {
+                showToast('命中效果已對自己套用：' + atk.onHitSelfStatusNotes.join('、'));
+            }
+        }
+    }
 
     // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零。
     // 注意順序：cmAutoRollAndApply 讀取破裂層數計入傷害「之後」才消耗；

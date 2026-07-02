@@ -301,12 +301,22 @@ function lvComputeBattleAnalysis() {
     const ended = segment.some(l => l && l.entryType === 'battle_end');
     const rounds = Math.max(0, ...segment.map(l => Number(l.round) || 0));
 
-    const avgOf = (arr, key) => arr.length
-        ? Math.round(arr.reduce((a, l) => a + (Number(l[key]) || 0), 0) / arr.length * 10) / 10 : 0;
-    const maxOf = (arr, key) => arr.length ? Math.max(...arr.map(l => Number(l[key]) || 0)) : 0;
+    // 舊版日誌沒有這些欄位：平均值只取「真的有記錄該欄位」的條目，
+    // 全部缺欄時回傳 null（顯示為 —），避免把缺資料誤算成 0
+    const avgOf = (arr, key) => {
+        const withField = arr.filter(l => typeof l[key] === 'number');
+        if (!withField.length) return null;
+        return Math.round(withField.reduce((a, l) => a + l[key], 0) / withField.length * 10) / 10;
+    };
+    const maxOf = (arr, key) => {
+        const withField = arr.filter(l => typeof l[key] === 'number');
+        return withField.length ? Math.max(...withField.map(l => l[key])) : null;
+    };
 
     const playerAtk = attacks.filter(l => l.attackerRole === 'player');
     const enemyAtk = attacks.filter(l => l.attackerRole !== 'player');
+    // 有多少比例的條目帶有新版分析欄位（用於提示舊日誌）
+    const legacyCount = attacks.filter(l => typeof l.round !== 'number').length;
 
     // 每回合曲線：玩家骰數均值 + 敵方（被玩家攻擊的目標）負面狀態最高總層數
     const byRound = [];
@@ -318,6 +328,7 @@ function lvComputeBattleAnalysis() {
 
     return {
         ended, rounds,
+        hasLegacyLogs: legacyCount > 0,
         playerAttackCount: playerAtk.length,
         playerAvgDice: avgOf(playerAtk, 'finalDice'),
         playerMaxDice: maxOf(playerAtk, 'finalDice'),
@@ -330,26 +341,30 @@ function lvComputeBattleAnalysis() {
         playerAvgDefAuto: avgOf(enemyAtk, 'defAuto'),
         // 敵方被疊 debuff 的速度：最終峰值與首次超過 10 層的回合
         debuffPeak: maxOf(playerAtk, 'targetDebuffTotal'),
-        debuffFastRound: (byRound.find(r => r.debuffPeak >= 10) || {}).round || 0,
+        debuffFastRound: (byRound.find(r => (r.debuffPeak || 0) >= 10) || {}).round || 0,
         lastTargetDebuffs: (playerAtk.slice(-1)[0] || {}).targetDebuffs || '',
         byRound
     };
 }
 
-/** 把回合分析整理成給 AI 的文字摘要（也用於 ST 檢視） */
+/** 把回合分析整理成給 AI 的文字摘要（也用於 ST 檢視）。null 欄位顯示為 —（舊日誌無此數據）。 */
 function lvAnalysisSummaryText(a) {
     if (!a) return '';
+    const f = (v) => (v === null || v === undefined) ? '—' : v;
     const lines = [
-        `本場戰鬥${a.ended ? '已結束' : '進行中'}，共 ${a.rounds || '?'} 回合。`,
-        `玩家攻擊 ${a.playerAttackCount} 次：平均擲骰 ${a.playerAvgDice} 顆（最高 ${a.playerMaxDice}）、平均附加成功 ${a.playerAvgExtra}、平均宣告攻擊 DP ${a.playerAvgAtkDp}。`,
-        `敵方攻擊 ${a.enemyAttackCount} 次（平均骰數 ${a.enemyAvgDice}）；玩家防禦 QTE 平均：防禦 DP ${a.playerAvgDefDp}、防禦附加成功 ${a.playerAvgDefAuto}。`,
-        `敵方單位被玩家疊負面狀態的峰值為 ${a.debuffPeak} 層` +
+        `本場戰鬥${a.ended ? '已結束' : '進行中'}，共 ${a.rounds || '—'} 回合。`,
+        `玩家攻擊 ${a.playerAttackCount} 次：平均擲骰 ${f(a.playerAvgDice)} 顆（最高 ${f(a.playerMaxDice)}）、平均附加成功 ${f(a.playerAvgExtra)}、平均宣告攻擊 DP ${f(a.playerAvgAtkDp)}。`,
+        `敵方攻擊 ${a.enemyAttackCount} 次（平均骰數 ${f(a.enemyAvgDice)}）；玩家防禦 QTE 平均：防禦 DP ${f(a.playerAvgDefDp)}、防禦附加成功 ${f(a.playerAvgDefAuto)}。`,
+        `敵方單位被玩家疊負面狀態的峰值為 ${f(a.debuffPeak)} 層` +
             (a.debuffFastRound ? `（第 ${a.debuffFastRound} 回合即突破 10 層——玩家疊 debuff 速度快）` : '') +
             (a.lastTargetDebuffs ? `；最近一次結算時目標身上：${a.lastTargetDebuffs}` : '') + '。'
     ];
     if (a.byRound.length) {
         lines.push('逐回合（玩家攻擊次數/平均骰數/敵方累積 debuff 峰值）：' +
-            a.byRound.map(r => `R${r.round}: ${r.playerAttacks}次/${r.avgDice}顆/${r.debuffPeak}層`).join('；'));
+            a.byRound.map(r => `R${r.round}: ${r.playerAttacks}次/${f(r.avgDice)}顆/${f(r.debuffPeak)}層`).join('；'));
+    }
+    if (a.hasLegacyLogs) {
+        lines.push('（提示：包含更新前的舊日誌，「—」表示該筆無此數據；按「開始戰鬥」後的新戰鬥才有完整的回合／附加成功／防禦數據。）');
     }
     return lines.join('\n');
 }
@@ -363,38 +378,42 @@ function lvRenderDpsStat() {
 
     // 全程以 DOM 節點 + textContent 建構：分析摘要含跨客戶端的狀態名稱／單位名稱
     // （lastTargetDebuffs 等），不可經 innerHTML 注入，從根本杜絕 XSS。
+    // 火力統計與回合分析合併為同一個可展開區塊，標題列即摘要，避免重複資訊。
     el.textContent = '';
-    const statLine = document.createElement('span');
-    statLine.append('🎯 玩家火力統計：最近 ');
-    const countB = document.createElement('b');
-    countB.textContent = String(count);
-    statLine.appendChild(countB);
-    statLine.append(' 筆攻擊，平均擲骰數 ');
+    const a = lvComputeBattleAnalysis();
+
+    if (!a) {
+        const statLine = document.createElement('span');
+        statLine.append(`📊 戰況分析：最近 ${count} 筆攻擊，平均擲骰 `);
+        const avgB = document.createElement('b');
+        avgB.className = 'dps-value';
+        avgB.textContent = String(avg);
+        statLine.appendChild(avgB);
+        statLine.append(' 顆（尚無可分析的戰鬥區段）');
+        el.appendChild(statLine);
+        return;
+    }
+
+    const details = document.createElement('details');
+    details.className = 'log-analysis';
+    const summary = document.createElement('summary');
+    const roundsTxt = a.rounds ? `｜${a.ended ? '最近一場' : '本場'} ${a.rounds} 回合` : '';
+    summary.append(`📊 戰況分析：最近 ${count} 筆攻擊・平均擲骰 `);
     const avgB = document.createElement('b');
     avgB.className = 'dps-value';
     avgB.textContent = String(avg);
-    statLine.appendChild(avgB);
-    statLine.append(' 顆');
-    el.appendChild(statLine);
-
-    // 最近一場戰鬥的回合分析（可展開）
-    const a = lvComputeBattleAnalysis();
-    if (a) {
-        const details = document.createElement('details');
-        details.className = 'log-analysis';
-        const summary = document.createElement('summary');
-        summary.textContent = `📊 回合分析（${a.ended ? '最近一場' : '本場進行中'}｜${a.rounds || '?'} 回合）`;
-        const body = document.createElement('div');
-        body.className = 'log-analysis-body';
-        lvAnalysisSummaryText(a).split('\n').forEach(line => {
-            const row = document.createElement('div');
-            row.textContent = line;
-            body.appendChild(row);
-        });
-        details.appendChild(summary);
-        details.appendChild(body);
-        el.appendChild(details);
-    }
+    summary.appendChild(avgB);
+    summary.append(` 顆${roundsTxt}`);
+    const body = document.createElement('div');
+    body.className = 'log-analysis-body';
+    lvAnalysisSummaryText(a).split('\n').forEach(line => {
+        const row = document.createElement('div');
+        row.textContent = line;
+        body.appendChild(row);
+    });
+    details.appendChild(summary);
+    details.appendChild(body);
+    el.appendChild(details);
 }
 
 // ===== AI 動態遭遇生成器（ST） =====

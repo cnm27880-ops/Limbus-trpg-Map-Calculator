@@ -29,7 +29,7 @@ function cqOnBroadcasting(data) {
             banner.appendChild(extraSpan);
         }
     } else {
-        banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！碰撞產生優勢！👉 請投擲 `));
+        banner.appendChild(document.createTextNode(`【${attackerName}】發起攻擊！👉 請投擲 `));
         const diceSpan = document.createElement('span');
         diceSpan.className = 'combat-broadcast-dice';
         diceSpan.textContent = String(finalDice);

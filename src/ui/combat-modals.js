@@ -533,11 +533,21 @@ function submitCounterAssign() {
     cpRenderFloatPanel();
 }
 
-/** 顯示浮動面板（若被收納在右緣邊條則先還原）。 */
-function cpShowFloatPanel() {
+/**
+ * 顯示浮動面板。
+ * 若被收納在右緣邊條：預設「尊重收納狀態」不強制彈出（閃爍邊條提示），
+ * 玩家自己按住圖標拖出來看；forceRestore=true（快捷球等顯式操作）才還原（置中出現）。
+ */
+function cpShowFloatPanel(forceRestore) {
     const panel = document.getElementById('counter-float-panel');
     if (!panel) return;
     if (typeof PanelDock !== 'undefined' && PanelDock.isDocked('counter-float-panel')) {
+        if (!forceRestore) {
+            PanelDock.setHint(true);
+            setTimeout(() => PanelDock.setHint(false), 1600);
+            if (typeof showToast === 'function') showToast('⚔️ 對抗分配面板收納於右側邊條，按住圖標拖出查看');
+            return;
+        }
         PanelDock.restore('counter-float-panel');
     }
     panel.classList.remove('hidden');
@@ -551,9 +561,9 @@ function cpCloseFloatPanel(event) {
     if (panel) panel.classList.add('hidden');
 }
 
-/** 快捷球「本回合對抗分配」選單項：重新開啟並渲染浮動面板。 */
+/** 快捷球「本回合對抗分配」選單項：顯式開啟 → 即使收納中也還原（置中出現）。 */
 function cpToggleFloatPanel() {
-    cpShowFloatPanel();
+    cpShowFloatPanel(true);
     cpRenderFloatPanel();
 }
 
@@ -568,8 +578,10 @@ function cpInitFloatPanel() {
         headerId: 'counter-float-header',
         collapseBtnId: 'counter-float-collapse',
         storageKey: 'limbus_counter_float_panel',
-        defaultPos: { x: Math.max(20, window.innerWidth - 350), y: Math.max(60, window.innerHeight - 460) },
+        // 預設置中偏上（不擋戰場中央操作，也不再窩在右下角）
+        defaultPos: { x: Math.max(20, Math.round((window.innerWidth - 330) / 2)), y: Math.max(60, Math.round(window.innerHeight * 0.18)) },
         dock: { icon: '⚔️', title: '本回合對抗分配' },
+        restoreDock: true,
     });
 }
 if (document.readyState === 'loading') {

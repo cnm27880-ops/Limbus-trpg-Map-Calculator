@@ -65,8 +65,18 @@ function buildEngineUnitState(unit, extra) {
         initiative: (unit && unit.init) ? (parseInt(unit.init) || 0) : 0,
         // 單位卡上的護盾值（一次性＋自動），供「護盾不為 0」類條件使用；與人民之盾狀態無關
         unitShield: unit ? ((parseInt(unit.shieldTemp) || 0) + (parseInt(unit.shieldAuto) || 0)) : 0,
+        // 場上是否存在「指令對象」（食指的業判定：攻擊指令對象以外的目標 → 獲得業）
+        commandTargetOnField: idtHasCommandTargetOnField(),
     };
     return Object.assign(base, extra || {});
+}
+
+/** 場上任一單位是否帶有「指令對象」狀態 */
+function idtHasCommandTargetOnField() {
+    if (typeof state === 'undefined' || !Array.isArray(state.units)) return false;
+    const def = (typeof getStatusById === 'function') ? getStatusById('command_target') : null;
+    const name = def ? def.name : '指令對象';
+    return state.units.some(u => u.status && (parseInt(u.status[name]) || 0) > 0);
 }
 
 /**
@@ -816,7 +826,48 @@ function performIdentityTurnStart(unitId) {
         if (typeof showToast === 'function') showToast(`🛡 回合開始：獲得 ${shieldGain} 點一次性護盾`);
         n++;
     }
+
+    // 指令對象抽選（食指被動）：持有標記 commandTargetRoll 的卡片時，
+    // 骰一顆等同場上敵人數量的面骰決定本回合指令對象
+    const hasRollCard = owned.some(entry => {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(entry.id) : null;
+        return card && card.commandTargetRoll;
+    });
+    if (hasRollCard && idtRollCommandTarget()) n++;
+
     return n;
+}
+
+/**
+ * 食指（被動）：骰 1D[場上敵人數] 抽選本回合的「指令對象」。
+ * 先清除場上所有既有的指令對象標記，再對骰中的敵人套上 1 層指令對象並同步。
+ * @returns {boolean} 是否成功抽選
+ */
+function idtRollCommandTarget() {
+    if (typeof state === 'undefined' || !Array.isArray(state.units)) return false;
+    // 行動條目（actionSlotOf）只佔先攻格，不是真正的敵人，排除
+    const enemies = state.units.filter(u =>
+        (u.type === 'enemy' || u.type === 'boss') && !u.actionSlotOf);
+    if (!enemies.length) return false;
+
+    const def = (typeof getStatusById === 'function') ? getStatusById('command_target') : null;
+    const name = def ? def.name : '指令對象';
+
+    // 清除上一回合的指令對象（不逐一跳 toast，統一在抽選結果提示）
+    state.units.forEach(u => {
+        if (u.status && u.status[name] !== undefined) {
+            delete u.status[name];
+            if (typeof syncUnitStatus === 'function') syncUnitStatus(u.id);
+        }
+    });
+
+    const rolled = Math.floor(Math.random() * enemies.length); // 0-based
+    const chosen = enemies[rolled];
+    if (typeof addStatusToUnit === 'function') addStatusToUnit(chosen.id, 'command_target', 1);
+    if (typeof showToast === 'function') {
+        showToast(`🎯 指令抽選：1D${enemies.length} 骰出 ${rolled + 1} → 本回合指令對象「${chosen.name || '敵方單位'}」`);
+    }
+    return true;
 }
 
 function runIdentityTurnStart() {

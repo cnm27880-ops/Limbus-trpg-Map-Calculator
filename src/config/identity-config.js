@@ -351,6 +351,9 @@ const IDENTITY_LIBRARY = {
         owner: '浮士德',
         repeatUnlockSkill: '我將遵照指令將你處決',
         keyStatuses: ['commandProtect', 'karma', 'breathing', 'sinking', 'commandTarget'],
+        // 食指（被動）：回合開始時骰一顆等同場上敵人數量的面骰，骰中者為本回合「指令對象」。
+        // 由 identity-hud 於回合開始資源結算時自動抽選並套用狀態（見 idtRollCommandTarget）。
+        commandTargetRoll: true,
         hooks: {
             onTurnStart: [
                 { condition: () => true, selfStatus: { breathing: 2 }, source: '務必保證，遵從指令', skill: '務必保證，遵從指令' },
@@ -359,6 +362,9 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, selfStatus: { breathing: (t, a) => Math.floor((a.status.commandProtect || 0) / 3) }, source: '我將遵照指令將你處決', skill: '我將遵照指令將你處決', locked: true }
             ],
             onAttack: [
+                // 業（食指被動）：場上存在指令對象、卻攻擊其以外的目標 → 獲得 1 層業
+                { condition: (t, a) => !!a.commandTargetOnField && !((t.status.commandTarget || 0) > 0),
+                  selfStatus: { karma: 1 }, source: '背離指令（獲得業）', skill: '（被動）' },
                 // 呼吸法 + 目標沉淪之和每 6 點 +1 DP（兩個技能各觸發一次）
                 { condition: () => true, dpBonus: (t, a) => Math.floor(((a.status.breathing || 0) + (t.status.sinking || 0)) / 6), source: '務必保證，遵從指令', skill: '務必保證，遵從指令' },
                 { condition: () => true, dpBonus: (t, a) => Math.floor(((a.status.breathing || 0) + (t.status.sinking || 0)) / 6), source: '執行指令並修行', skill: '執行指令並修行' },

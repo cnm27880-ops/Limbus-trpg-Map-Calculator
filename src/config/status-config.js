@@ -224,6 +224,7 @@ const STATUS_LIBRARY = {
         },
         {
             id: 'command_target',
+            // 註：由 identity-hud 的 idtRollCommandTarget() 於食指玩家回合開始時自動抽選套用
             name: '指令對象',
             icon: '🔮',
             type: 'binary',
@@ -241,8 +242,8 @@ const STATUS_LIBRARY = {
             name: '業',
             icon: '⚖️',
             type: 'stack',
-            desc: '業力累積',
-            fullDesc: '累積業力，達到一定層數引發特殊效果。',
+            desc: '背離指令的業力',
+            fullDesc: '浮士德【食指】專屬：回合開始骰選指令對象後，攻擊指令對象以外的目標時獲得 1 層業。累積後的效果依【食指】規則由 ST 判定。',
             keyResist: null,
             effects: {
                 light: '業力累積',

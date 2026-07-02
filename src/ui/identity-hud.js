@@ -60,7 +60,12 @@ function buildEngineUnitState(unit, extra) {
             }
         }
     }
-    const base = { status, initiative: (unit && unit.init) ? (parseInt(unit.init) || 0) : 0 };
+    const base = {
+        status,
+        initiative: (unit && unit.init) ? (parseInt(unit.init) || 0) : 0,
+        // 單位卡上的護盾值（一次性＋自動），供「護盾不為 0」類條件使用；與人民之盾狀態無關
+        unitShield: unit ? ((parseInt(unit.shieldTemp) || 0) + (parseInt(unit.shieldAuto) || 0)) : 0,
+    };
     return Object.assign(base, extra || {});
 }
 
@@ -801,7 +806,17 @@ function performIdentityTurnStart(unitId) {
     const owned = collectOwnedIdentities();
     const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
     const res = evaluatePlayerTurnStart(owned, buildEngineUnitState(attackerUnit));
-    return applyEngineStatusesToUnit(unitId, res.expectedSelfStatus);
+    let n = applyEngineStatusesToUnit(unitId, res.expectedSelfStatus);
+
+    // 護盾值獲取（如羅佳「穩紮穩打」）：加到單位卡的一次性護盾，而非狀態層數
+    const shieldGain = (res.totals && parseInt(res.totals.selfShield)) || 0;
+    if (shieldGain > 0 && attackerUnit) {
+        attackerUnit.shieldTemp = (parseInt(attackerUnit.shieldTemp) || 0) + shieldGain;
+        if (typeof broadcastState === 'function') broadcastState();
+        if (typeof showToast === 'function') showToast(`🛡 回合開始：獲得 ${shieldGain} 點一次性護盾`);
+        n++;
+    }
+    return n;
 }
 
 function runIdentityTurnStart() {
@@ -956,7 +971,8 @@ function renderIdentityResult() {
         ['武器傷害', r.totalWeaponDamage],
         ['附加成功', r.totalExtraSuccess],
         ['法術威力', r.totalSpellPower],
-        ['最終傷害', r.totalFinalDamage]
+        ['最終傷害', r.totalFinalDamage],
+        ['一次性護盾', r.totals && r.totals.selfShield]
     ].filter(([, v]) => (v || 0) !== 0)
      .map(([k, v]) => `<div class="idt-bonus"><span>${k}</span><b>+${v}</b></div>`).join('');
 
@@ -979,6 +995,7 @@ function renderIdentityResult() {
         if (l.extraSuccess) parts.push(`附加成功+${l.extraSuccess}`);
         if (l.spellPower) parts.push(`威力+${l.spellPower}`);
         if (l.finalDamage) parts.push(`最終傷害+${l.finalDamage}`);
+        if (l.selfShield) parts.push(`護盾+${l.selfShield}`);
         if (l.targetStatus) parts.push('→敵：' + fmtStatus(resolveLogStatus(l.targetStatus, r)));
         if (l.selfStatus) parts.push('→己：' + fmtStatus(resolveLogStatus(l.selfStatus, r)));
         const src = (typeof escapeHtml === 'function') ? escapeHtml(l.source || '') : (l.source || '');

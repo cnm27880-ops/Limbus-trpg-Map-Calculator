@@ -721,6 +721,40 @@ function removeStatusFromUnit(unitId, statusName) {
 }
 
 /**
+ * 列出單位身上「受擊時消耗」的狀態（如破裂／震顫：受到攻擊時消耗所有層數）。
+ * 供攻擊結算前顯示提示、結算後自動清除，讓 ST 不必記著手動歸零。
+ * @param {object} unit - state.units 中的單位
+ * @returns {Array<{name:string, stacks:number}>}
+ */
+function listConsumeOnAttackedStatuses(unit) {
+    const out = [];
+    if (!unit || !unit.status) return out;
+    for (const [statusName, raw] of Object.entries(unit.status)) {
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(statusName) : null;
+        if (!def || !def.consumeOnAttacked) continue;
+        const stacks = parseInt(raw) || 0;
+        if (stacks > 0) out.push({ name: statusName, stacks });
+    }
+    return out;
+}
+
+/**
+ * 攻擊結算完成後（ST 確認廣播時呼叫）：自動消耗目標身上的受擊消耗狀態並同步。
+ * @param {string} unitId - 防禦方單位 ID
+ * @returns {Array<{name:string, stacks:number}>} 實際被消耗的狀態
+ */
+function consumeOnAttackedStatuses(unitId) {
+    const unit = findUnitById(unitId);
+    const consumed = listConsumeOnAttackedStatuses(unit);
+    if (!consumed.length) return [];
+    consumed.forEach(s => { delete unit.status[s.name]; });
+    syncUnitStatus(unitId);
+    renderUnitsList();
+    renderSidebarUnits();
+    return consumed;
+}
+
+/**
  * 更新狀態堆疊數值
  * @param {string} unitId - 單位 ID
  * @param {string} statusName - 狀態名稱
@@ -994,6 +1028,12 @@ function openStatusQuickPopover(event, unitId, statusName, statusDef) {
             <button class="popover-stack-btn" onclick="popoverAdjustStacks(5)">+5</button>
         </div>` : '';
 
+    // 週期傷害狀態（如燃燒）：一鍵結算——依層數扣血（走護盾吸收）後層數自動 -1
+    const tickBtn = (statusDef && statusDef.tickDamage) ? `
+        <button class="popover-tick-btn" onclick="popoverSettleTickDamage()">
+            ${icon} 結算${escapeHtml(statusName)}傷害（扣血後層數 −1）
+        </button>` : '';
+
     const pop = document.createElement('div');
     pop.id = 'status-quick-popover';
     pop.className = 'status-quick-popover';
@@ -1004,6 +1044,7 @@ function openStatusQuickPopover(event, unitId, statusName, statusDef) {
         </div>
         ${desc ? `<div class="popover-desc">${escapeHtml(desc)}</div>` : ''}
         ${stackControls}
+        ${tickBtn}
         <div class="popover-footer">
             <button class="popover-remove-btn" onclick="popoverRemoveStatus()">🗑 移除狀態</button>
         </div>
@@ -1078,6 +1119,40 @@ function popoverRemoveStatus() {
     if (!statusPopoverTarget) return;
     const { unitId, statusName } = statusPopoverTarget;
     removeStatusFromUnit(unitId, statusName);
+    closeStatusQuickPopover();
+}
+
+/**
+ * 一鍵結算週期傷害狀態（tickDamage，例：燃燒）：
+ * 依目前層數對單位造成對應類型的傷害（優先由護盾吸收），結算後層數自動 -1。
+ */
+function popoverSettleTickDamage() {
+    if (!statusPopoverTarget) return;
+    const { unitId, statusName } = statusPopoverTarget;
+    const unit = findUnitById(unitId);
+    if (!unit || !unit.status || unit.status[statusName] === undefined) {
+        closeStatusQuickPopover();
+        return;
+    }
+    const def = (typeof getStatusByName === 'function') ? getStatusByName(statusName) : null;
+    if (!def || !def.tickDamage) return;
+
+    const stacks = parseInt(unit.status[statusName]) || 0;
+    if (stacks <= 0) { closeStatusQuickPopover(); return; }
+
+    // tickDamage 為傷害類型（'b'/'l'/'a'），依層數扣血（走 modifyHPInternal 的護盾吸收邏輯）
+    const dmgType = (typeof def.tickDamage === 'string') ? def.tickDamage : 'l';
+    if (typeof modifyHPInternal === 'function' && Array.isArray(unit.hpArr)) {
+        modifyHPInternal(unit, dmgType, stacks);
+    }
+    const remain = stacks - 1;
+    if (remain > 0) unit.status[statusName] = remain.toString();
+    else delete unit.status[statusName];
+
+    if (typeof broadcastState === 'function') broadcastState();
+    renderUnitsList();
+    renderSidebarUnits();
+    showToast(`${def.icon || ''} ${unit.name || '單位'} 受到 ${stacks} 點${statusName}傷害，${statusName} −1（剩 ${Math.max(0, remain)} 層）`);
     closeStatusQuickPopover();
 }
 

@@ -512,17 +512,17 @@ const IDENTITY_LIBRARY = {
         }
     },
 
-    // 羅佳 - Zwei 協會南部5科 ── 挑釁 / 呼吸法 / 護盾 / 易損
+    // 羅佳 - Zwei 協會南部5科 ── 挑釁 / 呼吸法 / 易損（護盾走單位護盾值，非狀態）
     ryoshu_zwei_south5: {
         id: 'ryoshu_zwei_south5',
         name: '羅佳 - Zwei 協會南部5科',
         owner: '羅佳',
         repeatUnlockSkill: '威脅鎮壓',
-        keyStatuses: ['provoke', 'breathing', 'shield', 'vulnerable'],
+        keyStatuses: ['provoke', 'breathing', 'vulnerable'],
         hooks: {
             onTurnStart: [
-                // 穩紮穩打（被動）：每 15 層呼吸法 → 1 點護盾（不會自動回復）
-                { condition: () => true, selfStatus: { shield: (t, a) => Math.floor((a.status.breathing || 0) / 15) },
+                // 穩紮穩打（被動）：每 15 層呼吸法 → 1 點「一次性護盾」（單位護盾值，不會自動回復）
+                { condition: () => true, selfShield: (t, a) => Math.floor((a.status.breathing || 0) / 15),
                   source: '穩紮穩打（被動）', skill: '（被動）' }
             ],
             onAttack: [
@@ -530,10 +530,10 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, targetStatus: { provoke: 1 }, source: '牽制戰術', skill: '牽制戰術' },
                 // 專注防禦：宣告攻擊 → 目標 +2 挑釁、自身 +2 呼吸法
                 { condition: () => true, targetStatus: { provoke: 2 }, selfStatus: { breathing: 2 }, source: '專注防禦', skill: '專注防禦' },
-                // 專注防禦：護盾不為 0 → 再 +2 呼吸法
-                { condition: (t, a) => (a.status.shield || 0) > 0, selfStatus: { breathing: 2 }, source: '專注防禦（護盾不為 0）', skill: '專注防禦' },
-                // 威脅鎮壓：護盾不為 0 → +6 DP
-                { condition: (t, a) => (a.status.shield || 0) > 0, dpBonus: 6, source: '威脅鎮壓', skill: '威脅鎮壓', locked: true }
+                // 專注防禦：護盾值不為 0 → 再 +2 呼吸法（unitShield＝單位卡上的一次性＋自動護盾）
+                { condition: (t, a) => (a.unitShield || 0) > 0, selfStatus: { breathing: 2 }, source: '專注防禦（護盾不為 0）', skill: '專注防禦' },
+                // 威脅鎮壓：護盾值不為 0 → +6 DP
+                { condition: (t, a) => (a.unitShield || 0) > 0, dpBonus: 6, source: '威脅鎮壓', skill: '威脅鎮壓', locked: true }
             ],
             onHit: [
                 { condition: () => true, selfStatus: { breathing: 2 }, source: '牽制戰術', skill: '牽制戰術' },

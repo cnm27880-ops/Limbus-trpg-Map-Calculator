@@ -1241,6 +1241,23 @@ body.aoe-select-active .token {
     transition: all 0.15s;
 }
 
+/* 週期傷害一鍵結算鈕（燃燒等）：扣血後層數 -1 */
+.status-quick-popover .popover-tick-btn {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 6px;
+    border-radius: 6px;
+    border: 1px solid var(--accent-orange);
+    background: rgba(251, 140, 0, 0.12);
+    color: var(--accent-orange);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.status-quick-popover .popover-tick-btn:hover {
+    background: rgba(251, 140, 0, 0.25);
+}
+
 .status-quick-popover .popover-remove-btn:hover {
     background: var(--accent-red);
     color: #000;

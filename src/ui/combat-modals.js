@@ -303,6 +303,8 @@ function cqOnSTReview(data) {
     if (reviewModal) {
         reviewModal.dataset.baseDice = String(baseDice);
         reviewModal.dataset.baseExtraSuccess = String(baseExtraSuccess);
+        // 防禦方 id 一併釘上：確認廣播時自動消耗其受擊消耗狀態（破裂/震顫）
+        reviewModal.dataset.targetId = (data.target && data.target.id) ? String(data.target.id) : '';
     }
 
     // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
@@ -336,6 +338,20 @@ function cqOnSTReview(data) {
             rows.push({ label: '對目標施加', value: atk.identityStatusNotes.join('、'), cls: 'is-penalty' });
         if (Array.isArray(atk.identitySelfStatusNotes) && atk.identitySelfStatusNotes.length)
             rows.push({ label: '對自己施加', value: atk.identitySelfStatusNotes.join('、'), cls: 'is-bonus' });
+
+        // 防禦方身上的「受擊消耗」狀態（破裂/震顫）：提示 ST 本次結算需計入其效果，
+        // 確認廣播後會自動清除層數
+        const targetUnit = (data.target && data.target.id && typeof findUnitById === 'function')
+            ? findUnitById(data.target.id) : null;
+        const consumable = (typeof listConsumeOnAttackedStatuses === 'function')
+            ? listConsumeOnAttackedStatuses(targetUnit) : [];
+        if (consumable.length) {
+            rows.push({
+                label: '目標受擊消耗',
+                value: consumable.map(s => `${s.name} ${s.stacks} 層`).join('、') + '（廣播後自動清除）',
+                cls: 'is-penalty'
+            });
+        }
 
         if (rows.length) {
             const list = document.createElement('div');
@@ -392,6 +408,15 @@ function confirmSTReview() {
 
     closeModal('st-review-modal');
     cqBroadcastResult(finalDice, baseExtraSuccess, modifier);
+
+    // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零
+    const targetId = ds.targetId || '';
+    if (targetId && typeof consumeOnAttackedStatuses === 'function') {
+        const consumed = consumeOnAttackedStatuses(targetId);
+        if (consumed.length && typeof showToast === 'function') {
+            showToast('💥 已自動消耗目標的 ' + consumed.map(s => `${s.name} ${s.stacks} 層`).join('、'));
+        }
+    }
 }
 
 /**

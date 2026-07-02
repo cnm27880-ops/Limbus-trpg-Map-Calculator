@@ -42,6 +42,10 @@ function openAttackModal(unitId) {
     document.getElementById('attack-armor-pierce').value = memo.armorPierce ?? 0;
     document.getElementById('attack-haste-pierce').value = memo.hastePierce ?? 0;
     document.getElementById('attack-magic-pierce').value = memo.magicPierce ?? 0;
+    const capInput = document.getElementById('attack-damage-cap');
+    if (capInput) capInput.value = memo.damageCap ?? 0;
+    const explodeSel = document.getElementById('attack-explode');
+    if (explodeSel) explodeSel.value = String(memo.explodeAt ?? 10);
 
     // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
     threatPendingStatuses = [];
@@ -180,8 +184,11 @@ function submitAttackModal() {
     const armorPierce = Math.max(0, parseInt(document.getElementById('attack-armor-pierce').value, 10) || 0);
     const hastePierce = Math.max(0, parseInt(document.getElementById('attack-haste-pierce').value, 10) || 0);
     const magicPierce = Math.max(0, parseInt(document.getElementById('attack-magic-pierce').value, 10) || 0);
+    // 自動擲骰參數：攻擊上限（0=無上限；BOSS 不受上限影響）與加骰門檻（10/9/8）
+    const damageCap = Math.max(0, parseInt(document.getElementById('attack-damage-cap')?.value, 10) || 0);
+    const explodeAt = parseInt(document.getElementById('attack-explode')?.value, 10) || 10;
 
-    cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious, armorPierce, hastePierce, magicPierce });
+    cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious, armorPierce, hastePierce, magicPierce, damageCap, explodeAt });
 
     // 攻擊方單位：玩家＝自己控制的單位；ST 發起威脅＝目前作用中的 BOSS（用於套用 BOSS 攻擊修正）
     let attackerUnit = null;
@@ -207,6 +214,7 @@ function submitAttackModal() {
         attackerRole: (myRole === 'st') ? 'enemy' : 'player',
         dp, auto, ignoreDef, critVicious,
         armorPierce, hastePierce, magicPierce,
+        damageCap, explodeAt,
         identityDpBonus: identityBonus.dpBonus,
         identityExtraSuccess: identityBonus.extraSuccess,
         identityNotes: identityBonus.names,
@@ -388,8 +396,17 @@ function cqOnSTReview(data) {
     }
 
     document.getElementById('st-review-modifier').value = 0;
+    // 還原上次的自動擲骰開關選擇（預設開啟）
+    const autorollBox = document.getElementById('st-review-autoroll');
+    if (autorollBox) {
+        let saved = null;
+        try { saved = localStorage.getItem('limbus-st-autoroll'); } catch (e) { /* ignore */ }
+        autorollBox.checked = saved === null ? true : saved === '1';
+    }
     openModal('st-review-modal');
 }
+
+const ST_AUTOROLL_KEY = 'limbus-st-autoroll';
 
 function confirmSTReview() {
     // 優先從 Modal 的 data-* 屬性讀取初步骰數（cqOnSTReview 渲染時已釘上），
@@ -406,17 +423,99 @@ function confirmSTReview() {
     // 微調僅套用於骰數，附加成功維持黑箱原值（兩者分開，不相加）
     const finalDice = Math.max(0, parseInt(baseDice, 10) + modifier);
 
-    closeModal('st-review-modal');
-    cqBroadcastResult(finalDice, baseExtraSuccess, modifier);
+    // 記住自動擲骰開關的選擇
+    const autorollBox = document.getElementById('st-review-autoroll');
+    const autoroll = autorollBox ? autorollBox.checked : false;
+    try { localStorage.setItem(ST_AUTOROLL_KEY, autoroll ? '1' : '0'); } catch (e) { /* ignore */ }
 
-    // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零
+    // ===== 自動擲骰＋套用傷害（骰數 0 的機運骰情境維持手動）=====
+    let rollResult = null;
     const targetId = ds.targetId || '';
+    if (autoroll && finalDice > 0 && typeof bbRollAttackDice === 'function') {
+        rollResult = cmAutoRollAndApply(finalDice, baseExtraSuccess, targetId);
+    }
+
+    closeModal('st-review-modal');
+    cqBroadcastResult(finalDice, baseExtraSuccess, modifier, rollResult);
+
+    // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零。
+    // 注意順序：cmAutoRollAndApply 讀取破裂層數計入傷害「之後」才消耗；
+    // 震顫消耗時同步削減目標生命上限（見 consumeOnAttackedStatuses）。
     if (targetId && typeof consumeOnAttackedStatuses === 'function') {
-        const consumed = consumeOnAttackedStatuses(targetId);
-        if (consumed.length && typeof showToast === 'function') {
-            showToast('💥 已自動消耗目標的 ' + consumed.map(s => `${s.name} ${s.stacks} 層`).join('、'));
+        const result = consumeOnAttackedStatuses(targetId);
+        if (result.consumed.length && typeof showToast === 'function') {
+            let msg = '💥 已自動消耗目標的 ' + result.consumed.map(s => `${s.name} ${s.stacks} 層`).join('、');
+            if (result.maxHpCut > 0) msg += `；生命上限 −${result.maxHpCut}`;
+            showToast(msg);
         }
     }
+}
+
+/**
+ * ST 端：自動擲骰並把最終傷害套用到防禦方。
+ * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻爆骰）＋ 附加成功
+ * ＋ 目標身上的破裂（受擊消耗）與易損層數 → 合計後玩家攻擊受「攻擊上限」封頂
+ * （破裂/易損計入上限內；BOSS 攻擊不受限）
+ * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。
+ * 擲骰明細（各骰點數、10 的數量）隨廣播同步，供「骰到兩個 10 觸發」類人格卡判定。
+ * @returns {object} rollResult（隨廣播同步給所有客戶端顯示）
+ */
+function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
+    const atk = (combatQueueLast && combatQueueLast.attacker) || {};
+    const isPlayerAttack = atk.attackerRole === 'player';
+    const explodeAt = parseInt(atk.explodeAt, 10) || 10;
+
+    const roll = bbRollAttackDice(finalDice, explodeAt);
+    const tens = roll.rolls.filter(d => d === 10).length;
+
+    // 目標身上的破裂（本次受擊消耗）與易損：受到的傷害 +層數（計入攻擊上限）
+    const targetUnit = (typeof findUnitById === 'function' && targetId) ? findUnitById(targetId) : null;
+    let statusBonus = 0;
+    const statusBonusParts = [];
+    if (targetUnit && targetUnit.status && typeof getStatusByName === 'function') {
+        for (const [name, raw] of Object.entries(targetUnit.status)) {
+            const def = getStatusByName(name);
+            if (!def) continue;
+            const stacks = parseInt(raw) || 0;
+            if (stacks <= 0) continue;
+            // 破裂＝受擊消耗且加傷；易損＝常駐加傷
+            if (def.id === 'fragile' || def.id === 'vulnerable') {
+                statusBonus += stacks;
+                statusBonusParts.push(`${name}+${stacks}`);
+            }
+        }
+    }
+
+    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
+    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus;
+    const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
+    const capApplied = (cap > 0 && totalBeforeCap > cap);
+    const damage = capApplied ? cap : totalBeforeCap;
+
+    // 套用傷害：L 傷為主，「嚴重轉惡性」宣告的點數轉為 A 傷；走護盾吸收
+    if (targetUnit && Array.isArray(targetUnit.hpArr) && typeof modifyHPInternal === 'function' && damage > 0) {
+        const aPart = Math.min(Math.max(0, parseInt(atk.critVicious, 10) || 0), damage);
+        const lPart = damage - aPart;
+        if (aPart > 0) modifyHPInternal(targetUnit, 'a', aPart);
+        if (lPart > 0) modifyHPInternal(targetUnit, 'l', lPart);
+    }
+    if (typeof broadcastState === 'function') broadcastState();
+
+    return {
+        rolls: roll.rolls,             // 各骰點數明細（供「骰到 N 個 10 觸發」類人格卡判定）
+        tens: tens,                    // 骰出 10 的數量
+        successes: roll.successes,
+        exploded: roll.explodedCount,
+        totalRolled: roll.totalRolled,
+        explodeAt: explodeAt,
+        extraSuccess: Number(extraSuccess) || 0,
+        totalBeforeCap: totalBeforeCap,
+        cap: cap,
+        capApplied: capApplied,
+        statusBonus: statusBonus,
+        statusBonusText: statusBonusParts.join('、'),
+        damage: damage
+    };
 }
 
 /**
@@ -533,11 +632,21 @@ function submitCounterAssign() {
     cpRenderFloatPanel();
 }
 
-/** 顯示浮動面板（若被收納在右緣邊條則先還原）。 */
-function cpShowFloatPanel() {
+/**
+ * 顯示浮動面板。
+ * 若被收納在右緣邊條：預設「尊重收納狀態」不強制彈出（閃爍邊條提示），
+ * 玩家自己按住圖標拖出來看；forceRestore=true（快捷球等顯式操作）才還原（置中出現）。
+ */
+function cpShowFloatPanel(forceRestore) {
     const panel = document.getElementById('counter-float-panel');
     if (!panel) return;
     if (typeof PanelDock !== 'undefined' && PanelDock.isDocked('counter-float-panel')) {
+        if (!forceRestore) {
+            PanelDock.setHint(true);
+            setTimeout(() => PanelDock.setHint(false), 1600);
+            if (typeof showToast === 'function') showToast('⚔️ 對抗分配面板收納於右側邊條，按住圖標拖出查看');
+            return;
+        }
         PanelDock.restore('counter-float-panel');
     }
     panel.classList.remove('hidden');
@@ -551,9 +660,9 @@ function cpCloseFloatPanel(event) {
     if (panel) panel.classList.add('hidden');
 }
 
-/** 快捷球「本回合對抗分配」選單項：重新開啟並渲染浮動面板。 */
+/** 快捷球「本回合對抗分配」選單項：顯式開啟 → 即使收納中也還原（置中出現）。 */
 function cpToggleFloatPanel() {
-    cpShowFloatPanel();
+    cpShowFloatPanel(true);
     cpRenderFloatPanel();
 }
 
@@ -568,8 +677,10 @@ function cpInitFloatPanel() {
         headerId: 'counter-float-header',
         collapseBtnId: 'counter-float-collapse',
         storageKey: 'limbus_counter_float_panel',
-        defaultPos: { x: Math.max(20, window.innerWidth - 350), y: Math.max(60, window.innerHeight - 460) },
+        // 預設置中偏上（不擋戰場中央操作，也不再窩在右下角）
+        defaultPos: { x: Math.max(20, Math.round((window.innerWidth - 330) / 2)), y: Math.max(60, Math.round(window.innerHeight * 0.18)) },
         dock: { icon: '⚔️', title: '本回合對抗分配' },
+        restoreDock: true,
     });
 }
 if (document.readyState === 'loading') {

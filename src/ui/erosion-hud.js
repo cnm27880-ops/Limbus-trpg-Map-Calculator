@@ -119,6 +119,7 @@ function eroInitFloatPanel() {
         storageKey: 'limbus_erosion_hud_panel',
         defaultPos: { x: Math.max(20, window.innerWidth - 370), y: Math.max(60, window.innerHeight - 560) },
         dock: { icon: '🔥', title: 'E.G.O 侵蝕控制台' },
+        restoreDock: true,
     });
 }
 if (document.readyState === 'loading') {

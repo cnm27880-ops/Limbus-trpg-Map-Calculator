@@ -130,15 +130,18 @@ function cqEnterSTReview(baseDice, baseExtraSuccess, debugStr) {
 /**
  * ST 確認最終微調後，寫入 finalDice / finalExtraSuccess 並轉入 broadcasting。
  * 微調僅套用於骰數（finalDice），附加成功維持黑箱原值。
+ * @param {object|null} rollResult - 自動擲骰結果（null＝手動擲骰）：
+ *   { successes, exploded, totalRolled, totalBeforeCap, capApplied, statusBonus, statusBonusText, damage }
  */
-function cqBroadcastResult(finalDice, finalExtraSuccess, modifier) {
+function cqBroadcastResult(finalDice, finalExtraSuccess, modifier, rollResult) {
     const ref = cqRef();
     if (!ref) return;
     ref.update({
         status: 'broadcasting',
         modifier: modifier,
         finalDice: finalDice,
-        finalExtraSuccess: finalExtraSuccess
+        finalExtraSuccess: finalExtraSuccess,
+        rollResult: rollResult || null
     });
 }
 

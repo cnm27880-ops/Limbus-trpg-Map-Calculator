@@ -165,6 +165,37 @@ function bbRunBlackBoxCalculation(data) {
 }
 
 /**
+ * 自動擲骰：擲 diceCount 顆 D10。
+ * 規則：骰到 8/9/10 算 1 成功；骰到「加骰門檻」(explodeThreshold) 以上時追加 1 顆骰
+ * （追加骰同樣可成功、可再加骰）。預設門檻 10（骰到 10 加骰），
+ * 具「9加骰／8加骰」技能時門檻為 9／8（規則上最多到 8）。
+ * @param {number} diceCount - 基礎骰數
+ * @param {number} explodeThreshold - 加骰門檻（8~10；其他值視為 10）
+ * @param {function} [rng] - 回傳 [0,1) 的亂數函式（預設 Math.random，供測試注入）
+ * @returns {{ rolls:number[], successes:number, explodedCount:number, totalRolled:number }}
+ */
+function bbRollAttackDice(diceCount, explodeThreshold, rng) {
+    const rand = (typeof rng === 'function') ? rng : Math.random;
+    let threshold = parseInt(explodeThreshold, 10);
+    if (!(threshold >= 8 && threshold <= 10)) threshold = 10;
+    const MAX_TOTAL = 500; // 防呆：極端爆骰時的骰數上限，避免無限迴圈
+
+    const rolls = [];
+    let queue = Math.max(0, parseInt(diceCount, 10) || 0);
+    let successes = 0;
+    let explodedCount = 0;
+
+    while (queue > 0 && rolls.length < MAX_TOTAL) {
+        queue--;
+        const d = Math.floor(rand() * 10) + 1;
+        rolls.push(d);
+        if (d >= 8) successes++;
+        if (d >= threshold) { queue++; explodedCount++; }
+    }
+    return { rolls, successes, explodedCount, totalRolled: rolls.length };
+}
+
+/**
  * 戰鬥日誌（系統 A）：於全場廣播時，由 ST 端把這一筆攻擊結果寫入
  * Firebase /rooms/{roomId}/combatLogs，供「戰鬥日誌 / 構築室」分頁渲染。
  * 採單一寫入者（ST）避免重複，並維持最多 100 筆（FIFO）。
@@ -198,7 +229,15 @@ function bbPushCombatLog(entry) {
             defDp: Number(entry.defDp) || 0,
             defAuto: Number(entry.defAuto) || 0,
             targetDebuffs: String(entry.targetDebuffs || '').slice(0, 200),
-            targetDebuffTotal: Number(entry.targetDebuffTotal) || 0
+            targetDebuffTotal: Number(entry.targetDebuffTotal) || 0,
+            // ===== 自動擲骰／傷害欄位 =====
+            damage: Number(entry.damage) || 0,           // 實際造成（套用）的傷害
+            rollSuccesses: Number(entry.rollSuccesses) || 0, // 擲骰成功數（未含附加成功）
+            rollExploded: Number(entry.rollExploded) || 0,   // 爆骰追加的骰數
+            rollTens: Number(entry.rollTens) || 0,           // 骰出 10 的數量（人格卡觸發判定）
+            rollDetail: String(entry.rollDetail || '').slice(0, 600), // 各骰點數明細（逗號分隔）
+            targetCount: Number(entry.targetCount) || 1,     // 目標數（AOE 用；單體=1）
+            clockTicks: Number.isFinite(Number(entry.clockTicks)) ? Number(entry.clockTicks) : -1 // 戰鬥起訖標記記錄的時鐘刻度（-1=無資料）
         });
 
         // FIFO：以 .once 讀取（非監聽，不會造成無限迴圈），超過 100 筆時移除最舊者。

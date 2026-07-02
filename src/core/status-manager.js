@@ -740,18 +740,58 @@ function listConsumeOnAttackedStatuses(unit) {
 
 /**
  * 攻擊結算完成後（ST 確認廣播時呼叫）：自動消耗目標身上的受擊消耗狀態並同步。
+ * 標記 consumeReducesMaxHp 的狀態（震顫）：消耗時同步削減目標生命上限等同層數
+ * （昏迷閾值前移），hpArr 依新上限截短（已排序，保留最嚴重的傷害）。
  * @param {string} unitId - 防禦方單位 ID
- * @returns {Array<{name:string, stacks:number}>} 實際被消耗的狀態
+ * @returns {{consumed: Array<{name:string, stacks:number}>, maxHpCut: number}}
  */
 function consumeOnAttackedStatuses(unitId) {
     const unit = findUnitById(unitId);
     const consumed = listConsumeOnAttackedStatuses(unit);
-    if (!consumed.length) return [];
-    consumed.forEach(s => { delete unit.status[s.name]; });
+    if (!consumed.length) return { consumed: [], maxHpCut: 0 };
+
+    let maxHpCut = 0;
+    consumed.forEach(s => {
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(s.name) : null;
+        if (def && def.consumeReducesMaxHp) {
+            const before = Math.max(1, parseInt(unit.maxHp) || 1);
+            unit.maxHp = Math.max(1, before - s.stacks);
+            maxHpCut += before - unit.maxHp;
+            if (Array.isArray(unit.hpArr) && unit.hpArr.length !== unit.maxHp) {
+                const old = unit.hpArr;
+                unit.hpArr = Array.from({ length: unit.maxHp }, (_, i) => old[i] || 0);
+            }
+        }
+        delete unit.status[s.name];
+    });
+
     syncUnitStatus(unitId);
+    if (maxHpCut > 0 && typeof broadcastState === 'function') broadcastState();
     renderUnitsList();
     renderSidebarUnits();
-    return consumed;
+    return { consumed, maxHpCut };
+}
+
+/**
+ * 戰鬥結束能量池歸零：移除全場所有單位身上標記 battleEndReset 的狀態
+ * （呼吸法／充能／學識等「戰鬥結束後重置」的特殊能量池）。
+ * 呼叫端（toggleCombat 結束分支）隨後會 broadcastState() 同步。
+ * @returns {string[]} 被清除的狀態名稱清單（去重）
+ */
+function clearBattleEndStatuses() {
+    const clearedNames = new Set();
+    if (typeof state === 'undefined' || !Array.isArray(state.units)) return [];
+    state.units.forEach(unit => {
+        if (!unit || !unit.status) return;
+        for (const statusName of Object.keys(unit.status)) {
+            const def = (typeof getStatusByName === 'function') ? getStatusByName(statusName) : null;
+            if (def && def.battleEndReset) {
+                delete unit.status[statusName];
+                clearedNames.add(statusName);
+            }
+        }
+    });
+    return [...clearedNames];
 }
 
 /**

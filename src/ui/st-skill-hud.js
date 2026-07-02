@@ -136,8 +136,10 @@ function setupPanelCollapse(headerId, stateObj, panelId, saveFn, renderCollapsed
  * @param {string} [opts.collapseBtnId] 標頭收起鈕 id（可選）
  * @param {{x:number,y:number}} [opts.defaultPos] 首次開啟的預設座標
  * @param {{icon:string, title:string}} [opts.dock] 提供時啟用右緣磁鐵收納（PanelDock）：
- *        拖到畫面右緣放開即收納成邊條圖標，點圖標還原
- * @returns {Object|undefined} stateObj（含 position / isCollapsed）
+ *        拖到畫面右緣放開即收納成邊條圖標，按住圖標拖出還原
+ * @param {boolean} [opts.restoreDock] 頁面載入時若上次是收納狀態，靜默還原成邊條圖標
+ *        （適用於常駐面板如對抗分配／侵蝕控制台；顯式開啟的面板不要傳，開啟即視為取出）
+ * @returns {Object|undefined} stateObj（含 position / isCollapsed / isDocked）
  */
 function makeFloatingPanel(opts) {
     const o = opts || {};
@@ -159,6 +161,7 @@ function makeFloatingPanel(opts) {
             y: (saved.position && Number.isFinite(saved.position.y)) ? saved.position.y : def.y,
         },
         isCollapsed: !!saved.isCollapsed,
+        isDocked: !!saved.isDocked,
     };
     const saveFn = () => {
         try { localStorage.setItem(o.storageKey, JSON.stringify(stateObj)); } catch (e) { /* 忽略配額/隱私模式錯誤 */ }
@@ -184,35 +187,58 @@ function makeFloatingPanel(opts) {
 
     // 右緣磁鐵收納：拖曳到畫面右緣 DOCK_ZONE 內放開 → 收納成邊條圖標
     const DOCK_ZONE = 44;
+    // 收納選項（拖入收納與載入時靜默還原共用）
+    const buildDockOpts = (silent) => ({
+        icon: o.dock.icon,
+        title: o.dock.title,
+        silent: !!silent,
+        onRestore: () => {
+            // 程式化還原（快捷球重開等）：面板置中出現，不再跳回右下角
+            stateObj.isDocked = false;
+            stateObj.position.x = Math.max(8, Math.round((window.innerWidth - (panel.offsetWidth || 340)) / 2));
+            stateObj.position.y = Math.max(20, Math.round(window.innerHeight * 0.18));
+            panel.style.left = stateObj.position.x + 'px';
+            panel.style.top = stateObj.position.y + 'px';
+            clampHudPosition(stateObj, o.panelId);
+            saveFn();
+        },
+        // 圖標拖出：面板標頭跟著指標走
+        onDragOut: (x, y) => {
+            stateObj.isDocked = false;
+            stateObj.position.x = x - Math.min(120, (panel.offsetWidth || 340) / 2);
+            stateObj.position.y = y - 16;
+            panel.style.left = stateObj.position.x + 'px';
+            panel.style.top = stateObj.position.y + 'px';
+        },
+        onDragOutEnd: () => {
+            clampHudPosition(stateObj, o.panelId);
+            saveFn();
+        },
+    });
+
     const dockHooks = (o.dock && typeof PanelDock !== 'undefined') ? {
         onDragMove: (cx) => PanelDock.setHint(cx > window.innerWidth - DOCK_ZONE),
         onDragEnd: (cx, cy, moved) => {
             PanelDock.setHint(false);
             if (!moved || cx <= window.innerWidth - DOCK_ZONE) return;
-            PanelDock.dock(o.panelId, {
-                icon: o.dock.icon,
-                title: o.dock.title,
-                onRestore: () => {
-                    // 程式化還原（快捷球重開等）：把面板從右緣拉回可視範圍
-                    stateObj.position.x = Math.max(8, window.innerWidth - (panel.offsetWidth || 340) - 24);
-                    panel.style.left = stateObj.position.x + 'px';
-                    clampHudPosition(stateObj, o.panelId);
-                    saveFn();
-                },
-                // 圖標拖出：面板標頭跟著指標走
-                onDragOut: (x, y) => {
-                    stateObj.position.x = x - Math.min(120, (panel.offsetWidth || 340) / 2);
-                    stateObj.position.y = y - 16;
-                    panel.style.left = stateObj.position.x + 'px';
-                    panel.style.top = stateObj.position.y + 'px';
-                },
-                onDragOutEnd: () => {
-                    clampHudPosition(stateObj, o.panelId);
-                    saveFn();
-                },
-            });
+            if (PanelDock.dock(o.panelId, buildDockOpts(false))) {
+                stateObj.isDocked = true;
+                saveFn();
+            }
         },
     } : undefined;
+
+    // 收納狀態持久化：常駐面板（restoreDock）載入時若上次收著就靜默收回邊條；
+    // 顯式開啟的面板（BOSS 設定等）開啟即視為取出，清除殘留的收納旗標
+    if (stateObj.isDocked && o.dock && typeof PanelDock !== 'undefined' && o.restoreDock) {
+        if (!PanelDock.dock(o.panelId, buildDockOpts(true))) {
+            stateObj.isDocked = false;
+            saveFn();
+        }
+    } else if (stateObj.isDocked) {
+        stateObj.isDocked = false;
+        saveFn();
+    }
 
     // 標頭拖曳 + WindowManager 置頂（同 tier 內最後點擊者在最上層）
     setupPanelDrag(o.panelId, o.headerId, stateObj, saveFn, dockHooks);

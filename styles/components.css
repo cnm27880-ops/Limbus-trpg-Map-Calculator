@@ -3877,6 +3877,22 @@ body.combat-mode .boss-hud-container {
     box-sizing: border-box;
 }
 
+/* ST 審核：自動擲骰開關 */
+.st-review-autoroll-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    font-size: 0.82rem;
+    color: var(--accent-green);
+    background: rgba(67, 160, 71, 0.08);
+    border: 1px solid rgba(67, 160, 71, 0.35);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
 .st-review-context {
     text-align: left;
     color: var(--accent-yellow);
@@ -5247,6 +5263,15 @@ body.combat-mode .boss-hud-container {
 .log-attacker { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); flex: 1; }
 .log-time { font-size: .72rem; color: var(--text-dim, #777); }
 .log-row-body { font-size: .82rem; color: var(--text-dim, #bbb); line-height: 1.45; }
+/* 自動擲骰的各骰點數明細（等寬字體便於數 10） */
+.log-roll-detail {
+    font-family: var(--font-mono, monospace);
+    font-size: .7rem;
+    color: var(--text-dim, #888);
+    margin-top: 3px;
+    word-break: break-all;
+    line-height: 1.5;
+}
 
 /* 回合徽章：標示這筆攻擊發生於第幾回合 */
 .log-round-chip {

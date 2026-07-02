@@ -51,6 +51,7 @@ function logViewSetupListener() {
         unsubscribeListeners.push(() => roomRef.child('combatLogs').off('value', listener));
     }
 
+    lvSetupMonsterLibListener(); // 怪物庫房間共享
     lvRenderMonsterLibrary();
 }
 
@@ -203,6 +204,14 @@ function renderCombatLogs() {
 
         contentDiv.appendChild(head);
         contentDiv.appendChild(body);
+
+        // 自動擲骰明細：各骰點數（供玩家核對「骰到 N 個 10 觸發」類人格卡）
+        if (log.rollDetail) {
+            const detail = document.createElement('div');
+            detail.className = 'log-roll-detail';
+            detail.textContent = `🎲 [${log.rollDetail}]` + ((Number(log.rollTens) || 0) > 0 ? `｜🔟×${log.rollTens}` : '');
+            contentDiv.appendChild(detail);
+        }
         row.appendChild(contentDiv);
         frag.appendChild(row);
     }
@@ -230,9 +239,12 @@ function logAoeAction(attackerName, targetNames, actionData) {
         const data = actionData || {};
 
         let effect;
+        let totalDamage = 0;
         if (data.type === 'damage') {
             const typeLabel = { b: 'B', l: 'L', a: 'A' }[data.dmgType] || '';
-            effect = `造成 ${Number(data.value) || 0} ${typeLabel}傷害`;
+            const per = Number(data.value) || 0;
+            totalDamage = per * names.length; // 每個目標各承受 value 點 → 總傷害 = 單發 × 目標數
+            effect = `造成 ${per} ${typeLabel}傷害 ×${names.length} 人（總計 ${totalDamage}）`;
         } else if (data.type === 'heal') {
             effect = `治療 ${Number(data.value) || 0} 點生命`;
         } else if (data.type === 'status') {
@@ -253,7 +265,9 @@ function logAoeAction(attackerName, targetNames, actionData) {
                 attackerRole: (typeof myRole !== 'undefined' && myRole === 'st') ? 'enemy' : 'player',
                 broadcastText: text,
                 entryType: 'aoe',
-                round: (typeof state !== 'undefined' && state.roundNum) || 0
+                round: (typeof state !== 'undefined' && state.roundNum) || 0,
+                targetCount: names.length,
+                damage: totalDamage
             });
         }
     } catch (e) {
@@ -296,28 +310,62 @@ function lvComputeBattleAnalysis() {
     }
     const segment = lvCombatLogs.slice(Math.max(0, startIdx), endIdx);
     const attacks = segment.filter(l => l && (l.entryType === 'attack' || l.entryType === undefined));
-    if (!attacks.length) return null;
+    const aoes = segment.filter(l => l && l.entryType === 'aoe');
+    if (!attacks.length && !aoes.length) return null;
 
     const ended = segment.some(l => l && l.entryType === 'battle_end');
     const rounds = Math.max(0, ...segment.map(l => Number(l.round) || 0));
 
-    const avgOf = (arr, key) => arr.length
-        ? Math.round(arr.reduce((a, l) => a + (Number(l[key]) || 0), 0) / arr.length * 10) / 10 : 0;
-    const maxOf = (arr, key) => arr.length ? Math.max(...arr.map(l => Number(l[key]) || 0)) : 0;
+    // 時鐘刻度消耗：戰鬥起訖標記各自記下當下刻度（-1=無資料）
+    const startMark = segment.find(l => l && l.entryType === 'battle_start');
+    const endMark = segment.find(l => l && l.entryType === 'battle_end');
+    const startTicks = (startMark && Number(startMark.clockTicks) >= 0) ? Number(startMark.clockTicks) : null;
+    let endTicks = (endMark && Number(endMark.clockTicks) >= 0) ? Number(endMark.clockTicks) : null;
+    if (endTicks === null && !ended && typeof eroClockTicks === 'number') endTicks = eroClockTicks; // 進行中：取當前刻度
+    const ticksUsed = (startTicks !== null && endTicks !== null) ? Math.max(0, startTicks - endTicks) : null;
+
+    // 舊版日誌沒有這些欄位：平均值只取「真的有記錄該欄位」的條目，
+    // 全部缺欄時回傳 null（顯示為 —），避免把缺資料誤算成 0
+    const avgOf = (arr, key) => {
+        const withField = arr.filter(l => typeof l[key] === 'number');
+        if (!withField.length) return null;
+        return Math.round(withField.reduce((a, l) => a + l[key], 0) / withField.length * 10) / 10;
+    };
+    const maxOf = (arr, key) => {
+        const withField = arr.filter(l => typeof l[key] === 'number');
+        return withField.length ? Math.max(...withField.map(l => l[key])) : null;
+    };
 
     const playerAtk = attacks.filter(l => l.attackerRole === 'player');
     const enemyAtk = attacks.filter(l => l.attackerRole !== 'player');
+    const playerAoe = aoes.filter(l => l.attackerRole === 'player');
+    // 有多少比例的條目帶有新版分析欄位（用於提示舊日誌）
+    const legacyCount = attacks.filter(l => typeof l.round !== 'number').length;
 
-    // 每回合曲線：玩家骰數均值 + 敵方（被玩家攻擊的目標）負面狀態最高總層數
+    // 玩家總傷害：單體攻擊（自動擲骰才有 damage）＋ AOE 總傷害
+    const sumOf = (arr, key) => arr.reduce((a, l) => a + (Number(l[key]) || 0), 0);
+    const playerDamage = sumOf(playerAtk, 'damage') + sumOf(playerAoe, 'damage');
+    const damagedCount = playerAtk.filter(l => (Number(l.damage) || 0) > 0).length;
+
+    // 每回合曲線：玩家攻擊次數/骰數均值/當回合傷害 + 敵方累積 debuff 峰值
     const byRound = [];
     for (let r = 1; r <= rounds; r++) {
         const pa = playerAtk.filter(l => (Number(l.round) || 0) === r);
+        const paoe = playerAoe.filter(l => (Number(l.round) || 0) === r);
         const debuffPeak = maxOf(playerAtk.filter(l => (Number(l.round) || 0) <= r), 'targetDebuffTotal');
-        byRound.push({ round: r, playerAttacks: pa.length, avgDice: avgOf(pa, 'finalDice'), debuffPeak });
+        byRound.push({
+            round: r, playerAttacks: pa.length, avgDice: avgOf(pa, 'finalDice'),
+            damage: sumOf(pa, 'damage') + sumOf(paoe, 'damage'), debuffPeak
+        });
     }
 
     return {
-        ended, rounds,
+        ended, rounds, ticksUsed, startTicks, endTicks,
+        playerDamage, damagedCount,
+        aoeCount: playerAoe.length,
+        aoeAvgTargets: avgOf(playerAoe, 'targetCount'),
+        aoeDamage: sumOf(playerAoe, 'damage'),
+        hasLegacyLogs: legacyCount > 0,
         playerAttackCount: playerAtk.length,
         playerAvgDice: avgOf(playerAtk, 'finalDice'),
         playerMaxDice: maxOf(playerAtk, 'finalDice'),
@@ -330,28 +378,81 @@ function lvComputeBattleAnalysis() {
         playerAvgDefAuto: avgOf(enemyAtk, 'defAuto'),
         // 敵方被疊 debuff 的速度：最終峰值與首次超過 10 層的回合
         debuffPeak: maxOf(playerAtk, 'targetDebuffTotal'),
-        debuffFastRound: (byRound.find(r => r.debuffPeak >= 10) || {}).round || 0,
+        debuffFastRound: (byRound.find(r => (r.debuffPeak || 0) >= 10) || {}).round || 0,
         lastTargetDebuffs: (playerAtk.slice(-1)[0] || {}).targetDebuffs || '',
         byRound
     };
 }
 
-/** 把回合分析整理成給 AI 的文字摘要（也用於 ST 檢視） */
+/** 把回合分析整理成給 AI 的文字摘要（也用於 ST 檢視）。null 欄位顯示為 —（舊日誌無此數據）。 */
 function lvAnalysisSummaryText(a) {
     if (!a) return '';
+    const f = (v) => (v === null || v === undefined) ? '—' : v;
     const lines = [
-        `本場戰鬥${a.ended ? '已結束' : '進行中'}，共 ${a.rounds || '?'} 回合。`,
-        `玩家攻擊 ${a.playerAttackCount} 次：平均擲骰 ${a.playerAvgDice} 顆（最高 ${a.playerMaxDice}）、平均附加成功 ${a.playerAvgExtra}、平均宣告攻擊 DP ${a.playerAvgAtkDp}。`,
-        `敵方攻擊 ${a.enemyAttackCount} 次（平均骰數 ${a.enemyAvgDice}）；玩家防禦 QTE 平均：防禦 DP ${a.playerAvgDefDp}、防禦附加成功 ${a.playerAvgDefAuto}。`,
-        `敵方單位被玩家疊負面狀態的峰值為 ${a.debuffPeak} 層` +
+        `本場戰鬥${a.ended ? '已結束' : '進行中'}，共 ${a.rounds || '—'} 回合` +
+            (a.ticksUsed !== null ? `，消耗時鐘刻度 ${a.ticksUsed}（${a.startTicks} → ${a.endTicks}）` : '') + '。',
+        `玩家攻擊 ${a.playerAttackCount} 次：平均擲骰 ${f(a.playerAvgDice)} 顆（最高 ${f(a.playerMaxDice)}）、平均附加成功 ${f(a.playerAvgExtra)}、平均宣告攻擊 DP ${f(a.playerAvgAtkDp)}。`,
+        `玩家總傷害 ${a.playerDamage}` +
+            (a.damagedCount ? `（自動擲骰結算 ${a.damagedCount} 次）` : '（尚無自動擲骰傷害紀錄）') +
+            (a.aoeCount ? `；AOE ${a.aoeCount} 次、平均命中 ${f(a.aoeAvgTargets)} 人、AOE 傷害共 ${a.aoeDamage}` : '') + '。',
+        `敵方攻擊 ${a.enemyAttackCount} 次（平均骰數 ${f(a.enemyAvgDice)}）；玩家防禦 QTE 平均：防禦 DP ${f(a.playerAvgDefDp)}、防禦附加成功 ${f(a.playerAvgDefAuto)}。`,
+        `敵方單位被玩家疊負面狀態的峰值為 ${f(a.debuffPeak)} 層` +
             (a.debuffFastRound ? `（第 ${a.debuffFastRound} 回合即突破 10 層——玩家疊 debuff 速度快）` : '') +
             (a.lastTargetDebuffs ? `；最近一次結算時目標身上：${a.lastTargetDebuffs}` : '') + '。'
     ];
     if (a.byRound.length) {
-        lines.push('逐回合（玩家攻擊次數/平均骰數/敵方累積 debuff 峰值）：' +
-            a.byRound.map(r => `R${r.round}: ${r.playerAttacks}次/${r.avgDice}顆/${r.debuffPeak}層`).join('；'));
+        lines.push('逐回合（玩家攻擊次數/平均骰數/傷害/敵方累積 debuff 峰值）：' +
+            a.byRound.map(r => `R${r.round}: ${r.playerAttacks}次/${f(r.avgDice)}顆/${r.damage}傷/${f(r.debuffPeak)}層`).join('；'));
+    }
+    // 歷次戰鬥難度曲線（回合數／平均骰數／總傷害／刻度消耗）
+    const history = (typeof lvComputeBattleHistory === 'function') ? lvComputeBattleHistory() : [];
+    if (history.length > 1) {
+        lines.push('歷次戰鬥曲線（回合/玩家平均骰/總傷害/刻度消耗）：' +
+            history.map((h, i) => `#${i + 1}: ${h.rounds || '—'}回合/${f(h.avgDice)}顆/${h.damage}傷/${f(h.ticksUsed)}刻度${h.ended ? '' : '（進行中）'}`).join('；'));
+    }
+    if (a.hasLegacyLogs) {
+        lines.push('（提示：包含更新前的舊日誌，「—」表示該筆無此數據；按「開始戰鬥」後的新戰鬥才有完整的回合／附加成功／防禦數據。）');
     }
     return lines.join('\n');
+}
+
+/**
+ * 歷次戰鬥難度曲線：依 battle_start 標記切分日誌，為每場戰鬥算出摘要
+ * （回合數／玩家平均骰數／玩家總傷害／時鐘刻度消耗），依時間先後排序。
+ * @returns {Array<{rounds:number, avgDice:number|null, damage:number, ticksUsed:number|null, ended:boolean}>}
+ */
+function lvComputeBattleHistory() {
+    const starts = [];
+    lvCombatLogs.forEach((l, i) => { if (l && l.entryType === 'battle_start') starts.push(i); });
+    if (!starts.length) return [];
+
+    return starts.map((startIdx, si) => {
+        const nextStart = (si + 1 < starts.length) ? starts[si + 1] : lvCombatLogs.length;
+        const endMark = lvCombatLogs.findIndex((l, i) => i > startIdx && i < nextStart && l && l.entryType === 'battle_end');
+        const segEnd = endMark >= 0 ? endMark + 1 : nextStart;
+        const seg = lvCombatLogs.slice(startIdx, segEnd);
+
+        const playerAtk = seg.filter(l => l && (l.entryType === 'attack' || l.entryType === undefined) && l.attackerRole === 'player');
+        const playerAoe = seg.filter(l => l && l.entryType === 'aoe' && l.attackerRole === 'player');
+        const withDice = playerAtk.filter(l => typeof l.finalDice === 'number');
+        const avgDice = withDice.length
+            ? Math.round(withDice.reduce((a, l) => a + l.finalDice, 0) / withDice.length * 10) / 10 : null;
+        const damage = playerAtk.reduce((a, l) => a + (Number(l.damage) || 0), 0)
+            + playerAoe.reduce((a, l) => a + (Number(l.damage) || 0), 0);
+
+        const startMark = seg[0];
+        const endM = endMark >= 0 ? lvCombatLogs[endMark] : null;
+        const sT = (startMark && Number(startMark.clockTicks) >= 0) ? Number(startMark.clockTicks) : null;
+        const eT = (endM && Number(endM.clockTicks) >= 0) ? Number(endM.clockTicks) : null;
+
+        return {
+            rounds: Math.max(0, ...seg.map(l => Number(l.round) || 0)),
+            avgDice,
+            damage,
+            ticksUsed: (sT !== null && eT !== null) ? Math.max(0, sT - eT) : null,
+            ended: endMark >= 0
+        };
+    });
 }
 
 function lvRenderDpsStat() {
@@ -363,38 +464,42 @@ function lvRenderDpsStat() {
 
     // 全程以 DOM 節點 + textContent 建構：分析摘要含跨客戶端的狀態名稱／單位名稱
     // （lastTargetDebuffs 等），不可經 innerHTML 注入，從根本杜絕 XSS。
+    // 火力統計與回合分析合併為同一個可展開區塊，標題列即摘要，避免重複資訊。
     el.textContent = '';
-    const statLine = document.createElement('span');
-    statLine.append('🎯 玩家火力統計：最近 ');
-    const countB = document.createElement('b');
-    countB.textContent = String(count);
-    statLine.appendChild(countB);
-    statLine.append(' 筆攻擊，平均擲骰數 ');
+    const a = lvComputeBattleAnalysis();
+
+    if (!a) {
+        const statLine = document.createElement('span');
+        statLine.append(`📊 戰況分析：最近 ${count} 筆攻擊，平均擲骰 `);
+        const avgB = document.createElement('b');
+        avgB.className = 'dps-value';
+        avgB.textContent = String(avg);
+        statLine.appendChild(avgB);
+        statLine.append(' 顆（尚無可分析的戰鬥區段）');
+        el.appendChild(statLine);
+        return;
+    }
+
+    const details = document.createElement('details');
+    details.className = 'log-analysis';
+    const summary = document.createElement('summary');
+    const roundsTxt = a.rounds ? `｜${a.ended ? '最近一場' : '本場'} ${a.rounds} 回合` : '';
+    summary.append(`📊 戰況分析：最近 ${count} 筆攻擊・平均擲骰 `);
     const avgB = document.createElement('b');
     avgB.className = 'dps-value';
     avgB.textContent = String(avg);
-    statLine.appendChild(avgB);
-    statLine.append(' 顆');
-    el.appendChild(statLine);
-
-    // 最近一場戰鬥的回合分析（可展開）
-    const a = lvComputeBattleAnalysis();
-    if (a) {
-        const details = document.createElement('details');
-        details.className = 'log-analysis';
-        const summary = document.createElement('summary');
-        summary.textContent = `📊 回合分析（${a.ended ? '最近一場' : '本場進行中'}｜${a.rounds || '?'} 回合）`;
-        const body = document.createElement('div');
-        body.className = 'log-analysis-body';
-        lvAnalysisSummaryText(a).split('\n').forEach(line => {
-            const row = document.createElement('div');
-            row.textContent = line;
-            body.appendChild(row);
-        });
-        details.appendChild(summary);
-        details.appendChild(body);
-        el.appendChild(details);
-    }
+    summary.appendChild(avgB);
+    summary.append(` 顆${roundsTxt}`);
+    const body = document.createElement('div');
+    body.className = 'log-analysis-body';
+    lvAnalysisSummaryText(a).split('\n').forEach(line => {
+        const row = document.createElement('div');
+        row.textContent = line;
+        body.appendChild(row);
+    });
+    details.appendChild(summary);
+    details.appendChild(body);
+    el.appendChild(details);
 }
 
 // ===== AI 動態遭遇生成器（ST） =====
@@ -519,16 +624,52 @@ async function requestAIEncounter() {
     }
 }
 
-// ===== 怪物庫（localStorage） =====
+// ===== 怪物庫（Firebase 房間共享，localStorage 作為離線快取／備援） =====
+let lvMonsterLibSynced = null; // 房間同步後的怪物庫（null=尚未同步，回退 localStorage）
+
 function lvLoadMonsterLibrary() {
+    if (Array.isArray(lvMonsterLibSynced)) return lvMonsterLibSynced;
     try {
         const raw = localStorage.getItem(LV_MONSTER_LIB_KEY);
         const arr = raw ? JSON.parse(raw) : [];
         return Array.isArray(arr) ? arr : [];
     } catch (e) { return []; }
 }
+
 function lvSaveMonsterLibrary(arr) {
     try { localStorage.setItem(LV_MONSTER_LIB_KEY, JSON.stringify(arr)); } catch (e) { /* quota */ }
+    // 房間共享：ST 寫入 Firebase，所有 ST 裝置／換裝置皆可取用
+    try {
+        if (typeof roomRef !== 'undefined' && roomRef && typeof myRole !== 'undefined' && myRole === 'st') {
+            roomRef.child('monsterLibrary').set(arr);
+        }
+    } catch (e) { /* 同步失敗不影響本機快取 */ }
+    lvMonsterLibSynced = Array.isArray(arr) ? arr : [];
+}
+
+/** 監聽房間怪物庫（由 logViewSetupListener 呼叫）。首次同步時若房間為空而本機有存貨，ST 自動上傳。 */
+function lvSetupMonsterLibListener() {
+    if (typeof roomRef === 'undefined' || !roomRef) return;
+    const ref = roomRef.child('monsterLibrary');
+    const listener = ref.on('value', snapshot => {
+        const val = snapshot.val();
+        const arr = Array.isArray(val) ? val.filter(Boolean)
+            : (val && typeof val === 'object') ? Object.values(val).filter(Boolean) : [];
+        if (!arr.length && lvMonsterLibSynced === null && typeof myRole !== 'undefined' && myRole === 'st') {
+            // 房間還沒有共享怪物庫：把本機既有怪物庫上傳（一次性遷移）
+            let local = [];
+            try { local = JSON.parse(localStorage.getItem(LV_MONSTER_LIB_KEY) || '[]') || []; } catch (e) { local = []; }
+            lvMonsterLibSynced = Array.isArray(local) ? local : [];
+            if (lvMonsterLibSynced.length) ref.set(lvMonsterLibSynced);
+        } else {
+            lvMonsterLibSynced = arr;
+            try { localStorage.setItem(LV_MONSTER_LIB_KEY, JSON.stringify(arr)); } catch (e) { /* quota */ }
+        }
+        lvRenderMonsterLibrary();
+    });
+    if (typeof unsubscribeListeners !== 'undefined') {
+        unsubscribeListeners.push(() => ref.off('value', listener));
+    }
 }
 
 /** 把任意 AI 回傳結構正規化為怪物陣列（接受 {monsters:[]}／陣列／單一物件）。 */
@@ -598,25 +739,70 @@ function lvDeployMonster(id) {
 function lvRenderMonsterLibrary() {
     const box = document.getElementById('monster-library-list');
     if (!box) return;
-    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
     const lib = lvLoadMonsterLibrary();
+
+    // 怪物庫已改為 Firebase 房間共享（跨客戶端資料），全程以 DOM 節點 + textContent
+    // 建構，不經 innerHTML，從根本杜絕 XSS。
+    box.textContent = '';
     if (!lib.length) {
-        box.innerHTML = '<div class="log-empty">怪物庫是空的。用上方 AI 構築或手動貼上 JSON 後存入。</div>';
+        const empty = document.createElement('div');
+        empty.className = 'log-empty';
+        empty.textContent = '怪物庫是空的。用上方 AI 構築或手動貼上 JSON 後存入。';
+        box.appendChild(empty);
         return;
     }
-    box.innerHTML = lib.map(m => `
-        <div class="monster-lib-card">
-            <div class="monster-lib-info">
-                <div class="monster-lib-name">${esc(m.name)}</div>
-                <div class="monster-lib-stats">HP ${m.hp}｜防 ${m.defDp}(+${m.defAuto})｜攻DP ${m.atkDp}｜先攻 ${m.init}</div>
-                ${m.passive ? `<div class="monster-lib-passive">🧬 ${esc(m.passive)}</div>` : ''}
-                ${m.notes ? `<div class="monster-lib-notes">${esc(m.notes)}</div>` : ''}
-            </div>
-            <div class="monster-lib-actions">
-                <button class="lv-btn lv-btn-deploy" onclick="lvDeployMonster('${m.id}')" title="建立此敵方單位">⚔ 部署</button>
-                <button class="lv-btn lv-btn-del" onclick="lvDeleteMonster('${m.id}')" title="從怪物庫刪除">🗑️</button>
-            </div>
-        </div>`).join('');
+
+    const frag = document.createDocumentFragment();
+    for (const m of lib) {
+        const card = document.createElement('div');
+        card.className = 'monster-lib-card';
+
+        const info = document.createElement('div');
+        info.className = 'monster-lib-info';
+
+        const name = document.createElement('div');
+        name.className = 'monster-lib-name';
+        name.textContent = String(m.name || '無名怪物');
+        info.appendChild(name);
+
+        const stats = document.createElement('div');
+        stats.className = 'monster-lib-stats';
+        stats.textContent = `HP ${Number(m.hp) || 0}｜防 ${Number(m.defDp) || 0}(+${Number(m.defAuto) || 0})｜攻DP ${Number(m.atkDp) || 0}｜先攻 ${Number(m.init) || 0}`;
+        info.appendChild(stats);
+
+        if (m.passive) {
+            const passive = document.createElement('div');
+            passive.className = 'monster-lib-passive';
+            passive.textContent = '🧬 ' + String(m.passive);
+            info.appendChild(passive);
+        }
+        if (m.notes) {
+            const notes = document.createElement('div');
+            notes.className = 'monster-lib-notes';
+            notes.textContent = String(m.notes);
+            info.appendChild(notes);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'monster-lib-actions';
+        const deployBtn = document.createElement('button');
+        deployBtn.className = 'lv-btn lv-btn-deploy';
+        deployBtn.title = '建立此敵方單位';
+        deployBtn.textContent = '⚔ 部署';
+        deployBtn.addEventListener('click', () => lvDeployMonster(m.id));
+        const delBtn = document.createElement('button');
+        delBtn.className = 'lv-btn lv-btn-del';
+        delBtn.title = '從怪物庫刪除';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => lvDeleteMonster(m.id));
+        actions.appendChild(deployBtn);
+        actions.appendChild(delBtn);
+
+        card.appendChild(info);
+        card.appendChild(actions);
+        frag.appendChild(card);
+    }
+    box.appendChild(frag);
 }
 
 // ===== Window bindings =====

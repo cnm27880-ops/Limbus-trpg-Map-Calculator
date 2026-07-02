@@ -83,10 +83,13 @@ const PanelDock = (function () {
         items.set(panelId, { btn, onRestore: o.onRestore, onDragOut: o.onDragOut, onDragOutEnd: o.onDragOutEnd });
         refresh();
 
-        // 短暫外滑讓使用者看到收納結果，再自動收合
-        expand();
-        scheduleCollapse();
-        if (typeof showToast === 'function') showToast(`已收納「${o.title || '面板'}」，按住圖標拖出即可取回`);
+        // silent：頁面載入時還原上次的收納狀態，不打擾使用者
+        if (!o.silent) {
+            // 短暫外滑讓使用者看到收納結果，再自動收合
+            expand();
+            scheduleCollapse();
+            if (typeof showToast === 'function') showToast(`已收納「${o.title || '面板'}」，按住圖標拖出即可取回`);
+        }
         return true;
     }
 
@@ -114,7 +117,8 @@ const PanelDock = (function () {
                 collapse();
                 const panel = document.getElementById(panelId);
                 if (panel) {
-                    panel.classList.remove('dock-hidden');
+                    // 一併解除 hidden：跨頁面重整還原的收納面板，重整後可能帶有預設的 hidden class
+                    panel.classList.remove('dock-hidden', 'hidden');
                     if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);
                 }
             }
@@ -146,7 +150,7 @@ const PanelDock = (function () {
 
         const panel = document.getElementById(panelId);
         if (!panel) return; // 面板已被程式移除（如 BOSS 設定已儲存關閉）
-        panel.classList.remove('dock-hidden');
+        panel.classList.remove('dock-hidden', 'hidden');
         if (typeof it.onRestore === 'function') it.onRestore();
         if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);
     }

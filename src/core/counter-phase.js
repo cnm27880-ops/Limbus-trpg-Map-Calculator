@@ -9,9 +9,10 @@
  * - 玩家本回合未對抗任何行動：玩家自身攻擊 DP + 支線等級x10
  */
 
-let counterPhaseState = { started: false, roundId: 0, bossId: null, actions: [], assignments: {} };
+let counterPhaseState = { started: false, roundId: 0, bossId: null, actions: [], assignments: {}, finalized: false };
 let counterPhaseListener = null;
 let cpLastPoppedRound = -1;
+let cpLastFinalizedRound = -1;
 
 function cpRef() {
     return (typeof roomRef !== 'undefined' && roomRef) ? roomRef.child('counterPhase') : null;
@@ -31,13 +32,14 @@ function cpAsArray(value) {
 }
 
 function cpNormalizeState(data) {
-    const base = { started: false, roundId: 0, bossId: null, actions: [], assignments: {} };
+    const base = { started: false, roundId: 0, bossId: null, actions: [], assignments: {}, finalized: false };
     if (!data) return base;
     return {
         ...base,
         ...data,
         actions: cpAsArray(data.actions),
-        assignments: (data.assignments && typeof data.assignments === 'object') ? data.assignments : {}
+        assignments: (data.assignments && typeof data.assignments === 'object') ? data.assignments : {},
+        finalized: !!data.finalized
     };
 }
 
@@ -66,6 +68,13 @@ function cpHandleUpdate() {
         cpLastPoppedRound = counterPhaseState.roundId;
         if (typeof openCounterAssignModal === 'function') openCounterAssignModal();
     }
+    // ST 公佈最終結果 → 自動彈出面板讓玩家看到結果（每輪僅一次）
+    if (counterPhaseState.finalized && counterPhaseState.roundId !== cpLastFinalizedRound) {
+        cpLastFinalizedRound = counterPhaseState.roundId;
+        if (typeof cpShowFloatPanel === 'function') cpShowFloatPanel();
+        if (typeof cpRenderFloatPanel === 'function') cpRenderFloatPanel();
+        if (typeof showToast === 'function') showToast('📢 ST 已公佈本輪對抗分配結果');
+    }
 }
 
 /**
@@ -88,19 +97,60 @@ function cpStartRound(bossId) {
         roundId: (counterPhaseState.roundId || 0) + 1,
         bossId,
         actions,
-        assignments: {}
+        assignments: {},
+        finalized: false
     });
     if (typeof showToast === 'function') showToast('已開始對抗徵詢，玩家端將自動跳出選擇視窗');
 }
 
 /**
- * 玩家：送出本回合要對抗的行動清單
+ * 玩家：送出本回合要對抗的行動清單（ST 公佈結果前可重複送出修改）。
+ * Firebase 不儲存空陣列（會直接移除該鍵、看起來像「未送出」），
+ * 故「不對抗任何行動」以 'none' 哨兵值表示；讀取端 cpAsArray('none') 會正規化回 []。
  * @param {string[]} actionIds
  */
 function cpSubmitAssignment(actionIds) {
     const ref = cpRef();
     if (!ref) return;
-    ref.child('assignments').update({ [myPlayerId]: actionIds });
+    if (counterPhaseState.finalized) {
+        if (typeof showToast === 'function') showToast('ST 已公佈本輪結果，無法再修改');
+        return;
+    }
+    ref.child('assignments').update({ [myPlayerId]: (actionIds && actionIds.length) ? actionIds : 'none' });
+}
+
+/**
+ * ST：手動指定某行動由哪位玩家對抗（playerId 傳空字串＝改為無人對抗）。
+ * 會先把該行動從所有玩家的分配中移除，再併入指定玩家的清單。
+ * @param {string} actionId
+ * @param {string} playerId
+ */
+function cpSTAssign(actionId, playerId) {
+    if (myRole !== 'st') return;
+    const ref = cpRef();
+    if (!ref) return;
+    const next = {};
+    Object.keys(counterPhaseState.assignments || {}).forEach(pid => {
+        const rest = cpAsArray(counterPhaseState.assignments[pid]).filter(id => id !== actionId);
+        next[pid] = rest.length ? rest : 'none';
+    });
+    if (playerId) {
+        const cur = (next[playerId] && next[playerId] !== 'none') ? next[playerId] : [];
+        cur.push(actionId);
+        next[playerId] = cur;
+    }
+    ref.child('assignments').set(next);
+}
+
+/**
+ * ST：公佈本輪最終結果。玩家端會自動彈出面板顯示結果，且不能再修改分配。
+ */
+function cpFinalizeRound() {
+    if (myRole !== 'st') return;
+    const ref = cpRef();
+    if (!ref || !counterPhaseState.started) return;
+    ref.update({ finalized: true });
+    if (typeof showToast === 'function') showToast('已公佈本輪對抗分配結果');
 }
 
 /**

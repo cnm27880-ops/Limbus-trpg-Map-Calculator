@@ -21,8 +21,9 @@ const STATUS_LIBRARY = {
             name: '燃燒',
             icon: '🔥',
             type: 'stack',
-            desc: '每回合受火焰傷害',
-            fullDesc: '每次結束行動時都會受到燃燒點數的火焰嚴重傷害。可用標準動作反射檢定撲滅（每成功數-1點）。與凍結互相抵銷。',
+            desc: '每回合受火焰傷害，結算後 -1',
+            fullDesc: '每次結束行動時都會受到燃燒點數的火焰嚴重傷害，每次結算燃燒傷害後層數自動 -1。可用標準動作反射檢定撲滅（每成功數-1點）。與凍結互相抵銷。（點狀態圖示可一鍵結算：自動扣血並 -1 層）',
+            tickDamage: 'l',
             keyResist: ['敏捷'],
             canCounter: ['freeze'],
             effects: {
@@ -50,8 +51,9 @@ const STATUS_LIBRARY = {
             name: '破裂',
             icon: '💎',
             type: 'stack',
-            desc: '受到的傷害增加',
-            fullDesc: '受到的所有傷害增加，具體數值由 GM 判定。',
+            desc: '受擊時消耗，增加受到的傷害',
+            fullDesc: '受到攻擊時消耗所有層數，該次受到的傷害增加等同層數的數值。（ST 確認攻擊結算後，系統會自動清除層數）',
+            consumeOnAttacked: true,
             keyResist: ['耐力','決心'],
             effects: {
                 light: '受到傷害增加',
@@ -222,6 +224,7 @@ const STATUS_LIBRARY = {
         },
         {
             id: 'command_target',
+            // 註：由 identity-hud 的 idtRollCommandTarget() 於食指玩家回合開始時自動抽選套用
             name: '指令對象',
             icon: '🔮',
             type: 'binary',
@@ -239,8 +242,8 @@ const STATUS_LIBRARY = {
             name: '業',
             icon: '⚖️',
             type: 'stack',
-            desc: '業力累積',
-            fullDesc: '累積業力，達到一定層數引發特殊效果。',
+            desc: '背離指令的業力',
+            fullDesc: '浮士德【食指】專屬：回合開始骰選指令對象後，攻擊指令對象以外的目標時獲得 1 層業。累積後的效果依【食指】規則由 ST 判定。',
             keyResist: null,
             effects: {
                 light: '業力累積',
@@ -253,8 +256,8 @@ const STATUS_LIBRARY = {
             name: '指令加護',
             icon: '✨',
             type: 'stack',
-            desc: '受到指令保護',
-            fullDesc: '獲得護盾或其他防禦增益。',
+            desc: '浮士德【紙條】專屬資源',
+            fullDesc: '浮士德【紙條】專屬資源：回合開始時每 3 層額外獲得 1 層呼吸法（處決技解鎖後）；處決技造成的最終傷害 +層數，滿 9 層時改為 +12。',
             keyResist: null,
             effects: {
                 light: '提升防禦力',
@@ -267,8 +270,9 @@ const STATUS_LIBRARY = {
             name: '震顫',
             icon: '🔔',
             type: 'stack',
-            desc: '震顫累積',
-            fullDesc: '受到震顫爆發時增加暈眩點數。',
+            desc: '受擊時消耗，削減昏迷閾值',
+            fullDesc: '受到攻擊時消耗所有層數，削減同等數值的昏迷閾值／生命上限。（ST 確認攻擊結算後，系統會自動清除層數）',
+            consumeOnAttacked: true,
             keyResist: null,
             effects: {
                 light: '被震顫爆發引爆',
@@ -281,8 +285,8 @@ const STATUS_LIBRARY = {
             name: '呼吸法',
             icon: '💨',
             type: 'stack',
-            desc: '調整呼吸',
-            fullDesc: '增加暴擊機率。',
+            desc: '特殊能量池-呼吸法',
+            fullDesc: '特殊能量池：由人格卡技能獲取與消耗（門檻加值、換取護盾等依各卡規則）。戰鬥結束後歸零重置。',
             keyResist: null,
             effects: {
                 light: '暴擊率提升',
@@ -865,6 +869,16 @@ const STATUS_LIBRARY = {
             effects: { light: '防禦附加成功 -層數', heavy: null, destruction: null }
         },
         {
+            id: 'vulnerable',
+            name: '易損',
+            icon: '💔',
+            type: 'stack',
+            desc: '受到傷害增加',
+            fullDesc: '目標受到的最終傷害增加等同於層數的數值；當施加者具有造成惡性傷害的能力時，此效果也可造成惡性傷害。',
+            keyResist: null,
+            effects: { light: '最終傷害 +層數', heavy: null, destruction: null }
+        },
+        {
             id: 'sinking',
             name: '沉淪',
             icon: '🌊',
@@ -1190,7 +1204,7 @@ const STATUS_DEBUFF_ID_FALLBACK = [
     'exhausted', 'blind', 'deaf', 'tinnitus', 'airborne', 'prone', 'immobilized', 'slow',
     'limb_impair', 'fatigue', 'pain', 'weak', 'banish', 'frozen_solid', 'limb_disabled', 'fear',
     'mental_bind', 'depression', 'charmed', 'fascinated', 'silence', 'seal', 'addiction',
-    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking'
+    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking', 'vulnerable'
 ];
 
 /**

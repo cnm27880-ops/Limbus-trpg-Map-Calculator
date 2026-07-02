@@ -1306,11 +1306,8 @@ function openMultiActionModal(bossId) {
             <div class="modal-body">
                 <!-- 區塊一：戰鬥數值（原獨立的「戰鬥數值設定」Modal，併入同一視窗以免來回切換） -->
                 <div class="ma-section-title">👹 戰鬥數值</div>
-                <div class="stat-grid cols-2">
+                <div class="stat-grid cols-3">
                     <label class="stat-field"><span>生命上限</span><input type="number" id="ma-boss-max-hp" value="${boss.maxHp || 1}" min="1"></label>
-                    <label class="stat-field"><span>支線等級</span><input type="number" id="ma-boss-side-level" value="${boss.sideLevel || 1}" min="1" max="99"></label>
-                </div>
-                <div class="stat-grid cols-2">
                     <label class="stat-field"><span>防禦</span><input type="number" id="ma-boss-def-dp" value="${boss.defDp || 0}"></label>
                     <label class="stat-field"><span>防禦附加成功</span><input type="number" id="ma-boss-def-auto" value="${boss.defAuto || 0}"></label>
                 </div>
@@ -1322,18 +1319,14 @@ function openMultiActionModal(bossId) {
                         <input type="number" id="ma-boss-save-tenacity" value="${boss.saveTenacity || 0}" placeholder="強韌">
                     </div>
                 </div>
-                <div class="stat-grid cols-2">
+                <div class="stat-grid cols-3">
                     <label class="stat-field"><span>全屬性</span><input type="number" id="ma-boss-all-attr" value="${boss.allAttr || 0}"></label>
                     <label class="stat-field"><span>全技能</span><input type="number" id="ma-boss-all-skill" value="${boss.allSkill || 0}"></label>
+                    <label class="stat-field"><span>支線等級</span><input type="number" id="ma-boss-side-level" value="${boss.sideLevel || 1}" min="1" max="99" title="「對抗分配」修正基數 = 等級 × 10"></label>
                 </div>
-                <label class="stat-field">
-                    <span>被動能力／特性（自由填寫，供 ST 臨場參考）</span>
-                    <textarea id="ma-boss-passive" rows="2" placeholder="例：每回合結束回復 10 HP；免疫流血；受火焰傷害 +50%……">${escapeHtml(boss.passive || '')}</textarea>
-                </label>
-                <div class="ma-hint">
-                    防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
-                    三豁免／全屬性／全技能／被動能力目前僅記錄＋顯示，供臨場判定參考，不會自動套入計算。
-                    支線等級為下方「對抗分配」修正基數（= 等級 × 10）。
+                <div class="stat-field">
+                    <span>被動能力／特性（逐條新增，供 ST 臨場參考）</span>
+                    <div id="ma-boss-passive-editor"></div>
                 </div>
 
                 <!-- 區塊二：多重行動設定（原獨立的「多重行動設定」Modal） -->
@@ -1343,30 +1336,14 @@ function openMultiActionModal(bossId) {
                     <input type="number" id="ma-count" value="${maEdit.actions.length}" min="1" max="12"
                            onchange="maSetCount(this.value)">
                 </div>
-                <div class="form-group">
-                    <label>各行動：先攻 / DP / 命中時對目標施加的狀態</label>
-                    <div id="ma-action-list"></div>
-                </div>
+                <div id="ma-action-list"></div>
                 <datalist id="ma-status-options"></datalist>
-                <div class="ma-hint">
-                    行動條目只佔先攻順序，沒有自己的血條；對 BOSS 的傷害照常打在本體上（本體生命上限見上方「戰鬥數值」）。
-                    DP 與狀態會在 ST 對玩家「發起威脅」時，依所選行動自動帶入並施加；勾選「AOE」的行動請改用下方群體操作套用。
-                </div>
 
                 <!-- 對抗分配（先攻對抗計算自動化） -->
                 <div class="skill-hud-aoe-section" style="padding:8px; border:1px solid var(--border); margin-top:8px;">
                     <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">🎲 對抗分配</div>
                     <button class="skill-action-btn" style="width:100%;margin-bottom:6px;" onclick="cpStartRound('${bossId}')">開始新輪次：徵詢玩家對抗行動</button>
                     <div id="ma-counter-status" style="font-size:0.78rem;color:var(--text-dim);"></div>
-                </div>
-
-                <!-- 群體操作 (AOE)：已改為「長按 T 鍵」的選取模式 -->
-                <div class="skill-hud-aoe-section aoe-hint-card" style="padding:8px; border:1px solid var(--border); margin-top:8px;">
-                    <div style="font-weight:bold; color:var(--accent-red); margin-bottom:4px;">💥 群體操作 (AOE)</div>
-                    <div style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;">
-                        AOE 結算已移至全新的「<b>長按 T 鍵</b>」選取模式：長按 T → 點擊棋子選取（紅色光暈）→ 鬆開 T 結算。
-                        勾選為 <b>AOE</b> 的行動，其 DP / 狀態會在結算視窗自動帶入。
-                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1379,6 +1356,7 @@ function openMultiActionModal(bossId) {
     `;
     document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
     maBuildStatusDatalist();
+    if (typeof initPassiveEditor === 'function') initPassiveEditor('ma-boss-passive-editor', boss.passive);
     renderMultiActionList();
     renderMultiActionCounterStatus();
     // 轉為可拖曳 / 雙擊收起的浮動面板（記憶位置與收合狀態），預設落在右側不擋戰場
@@ -1389,12 +1367,15 @@ function openMultiActionModal(bossId) {
             collapseBtnId: 'ma-collapse-btn',
             storageKey: 'limbus_boss_setup_panel',
             defaultPos: { x: Math.max(20, window.innerWidth - 400), y: 64 },
+            dock: { icon: '👹', title: `BOSS 設定 - ${boss.name || '單位'}` },
         });
     }
 }
 
 /**
- * 渲染多重行動 Modal 內的「對抗分配」狀態（counter-phase.js 狀態更新時呼叫）
+ * 渲染多重行動 Modal 內的「對抗分配」狀態（counter-phase.js 狀態更新時呼叫）。
+ * ST 可用每列的下拉手動指定／改派對抗者（玩家還沒討論好就先點了也能改回來），
+ * 調整完按「公佈最終結果」推送給所有玩家並鎖定本輪分配。
  */
 function renderMultiActionCounterStatus() {
     const box = document.getElementById('ma-counter-status');
@@ -1406,13 +1387,38 @@ function renderMultiActionCounterStatus() {
     const actions = counterPhaseState.actions || [];
     const assignments = counterPhaseState.assignments || {};
     const submitted = Object.keys(assignments);
+    const finalized = !!counterPhaseState.finalized;
+
+    // 玩家候選清單（每位玩家取其第一個棋子的名稱），供 ST 手動指定對抗者
+    const candidates = [];
+    const seenOwners = new Set();
+    (state.units || []).forEach(u => {
+        if (u.type === 'player' && u.ownerId && !u.actionSlotOf && !seenOwners.has(u.ownerId)) {
+            seenOwners.add(u.ownerId);
+            candidates.push({ id: u.ownerId, name: u.name || u.ownerName || u.ownerId });
+        }
+    });
+
     const rows = actions.map(a => {
-        const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
-        return r.playerId
-            ? `${escapeHtml(a.label)}：${escapeHtml(r.playerName)} 對抗（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）`
-            : `${escapeHtml(a.label)}：無人對抗`;
-    }).join('<br>');
-    box.innerHTML = `已送出 ${submitted.length} 人<br>${rows}`;
+        const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerId: null, playerName: '', mod: 0 };
+        const options = ['<option value="">— 無人對抗 —</option>']
+            .concat(candidates.map(p =>
+                `<option value="${escapeHtml(p.id)}" ${r.playerId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`))
+            .join('');
+        const modTxt = r.playerId ? `DP ${r.mod >= 0 ? '+' : ''}${r.mod}` : '';
+        return `<div class="cp-st-row">
+            <span class="cp-st-label">${escapeHtml(a.label)}</span>
+            <select onchange="cpSTAssign('${a.id}', this.value)" title="手動指定／改派此行動的對抗者">${options}</select>
+            <span class="cp-st-mod">${modTxt}</span>
+        </div>`;
+    }).join('');
+
+    box.innerHTML = `
+        <div style="margin-bottom:4px;">已送出 ${submitted.length} 人${finalized ? '｜<span style="color:var(--accent-green);">✅ 已公佈</span>' : ''}</div>
+        ${rows}
+        <button class="skill-action-btn" style="width:100%;margin-top:6px;" onclick="cpFinalizeRound()" ${finalized ? 'disabled' : ''}>
+            ${finalized ? '✅ 已公佈最終結果' : '📢 公佈最終結果給玩家'}
+        </button>`;
 }
 
 /** 從單位讀取行動設定（先攻 / DP / 狀態 / 是否為AOE行動），含舊資料相容 */
@@ -1426,6 +1432,8 @@ function maReadActionFrom(unit) {
 }
 
 function closeMultiActionModal() {
+    // 面板被程式關閉（儲存/移除）時，若已收納在右緣邊條需一併清掉圖標
+    if (typeof PanelDock !== 'undefined') PanelDock.remove('multi-action-modal');
     const modal = document.getElementById('multi-action-modal');
     if (modal) modal.remove();
     maEdit = null;
@@ -1514,20 +1522,22 @@ function renderMultiActionList() {
         <div class="ma-action-card">
             <div class="ma-action-head">
                 行動${i + 1}${i === 0 ? '（本體）' : ''}
-                <label class="ma-aoe-toggle" title="勾選後此行動視為群體(AOE)效果，僅透過下方「群體操作」套用，不會出現在單體威脅快選中">
-                    <input type="checkbox" ${a.aoe ? 'checked' : ''} onchange="maToggleAoe(${i}, this.checked)"> AOE
+                <label class="ma-aoe-switch" title="開啟後此行動視為群體(AOE)效果，以長按 T 鍵的選取模式結算，不會出現在單體威脅快選中">
+                    <input type="checkbox" ${a.aoe ? 'checked' : ''} onchange="maToggleAoe(${i}, this.checked)">
+                    <span class="aoe-text">AOE</span>
+                    <span class="aoe-track"></span>
                 </label>
             </div>
             <div class="ma-action-fields">
-                <label>先攻<input type="number" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
-                <label>DP<input type="number" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
+                <label class="ma-f-narrow">先攻<input type="number" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
+                <label class="ma-f-narrow">DP<input type="number" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
+                <label class="ma-f-wide">命中施加狀態<input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="例：破裂"></label>
             </div>
             <div class="ma-status-row">
-                <input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="狀態名稱（例：破裂）">
-                <input type="number" id="ma-status-stack-${i}" value="1" title="層數" style="width:56px;">
+                <input type="number" id="ma-status-stack-${i}" value="1" title="層數" style="width:48px;">
                 <button class="ma-mini-btn" onclick="maAddStatus(${i})">＋</button>
+                <div class="ma-status-chips">${chips}</div>
             </div>
-            <div class="ma-status-chips">${chips}</div>
         </div>`;
     }).join('');
 }
@@ -1550,7 +1560,7 @@ function saveMultiAction(bossId) {
     boss.allAttr = parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0;
     boss.allSkill = parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0;
     boss.sideLevel = Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1);
-    boss.passive = (document.getElementById('ma-boss-passive')?.value || '').trim();
+    boss.passive = (typeof readPassiveEditor === 'function') ? readPassiveEditor('ma-boss-passive-editor') : (boss.passive || '');
     if (Array.isArray(boss.hpArr) && boss.hpArr.length !== boss.maxHp) {
         const old = boss.hpArr;
         boss.hpArr = Array.from({ length: boss.maxHp }, (_, i) => old[i] || 0);
@@ -1629,7 +1639,7 @@ function saveMultiActionAsTemplate(bossId) {
             allAttr: parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0,
             allSkill: parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0,
             sideLevel: Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1),
-            passive: (document.getElementById('ma-boss-passive')?.value || '').trim(),
+            passive: (typeof readPassiveEditor === 'function') ? readPassiveEditor('ma-boss-passive-editor') : (boss.passive || ''),
             actionDp: action0.dp || 0,
             actionAoe: !!action0.aoe,
             actionStatuses: action0.statuses.map(s => ({ ...s }))

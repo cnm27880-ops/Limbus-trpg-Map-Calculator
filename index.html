@@ -216,9 +216,12 @@
 
 <!-- E.G.O 侵蝕控制台（ST 專屬浮動面板） -->
 <div id="erosion-hud" class="floating-hud hidden">
-    <div class="floating-hud-header">
+    <div class="floating-hud-header" id="erosion-hud-header">
         <span>🔥 E.G.O 侵蝕控制台</span>
-        <button class="floating-hud-close" onclick="closeErosionHud()">×</button>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" id="erosion-hud-collapse" title="收起">▾</button>
+            <button class="floating-hud-close" onclick="closeErosionHud()">×</button>
+        </span>
     </div>
     <div id="erosion-hud-body" class="floating-hud-body"></div>
 </div>
@@ -238,10 +241,10 @@
             <div class="combat-modal-target" id="attack-target-name">目標：---</div>
             <div class="attack-boss-actions" id="attack-boss-actions" style="display:none;"></div>
 
-            <!-- 攻擊動作：基礎判定數值 -->
+            <!-- 攻擊動作：基礎判定數值＋穿透（破甲/高速/破魔，直接併入攻擊 DP 桶） -->
             <div class="identity-card">
                 <div class="identity-card-title">⚔️ 攻擊判定</div>
-                <div class="calc-grid">
+                <div class="calc-grid cols-2">
                     <div class="calc-field">
                         <span class="calc-label">總攻擊 DP</span>
                         <input type="number" id="attack-dp" value="0" min="0">
@@ -259,22 +262,17 @@
                         <input type="number" id="attack-crit-vicious" value="0" min="0">
                     </div>
                 </div>
-            </div>
-
-            <!-- 資源狀態：穿透（等效 DP），與攻擊動作分開擺放 -->
-            <div class="identity-card is-resource">
-                <div class="identity-card-title">🔮 穿透 / 等效 DP</div>
-                <div class="calc-grid">
+                <div class="calc-grid cols-3" style="margin-top:8px;">
                     <div class="calc-field">
-                        <span class="calc-label">破甲（等效 DP）</span>
+                        <span class="calc-label">破甲</span>
                         <input type="number" id="attack-armor-pierce" value="0" min="0">
                     </div>
                     <div class="calc-field">
-                        <span class="calc-label">高速（等效 DP）</span>
+                        <span class="calc-label">高速</span>
                         <input type="number" id="attack-haste-pierce" value="0" min="0">
                     </div>
                     <div class="calc-field">
-                        <span class="calc-label">破魔（等效 DP）</span>
+                        <span class="calc-label">破魔</span>
                         <input type="number" id="attack-magic-pierce" value="0" min="0">
                     </div>
                 </div>
@@ -295,7 +293,7 @@
         </div>
         <div class="modal-body">
             <div class="qte-warning-banner" id="defense-qte-warning">⚠️ 你正遭受攻擊！立即填入防禦數值！</div>
-            <div class="calc-grid">
+            <div class="calc-grid cols-2">
                 <div class="calc-field">
                     <span class="calc-label">防禦總 DP</span>
                     <input type="number" id="defense-dp" value="0" min="0">
@@ -381,11 +379,14 @@
     </div>
 </div>
 
-<!-- 本回合對抗分配：浮動面板（玩家端，送出後仍可查看，可雙擊縮放、可關閉、可由快捷球重開） -->
-<div id="counter-float-panel" class="counter-float-panel hidden" ondblclick="cpToggleZoomFloatPanel(event)">
-    <div class="counter-float-header">
+<!-- 本回合對抗分配：浮動面板（玩家端，可拖曳、雙擊標頭收起、拖到右緣收納、可由快捷球重開） -->
+<div id="counter-float-panel" class="counter-float-panel hidden">
+    <div class="counter-float-header" id="counter-float-header">
         <span class="counter-float-title">⚔️ 本回合對抗分配</span>
-        <button class="counter-float-close" onclick="cpCloseFloatPanel(event)">×</button>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" id="counter-float-collapse" title="收起">▾</button>
+            <button class="counter-float-close" onclick="cpCloseFloatPanel(event)">×</button>
+        </span>
     </div>
     <div class="counter-float-body" id="counter-float-body">尚未開始本輪徵詢</div>
 </div>
@@ -617,6 +618,7 @@
 
 <!-- UI 層 -->
 <script src="src/ui/window-manager.js"></script>
+<script src="src/ui/panel-dock.js"></script>
 <script src="src/ui/camera.js"></script>
 <script src="src/ui/map-canvas.js"></script>
 <script src="src/ui/map.js"></script>

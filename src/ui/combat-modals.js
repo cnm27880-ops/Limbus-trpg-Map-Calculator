@@ -303,6 +303,8 @@ function cqOnSTReview(data) {
     if (reviewModal) {
         reviewModal.dataset.baseDice = String(baseDice);
         reviewModal.dataset.baseExtraSuccess = String(baseExtraSuccess);
+        // 防禦方 id 一併釘上：確認廣播時自動消耗其受擊消耗狀態（破裂/震顫）
+        reviewModal.dataset.targetId = (data.target && data.target.id) ? String(data.target.id) : '';
     }
 
     // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
@@ -336,6 +338,20 @@ function cqOnSTReview(data) {
             rows.push({ label: '對目標施加', value: atk.identityStatusNotes.join('、'), cls: 'is-penalty' });
         if (Array.isArray(atk.identitySelfStatusNotes) && atk.identitySelfStatusNotes.length)
             rows.push({ label: '對自己施加', value: atk.identitySelfStatusNotes.join('、'), cls: 'is-bonus' });
+
+        // 防禦方身上的「受擊消耗」狀態（破裂/震顫）：提示 ST 本次結算需計入其效果，
+        // 確認廣播後會自動清除層數
+        const targetUnit = (data.target && data.target.id && typeof findUnitById === 'function')
+            ? findUnitById(data.target.id) : null;
+        const consumable = (typeof listConsumeOnAttackedStatuses === 'function')
+            ? listConsumeOnAttackedStatuses(targetUnit) : [];
+        if (consumable.length) {
+            rows.push({
+                label: '目標受擊消耗',
+                value: consumable.map(s => `${s.name} ${s.stacks} 層`).join('、') + '（廣播後自動清除）',
+                cls: 'is-penalty'
+            });
+        }
 
         if (rows.length) {
             const list = document.createElement('div');
@@ -392,6 +408,15 @@ function confirmSTReview() {
 
     closeModal('st-review-modal');
     cqBroadcastResult(finalDice, baseExtraSuccess, modifier);
+
+    // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零
+    const targetId = ds.targetId || '';
+    if (targetId && typeof consumeOnAttackedStatuses === 'function') {
+        const consumed = consumeOnAttackedStatuses(targetId);
+        if (consumed.length && typeof showToast === 'function') {
+            showToast('💥 已自動消耗目標的 ' + consumed.map(s => `${s.name} ${s.stacks} 層`).join('、'));
+        }
+    }
 }
 
 /**
@@ -415,9 +440,14 @@ function openCounterAssignModal() {
 }
 
 /**
- * 渲染浮動面板內容。尚未送出：顯示可勾選的行動清單與送出按鈕；
- * 已送出：顯示唯讀狀態（行動對應的棋子名稱，或「等待對抗中……」），並持續即時更新。
+ * 渲染浮動面板內容（依狀態分三種視圖）：
+ *  1) 未送出／按「修改」且未公佈：可勾選的行動清單＋送出按鈕（送出後、公佈前可再修改）
+ *  2) 已送出、未公佈：即時顯示各行動目前由誰對抗＋「修改我的選擇」按鈕
+ *  3) ST 已公佈：最終結果視圖（含自己的 DP 修正摘要），鎖定不可再改
  */
+let cpEditingAssign = false;   // 玩家按「修改我的選擇」進入重新勾選模式
+let cpEditingRound = -1;       // 修改模式對應的輪次（換輪自動退出）
+
 function cpRenderFloatPanel() {
     const body = document.getElementById('counter-float-body');
     if (!body) return;
@@ -432,49 +462,86 @@ function cpRenderFloatPanel() {
 
     const actions = counterPhaseState.actions || [];
     const assignments = counterPhaseState.assignments || {};
+    const finalized = !!counterPhaseState.finalized;
     const mine = (myRole !== 'st') ? assignments[myPlayerId] : undefined;
     const hasSubmitted = mine !== undefined;
+    const myIds = (typeof cpAsArray === 'function') ? cpAsArray(mine) : (Array.isArray(mine) ? mine : []);
+    if (cpEditingRound !== counterPhaseState.roundId) cpEditingAssign = false;
 
-    if (!hasSubmitted && myRole !== 'st') {
+    // 視圖 1：可勾選（未送出，或按了「修改」且 ST 尚未公佈）
+    if (myRole !== 'st' && !finalized && (!hasSubmitted || cpEditingAssign)) {
         const rows = actions.map(a => `
             <label class="counter-assign-row">
-                <input type="checkbox" value="${a.id}" class="counter-float-check counter-assign-check">
+                <input type="checkbox" value="${a.id}" class="counter-float-check counter-assign-check" ${myIds.includes(a.id) ? 'checked' : ''}>
                 <span>${escapeHtml(a.label)}（先攻 ${a.init}）</span>
             </label>
         `).join('');
         body.innerHTML = `
-            <p style="font-size:0.8rem;color:var(--text-dim);margin:0 0 6px;">勾選你這回合要對抗的 BOSS 行動（可複選，可不選）。未勾選任何行動，本回合你的攻擊 DP 會自動加成。</p>
+            <p style="font-size:0.8rem;color:var(--text-dim);margin:0 0 6px;">勾選你這回合要對抗的 BOSS 行動（可複選，可不選）。送出後在 ST 公佈結果前仍可修改。未勾選任何行動，本回合你的攻擊 DP 會自動加成。</p>
             ${rows || '<div class="bb-hint">尚無行動資料</div>'}
-            <button class="modal-btn" onclick="submitCounterAssign()" style="background:var(--accent-green);width:100%;margin-top:8px;">送出</button>
+            <button class="modal-btn" onclick="submitCounterAssign()" style="background:var(--accent-green);width:100%;margin-top:8px;">送出${hasSubmitted ? '修改' : ''}</button>
         `;
         return;
     }
 
-    // 已送出（或 ST 檢視）：唯讀顯示每個行動目前對抗狀態
+    // 視圖 2 / 3：唯讀顯示每個行動目前（或最終）的對抗狀態
     const rows = actions.map(a => {
         const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
         const statusHtml = r.playerId
             ? `<span class="ca-taken">${escapeHtml(r.playerName)}（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）</span>`
-            : `<span class="ca-waiting">等待對抗中……</span>`;
+            : `<span class="ca-waiting">${finalized ? '無人對抗' : '等待對抗中……'}</span>`;
         return `<div class="counter-float-row"><span>${escapeHtml(a.label)}</span>${statusHtml}</div>`;
     }).join('');
     const submittedCount = Object.keys(assignments).length;
-    body.innerHTML = `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">已送出 ${submittedCount} 人</div>${rows}`;
+
+    const head = finalized
+        ? '<div class="cp-final-badge">📢 最終結果已公佈</div>'
+        : `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">已送出 ${submittedCount} 人（ST 公佈前可修改）</div>`;
+
+    let footer = '';
+    if (myRole !== 'st' && !finalized && hasSubmitted) {
+        footer = '<button class="modal-btn" onclick="cpEditAssign()" style="background:var(--bg-card);width:100%;margin-top:8px;">✏️ 修改我的選擇</button>';
+    } else if (myRole !== 'st' && finalized) {
+        // 自己的最終修正摘要
+        const meUnit = (typeof state !== 'undefined' && Array.isArray(state.units))
+            ? state.units.find(u => u.ownerId === myPlayerId) : null;
+        const mods = (typeof cpResolvePlayerMods === 'function')
+            ? cpResolvePlayerMods(myPlayerId, meUnit ? (meUnit.init || 0) : 0)
+            : { selfBonus: 0 };
+        footer = mods.selfBonus > 0
+            ? `<div class="cp-self-bonus">你本回合未對抗任何行動：自身攻擊 DP <b>+${mods.selfBonus}</b></div>`
+            : `<div class="cp-self-bonus">你本回合對抗 ${myIds.length} 個行動（BOSS 該行動 DP 修正見上方清單）</div>`;
+    }
+    body.innerHTML = head + rows + footer;
+}
+
+/** 玩家：重新進入勾選模式修改自己的分配（ST 公佈前有效） */
+function cpEditAssign() {
+    if (counterPhaseState.finalized) return;
+    cpEditingAssign = true;
+    cpEditingRound = counterPhaseState.roundId;
+    cpRenderFloatPanel();
 }
 
 function submitCounterAssign() {
     const checks = document.querySelectorAll('#counter-float-body .counter-assign-check:checked');
     const ids = Array.from(checks).map(c => c.value);
     cpSubmitAssignment(ids);
+    cpEditingAssign = false;
     if (typeof showToast === 'function') showToast('已送出本回合對抗分配');
     // assignments 會透過 Firebase 監聽回流並自動重新渲染為唯讀狀態，這裡先樂觀渲染避免畫面延遲
     cpRenderFloatPanel();
 }
 
-/** 顯示浮動面板（不重置縮放狀態）。 */
+/** 顯示浮動面板（若被收納在右緣邊條則先還原）。 */
 function cpShowFloatPanel() {
     const panel = document.getElementById('counter-float-panel');
-    if (panel) panel.classList.remove('hidden');
+    if (!panel) return;
+    if (typeof PanelDock !== 'undefined' && PanelDock.isDocked('counter-float-panel')) {
+        PanelDock.restore('counter-float-panel');
+    }
+    panel.classList.remove('hidden');
+    if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);
 }
 
 /** 關閉浮動面板（玩家可隨時關閉，之後可由快捷球重新開啟）。 */
@@ -486,15 +553,27 @@ function cpCloseFloatPanel(event) {
 
 /** 快捷球「本回合對抗分配」選單項：重新開啟並渲染浮動面板。 */
 function cpToggleFloatPanel() {
-    const panel = document.getElementById('counter-float-panel');
-    if (!panel) return;
-    panel.classList.remove('hidden');
+    cpShowFloatPanel();
     cpRenderFloatPanel();
 }
 
-/** 雙擊面板標頭區域切換縮放（zoomed）大小，方便詳細查看。 */
-function cpToggleZoomFloatPanel(event) {
-    if (event && event.target && event.target.closest('.counter-float-close')) return;
-    const panel = document.getElementById('counter-float-panel');
-    if (panel) panel.classList.toggle('zoomed');
+/**
+ * 初始化：把對抗分配面板接上通用浮動面板（標頭拖曳／雙擊收起／右緣磁鐵收納）。
+ * 舊的「雙擊縮放 (zoomed)」已由標準的收起／展開取代。
+ */
+function cpInitFloatPanel() {
+    if (typeof makeFloatingPanel !== 'function') return;
+    makeFloatingPanel({
+        panelId: 'counter-float-panel',
+        headerId: 'counter-float-header',
+        collapseBtnId: 'counter-float-collapse',
+        storageKey: 'limbus_counter_float_panel',
+        defaultPos: { x: Math.max(20, window.innerWidth - 350), y: Math.max(60, window.innerHeight - 460) },
+        dock: { icon: '⚔️', title: '本回合對抗分配' },
+    });
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', cpInitFloatPanel);
+} else {
+    cpInitFloatPanel();
 }

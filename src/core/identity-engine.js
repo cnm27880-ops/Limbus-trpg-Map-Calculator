@@ -26,7 +26,16 @@
  */
 
 // 引擎會自動累加的數值加值欄位
-const IDENTITY_BONUS_KEYS = ['dpBonus', 'weaponDamage', 'extraSuccess', 'spellPower', 'finalDamage'];
+// selfShield：使自身獲得「單位護盾值」（一次性護盾，見 units.js 護盾系統），
+//             與 shield（人民之盾狀態）不同——後者是狀態層數，前者是單位卡上的護盾點數。
+const IDENTITY_BONUS_KEYS = ['dpBonus', 'weaponDamage', 'extraSuccess', 'spellPower', 'finalDamage', 'selfShield'];
+
+/** 產生歸零的加值累積物件（兩個評估入口共用，避免未初始化鍵累加出 NaN） */
+function makeZeroTotals() {
+    const totals = {};
+    for (const key of IDENTITY_BONUS_KEYS) totals[key] = 0;
+    return totals;
+}
 
 /**
  * 將人格卡的輸入項正規化為 { id, unlocked } 結構。
@@ -213,7 +222,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
     const target = ensureStatefulUnit(targetState);
 
     const result = {
-        totals: { dpBonus: 0, weaponDamage: 0, extraSuccess: 0, spellPower: 0, finalDamage: 0 },
+        totals: makeZeroTotals(),
         triggerLogs: [],
         expectedTargetStatus: {},
         expectedSelfStatus: {}
@@ -254,7 +263,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
  */
 function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     const attacker = ensureStatefulUnit(attackerState);
-    const result = { triggerLogs: [], expectedSelfStatus: {}, totals: {}, expectedTargetStatus: {} };
+    const result = { triggerLogs: [], expectedSelfStatus: {}, totals: makeZeroTotals(), expectedTargetStatus: {} };
 
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
@@ -267,7 +276,7 @@ function evaluatePlayerTurnStart(playerIdentities, attackerState) {
             processHooks(card.hooks.onTurnStart, 'turnStart', card, unlocked, attacker, attacker, result);
         }
     }
-    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs };
+    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
 }
 
 // ===== 瀏覽器全域匯出（與專案其他模組一致，使用全域函式） =====

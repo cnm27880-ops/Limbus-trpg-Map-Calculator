@@ -1525,6 +1525,42 @@ body.aoe-select-active .token {
     font-family: inherit;
 }
 
+/* 被動能力／特性：逐條新增（可刪除）的條目編輯器 */
+.passive-entry-list { display: flex; flex-direction: column; gap: 4px; }
+.passive-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    color: var(--text-main);
+}
+.passive-entry span { flex: 1; min-width: 0; word-break: break-word; }
+.passive-entry button {
+    background: none;
+    border: none;
+    color: var(--accent-red);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0;
+}
+.passive-entry-add { display: flex; gap: 5px; margin-top: 4px; }
+.passive-entry-add input {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-size: 0.82rem;
+}
+
 /* 「BOSS 設定」合併視窗（units.js openMultiActionModal）內的區塊分隔標題 */
 .ma-section-title {
     font-weight: bold;
@@ -3678,6 +3714,16 @@ body.combat-mode .boss-hud-container {
     gap: 4px;
 }
 
+/* 攻擊 / 防禦 QTE：欄位改為多欄排列，縮短視窗高度 */
+#attack-modal .calc-grid,
+#defense-qte-modal .calc-grid {
+    display: grid;
+    gap: 8px;
+}
+#attack-modal .calc-grid.cols-2,
+#defense-qte-modal .calc-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+#attack-modal .calc-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
 #attack-modal .calc-field input,
 #defense-qte-modal .calc-field input,
 #st-review-modal .calc-field input {
@@ -4040,22 +4086,61 @@ body.combat-mode .boss-hud-container {
     align-items: center;
     justify-content: space-between;
 }
-.ma-aoe-toggle {
-    display: flex;
+/* AOE 工業風切換開關（取代舊勾選格） */
+.ma-aoe-switch {
+    display: inline-flex;
     align-items: center;
-    gap: 3px;
-    font-size: 0.7rem;
-    font-weight: normal;
-    color: var(--text-dim);
+    gap: 6px;
     cursor: pointer;
+    user-select: none;
 }
+.ma-aoe-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.ma-aoe-switch .aoe-text {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    transition: color 0.15s;
+}
+.ma-aoe-switch .aoe-track {
+    width: 34px;
+    height: 16px;
+    border-radius: 3px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    position: relative;
+    transition: background 0.15s, border-color 0.15s;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.ma-aoe-switch .aoe-track::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(180deg, #3a3a42, #26262c);
+    border: 1px solid #4a4a52;
+    border-radius: 2px;
+    box-sizing: border-box;
+    transition: left 0.15s, background 0.15s;
+}
+.ma-aoe-switch input:checked ~ .aoe-track {
+    background: rgba(229, 57, 53, 0.35);
+    border-color: var(--accent-red);
+}
+.ma-aoe-switch input:checked ~ .aoe-track::after {
+    left: 19px;
+    background: linear-gradient(180deg, var(--accent-red), #b71c1c);
+    border-color: #ff6b6b;
+}
+.ma-aoe-switch input:checked ~ .aoe-text { color: var(--accent-red); }
 .ma-action-fields {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     margin-bottom: 6px;
 }
 .ma-action-fields label {
-    flex: 1;
     min-width: 0;
     font-size: 0.7rem;
     color: var(--text-dim);
@@ -4063,6 +4148,9 @@ body.combat-mode .boss-hud-container {
     flex-direction: column;
     gap: 3px;
 }
+/* 先攻 / DP 縮窄，狀態名稱吃剩餘寬度並排同一列 */
+.ma-action-fields .ma-f-narrow { flex: 0 0 58px; }
+.ma-action-fields .ma-f-wide { flex: 1; }
 .ma-action-fields input {
     width: 100%;
     box-sizing: border-box;
@@ -4073,8 +4161,10 @@ body.combat-mode .boss-hud-container {
     color: var(--text-main);
     text-align: center;
 }
+.ma-action-fields .ma-f-wide input { text-align: left; }
 .ma-status-row {
     display: flex;
+    align-items: center;
     gap: 5px;
     margin-bottom: 6px;
 }
@@ -4101,8 +4191,11 @@ body.combat-mode .boss-hud-container {
 .ma-status-chips {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 5px;
 }
+/* 已選取狀態與層數輸入同列時，chips 吃剩餘寬度 */
+.ma-status-row .ma-status-chips { flex: 1; min-width: 0; margin-left: 2px; }
 .ma-status-chip {
     display: inline-flex;
     align-items: center;
@@ -5166,7 +5259,6 @@ body.combat-mode .boss-hud-container {
 
 .aoe-action-attack { border-left-color: var(--accent-red); }
 .aoe-action-status { border-left-color: var(--resource-color); }
-.aoe-hint-card { background: var(--tint-negative); }
 
 /* =======================================================================
    戰鬥計算明細「卡片清單 / 條紋樣式」

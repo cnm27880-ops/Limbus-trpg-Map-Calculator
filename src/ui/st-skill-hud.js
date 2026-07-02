@@ -186,6 +186,59 @@ function makeFloatingPanel(opts) {
     return stateObj;
 }
 
+// ===== Passive Entry Editor（被動能力／特性：逐條新增、可刪除）=====
+// 單位上仍以字串儲存（各條目以換行分隔），與既有模板 / Firebase 同步格式相容。
+
+const passiveEditors = {}; // containerId -> string[]
+
+/** 在指定容器初始化被動條目編輯器，initialText 為以換行分隔的既有內容 */
+function initPassiveEditor(containerId, initialText) {
+    passiveEditors[containerId] = String(initialText || '')
+        .split('\n').map(s => s.trim()).filter(Boolean);
+    renderPassiveEditor(containerId);
+}
+
+function renderPassiveEditor(containerId) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    const entries = passiveEditors[containerId] || [];
+    const rows = entries.map((t, i) =>
+        `<div class="passive-entry"><span>${escapeHtml(t)}</span><button onclick="removePassiveEntry('${containerId}',${i})" title="刪除">×</button></div>`
+    ).join('');
+    box.innerHTML = `
+        <div class="passive-entry-list">${rows}</div>
+        <div class="passive-entry-add">
+            <input type="text" id="${containerId}-input" placeholder="例：每回合結束回復 10 HP"
+                   onkeydown="if(event.key==='Enter'){addPassiveEntry('${containerId}');event.preventDefault();}">
+            <button class="ma-mini-btn" onclick="addPassiveEntry('${containerId}')">＋</button>
+        </div>`;
+}
+
+function addPassiveEntry(containerId) {
+    const input = document.getElementById(containerId + '-input');
+    const text = (input?.value || '').trim();
+    if (!text) return;
+    if (!passiveEditors[containerId]) passiveEditors[containerId] = [];
+    passiveEditors[containerId].push(text);
+    renderPassiveEditor(containerId);
+    const fresh = document.getElementById(containerId + '-input');
+    if (fresh) fresh.focus();
+}
+
+function removePassiveEntry(containerId, index) {
+    if (!passiveEditors[containerId]) return;
+    passiveEditors[containerId].splice(index, 1);
+    renderPassiveEditor(containerId);
+}
+
+/** 讀回編輯器內容（含輸入框中尚未按＋的文字），回傳換行分隔字串供儲存 */
+function readPassiveEditor(containerId) {
+    const entries = (passiveEditors[containerId] || []).slice();
+    const pending = (document.getElementById(containerId + '-input')?.value || '').trim();
+    if (pending) entries.push(pending);
+    return entries.join('\n');
+}
+
 // ===== Status Name Helpers =====
 
 function getStatusName(statusId) {
@@ -217,6 +270,11 @@ window.clampHudPosition = clampHudPosition;
 window.setupPanelDrag = setupPanelDrag;
 window.setupPanelCollapse = setupPanelCollapse;
 window.makeFloatingPanel = makeFloatingPanel;
+window.initPassiveEditor = initPassiveEditor;
+window.renderPassiveEditor = renderPassiveEditor;
+window.addPassiveEntry = addPassiveEntry;
+window.removePassiveEntry = removePassiveEntry;
+window.readPassiveEditor = readPassiveEditor;
 window.getStatusName = getStatusName;
 window.getStatusDisplayName = getStatusDisplayName;
 

@@ -39,11 +39,8 @@ function openBossUnitModal(unitId) {
                 </span>
             </div>
             <div class="modal-body">
-                <div class="stat-grid cols-2">
-                    <label class="stat-field"><span>先攻加值</span><input type="number" id="boss-unit-init" value="${u.init || 0}"></label>
+                <div class="stat-grid cols-3">
                     <label class="stat-field"><span>生命上限</span><input type="number" id="boss-unit-max-hp" value="${u.maxHp || 1}" min="1"></label>
-                </div>
-                <div class="stat-grid cols-2">
                     <label class="stat-field"><span>防禦</span><input type="number" id="boss-unit-def-dp" value="${u.defDp || 0}"></label>
                     <label class="stat-field"><span>防禦附加成功</span><input type="number" id="boss-unit-def-auto" value="${u.defAuto || 0}"></label>
                 </div>
@@ -55,21 +52,17 @@ function openBossUnitModal(unitId) {
                         <input type="number" id="boss-unit-save-tenacity" value="${u.saveTenacity || 0}" placeholder="強韌">
                     </div>
                 </div>
-                <div class="stat-grid cols-2">
+                <div class="stat-grid cols-3">
                     <label class="stat-field"><span>全屬性</span><input type="number" id="boss-unit-all-attr" value="${u.allAttr || 0}"></label>
                     <label class="stat-field"><span>全技能</span><input type="number" id="boss-unit-all-skill" value="${u.allSkill || 0}"></label>
+                    <label class="stat-field"><span>支線等級</span><input type="number" id="boss-unit-side-level" value="${u.sideLevel || 1}" min="1" max="99" title="「對抗分配」修正基數 = 等級 × 10"></label>
                 </div>
-                <label class="stat-field">
-                    <span>支線等級（對抗分配修正基數 = 等級 × 10）</span>
-                    <input type="number" id="boss-unit-side-level" value="${u.sideLevel || 1}" min="1" max="99">
-                </label>
-                <label class="stat-field">
-                    <span>被動能力／特性（自由填寫，供 ST 臨場參考）</span>
-                    <textarea id="boss-unit-passive" rows="2" placeholder="例：每回合結束回復 10 HP；免疫流血；受火焰傷害 +50%……">${escapeHtml(u.passive || '')}</textarea>
-                </label>
-                <div class="ma-hint">
-                    防禦／防禦附加成功會在玩家發起攻擊（無防禦QTE）時自動套入黑箱計算；
-                    三豁免／全屬性／全技能／被動能力目前僅記錄＋顯示，供套用狀態或臨場判定參考，不會自動套入計算。
+                <div class="stat-grid cols-3">
+                    <label class="stat-field"><span>先攻加值</span><input type="number" id="boss-unit-init" value="${u.init || 0}"></label>
+                </div>
+                <div class="stat-field">
+                    <span>被動能力／特性（逐條新增，供 ST 臨場參考）</span>
+                    <div id="boss-unit-passive-editor"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -81,6 +74,7 @@ function openBossUnitModal(unitId) {
     `;
     const container = document.getElementById('modals-container') || document.body;
     container.insertAdjacentHTML('beforeend', html);
+    if (typeof initPassiveEditor === 'function') initPassiveEditor('boss-unit-passive-editor', u.passive);
     // 轉為可拖曳 / 雙擊收起的浮動面板（記憶位置與收合狀態），預設落在右側不擋戰場
     if (typeof makeFloatingPanel === 'function') {
         makeFloatingPanel({
@@ -113,7 +107,7 @@ function saveBossUnitModal(unitId) {
     u.allAttr = parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0;
     u.allSkill = parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0;
     u.sideLevel = Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1);
-    u.passive = (document.getElementById('boss-unit-passive')?.value || '').trim();
+    u.passive = (typeof readPassiveEditor === 'function') ? readPassiveEditor('boss-unit-passive-editor') : (u.passive || '');
 
     if (Array.isArray(u.hpArr) && u.hpArr.length !== u.maxHp) {
         const old = u.hpArr;
@@ -155,7 +149,7 @@ function saveBossUnitAsTemplate(unitId) {
             allAttr: parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0,
             allSkill: parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0,
             sideLevel: Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1),
-            passive: (document.getElementById('boss-unit-passive')?.value || '').trim(),
+            passive: (typeof readPassiveEditor === 'function') ? readPassiveEditor('boss-unit-passive-editor') : (u.passive || ''),
             actionDp: u.actionDp || 0,
             actionAoe: !!u.actionAoe,
             actionStatuses: Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : []

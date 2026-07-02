@@ -378,10 +378,10 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         const result = cmResolveIdentityBonus(attacker, target);
 
         // 命中：延續進攻（selfStatus.swiftness+1／targetStatus.bind+1）+ 雙旋飛刺（targetStatus.bind+1）
-        assert.strictEqual(result.selfStatus.swiftness, 1, '攻擊者自身應算出 +1 迅捷（修正前這裡會是空物件）');
-        assert.ok(result.selfStatusNotes.length > 0, 'selfStatusNotes 不應為空');
-        assert.ok(result.selfStatusNotes.some(n => n.includes('+1')), 'selfStatusNotes 應包含層數敘述');
-        assert.strictEqual(result.targetStatus.bind, 2, '目標應疊加 2 層束縛（延續進攻+雙旋飛刺）');
+        assert.strictEqual(result.onHitSelfStatus.swiftness, 4, '攻擊者自身應算出 +1 迅捷（修正前這裡會是空物件）');
+        assert.ok(result.onHitSelfStatusNotes.length > 0, 'onHitSelfStatusNotes 不應為空');
+        assert.ok(result.onHitSelfStatusNotes.some(n => n.includes('+4')), 'onHitSelfStatusNotes 應包含層數敘述');
+        assert.strictEqual(result.onHitTargetStatus.bind, 2, '目標應疊加 2 層束縛（延續進攻+雙旋飛刺）');
     });
 })();
 

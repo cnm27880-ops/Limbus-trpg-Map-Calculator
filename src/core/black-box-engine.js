@@ -178,7 +178,7 @@ function bbRollAttackDice(diceCount, explodeThreshold, rng) {
     const rand = (typeof rng === 'function') ? rng : Math.random;
     let threshold = parseInt(explodeThreshold, 10);
     if (!(threshold >= 8 && threshold <= 10)) threshold = 10;
-    const MAX_TOTAL = 500; // 防呆：極端爆骰時的骰數上限，避免無限迴圈
+    const MAX_TOTAL = 500; // 防呆：極端連鎖加骰時的骰數上限，避免無限迴圈
 
     const rolls = [];
     let queue = Math.max(0, parseInt(diceCount, 10) || 0);
@@ -233,7 +233,7 @@ function bbPushCombatLog(entry) {
             // ===== 自動擲骰／傷害欄位 =====
             damage: Number(entry.damage) || 0,           // 實際造成（套用）的傷害
             rollSuccesses: Number(entry.rollSuccesses) || 0, // 擲骰成功數（未含附加成功）
-            rollExploded: Number(entry.rollExploded) || 0,   // 爆骰追加的骰數
+            rollExploded: Number(entry.rollExploded) || 0,   // 加骰追加的骰數
             rollTens: Number(entry.rollTens) || 0,           // 骰出 10 的數量（人格卡觸發判定）
             rollDetail: String(entry.rollDetail || '').slice(0, 600), // 各骰點數明細（逗號分隔）
             targetCount: Number(entry.targetCount) || 1,     // 目標數（AOE 用；單體=1）

@@ -1392,10 +1392,14 @@ function sendToHost(message) {
             // 直接更新單位位置
             roomRef.child(`units/${message.unitId}/x`).set(message.x);
             roomRef.child(`units/${message.unitId}/y`).set(message.y);
+            // 同步移動能量消耗（戰術移動系統：本回合已消耗格數）
+            if (message.moveUsed !== undefined) {
+                roomRef.child(`units/${message.unitId}/moveUsed`).set(Math.max(0, parseInt(message.moveUsed) || 0));
+            }
             break;
 
         case 'addUnit':
-            const newUnit = createUnit(message.name, message.hp, message.unitType, message.playerId, message.playerName, message.size || 1);
+            const newUnit = createUnit(message.name, message.hp, message.unitType, message.playerId, message.playerName, message.size || 1, parseInt(message.moveSpeed) || 20);
             if (message.avatar) newUnit.avatar = message.avatar;
             // 模板帶來的完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態）
             if (message.combat && typeof message.combat === 'object') Object.assign(newUnit, message.combat);

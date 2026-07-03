@@ -230,7 +230,7 @@ function getVagueStatus(unit) {
  * @param {number} size - 單位大小 (1=1x1, 2=2x2, 3=3x3)
  * @returns {Object} 新單位物件
  */
-function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1) {
+function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1, moveSpeed = 20) {
     return {
         id: Date.now().toString() + '_' + Math.floor(Math.random() * 1000000).toString(),  // Firebase-safe: 纯字符串 ID (无小数点)
         name: name,
@@ -245,8 +245,47 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1) 
         ownerName: ownerName,
         size: size,  // 單位大小：1=普通, 2=大型, 3=巨型
         status: {},  // 單位狀態標籤 (例如: {"燃燒": "3", "流血": "2"})
-        hidden: false  // 是否對玩家隱藏（ST 可見，玩家看不到）
+        hidden: false,  // 是否對玩家隱藏（ST 可見，玩家看不到）
+        moveSpeed: moveSpeed,  // 移動速度（米），5 米 = 1 格
+        moveUsed: 0  // 本回合已消耗的移動格數（回合開始時歸零）
     };
+}
+
+// ===== 戰術移動消耗（5 米 1 格，斜走加倍）=====
+/**
+ * 計算兩格間的戰術移動消耗：直走 1 格消耗 1，斜走 1 格消耗 2。
+ * 先盡量斜走補足較短軸，剩餘距離直走；總消耗 = 直走步數 + 斜走步數 × 2。
+ * @param {number} dx - X 位移（格）
+ * @param {number} dy - Y 位移（格）
+ * @returns {number} 消耗格數（整數）
+ */
+function calcTacticalCost(dx, dy) {
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    const diag = Math.min(ax, ay);           // 斜走步數
+    const straight = Math.max(ax, ay) - diag; // 直走步數
+    return straight + diag * 2;
+}
+
+/**
+ * 單位最大可移動格數 = floor(移動速度(米) / 5)，未設定時預設 20 米（4 格）。
+ * @param {Object} unit - 單位物件
+ * @returns {number}
+ */
+function getUnitMaxMoveGrids(unit) {
+    const speed = parseInt(unit && unit.moveSpeed);
+    const meters = (Number.isFinite(speed) && speed >= 0) ? speed : 20;
+    return Math.floor(meters / 5);
+}
+
+/**
+ * 單位本回合剩餘可移動格數（能量條剩餘量）。
+ * @param {Object} unit - 單位物件
+ * @returns {number}
+ */
+function getUnitMoveRemaining(unit) {
+    const used = parseInt(unit && unit.moveUsed) || 0;
+    return Math.max(0, getUnitMaxMoveGrids(unit) - used);
 }
 
 // ===== HP 內部修改 =====
@@ -313,6 +352,7 @@ export {
     escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
     generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
     calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
+    calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
 };
 
 if (typeof window !== 'undefined') {
@@ -320,5 +360,6 @@ if (typeof window !== 'undefined') {
         escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
         generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
         calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
+        calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
     });
 }

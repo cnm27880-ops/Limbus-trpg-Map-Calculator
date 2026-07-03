@@ -185,12 +185,15 @@ function initKeyboardControls() {
             u.y = newY;
             broadcastState();
         } else {
+            // 玩家移動攔截器：戰術消耗超過剩餘移動能量則擋下（ST 不受限）
+            if (typeof applyMoveCost === 'function' && !applyMoveCost(u, newX, newY)) return;
             sendToHost({
                 type: 'moveUnit',
                 playerId: myPlayerId,
                 unitId: u.id,
                 x: newX,
-                y: newY
+                y: newY,
+                moveUsed: u.moveUsed || 0
             });
             // 玩家端預先渲染以獲得即時回饋 (實際以 ST 回傳為準)
             // 這裡暫時修改本地數據以達到流暢效果

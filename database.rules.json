@@ -24,7 +24,9 @@
             "x":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -1 && newData.val() <= 9999)" },
             "y":      { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -1 && newData.val() <= 9999)" },
             "init":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -9999 && newData.val() <= 9999)" },
-            "size":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 3)" }
+            "size":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 3)" },
+            "moveSpeed": { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 999)" },
+            "moveUsed":  { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 999)" }
           }
         }
       }

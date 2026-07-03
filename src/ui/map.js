@@ -301,6 +301,11 @@ function renderMap() {
     const grid = document.getElementById('battle-map');
     if (!grid) return;
 
+    const wInput = document.getElementById('map-w');
+    const hInput = document.getElementById('map-h');
+    if (wInput && state.mapW) wInput.value = state.mapW;
+    if (hInput && state.mapH) hInput.value = state.mapH;
+    
     // ===== 防呆機制：檢查地圖資料是否已載入 =====
     if (!state.mapData || state.mapData.length === 0 || !Array.isArray(state.mapData)) {
         grid.innerHTML = `

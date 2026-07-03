@@ -504,6 +504,7 @@ body.aoe-select-active .token {
     gap: 4px;
     flex-wrap: wrap;
     margin-top: 4px;
+    align-items: center; /* 避免開關/輸入框被拉伸到整列高度 */
 }
 
 /* ===== 戰術步進器 (HP Steppers) ===== */
@@ -585,11 +586,11 @@ body.aoe-select-active .token {
 }
 
 .toggle-track {
-    width: 42px;
-    height: 22px;
+    width: 40px;
+    height: 18px; /* 上下縮減，不再撐高整列 */
     background-color: var(--bg-input);
     border: 1px solid var(--border);
-    border-radius: 4px; /* 工業風微圓角，非完全圓形 */
+    border-radius: 9px; /* 圓角膠囊 */
     position: relative;
     transition: all 0.3s ease;
 }
@@ -599,10 +600,10 @@ body.aoe-select-active .token {
     position: absolute;
     top: 2px;
     left: 2px;
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
     background-color: var(--text-dim);
-    border-radius: 2px;
+    border-radius: 50%;
     transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
@@ -622,7 +623,7 @@ body.aoe-select-active .token {
     background-color: rgba(67, 160, 71, 0.1);
 }
 .tactical-toggle input:checked ~ .toggle-track::before {
-    transform: translateX(20px);
+    transform: translateX(22px);
     background-color: var(--accent-green);
     box-shadow: 0 0 6px var(--accent-green);
 }
@@ -638,33 +639,43 @@ body.aoe-select-active .token {
     border: 1px solid transparent;
 }
 
-/* 護盾按鈕：藍色描邊＋文字，避免單一 emoji 在深色底上不明顯 */
-.action-btn.shield-btn {
-    color: #7ec8ff;
-    border-color: rgba(66, 165, 245, 0.55);
-    background: rgba(21, 43, 66, 0.65);
+/* 操作列格子統一：黑灰方塊＋有色圖標，等寬平均分配（左側 BLA 步進器不受影響） */
+.unit-actions .action-btn {
+    flex: 1 1 0;
+    min-width: 52px;
+    padding: 5px 4px;
     white-space: nowrap;
+    background: var(--bg-input);
+    border: 1px solid transparent;
 }
 
-/* 單位卡操作列的移動速度輸入（僅我方單位）：🏃 + 數字 + 米 */
+/* 護盾按鈕：黑灰方塊＋藍色圖標文字 */
+.action-btn.shield-btn {
+    color: #64b5f6;
+}
+
+/* 單位卡操作列的移動速度輸入（僅玩家角色）：黑灰方塊＋綠色圖標，與其他格子等寬 */
 .unit-move-speed {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 2px;
-    flex: 0 0 auto;
-    padding: 2px 6px;
-    background: rgba(24, 46, 28, 0.65);
-    border: 1px solid rgba(67, 160, 71, 0.55);
+    flex: 1 1 0;
+    min-width: 52px;
+    padding: 3px 4px;
+    background: var(--bg-input);
+    border: 1px solid transparent;
     border-radius: 4px;
     font-size: 0.75rem;
-    color: #9ccc9c;
+    color: var(--accent-green);
     cursor: default;
+    white-space: nowrap;
 }
 .unit-move-speed input {
-    width: 44px;
-    padding: 2px 4px;
+    width: 40px;
+    padding: 1px 3px;
     text-align: center;
-    background: var(--bg-input);
+    background: var(--bg-card);
     color: var(--text-main);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -5683,4 +5694,127 @@ body.combat-mode .boss-hud-container {
 
 .token-move-bar:has(.token-move-fill.depleted) {
     background: rgba(183, 28, 28, 0.55);
+}
+
+/* ===== 模板管理器（🗂 管理）===== */
+/* 開啟按鈕：灰白工業風，在深色 Modal 內醒目可見 */
+.tm-open-btn {
+    background: #cfcfd4 !important;
+    color: #16161a !important;
+    border: 1px solid #85858c;
+    font-weight: 700;
+    padding: 8px 12px;
+    white-space: nowrap;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+}
+.tm-open-btn:hover { background: #e2e2e6 !important; }
+
+/* 模板卡片：深色工業卡＋依類型上色的左邊框 */
+.tm-card {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--text-dim);
+    border-radius: 8px;
+    background: var(--bg-card);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+.tm-card.tm-type-player { border-left-color: var(--accent-green, #43a047); }
+.tm-card.tm-type-enemy  { border-left-color: var(--accent-red, #e53935); }
+.tm-card.tm-type-boss   { border-left-color: var(--accent-yellow, #fdd835); }
+
+.tm-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.tm-card-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: var(--bg-input) center / cover no-repeat;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--text-dim);
+}
+.tm-card-info { flex: 1; min-width: 0; }
+.tm-card-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    margin-bottom: 4px;
+}
+.tm-card-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.tm-chip {
+    font-size: 0.68rem;
+    line-height: 1.4;
+    padding: 1px 7px;
+    border-radius: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    white-space: nowrap;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+.tm-chip-hp   { color: #ef9a9a; }
+.tm-chip-move { color: #a5d6a7; }
+.tm-chip-def  { color: #90caf9; }
+.tm-chip-atk  { color: #ffcc80; }
+.tm-chip-type-player { color: #a5d6a7; border-color: rgba(67, 160, 71, 0.5); }
+.tm-chip-type-enemy  { color: #ef9a9a; border-color: rgba(229, 57, 53, 0.5); }
+.tm-chip-type-boss   { color: #fff59d; border-color: rgba(253, 216, 53, 0.5); }
+
+/* 卡片操作鈕：豎向小按鈕（同怪物庫風格） */
+.tm-card-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 0 0 auto;
+}
+.tm-btn {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-input);
+    color: var(--text-main);
+    padding: 2px 10px;
+    font-size: 0.7rem;
+    line-height: 1.5;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter .15s;
+}
+.tm-btn:hover { filter: brightness(1.25); }
+.tm-btn-edit { color: #c9aaff; border-color: rgba(126, 87, 194, 0.55); background: #221a30; }
+.tm-btn-del  { color: #ff8a80; border-color: rgba(229, 57, 53, 0.55); background: #2a1414; }
+
+/* 行內編輯表單：內縮面板 */
+.tm-edit-form {
+    margin-top: 10px;
+    padding: 10px;
+    border-top: 1px dashed var(--border);
+    background: var(--bg-input);
+    border-radius: 6px;
+}
+.tm-edit-form .calc-label { font-size: 0.7rem; color: var(--text-dim); }
+.tm-edit-form input,
+.tm-edit-form select,
+.tm-edit-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    background: var(--bg-card);
+}
+
+/* ===== Modal 內表單通用防溢出 ===== */
+/* number/select 有固有最小寬度，塞進 1fr 網格會把 Modal 撐出水平捲軸（批量新增破圖） */
+.modal .calc-field { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.modal .calc-field input,
+.modal .calc-field select,
+.modal .calc-field textarea {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }

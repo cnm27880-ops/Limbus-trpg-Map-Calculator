@@ -312,9 +312,12 @@ function renderUnitsList() {
                     <button class="stepper-btn plus" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">+</button>
                 </div>`;
 
-            // 移動速度（米）：戰術移動限制用，只有我方（玩家）單位需要填寫，
-            // 敵方/BOSS 由 ST 自由移動不受限，不顯示此欄位
-            const moveSpeedField = (u.type === 'player')
+            // 移動速度（米）：戰術移動限制用，給玩家角色填寫——
+            // 「我方」類型、或已分配給玩家操控的單位（ownerId 非 ST）都算玩家角色；
+            // ST 自己的敵方/BOSS 不顯示（ST 移動不受限，不需要移速）
+            const isPlayerCharacter = u.type === 'player'
+                || (u.ownerId && !String(u.ownerId).startsWith('st_'));
+            const moveSpeedField = isPlayerCharacter
                 ? `<label class="unit-move-speed" title="移動速度（米）：5 米 = 1 格，每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2">
                        🏃<input type="number" value="${(u.moveSpeed !== undefined && u.moveSpeed !== null) ? u.moveSpeed : 20}" min="0" max="999"
                               onchange="updateMoveSpeed('${u.id}', this.value)">米

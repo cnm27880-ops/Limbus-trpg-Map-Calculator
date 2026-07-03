@@ -25,7 +25,7 @@ function initModals() {
                         <select id="template-select" onchange="loadUnitTemplate(this.value)" style="flex:1;">
                             <option value="">-- 載入模板 --</option>
                         </select>
-                        <button class="modal-btn" onclick="openTemplateManager()" style="background:var(--bg-input);padding:8px 12px;" title="模板管理：查看／修改數值／刪除">🗂 管理</button>
+                        <button class="modal-btn tm-open-btn" onclick="openTemplateManager()" title="模板管理：查看／修改數值／刪除">🗂 管理</button>
                     </div>
 
                     <!-- 頭像預覽區 -->
@@ -138,6 +138,16 @@ function initModals() {
                             <option value="2">2x2 (大型)</option>
                             <option value="3">3x3 (巨型)</option>
                         </select>
+                    </div>
+                    <!-- 批量頭像：同一批雜兵長一樣，選一張圖套用到全部生成單位 -->
+                    <div class="calc-field" style="margin-top:10px;">
+                        <span class="calc-label">頭像（套用到本批全部單位）</span>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <div id="batch-avatar-preview" style="width:44px;height:44px;border-radius:50%;flex:0 0 auto;background:var(--bg-input) center / cover no-repeat;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:0.7rem;">無</div>
+                            <button class="modal-btn" onclick="pickBatchAvatar()" style="background:var(--bg-input);flex:1;">📷 選擇圖片</button>
+                            <button class="modal-btn" onclick="clearBatchAvatar()" style="background:var(--bg-input);" title="清除頭像">✕</button>
+                        </div>
+                        <input type="file" id="batch-avatar-file" accept="image/*" style="display:none;">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -504,7 +514,54 @@ function openBatchModal() {
     if (avatarEl) avatarEl.value = '';
     const combatEl = document.getElementById('batch-template-combat');
     if (combatEl) combatEl.value = '';
+    updateBatchAvatarPreview('');
     openModal('modal-batch');
+}
+
+/** 更新批量頭像預覽圈（空字串 = 無頭像） */
+function updateBatchAvatarPreview(avatar) {
+    const preview = document.getElementById('batch-avatar-preview');
+    if (!preview) return;
+    const safe = (avatar && typeof avatar === 'string' && avatar.startsWith('data:image/')) ? avatar : '';
+    preview.style.backgroundImage = safe ? `url(${safe})` : 'none';
+    preview.textContent = safe ? '' : '無';
+}
+
+/** 批量頭像：開檔案選擇器，選好後壓縮處理並套用到本批全部單位 */
+function pickBatchAvatar() {
+    const fileInput = document.getElementById('batch-avatar-file');
+    if (!fileInput) return;
+    fileInput.onchange = e => {
+        const file = e.target.files[0];
+        e.target.value = ''; // 允許重選同一張圖
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { showToast('請選擇圖片檔案'); return; }
+        if (file.size > 5 * 1024 * 1024) { showToast('圖片過大（最大 5MB）'); return; }
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => {
+                // processAvatarImage（units.js）：置中裁切 + 壓縮，與單體頭像上傳同規格
+                const data = (typeof processAvatarImage === 'function') ? processAvatarImage(img) : ev.target.result;
+                const avatarEl = document.getElementById('batch-template-avatar');
+                if (avatarEl) avatarEl.value = data;
+                updateBatchAvatarPreview(data);
+                showToast('頭像已選擇，將套用到本批全部單位');
+            };
+            img.onerror = () => showToast('圖片載入失敗');
+            img.src = ev.target.result;
+        };
+        reader.onerror = () => showToast('檔案讀取失敗');
+        reader.readAsDataURL(file);
+    };
+    fileInput.click();
+}
+
+/** 清除批量頭像 */
+function clearBatchAvatar() {
+    const avatarEl = document.getElementById('batch-template-avatar');
+    if (avatarEl) avatarEl.value = '';
+    updateBatchAvatarPreview('');
 }
 
 /**
@@ -517,6 +574,7 @@ function loadBatchTemplate(templateId) {
     if (!templateId) {
         if (avatarEl) avatarEl.value = '';
         if (combatEl) combatEl.value = '';
+        updateBatchAvatarPreview('');
         return;
     }
 
@@ -532,6 +590,7 @@ function loadBatchTemplate(templateId) {
     document.getElementById('batch-type').value = template.type || 'enemy';
     document.getElementById('batch-size').value = template.size || 1;
     if (avatarEl) avatarEl.value = template.avatar || '';
+    updateBatchAvatarPreview(template.avatar || '');
     if (combatEl) combatEl.value =
         (template.combat && typeof template.combat === 'object') ? JSON.stringify(template.combat) : '';
 
@@ -1161,14 +1220,25 @@ function tmRenderList() {
     box.innerHTML = templates.map(t => {
         const c = (t.combat && typeof t.combat === 'object') ? t.combat : {};
         const typeTxt = t.type === 'boss' ? 'BOSS' : t.type === 'enemy' ? '敵方' : '我方';
-        const summary = `HP ${t.hp}｜${typeTxt}｜${t.size || 1}x${t.size || 1}｜移速 ${t.moveSpeed !== undefined ? t.moveSpeed : 20}米`
-            + `｜防 ${c.defDp || 0}(+${c.defAuto || 0})｜攻DP ${c.actionDp || 0}｜先攻 ${c.init || 0}`;
+        const safeAvatar = (t.avatar && typeof t.avatar === 'string' && t.avatar.startsWith('data:image/')) ? t.avatar : '';
+        const avatarStyle = safeAvatar ? `background-image:url(${safeAvatar});` : '';
+        const avatarInitial = safeAvatar ? '' : escapeHtml((t.name || '?')[0]);
+        const chips = [
+            ['tm-chip-hp', `HP ${t.hp}`],
+            [`tm-chip-type-${t.type || 'enemy'}`, typeTxt],
+            ['', `${t.size || 1}x${t.size || 1}`],
+            ['tm-chip-move', `🏃 ${t.moveSpeed !== undefined ? t.moveSpeed : 20}米`],
+            ['tm-chip-def', `防 ${c.defDp || 0}(+${c.defAuto || 0})`],
+            ['tm-chip-atk', `攻DP ${c.actionDp || 0}`],
+            ['', `先攻 ${c.init || 0}`]
+        ].map(([cls, txt]) => `<span class="tm-chip ${cls}">${escapeHtml(txt)}</span>`).join('');
         return `
-            <div class="tm-card" id="tm-card-${t.id}">
+            <div class="tm-card tm-type-${t.type || 'enemy'}" id="tm-card-${t.id}">
                 <div class="tm-card-head">
+                    <div class="tm-card-avatar" style="${avatarStyle}">${avatarInitial}</div>
                     <div class="tm-card-info">
                         <div class="tm-card-name">${escapeHtml(t.name || '')}</div>
-                        <div class="tm-card-summary">${escapeHtml(summary)}</div>
+                        <div class="tm-card-chips">${chips}</div>
                     </div>
                     <div class="tm-card-btns">
                         <button class="tm-btn tm-btn-edit" onclick="tmToggleEdit('${t.id}')">✏ 編輯</button>

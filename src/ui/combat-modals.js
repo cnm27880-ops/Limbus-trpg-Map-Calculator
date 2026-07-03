@@ -458,8 +458,22 @@ function confirmSTReview() {
     closeModal('st-review-modal');
     cqBroadcastResult(finalDice, baseExtraSuccess, modifier, rollResult);
 
-    // 如果判定攻擊成功（傷害/成功數 > 0，或自動擲骰且產生了傷害），則套用「命中」狀態
-    // ST 也可由提示手動於事後套用。自動模式下我們就依據 successes 是否大於 0 來判斷命中。
+    // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零。
+    // ⚠️ 順序關鍵：必須在「命中狀態套用」之前消耗——
+    //   1) cmAutoRollAndApply 已把本次攻擊前既有的破裂層數計入傷害，此處清掉的是那批；
+    //   2) 本次命中新施加的破裂/震顫屬於「下一次攻擊」的資源，若先套用再消耗，
+    //      會被立刻清空且震顫錯誤地立即削減生命上限。
+    if (targetId && typeof consumeOnAttackedStatuses === 'function') {
+        const result = consumeOnAttackedStatuses(targetId);
+        if (result.consumed.length && typeof showToast === 'function') {
+            let msg = '💥 已自動消耗目標的 ' + result.consumed.map(s => `${s.name} ${s.stacks} 層`).join('、');
+            if (result.maxHpCut > 0) msg += `；生命上限 −${result.maxHpCut}`;
+            showToast(msg);
+        }
+    }
+
+    // 命中判定後套用「命中時施加」的人格卡狀態（成功數 > 0 視為命中）。
+    // 手動擲骰（autoroll 關閉）時無從得知命中與否，由 ST 依審核提示列自行套用。
     if (autoroll && rollResult && rollResult.successes > 0 && combatQueueLast && combatQueueLast.attacker) {
         const atk = combatQueueLast.attacker;
         if (atk.onHitTargetStatus && typeof applyEngineStatusesToUnit === 'function' && targetId) {
@@ -475,23 +489,11 @@ function confirmSTReview() {
             }
         }
     }
-
-    // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零。
-    // 注意順序：cmAutoRollAndApply 讀取破裂層數計入傷害「之後」才消耗；
-    // 震顫消耗時同步削減目標生命上限（見 consumeOnAttackedStatuses）。
-    if (targetId && typeof consumeOnAttackedStatuses === 'function') {
-        const result = consumeOnAttackedStatuses(targetId);
-        if (result.consumed.length && typeof showToast === 'function') {
-            let msg = '💥 已自動消耗目標的 ' + result.consumed.map(s => `${s.name} ${s.stacks} 層`).join('、');
-            if (result.maxHpCut > 0) msg += `；生命上限 −${result.maxHpCut}`;
-            showToast(msg);
-        }
-    }
 }
 
 /**
  * ST 端：自動擲骰並把最終傷害套用到防禦方。
- * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻爆骰）＋ 附加成功
+ * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻追加骰子）＋ 附加成功
  * ＋ 目標身上的破裂（受擊消耗）與易損層數 → 合計後玩家攻擊受「攻擊上限」封頂
  * （破裂/易損計入上限內；BOSS 攻擊不受限）
  * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。

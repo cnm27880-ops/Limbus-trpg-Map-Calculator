@@ -205,7 +205,12 @@ function sanitizeStatusMap(m) {
 }
 
 function registerCustomIdentity(raw) {
-    if (typeof IDENTITY_LIBRARY === 'undefined' || !raw || !raw.id) return;
+    if (typeof IDENTITY_LIBRARY === 'undefined') {
+        // 不可靜默丟棄：這曾造成「自訂人格卡全部消失」的難查 bug（模組載入時序）
+        console.warn('[identity-hud] IDENTITY_LIBRARY 尚未載入，自訂人格卡註冊被跳過：', raw && raw.id);
+        return;
+    }
+    if (!raw || !raw.id) return;
 
     const rules = Array.isArray(raw.rules) ? raw.rules : [];
     const onAttack = [];
@@ -1265,9 +1270,21 @@ if (typeof window !== 'undefined') {
     window.saveAIIdentity = saveAIIdentity;
     window.deleteCustomIdentity = deleteCustomIdentity;
     window.setCardInput = setCardInput;
-    // 啟動時把使用者儲存的自訂人格卡注入資料庫，並還原上次的選擇
-    registerAllCustomIdentities();
-    loadIdentityState();
+    // 啟動時把使用者儲存的自訂人格卡注入資料庫，並還原上次的選擇。
+    // ⚠️ 時序關鍵：IDENTITY_LIBRARY 來自 ES Module（identity-config 已模組化，延遲執行），
+    // 本檔為傳統 script，載入當下 IDENTITY_LIBRARY 必定尚未定義；若立刻註冊，
+    // registerCustomIdentity 會因 typeof 檢查而「靜默丟棄所有自訂人格卡」——
+    // 表現為：玩家選了（自訂）人格後發起攻擊不套用、DP 加值消失、角色從清單消失。
+    // 模組保證在 DOMContentLoaded 前執行完畢，故延後到該時點再註冊。
+    const idtBootstrap = () => {
+        registerAllCustomIdentities();
+        loadIdentityState();
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', idtBootstrap);
+    } else {
+        idtBootstrap();
+    }
     // 注入樣式（DOM 已就緒時立即注入，否則待載入）
     if (document.head) injectIdentityStyles();
     else document.addEventListener('DOMContentLoaded', injectIdentityStyles);

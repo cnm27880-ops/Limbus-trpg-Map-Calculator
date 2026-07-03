@@ -5615,3 +5615,37 @@ body.combat-mode .boss-hud-container {
     min-height: 22px;
     min-width: 30px;
 }
+
+/* ===== 移動能量條（戰術移動系統：5 米 1 格，斜走加倍）===== */
+/* 戰鬥中顯示在 Token 下緣：綠色 = 本回合剩餘移動格數比例，耗盡轉紅提示 */
+.token-move-bar {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    bottom: -8px;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 60;
+}
+
+.token-move-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #43a047, #8bc34a);
+    box-shadow: 0 0 4px rgba(139, 195, 74, 0.7);
+    border-radius: 2px;
+    transition: width 0.25s ease;
+}
+
+/* 能量耗盡：整條轉為暗紅底提示無法再移動 */
+.token-move-fill.depleted {
+    background: transparent;
+    box-shadow: none;
+}
+
+.token-move-bar:has(.token-move-fill.depleted) {
+    background: rgba(183, 28, 28, 0.55);
+}

@@ -463,6 +463,25 @@ function renderMap() {
             }
         }
 
+        // ===== 移動能量條（綠色）=====
+        // 戰鬥中顯示本回合剩餘移動格數（floor(移動速度/5) - 已消耗）；
+        // 玩家只看得到自己可控單位的能量條，ST 看得到全部。
+        if (state.isCombatActive && typeof getUnitMaxMoveGrids === 'function') {
+            const maxMove = getUnitMaxMoveGrids(u);
+            const canSeeBar = (typeof canControlUnit === 'function') ? canControlUnit(u) : (myRole === 'st');
+            if (maxMove > 0 && canSeeBar) {
+                const remaining = getUnitMoveRemaining(u);
+                const moveBar = document.createElement('div');
+                moveBar.className = 'token-move-bar';
+                moveBar.title = `移動能量：${remaining}/${maxMove} 格`;
+                const moveFill = document.createElement('div');
+                moveFill.className = 'token-move-fill' + (remaining === 0 ? ' depleted' : '');
+                moveFill.style.width = Math.round((remaining / maxMove) * 100) + '%';
+                moveBar.appendChild(moveFill);
+                t.appendChild(moveBar);
+            }
+        }
+
         // 儲存棋子點擊起始座標（用於判斷是拖曳還是點擊）
         let tokenClickStartX = null;
         let tokenClickStartY = null;
@@ -864,11 +883,47 @@ function screenToGrid(clientX, clientY) {
     return { x: gx, y: gy };
 }
 
+// ===== 移動攔截器（5 米 1 格，斜走加倍）=====
 /**
- * 計算折線總距離
+ * 移動防呆攔截：在單位移動到 (targetX, targetY) 前檢查並消耗移動能量。
+ *
+ * 規則：
+ *   - ST 可自由移動所有棋子，不消耗、不受限。
+ *   - 部署（從場外 x=-1 進場）與收回不消耗能量。
+ *   - 非戰鬥中不設限（回合制能量只在戰鬥回合內結算）。
+ *   - 戰鬥中：以戰術消耗算法（直走 1、斜走 2）計算消耗，
+ *     超過剩餘能量（floor(移動速度/5) - 本回合已消耗）則攔截並提示。
+ *
+ * 通過檢查時會把消耗累加到 unit.moveUsed（能量條扣除），呼叫端負責同步。
+ * @param {Object} unit - 要移動的單位
+ * @param {number} targetX - 目標格 X
+ * @param {number} targetY - 目標格 Y
+ * @returns {boolean} true = 放行；false = 已攔截（並顯示提示）
+ */
+function applyMoveCost(unit, targetX, targetY) {
+    if (!unit) return false;
+    if (myRole === 'st') return true;                     // ST 自由移動
+    if (unit.x < 0 || targetX < 0) return true;           // 部署 / 收回不計消耗
+    if (!state.isCombatActive) return true;               // 非戰鬥中不設限
+
+    const cost = calcTacticalCost(targetX - unit.x, targetY - unit.y);
+    if (cost === 0) return true;
+
+    const remaining = getUnitMoveRemaining(unit);
+    if (cost > remaining) {
+        showToast(`⚡ 移動能量不足：需要 ${cost} 格，剩餘 ${remaining} 格`);
+        return false;
+    }
+
+    unit.moveUsed = (parseInt(unit.moveUsed) || 0) + cost;
+    return true;
+}
+
+/**
+ * 計算折線總消耗格數（戰術消耗算法：直走 1 格消耗 1，斜走 1 格消耗 2）
  * @param {Array} points - 折點陣列
  * @param {{ x: number, y: number }|null} current - 當前游標位置
- * @returns {number}
+ * @returns {number} 總消耗格數（整數）
  */
 function calcRulerDistance(points, current) {
     const all = current ? [...points, current] : points;
@@ -876,7 +931,7 @@ function calcRulerDistance(points, current) {
     for (let i = 1; i < all.length; i++) {
         const dx = all[i].x - all[i - 1].x;
         const dy = all[i].y - all[i - 1].y;
-        total += Math.sqrt(dx * dx + dy * dy);
+        total += calcTacticalCost(dx, dy);
     }
     return total;
 }
@@ -984,14 +1039,14 @@ function initRulerEvents() {
         rulerCurrentPos = current;
         renderRuler();
 
-        // 計算總距離
-        const dist = calcRulerDistance(rulerPoints, rulerCurrentPos).toFixed(1);
+        // 計算總消耗格數（直走 1、斜走 2）
+        const cost = calcRulerDistance(rulerPoints, rulerCurrentPos);
 
-        // 更新標籤
+        // 更新標籤：只顯示總消耗格數，不換算米數
         const label = document.getElementById('ruler-label');
         if (label) {
             label.style.display = 'block';
-            label.textContent = `${dist} 格`;
+            label.textContent = `消耗 ${cost} 格`;
 
             const vpRect = vp.getBoundingClientRect();
             label.style.left = (e.clientX - vpRect.left) + 'px';

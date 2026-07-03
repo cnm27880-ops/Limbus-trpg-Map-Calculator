@@ -1191,6 +1191,10 @@ function renderIdentityModal() {
     const el = document.getElementById('identity-modal');
     if (!el) return;
 
+    // 重繪前記住內容區捲動位置，重繪後還原，避免每次輸入/勾選都跳回頂端
+    const oldBody = el.querySelector('.idt-body');
+    const currentScroll = oldBody ? oldBody.scrollTop : 0;
+
     const owners = (typeof getIdentityOwners === 'function') ? getIdentityOwners() : [];
     const ownerOpts = owners.map(o => {
         const sel = o === identityHudState.owner ? ' selected' : '';
@@ -1250,7 +1254,6 @@ function renderIdentityModal() {
             </div>
         </div>`;
     idtMountFloatPanel();
-}
 
     const newBody = el.querySelector('.idt-body');
     if (newBody) newBody.scrollTop = currentScroll;

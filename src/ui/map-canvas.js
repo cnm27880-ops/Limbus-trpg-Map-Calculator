@@ -239,12 +239,18 @@ function attachMapCanvasEvents(canvas) {
 
             if (u && controllable) {
                 if (myRole === 'st') {
+                    // ST 可自由移動所有棋子，不受移動能量限制
                     u.x = cell.x;
                     u.y = cell.y;
                     selectedUnitId = null;
                     broadcastState();
                 } else {
-                    sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: cell.x, y: cell.y });
+                    // 玩家移動攔截器：戰術消耗（直走 1、斜走 2）超過剩餘能量則擋下
+                    if (typeof applyMoveCost === 'function' && !applyMoveCost(u, cell.x, cell.y)) {
+                        e.stopPropagation();
+                        return;
+                    }
+                    sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: cell.x, y: cell.y, moveUsed: u.moveUsed || 0 });
                     u.x = cell.x;
                     u.y = cell.y;
                     selectedUnitId = null;

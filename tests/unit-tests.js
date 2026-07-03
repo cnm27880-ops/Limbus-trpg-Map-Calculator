@@ -512,6 +512,90 @@ console.log('\n[Phase 3A] WindowManager：z-index 分層與點擊置頂');
     });
 })();
 
+// ====================================================================
+console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
+// ====================================================================
+// utils.js（calcTacticalCost / getUnitMaxMoveGrids / getUnitMoveRemaining）與
+// map.js（calcRulerDistance / applyMoveCost）使用獨立沙箱，
+// 避免 utils.js 的 showToast 等函式覆蓋主沙箱的 stub。
+(() => {
+    const mvSandbox = {
+        console,
+        document: { getElementById: () => null },
+        window: undefined,
+        myRole: 'player',
+        state: { isCombatActive: true },
+    };
+    vm.createContext(mvSandbox);
+    const mvCombined = ['src/utils/utils.js', 'src/ui/map.js'].map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __mv = { calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining, calcRulerDistance, applyMoveCost };';
+    vm.runInContext(mvCombined, mvSandbox, { filename: 'combined-move-sources.js' });
+    const { calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining, calcRulerDistance, applyMoveCost } = mvSandbox.__mv;
+
+    test('calcTacticalCost：純直走 → 每格消耗 1', () => {
+        assert.strictEqual(calcTacticalCost(3, 0), 3);
+        assert.strictEqual(calcTacticalCost(0, 4), 4);
+    });
+    test('calcTacticalCost：純斜走 → 每格消耗 2', () => {
+        assert.strictEqual(calcTacticalCost(2, 2), 4);
+        assert.strictEqual(calcTacticalCost(-3, 3), 6);
+    });
+    test('calcTacticalCost：混合路徑 → 直走 + 斜走×2 加總', () => {
+        // (3,2)：斜走 2 步（消耗 4）+ 直走 1 步（消耗 1）= 5
+        assert.strictEqual(calcTacticalCost(3, 2), 5);
+        assert.strictEqual(calcTacticalCost(-3, 2), 5);
+        // (1,-5)：斜走 1 步（消耗 2）+ 直走 4 步（消耗 4）= 6
+        assert.strictEqual(calcTacticalCost(1, -5), 6);
+    });
+    test('calcRulerDistance：折線各段消耗加總（含游標段）', () => {
+        // (0,0)→(3,2) 消耗 5；(3,2)→(3,5) 消耗 3；合計 8
+        const total = calcRulerDistance([{ x: 0, y: 0 }, { x: 3, y: 2 }], { x: 3, y: 5 });
+        assert.strictEqual(total, 8);
+    });
+    test('getUnitMaxMoveGrids：floor(移動速度/5)，未設定預設 20 米 = 4 格', () => {
+        assert.strictEqual(getUnitMaxMoveGrids({ moveSpeed: 20 }), 4);
+        assert.strictEqual(getUnitMaxMoveGrids({ moveSpeed: 23 }), 4);  // 向下取整
+        assert.strictEqual(getUnitMaxMoveGrids({ moveSpeed: 7 }), 1);
+        assert.strictEqual(getUnitMaxMoveGrids({}), 4);                 // 預設 20
+    });
+    test('getUnitMoveRemaining：上限 - 已消耗，不為負', () => {
+        assert.strictEqual(getUnitMoveRemaining({ moveSpeed: 20, moveUsed: 3 }), 1);
+        assert.strictEqual(getUnitMoveRemaining({ moveSpeed: 20, moveUsed: 9 }), 0);
+    });
+    test('applyMoveCost：能量足夠 → 放行並累加 moveUsed', () => {
+        mvSandbox.myRole = 'player';
+        mvSandbox.state.isCombatActive = true;
+        const u = { x: 0, y: 0, moveSpeed: 20, moveUsed: 0 };
+        assert.strictEqual(applyMoveCost(u, 2, 2), true);   // 斜走 2 步 = 4 格
+        assert.strictEqual(u.moveUsed, 4);
+    });
+    test('applyMoveCost：能量耗盡 → 攔截且不累加', () => {
+        mvSandbox.myRole = 'player';
+        mvSandbox.state.isCombatActive = true;
+        const u = { x: 0, y: 0, moveSpeed: 20, moveUsed: 4 };
+        assert.strictEqual(applyMoveCost(u, 1, 0), false);  // 剩 0 格，直走 1 也不行
+        assert.strictEqual(u.moveUsed, 4);
+    });
+    test('applyMoveCost：ST 自由移動，不消耗能量', () => {
+        mvSandbox.myRole = 'st';
+        const u = { x: 0, y: 0, moveSpeed: 20, moveUsed: 4 };
+        assert.strictEqual(applyMoveCost(u, 10, 10), true);
+        assert.strictEqual(u.moveUsed, 4);
+    });
+    test('applyMoveCost：部署（場外進場）與非戰鬥中不設限', () => {
+        mvSandbox.myRole = 'player';
+        mvSandbox.state.isCombatActive = true;
+        const deploying = { x: -1, y: -1, moveSpeed: 20, moveUsed: 0 };
+        assert.strictEqual(applyMoveCost(deploying, 5, 5), true);
+        assert.strictEqual(deploying.moveUsed, 0);
+
+        mvSandbox.state.isCombatActive = false;
+        const explorer = { x: 0, y: 0, moveSpeed: 20, moveUsed: 0 };
+        assert.strictEqual(applyMoveCost(explorer, 10, 10), true);
+        assert.strictEqual(explorer.moveUsed, 0);
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

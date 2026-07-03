@@ -49,9 +49,10 @@ function toggleCombat() {
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
         state.roundNum = 1;
-        // 戰鬥開始時所有自動護盾回滿
+        // 戰鬥開始時所有自動護盾回滿、移動能量條回滿（moveUsed 歸零）
         state.units.forEach(u => {
             if ((u.shieldAutoMax || 0) > 0) u.shieldAuto = u.shieldAutoMax;
+            u.moveUsed = 0;
         });
         broadcastState();
         showToast('戰鬥開始！');
@@ -790,6 +791,11 @@ function nextTurn() {
         if (activeUnit && (activeUnit.shieldAutoMax || 0) > 0 && (activeUnit.shieldAuto || 0) < activeUnit.shieldAutoMax) {
             activeUnit.shieldAuto = activeUnit.shieldAutoMax;
             showToast(`🛡 ${activeUnit.name || '單位'} 的自動護盾已回滿（${activeUnit.shieldAutoMax}）`);
+        }
+
+        // 輪到的單位移動能量條回滿（本回合可重新移動 floor(移動速度/5) 格）
+        if (activeUnit && !activeUnit.actionSlotOf) {
+            activeUnit.moveUsed = 0;
         }
 
         // 防禦附加成功是回合刷新資源：輪到 BOSS 主體（非多重行動子條目）的行動時重置滿額，

@@ -272,11 +272,13 @@ function getUnitTemplates() {
  */
 function normalizeUnitTemplate(template) {
     const combat = (template.combat && typeof template.combat === 'object') ? template.combat : {};
+    const moveSpeed = parseInt(template.moveSpeed);
     return {
         name: template.name || 'Template',
         hp: template.hp || 10,
         type: template.type || 'enemy',
         size: template.size || 1,
+        moveSpeed: (Number.isFinite(moveSpeed) && moveSpeed >= 0) ? moveSpeed : 20,  // 移動速度（米），5 米 = 1 格
         avatar: template.avatar || null,
         // 完整戰鬥數值：讓 ST 設定好一隻小怪後可直接套用到其他同類小怪，不必每隻重新填一次
         combat: {

@@ -56,6 +56,11 @@ function initModals() {
                             <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
                         </div>
                     </div>
+                    <div class="calc-field" style="margin-top:10px;">
+                        <span class="calc-label">移動速度 (米)</span>
+                        <input type="number" id="add-move-speed" value="20" min="0" max="999" title="每回合可移動距離（米）。5 米 = 1 格，斜走消耗加倍。">
+                        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px;">5 米 = 1 格；每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2。</div>
+                    </div>
 
                     <!-- 隱藏欄位：儲存模板頭像 / 完整戰鬥數值（JSON） -->
                     <input type="hidden" id="add-template-avatar" value="">
@@ -243,6 +248,7 @@ function openAddUnitModal() {
     document.getElementById('add-hp').value = '10';
     document.getElementById('add-type').value = 'enemy';
     document.getElementById('add-size').value = '1';
+    document.getElementById('add-move-speed').value = '20';
     document.getElementById('add-avatar').checked = false;
     document.getElementById('add-template-avatar').value = '';
     document.getElementById('add-template-combat').value = '';
@@ -305,6 +311,7 @@ function loadUnitTemplate(templateId) {
     document.getElementById('add-hp').value = template.hp || 10;
     document.getElementById('add-type').value = template.type || 'enemy';
     document.getElementById('add-size').value = template.size || 1;
+    document.getElementById('add-move-speed').value = (template.moveSpeed !== undefined) ? template.moveSpeed : 20;
 
     // 完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態）：
     // Add-Unit 表單本身沒有對應欄位，暫存於隱藏欄位，待 confirmAddUnit() 建立單位後一併套用。
@@ -365,6 +372,7 @@ function saveAsUnitTemplate() {
     const hp = parseInt(document.getElementById('add-hp').value) || 10;
     const type = document.getElementById('add-type').value;
     const size = parseInt(document.getElementById('add-size').value) || 1;
+    const moveSpeed = parseInt(document.getElementById('add-move-speed').value);
     const avatar = document.getElementById('add-template-avatar').value || null;
     let combat = null;
     try {
@@ -382,6 +390,7 @@ function saveAsUnitTemplate() {
         hp: hp,
         type: type,
         size: size,
+        moveSpeed: Number.isFinite(moveSpeed) ? moveSpeed : 20,
         avatar: avatar,
         combat: combat
     });
@@ -494,6 +503,8 @@ function confirmAddUnit() {
     const hp = parseInt(document.getElementById('add-hp').value) || 10;
     const type = document.getElementById('add-type').value;
     const size = parseInt(document.getElementById('add-size').value) || 1;
+    const moveSpeedRaw = parseInt(document.getElementById('add-move-speed').value);
+    const moveSpeed = (Number.isFinite(moveSpeedRaw) && moveSpeedRaw >= 0) ? Math.min(999, moveSpeedRaw) : 20;
     const useAvatar = document.getElementById('add-avatar').checked;
     const templateAvatar = document.getElementById('add-template-avatar').value || '';
     // 模板可能帶有完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態），
@@ -505,7 +516,7 @@ function confirmAddUnit() {
     } catch (e) { templateCombat = null; }
 
     if (myRole === 'st') {
-        const u = createUnit(name, hp, type, myPlayerId, myName, size);
+        const u = createUnit(name, hp, type, myPlayerId, myName, size, moveSpeed);
 
         // 優先使用模板頭像，否則觸發上傳
         if (templateAvatar) {
@@ -531,6 +542,7 @@ function confirmAddUnit() {
             unitType: type,
             playerName: myName,
             size: size,
+            moveSpeed: moveSpeed,            // 移動速度（米），5 米 = 1 格
             avatar: templateAvatar || null,  // 傳送模板頭像給 ST
             combat: templateCombat || null   // 傳送模板戰鬥數值給 ST
         });

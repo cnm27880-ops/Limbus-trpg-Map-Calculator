@@ -1252,6 +1252,10 @@ function renderIdentityModal() {
     idtMountFloatPanel();
 }
 
+    const newBody = el.querySelector('.idt-body');
+    if (newBody) newBody.scrollTop = currentScroll;
+}
+
 // ===== 樣式（一次性注入，沿用網站 CSS 變數） =====
 function injectIdentityStyles() {
     if (document.getElementById('identity-hud-styles')) return;

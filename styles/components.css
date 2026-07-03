@@ -638,6 +638,39 @@ body.aoe-select-active .token {
     border: 1px solid transparent;
 }
 
+/* 護盾按鈕：藍色描邊＋文字，避免單一 emoji 在深色底上不明顯 */
+.action-btn.shield-btn {
+    color: #7ec8ff;
+    border-color: rgba(66, 165, 245, 0.55);
+    background: rgba(21, 43, 66, 0.65);
+    white-space: nowrap;
+}
+
+/* 單位卡操作列的移動速度輸入（僅我方單位）：🏃 + 數字 + 米 */
+.unit-move-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    background: rgba(24, 46, 28, 0.65);
+    border: 1px solid rgba(67, 160, 71, 0.55);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #9ccc9c;
+    cursor: default;
+}
+.unit-move-speed input {
+    width: 44px;
+    padding: 2px 4px;
+    text-align: center;
+    background: var(--bg-input);
+    color: var(--text-main);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
 .action-btn:hover {
     color: var(--text-main);
     border-color: var(--border);
@@ -5368,7 +5401,9 @@ body.combat-mode .boss-hud-container {
 .monster-lib-stats { font-size: .75rem; color: var(--accent-orange, #fb8c00); margin-top: 2px; }
 .monster-lib-notes { font-size: .72rem; color: var(--text-dim, #999); margin-top: 2px; }
 .monster-lib-passive { font-size: .72rem; color: var(--accent-purple, #8e24aa); margin-top: 2px; line-height: 1.5; }
-.monster-lib-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+/* 操作鈕豎向堆疊＋縮小尺寸，避免橫向擠壓左側的怪物資料文字 */
+.monster-lib-actions { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; align-items: stretch; }
+.monster-lib-actions .lv-btn { padding: 2px 8px; font-size: .68rem; line-height: 1.4; border-radius: 5px; }
 .lv-btn-deploy { background: #14301a; border-color: var(--accent-green, #43a047); color: #8fe08f; white-space: nowrap; }
 .lv-btn-tpl { background: #241a33; border-color: var(--accent-purple, #7e57c2); color: #c9aaff; white-space: nowrap; }
 .lv-btn-del { background: #2a1414; border-color: var(--accent-red, #e53935); color: #ff8080; }

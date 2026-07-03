@@ -13,6 +13,11 @@ let counterPhaseState = { started: false, roundId: 0, bossId: null, actions: [],
 let counterPhaseListener = null;
 let cpLastPoppedRound = -1;
 let cpLastFinalizedRound = -1;
+// 本次連線已看過的快照狀態（null = 尚未收到首個快照）。
+// counterPhase 節點會一直留在 Firebase，頁面載入的首個快照是「存量資料」而非 ST 的即時徵詢，
+// 一律不自動彈出面板；只有連線期間 roundId／finalized 發生「即時變化」（ST 按下徵詢/公佈）才彈。
+let cpSeenRoundId = null;
+let cpSeenFinalized = null;
 
 // 「已自動彈出過的輪次」持久化（依房間分開記憶）：
 // counterPhase 節點會一直留在 Firebase（沒有「結束徵詢」的動作），
@@ -77,6 +82,10 @@ function cpSetupListener() {
     if (!ref) return;
     if (counterPhaseListener) ref.off('value', counterPhaseListener);
 
+    // 重新掛監聽（換房/重連）時重置基準：下一個快照視為「載入存量」，不觸發自動彈出
+    cpSeenRoundId = null;
+    cpSeenFinalized = null;
+
     counterPhaseListener = ref.on('value', snapshot => {
         counterPhaseState = cpNormalizeState(snapshot.val());
         cpHandleUpdate();
@@ -91,19 +100,28 @@ function cpHandleUpdate() {
     // 浮動面板（玩家端持久面板）每次狀態變動都重新渲染，讓所有人即時看到彼此的對抗分配
     if (typeof cpRenderFloatPanel === 'function') cpRenderFloatPanel();
 
+    // 即時變化偵測：首個快照（頁面載入時的存量資料）只記錄基準、絕不自動彈出，
+    // 之後 roundId 變化 = ST 開啟新徵詢、finalized false→true = ST 剛公佈結果
+    const firstSnapshot = (cpSeenRoundId === null);
+    const isLiveNewRound = !firstSnapshot && counterPhaseState.roundId !== cpSeenRoundId;
+    const isLiveFinalized = !firstSnapshot && counterPhaseState.finalized && cpSeenFinalized === false;
+    cpSeenRoundId = counterPhaseState.roundId;
+    cpSeenFinalized = counterPhaseState.finalized;
+
     if (myRole === 'st' || !counterPhaseState.started) return;
     const mine = (counterPhaseState.assignments || {})[myPlayerId];
-    // 自動彈出條件：本輪尚未公佈結果、自己尚未送出、且「這一輪」從未在此瀏覽器彈出過
-    //（記憶體＋localStorage 雙重判斷——重新整理頁面不會因殘留的舊徵詢再跳一次）
-    if (mine === undefined && !counterPhaseState.finalized
+    // 自動彈出條件：ST「剛剛」開啟新一輪徵詢（連線期間即時變化）、本輪尚未公佈、自己尚未送出，
+    // 且這一輪從未在此瀏覽器彈出過（記憶體＋localStorage 標記為輔）。
+    // 頁面載入時的殘留徵詢一律不彈——玩家可從快捷球「本回合對抗分配」自行開啟。
+    if (isLiveNewRound && mine === undefined && !counterPhaseState.finalized
         && counterPhaseState.roundId !== cpLastPoppedRound
         && counterPhaseState.roundId !== cpLoadPoppedRound()) {
         cpLastPoppedRound = counterPhaseState.roundId;
         cpSavePoppedRound(counterPhaseState.roundId);
         if (typeof openCounterAssignModal === 'function') openCounterAssignModal();
     }
-    // ST 公佈最終結果 → 自動彈出面板讓玩家看到結果（每輪僅一次；同樣持久化，重整不再重跳）
-    if (counterPhaseState.finalized && counterPhaseState.roundId !== cpLastFinalizedRound
+    // ST「剛剛」公佈最終結果 → 自動彈出面板讓玩家看到結果（每輪僅一次；頁面重整不再重跳）
+    if (isLiveFinalized && counterPhaseState.roundId !== cpLastFinalizedRound
         && counterPhaseState.roundId !== cpLoadFinalizedRound()) {
         cpLastFinalizedRound = counterPhaseState.roundId;
         cpSaveFinalizedRound(counterPhaseState.roundId);

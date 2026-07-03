@@ -25,7 +25,7 @@ function initModals() {
                         <select id="template-select" onchange="loadUnitTemplate(this.value)" style="flex:1;">
                             <option value="">-- 載入模板 --</option>
                         </select>
-                        <button class="modal-btn" onclick="deleteSelectedTemplate()" style="background:var(--bg-input);padding:8px 12px;" title="刪除選中的模板">🗑️</button>
+                        <button class="modal-btn" onclick="openTemplateManager()" style="background:var(--bg-input);padding:8px 12px;" title="模板管理：查看／修改數值／刪除">🗂 管理</button>
                     </div>
 
                     <!-- 頭像預覽區 -->
@@ -56,15 +56,30 @@ function initModals() {
                             <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
                         </div>
                     </div>
-                    <div class="calc-field" style="margin-top:10px;">
-                        <span class="calc-label">移動速度 (米)</span>
-                        <input type="number" id="add-move-speed" value="20" min="0" max="999" title="每回合可移動距離（米）。5 米 = 1 格，斜走消耗加倍。">
-                        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px;">5 米 = 1 格；每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2。</div>
-                    </div>
 
-                    <!-- 隱藏欄位：儲存模板頭像 / 完整戰鬥數值（JSON） -->
+                    <!-- 進階戰鬥數值：直接在此填好即可存成完整模板，不必先建單位再回頭存 -->
+                    <details id="add-combat-details" style="margin-top:10px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
+                        <summary style="cursor:pointer;font-size:0.85rem;color:var(--accent-purple);font-weight:600;">⚔ 戰鬥數值（進階，可留空）</summary>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;">
+                            <div class="calc-field"><span class="calc-label">防禦 DP</span><input type="number" id="add-c-defdp" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">防禦附加成功</span><input type="number" id="add-c-defauto" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">先攻</span><input type="number" id="add-c-init" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">意志豁免</span><input type="number" id="add-c-savewill" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">反射豁免</span><input type="number" id="add-c-savereflex" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">堅韌豁免</span><input type="number" id="add-c-savetenacity" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">全屬性</span><input type="number" id="add-c-allattr" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">全技能</span><input type="number" id="add-c-allskill" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">支線等級</span><input type="number" id="add-c-sidelevel" value="1" min="1"></div>
+                        </div>
+                        <div class="calc-field" style="margin-top:8px;"><span class="calc-label">行動 DP（攻擊）</span><input type="number" id="add-c-actiondp" value="0"></div>
+                        <div class="calc-field" style="margin-top:8px;"><span class="calc-label">被動能力（每行一條）</span><textarea id="add-c-passive" rows="2" style="width:100%;resize:vertical;"></textarea></div>
+                        <div class="calc-field" style="margin-top:8px;"><span class="calc-label">行動說明</span><input type="text" id="add-c-actionnote" value=""></div>
+                    </details>
+
+                    <!-- 隱藏欄位：儲存模板頭像 / 完整戰鬥數值（JSON）/ 模板移動速度 -->
                     <input type="hidden" id="add-template-avatar" value="">
                     <input type="hidden" id="add-template-combat" value="">
+                    <input type="hidden" id="add-template-movespeed" value="">
                 </div>
                 <div class="modal-footer">
                     <button class="modal-btn" onclick="closeModal('modal-add-unit')" style="background:var(--bg-card);">取消</button>
@@ -248,11 +263,14 @@ function openAddUnitModal() {
     document.getElementById('add-hp').value = '10';
     document.getElementById('add-type').value = 'enemy';
     document.getElementById('add-size').value = '1';
-    document.getElementById('add-move-speed').value = '20';
     document.getElementById('add-avatar').checked = false;
     document.getElementById('add-template-avatar').value = '';
     document.getElementById('add-template-combat').value = '';
+    document.getElementById('add-template-movespeed').value = '';
     document.getElementById('template-select').value = '';
+    fillAddCombatFields(null);
+    const combatDetails = document.getElementById('add-combat-details');
+    if (combatDetails) combatDetails.open = false;
 
     // 隱藏頭像預覽
     const preview = document.getElementById('template-avatar-preview');
@@ -286,6 +304,64 @@ function refreshTemplateSelect(selectId = 'template-select') {
 }
 
 /**
+ * 把戰鬥數值填入新增單位 Modal 的進階欄位（null = 全部歸零重置）
+ * @param {Object|null} combat - 見 storage.js normalizeUnitTemplate 的 combat 結構
+ */
+function fillAddCombatFields(combat) {
+    const c = (combat && typeof combat === 'object') ? combat : {};
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    setVal('add-c-defdp', parseInt(c.defDp) || 0);
+    setVal('add-c-defauto', parseInt(c.defAuto) || 0);
+    setVal('add-c-init', parseInt(c.init) || 0);
+    setVal('add-c-savewill', parseInt(c.saveWill) || 0);
+    setVal('add-c-savereflex', parseInt(c.saveReflex) || 0);
+    setVal('add-c-savetenacity', parseInt(c.saveTenacity) || 0);
+    setVal('add-c-allattr', parseInt(c.allAttr) || 0);
+    setVal('add-c-allskill', parseInt(c.allSkill) || 0);
+    setVal('add-c-sidelevel', Math.max(1, parseInt(c.sideLevel) || 1));
+    setVal('add-c-actiondp', parseInt(c.actionDp) || 0);
+    setVal('add-c-passive', String(c.passive || ''));
+    setVal('add-c-actionnote', String(c.actionNote || ''));
+}
+
+/**
+ * 讀回進階欄位，疊在載入模板暫存的完整戰鬥數值之上
+ * （actionAoe / actionStatuses 等表單沒有的欄位由暫存 JSON 保留，不會遺失）
+ * @returns {Object|null} 合併後的 combat；完全沒有數值時回傳 null
+ */
+function readAddCombatFields() {
+    let base = null;
+    try {
+        const raw = document.getElementById('add-template-combat').value;
+        base = raw ? JSON.parse(raw) : null;
+    } catch (e) { base = null; }
+
+    const num = id => parseInt(document.getElementById(id)?.value) || 0;
+    const txt = id => String(document.getElementById(id)?.value || '');
+    const fields = {
+        defDp: num('add-c-defdp'),
+        defAuto: num('add-c-defauto'),
+        init: num('add-c-init'),
+        saveWill: num('add-c-savewill'),
+        saveReflex: num('add-c-savereflex'),
+        saveTenacity: num('add-c-savetenacity'),
+        allAttr: num('add-c-allattr'),
+        allSkill: num('add-c-allskill'),
+        sideLevel: Math.max(1, parseInt(document.getElementById('add-c-sidelevel')?.value) || 1),
+        actionDp: num('add-c-actiondp'),
+        passive: txt('add-c-passive'),
+        actionNote: txt('add-c-actionnote')
+    };
+
+    const merged = Object.assign({}, base || {}, fields);
+    // 全部為預設值且沒有載入模板 → 視為未填寫，維持與舊行為一致（不掛 combat）
+    const hasValue = base !== null
+        || Object.values(fields).some(v => (typeof v === 'number' ? v !== 0 : v.trim() !== ''))
+        || fields.sideLevel !== 1;
+    return hasValue ? merged : null;
+}
+
+/**
  * 載入單位模板
  * @param {string} templateId - 模板 ID
  */
@@ -294,7 +370,9 @@ function loadUnitTemplate(templateId) {
         // 選擇了空選項，重置頭像預覽與戰鬥數值暫存
         document.getElementById('add-template-avatar').value = '';
         document.getElementById('add-template-combat').value = '';
+        document.getElementById('add-template-movespeed').value = '';
         document.getElementById('template-avatar-preview').style.display = 'none';
+        fillAddCombatFields(null);
         return;
     }
 
@@ -311,12 +389,15 @@ function loadUnitTemplate(templateId) {
     document.getElementById('add-hp').value = template.hp || 10;
     document.getElementById('add-type').value = template.type || 'enemy';
     document.getElementById('add-size').value = template.size || 1;
-    document.getElementById('add-move-speed').value = (template.moveSpeed !== undefined) ? template.moveSpeed : 20;
+    document.getElementById('add-template-movespeed').value = (template.moveSpeed !== undefined) ? template.moveSpeed : '';
 
-    // 完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態）：
-    // Add-Unit 表單本身沒有對應欄位，暫存於隱藏欄位，待 confirmAddUnit() 建立單位後一併套用。
+    // 完整戰鬥數值：主要欄位直接填入進階區塊供檢視/修改；
+    // 表單沒有的欄位（actionAoe/actionStatuses 等）暫存於隱藏欄位，儲存時合併保留。
     document.getElementById('add-template-combat').value =
         (template.combat && typeof template.combat === 'object') ? JSON.stringify(template.combat) : '';
+    fillAddCombatFields(template.combat);
+    const details = document.getElementById('add-combat-details');
+    if (details && template.combat) details.open = true;
 
     // 處理頭像
     if (template.avatar) {
@@ -372,13 +453,11 @@ function saveAsUnitTemplate() {
     const hp = parseInt(document.getElementById('add-hp').value) || 10;
     const type = document.getElementById('add-type').value;
     const size = parseInt(document.getElementById('add-size').value) || 1;
-    const moveSpeed = parseInt(document.getElementById('add-move-speed').value);
     const avatar = document.getElementById('add-template-avatar').value || null;
-    let combat = null;
-    try {
-        const raw = document.getElementById('add-template-combat').value;
-        combat = raw ? JSON.parse(raw) : null;
-    } catch (e) { combat = null; }
+    // 戰鬥數值：進階欄位（可直接在本表單填寫）疊在載入模板的完整數值之上
+    const combat = readAddCombatFields();
+    // 移速：表單已無移速欄（移至單位卡編輯），沿用載入模板的值，未載入則交由預設（20）
+    const moveSpeed = parseInt(document.getElementById('add-template-movespeed').value);
 
     if (typeof saveUnitTemplate !== 'function') {
         showToast('模板功能不可用');
@@ -402,41 +481,6 @@ function saveAsUnitTemplate() {
         document.getElementById('template-select').value = result.template.id;
     } else {
         showToast('儲存模板失敗');
-    }
-}
-
-/**
- * 刪除選中的模板
- */
-function deleteSelectedTemplate() {
-    const select = document.getElementById('template-select');
-    const templateId = select ? select.value : '';
-
-    if (!templateId) {
-        showToast('請先選擇要刪除的模板');
-        return;
-    }
-
-    const templates = typeof getUnitTemplates === 'function' ? getUnitTemplates() : [];
-    const template = templates.find(t => t.id === templateId);
-
-    if (!template) {
-        showToast('找不到該模板');
-        return;
-    }
-
-    if (!confirm(`確定要刪除模板「${template.name}」嗎？`)) {
-        return;
-    }
-
-    if (typeof deleteUnitTemplate === 'function' && deleteUnitTemplate(templateId)) {
-        showToast(`已刪除模板：${template.name}`);
-        refreshTemplateSelect();
-        // 清空頭像預覽
-        document.getElementById('add-template-avatar').value = '';
-        document.getElementById('template-avatar-preview').style.display = 'none';
-    } else {
-        showToast('刪除模板失敗');
     }
 }
 
@@ -503,17 +547,12 @@ function confirmAddUnit() {
     const hp = parseInt(document.getElementById('add-hp').value) || 10;
     const type = document.getElementById('add-type').value;
     const size = parseInt(document.getElementById('add-size').value) || 1;
-    const moveSpeedRaw = parseInt(document.getElementById('add-move-speed').value);
+    const moveSpeedRaw = parseInt(document.getElementById('add-template-movespeed').value);
     const moveSpeed = (Number.isFinite(moveSpeedRaw) && moveSpeedRaw >= 0) ? Math.min(999, moveSpeedRaw) : 20;
     const useAvatar = document.getElementById('add-avatar').checked;
     const templateAvatar = document.getElementById('add-template-avatar').value || '';
-    // 模板可能帶有完整戰鬥數值（defDp/defAuto/三豁免/全屬性技能/支線等級/本體行動DP・狀態），
-    // Add-Unit 表單本身沒有對應欄位，故從 loadUnitTemplate() 暫存的隱藏欄位讀回。
-    let templateCombat = null;
-    try {
-        const raw = document.getElementById('add-template-combat').value;
-        templateCombat = raw ? JSON.parse(raw) : null;
-    } catch (e) { templateCombat = null; }
+    // 戰鬥數值：進階欄位（含載入模板後的修改）疊在模板完整數值之上
+    const templateCombat = readAddCombatFields();
 
     if (myRole === 'st') {
         const u = createUnit(name, hp, type, myPlayerId, myName, size, moveSpeed);
@@ -1075,3 +1114,195 @@ function confirmMaxHpModify() {
 }
 
 
+
+// ===== 模板管理器（查看／修改數值／刪除） =====
+/**
+ * 開啟模板管理 Modal：列出所有已儲存的單位模板，
+ * 每筆可展開行內編輯（名稱/HP/類型/大小/移速/完整戰鬥數值）、儲存與刪除。
+ */
+function openTemplateManager() {
+    closeTemplateManager();
+    const html = `
+        <div class="modal-overlay show" id="template-manager-modal" onclick="if(event.target.id==='template-manager-modal')closeTemplateManager()">
+            <div class="modal" style="max-width:560px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span>🗂 模板管理</span>
+                    <button onclick="closeTemplateManager()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body" style="max-height:65vh;overflow-y:auto;">
+                    <div id="tm-list"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="closeTemplateManager()" style="background:var(--bg-card);">關閉</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
+    tmRenderList();
+}
+
+function closeTemplateManager() {
+    const modal = document.getElementById('template-manager-modal');
+    if (modal) modal.remove();
+}
+
+/** 渲染模板清單（每筆：摘要列 + 可展開的編輯表單） */
+function tmRenderList() {
+    const box = document.getElementById('tm-list');
+    if (!box) return;
+    const templates = (typeof getUnitTemplates === 'function') ? getUnitTemplates() : [];
+
+    if (!templates.length) {
+        box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);">尚無模板。可在「新增單位」填好數值後按「存為模板」。</div>';
+        return;
+    }
+
+    box.innerHTML = templates.map(t => {
+        const c = (t.combat && typeof t.combat === 'object') ? t.combat : {};
+        const typeTxt = t.type === 'boss' ? 'BOSS' : t.type === 'enemy' ? '敵方' : '我方';
+        const summary = `HP ${t.hp}｜${typeTxt}｜${t.size || 1}x${t.size || 1}｜移速 ${t.moveSpeed !== undefined ? t.moveSpeed : 20}米`
+            + `｜防 ${c.defDp || 0}(+${c.defAuto || 0})｜攻DP ${c.actionDp || 0}｜先攻 ${c.init || 0}`;
+        return `
+            <div class="tm-card" id="tm-card-${t.id}">
+                <div class="tm-card-head">
+                    <div class="tm-card-info">
+                        <div class="tm-card-name">${escapeHtml(t.name || '')}</div>
+                        <div class="tm-card-summary">${escapeHtml(summary)}</div>
+                    </div>
+                    <div class="tm-card-btns">
+                        <button class="tm-btn tm-btn-edit" onclick="tmToggleEdit('${t.id}')">✏ 編輯</button>
+                        <button class="tm-btn tm-btn-del" onclick="tmDelete('${t.id}')">🗑 刪除</button>
+                    </div>
+                </div>
+                <div class="tm-edit-form" id="tm-edit-${t.id}" style="display:none;"></div>
+            </div>
+        `;
+    }).join('');
+}
+
+/** 展開／收合某模板的行內編輯表單 */
+function tmToggleEdit(id) {
+    const form = document.getElementById('tm-edit-' + id);
+    if (!form) return;
+    if (form.style.display !== 'none') {
+        form.style.display = 'none';
+        form.innerHTML = '';
+        return;
+    }
+    const t = ((typeof getUnitTemplates === 'function') ? getUnitTemplates() : []).find(x => x.id === id);
+    if (!t) return;
+    const c = (t.combat && typeof t.combat === 'object') ? t.combat : {};
+
+    const numField = (label, fid, val, extra = '') => `
+        <div class="calc-field"><span class="calc-label">${label}</span>
+        <input type="number" id="tm-${fid}-${id}" value="${val}" ${extra}></div>`;
+
+    form.innerHTML = `
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">
+            <div class="calc-field"><span class="calc-label">名稱</span>
+                <input type="text" id="tm-name-${id}" value="${escapeHtml(t.name || '')}"></div>
+            <div class="calc-field"><span class="calc-label">類型</span>
+                <select id="tm-type-${id}">
+                    <option value="enemy" ${t.type === 'enemy' ? 'selected' : ''}>敵方</option>
+                    <option value="player" ${t.type === 'player' ? 'selected' : ''}>我方</option>
+                    <option value="boss" ${t.type === 'boss' ? 'selected' : ''}>BOSS</option>
+                </select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
+            ${numField('HP', 'hp', t.hp || 10, 'min="1"')}
+            <div class="calc-field"><span class="calc-label">大小</span>
+                <select id="tm-size-${id}">
+                    <option value="1" ${(t.size || 1) === 1 ? 'selected' : ''}>1x1</option>
+                    <option value="2" ${t.size === 2 ? 'selected' : ''}>2x2</option>
+                    <option value="3" ${t.size === 3 ? 'selected' : ''}>3x3</option>
+                </select></div>
+            ${numField('移速(米)', 'movespeed', t.moveSpeed !== undefined ? t.moveSpeed : 20, 'min="0"')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
+            ${numField('防禦 DP', 'defdp', c.defDp || 0)}
+            ${numField('防禦附加', 'defauto', c.defAuto || 0)}
+            ${numField('先攻', 'init', c.init || 0)}
+            ${numField('意志豁免', 'savewill', c.saveWill || 0)}
+            ${numField('反射豁免', 'savereflex', c.saveReflex || 0)}
+            ${numField('堅韌豁免', 'savetenacity', c.saveTenacity || 0)}
+            ${numField('全屬性', 'allattr', c.allAttr || 0)}
+            ${numField('全技能', 'allskill', c.allSkill || 0)}
+            ${numField('支線等級', 'sidelevel', c.sideLevel || 1, 'min="1"')}
+        </div>
+        <div style="margin-top:6px;">${numField('行動 DP（攻擊）', 'actiondp', c.actionDp || 0)}</div>
+        <div class="calc-field" style="margin-top:6px;"><span class="calc-label">被動能力（每行一條）</span>
+            <textarea id="tm-passive-${id}" rows="2" style="width:100%;resize:vertical;">${escapeHtml(String(c.passive || ''))}</textarea></div>
+        <div class="calc-field" style="margin-top:6px;"><span class="calc-label">行動說明</span>
+            <input type="text" id="tm-actionnote-${id}" value="${escapeHtml(String(c.actionNote || ''))}"></div>
+        <button class="modal-btn" onclick="tmSave('${id}')" style="background:var(--accent-green);color:#000;width:100%;margin-top:10px;">💾 儲存修改</button>
+    `;
+    form.style.display = 'block';
+}
+
+/** 儲存行內編輯：保留頭像與表單沒有的欄位（actionAoe / actionStatuses 等） */
+function tmSave(id) {
+    const t = ((typeof getUnitTemplates === 'function') ? getUnitTemplates() : []).find(x => x.id === id);
+    if (!t || typeof updateUnitTemplate !== 'function') return;
+
+    const val = fid => document.getElementById(`tm-${fid}-${id}`)?.value;
+    const num = fid => parseInt(val(fid)) || 0;
+    const name = String(val('name') || '').trim();
+    if (!name) {
+        showToast('模板名稱不可為空');
+        return;
+    }
+
+    const baseCombat = (t.combat && typeof t.combat === 'object') ? t.combat : {};
+    const updated = updateUnitTemplate(id, {
+        name: name,
+        hp: Math.max(1, num('hp') || 10),
+        type: val('type') || 'enemy',
+        size: parseInt(val('size')) || 1,
+        moveSpeed: Math.max(0, num('movespeed')),
+        avatar: t.avatar || null,
+        combat: Object.assign({}, baseCombat, {
+            defDp: num('defdp'),
+            defAuto: num('defauto'),
+            init: num('init'),
+            saveWill: num('savewill'),
+            saveReflex: num('savereflex'),
+            saveTenacity: num('savetenacity'),
+            allAttr: num('allattr'),
+            allSkill: num('allskill'),
+            sideLevel: Math.max(1, num('sidelevel') || 1),
+            actionDp: num('actiondp'),
+            passive: String(val('passive') || ''),
+            actionNote: String(val('actionnote') || '')
+        })
+    });
+
+    if (updated) {
+        showToast(`已更新模板：${updated.name}`);
+        tmRenderList();
+        // 同步刷新新增單位 Modal 的下拉選單（若開著）
+        if (typeof refreshTemplateSelect === 'function') {
+            refreshTemplateSelect();
+            refreshTemplateSelect('batch-template-select');
+        }
+    } else {
+        showToast('更新模板失敗');
+    }
+}
+
+/** 刪除模板（confirm 防誤觸） */
+function tmDelete(id) {
+    const t = ((typeof getUnitTemplates === 'function') ? getUnitTemplates() : []).find(x => x.id === id);
+    if (!t) return;
+    if (!confirm(`確定要刪除模板「${t.name}」嗎？`)) return;
+    if (typeof deleteUnitTemplate === 'function' && deleteUnitTemplate(id)) {
+        showToast(`已刪除模板：${t.name}`);
+        tmRenderList();
+        if (typeof refreshTemplateSelect === 'function') {
+            refreshTemplateSelect();
+            refreshTemplateSelect('batch-template-select');
+        }
+    } else {
+        showToast('刪除模板失敗');
+    }
+}

@@ -312,6 +312,15 @@ function renderUnitsList() {
                     <button class="stepper-btn plus" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">+</button>
                 </div>`;
 
+            // 移動速度（米）：戰術移動限制用，只有我方（玩家）單位需要填寫，
+            // 敵方/BOSS 由 ST 自由移動不受限，不顯示此欄位
+            const moveSpeedField = (u.type === 'player')
+                ? `<label class="unit-move-speed" title="移動速度（米）：5 米 = 1 格，每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2">
+                       🏃<input type="number" value="${(u.moveSpeed !== undefined && u.moveSpeed !== null) ? u.moveSpeed : 20}" min="0" max="999"
+                              onchange="updateMoveSpeed('${u.id}', this.value)">米
+                   </label>`
+                : '';
+
             actions = `
                 <div class="unit-actions">
                     ${modeSwitch}
@@ -319,7 +328,8 @@ function renderUnitsList() {
                     ${hpStepper('l', 'L')}
                     ${hpStepper('a', 'A')}
                     <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
-                    <button class="action-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡</button>
+                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡️ 護盾</button>
+                    ${moveSpeedField}
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
@@ -740,6 +750,39 @@ function updateInit(id, val) {
             init: parseInt(val) || 0
         });
     }
+}
+
+/**
+ * 更新移動速度（米）：戰術移動限制的來源數值（5 米 = 1 格）。
+ * 玩家可修改自己的單位；ST 可修改所有單位。
+ * @param {string} id - 單位 ID
+ * @param {string|number} val - 新的移動速度（米）
+ */
+function updateMoveSpeed(id, val) {
+    const u = findUnitById(id);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    const parsed = parseInt(val);
+    const speed = (Number.isFinite(parsed) && parsed >= 0) ? Math.min(999, parsed) : 20;
+
+    if (myRole === 'st') {
+        u.moveSpeed = speed;
+        broadcastState();
+    } else {
+        u.moveSpeed = speed;
+        sendToHost({
+            type: 'updateMoveSpeed',
+            playerId: myPlayerId,
+            unitId: id,
+            moveSpeed: speed
+        });
+    }
+    showToast(`🏃 移動速度已設為 ${speed} 米（每回合 ${Math.floor(speed / 5)} 格）`);
 }
 
 /**

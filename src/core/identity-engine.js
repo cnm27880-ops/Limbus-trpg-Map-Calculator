@@ -253,6 +253,10 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
     result.totalSpellPower = result.totals.spellPower;
     result.totalFinalDamage = result.totals.finalDamage;
 
+    // 合併狀態供 UI 使用（相容 expectedTargetStatus 與 expectedSelfStatus）
+    result.expectedTargetStatus = mergeStatuses(result.onAttackTargetStatus, result.onHitTargetStatus);
+    result.expectedSelfStatus = mergeStatuses(result.onAttackSelfStatus, result.onHitSelfStatus);
+
     return result;
 }
 
@@ -267,7 +271,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
  */
 function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     const attacker = ensureStatefulUnit(attackerState);
-    const result = { triggerLogs: [], expectedSelfStatus: {}, totals: makeZeroTotals(), expectedTargetStatus: {} };
+    const result = { triggerLogs: [], totals: makeZeroTotals(), onAttackTargetStatus: {}, onAttackSelfStatus: {}, onHitTargetStatus: {}, onHitSelfStatus: {} };
 
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
@@ -280,7 +284,25 @@ function evaluatePlayerTurnStart(playerIdentities, attackerState) {
             processHooks(card.hooks.onTurnStart, 'turnStart', card, unlocked, attacker, attacker, result);
         }
     }
+    result.expectedSelfStatus = mergeStatuses(result.onAttackSelfStatus, result.onHitSelfStatus);
+    result.expectedTargetStatus = mergeStatuses(result.onAttackTargetStatus, result.onHitTargetStatus);
     return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
+}
+
+
+
+/**
+ * 合併多個狀態物件，用於相容 UI 需要的統一 expectedTargetStatus 與 expectedSelfStatus
+ */
+function mergeStatuses(...statusMaps) {
+    const merged = {};
+    for (const map of statusMaps) {
+        if (!map) continue;
+        for (const [key, value] of Object.entries(map)) {
+            merged[key] = (merged[key] || 0) + (parseInt(value) || 0);
+        }
+    }
+    return merged;
 }
 
 // ===== 瀏覽器全域匯出（與專案其他模組一致，使用全域函式） =====

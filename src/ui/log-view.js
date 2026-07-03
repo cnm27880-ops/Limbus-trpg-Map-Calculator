@@ -736,6 +736,50 @@ function lvDeployMonster(id) {
     if (typeof showToast === 'function') showToast(`已部署「${mon.name}」到單位列表，請至地圖點擊放置`);
 }
 
+/**
+ * 把怪物庫的一隻怪物存為「單位模板」（僅 ST）。
+ * 存成模板後即可在「新增單位／批量新增」載入，且可透過任一「存為模板」流程
+ * 以同名覆蓋來調整數值——比直接部署後再逐隻修改棋子直觀得多。
+ * @param {string} id - 怪物庫條目 ID
+ */
+function lvSaveMonsterAsTemplate(id) {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const mon = lvLoadMonsterLibrary().find(m => m.id === id);
+    if (!mon) return;
+    if (typeof saveUnitTemplate !== 'function') {
+        if (typeof showToast === 'function') showToast('模板功能不可用');
+        return;
+    }
+
+    const templateData = {
+        name: mon.name || '無名怪物',
+        hp: Math.max(1, parseInt(mon.hp) || 10),
+        type: 'enemy',
+        size: 1,
+        avatar: null,
+        combat: {
+            defDp: parseInt(mon.defDp) || 0,
+            defAuto: parseInt(mon.defAuto) || 0,
+            init: parseInt(mon.init) || 0,
+            actionDp: parseInt(mon.atkDp) || 0,
+            passive: String(mon.passive || ''),
+            actionNote: String(mon.notes || '')
+        }
+    };
+
+    const result = (typeof saveTemplateWithOverwritePrompt === 'function')
+        ? saveTemplateWithOverwritePrompt(templateData)
+        : (saveUnitTemplate(templateData) ? { template: templateData, updated: false } : null);
+
+    if (result) {
+        if (typeof showToast === 'function') {
+            showToast(`已將「${templateData.name}」${result.updated ? '更新為' : '存為'}單位模板，可在「新增單位／批量新增」載入`);
+        }
+    } else {
+        if (typeof showToast === 'function') showToast('儲存模板失敗');
+    }
+}
+
 function lvRenderMonsterLibrary() {
     const box = document.getElementById('monster-library-list');
     if (!box) return;
@@ -787,15 +831,21 @@ function lvRenderMonsterLibrary() {
         actions.className = 'monster-lib-actions';
         const deployBtn = document.createElement('button');
         deployBtn.className = 'lv-btn lv-btn-deploy';
-        deployBtn.title = '建立此敵方單位';
+        deployBtn.title = '直接建立此敵方單位（場外，再到地圖點擊放置）';
         deployBtn.textContent = '⚔ 部署';
         deployBtn.addEventListener('click', () => lvDeployMonster(m.id));
+        const tplBtn = document.createElement('button');
+        tplBtn.className = 'lv-btn lv-btn-tpl';
+        tplBtn.title = '存為單位模板：可在「新增單位／批量新增」載入，並可調整數值後同名覆蓋更新';
+        tplBtn.textContent = '💾 模板';
+        tplBtn.addEventListener('click', () => lvSaveMonsterAsTemplate(m.id));
         const delBtn = document.createElement('button');
         delBtn.className = 'lv-btn lv-btn-del';
         delBtn.title = '從怪物庫刪除';
         delBtn.textContent = '🗑️';
         delBtn.addEventListener('click', () => lvDeleteMonster(m.id));
         actions.appendChild(deployBtn);
+        actions.appendChild(tplBtn);
         actions.appendChild(delBtn);
 
         card.appendChild(info);
@@ -814,6 +864,7 @@ if (typeof window !== 'undefined') {
     window.requestAIEncounter = requestAIEncounter;
     window.saveEncounterToLibrary = saveEncounterToLibrary;
     window.lvDeployMonster = lvDeployMonster;
+    window.lvSaveMonsterAsTemplate = lvSaveMonsterAsTemplate;
     window.lvDeleteMonster = lvDeleteMonster;
     window.lvRenderMonsterLibrary = lvRenderMonsterLibrary;
 }

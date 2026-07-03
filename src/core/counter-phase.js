@@ -14,6 +14,35 @@ let counterPhaseListener = null;
 let cpLastPoppedRound = -1;
 let cpLastFinalizedRound = -1;
 
+// 「已自動彈出過的輪次」持久化（依房間分開記憶）：
+// counterPhase 節點會一直留在 Firebase（沒有「結束徵詢」的動作），
+// 若只用記憶體變數判斷，玩家每次重新整理／重開頁面都會因初始快照再彈一次視窗。
+// 持久化後，同一輪徵詢在同一個瀏覽器只自動彈出一次——只有 ST 開啟「新的一輪」才會再跳。
+const CP_POPPED_ROUND_KEY = 'limbus-cp-popped-round';
+const CP_FINALIZED_ROUND_KEY = 'limbus-cp-finalized-round';
+
+function cpLoadRoundMark(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        const data = raw ? JSON.parse(raw) : null;
+        const room = (typeof currentRoomCode !== 'undefined' && currentRoomCode) ? currentRoomCode : '';
+        if (data && data.room === room && Number.isFinite(Number(data.roundId))) return Number(data.roundId);
+    } catch (e) { /* ignore */ }
+    return -1;
+}
+
+function cpSaveRoundMark(key, roundId) {
+    try {
+        const room = (typeof currentRoomCode !== 'undefined' && currentRoomCode) ? currentRoomCode : '';
+        localStorage.setItem(key, JSON.stringify({ room, roundId }));
+    } catch (e) { /* ignore */ }
+}
+
+function cpLoadPoppedRound() { return cpLoadRoundMark(CP_POPPED_ROUND_KEY); }
+function cpSavePoppedRound(roundId) { cpSaveRoundMark(CP_POPPED_ROUND_KEY, roundId); }
+function cpLoadFinalizedRound() { return cpLoadRoundMark(CP_FINALIZED_ROUND_KEY); }
+function cpSaveFinalizedRound(roundId) { cpSaveRoundMark(CP_FINALIZED_ROUND_KEY, roundId); }
+
 function cpRef() {
     return (typeof roomRef !== 'undefined' && roomRef) ? roomRef.child('counterPhase') : null;
 }
@@ -64,13 +93,20 @@ function cpHandleUpdate() {
 
     if (myRole === 'st' || !counterPhaseState.started) return;
     const mine = (counterPhaseState.assignments || {})[myPlayerId];
-    if (mine === undefined && counterPhaseState.roundId !== cpLastPoppedRound) {
+    // 自動彈出條件：本輪尚未公佈結果、自己尚未送出、且「這一輪」從未在此瀏覽器彈出過
+    //（記憶體＋localStorage 雙重判斷——重新整理頁面不會因殘留的舊徵詢再跳一次）
+    if (mine === undefined && !counterPhaseState.finalized
+        && counterPhaseState.roundId !== cpLastPoppedRound
+        && counterPhaseState.roundId !== cpLoadPoppedRound()) {
         cpLastPoppedRound = counterPhaseState.roundId;
+        cpSavePoppedRound(counterPhaseState.roundId);
         if (typeof openCounterAssignModal === 'function') openCounterAssignModal();
     }
-    // ST 公佈最終結果 → 自動彈出面板讓玩家看到結果（每輪僅一次）
-    if (counterPhaseState.finalized && counterPhaseState.roundId !== cpLastFinalizedRound) {
+    // ST 公佈最終結果 → 自動彈出面板讓玩家看到結果（每輪僅一次；同樣持久化，重整不再重跳）
+    if (counterPhaseState.finalized && counterPhaseState.roundId !== cpLastFinalizedRound
+        && counterPhaseState.roundId !== cpLoadFinalizedRound()) {
         cpLastFinalizedRound = counterPhaseState.roundId;
+        cpSaveFinalizedRound(counterPhaseState.roundId);
         if (typeof cpShowFloatPanel === 'function') cpShowFloatPanel();
         if (typeof cpRenderFloatPanel === 'function') cpRenderFloatPanel();
         if (typeof showToast === 'function') showToast('📢 ST 已公佈本輪對抗分配結果');

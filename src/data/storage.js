@@ -263,46 +263,57 @@ function getUnitTemplates() {
 }
 
 /**
- * 保存單位模板
- * @param {Object} template - 模板數據 {name, hp, type, size, avatar, combat}
- *   combat（選填，通常來自「戰鬥數值設定」Modal 的既有單位另存）：
- *     { defDp, defAuto, saveWill, saveReflex, saveTenacity, allAttr, allSkill, sideLevel, passive,
- *       actionDp, actionAoe, actionStatuses:[{id,stacks}] }
+ * 正規化一份模板輸入為統一結構（saveUnitTemplate / updateUnitTemplate 共用）。
+ * 模板是「殼子＋數值」合一的完整資料卡：名稱／HP／類型／大小／頭像 ＋ 完整戰鬥數值。
+ * @param {Object} template - {name, hp, type, size, avatar, combat}
+ *   combat（選填）：{ defDp, defAuto, init, saveWill, saveReflex, saveTenacity, allAttr, allSkill,
+ *                    sideLevel, passive, actionDp, actionAoe, actionStatuses:[{id,stacks}], actionNote }
+ * @returns {Object} 不含 id/createdAt 的正規化模板資料
+ */
+function normalizeUnitTemplate(template) {
+    const combat = (template.combat && typeof template.combat === 'object') ? template.combat : {};
+    return {
+        name: template.name || 'Template',
+        hp: template.hp || 10,
+        type: template.type || 'enemy',
+        size: template.size || 1,
+        avatar: template.avatar || null,
+        // 完整戰鬥數值：讓 ST 設定好一隻小怪後可直接套用到其他同類小怪，不必每隻重新填一次
+        combat: {
+            defDp: parseInt(combat.defDp) || 0,
+            defAuto: parseInt(combat.defAuto) || 0,
+            init: parseInt(combat.init) || 0,
+            saveWill: parseInt(combat.saveWill) || 0,
+            saveReflex: parseInt(combat.saveReflex) || 0,
+            saveTenacity: parseInt(combat.saveTenacity) || 0,
+            allAttr: parseInt(combat.allAttr) || 0,
+            allSkill: parseInt(combat.allSkill) || 0,
+            sideLevel: Math.max(1, parseInt(combat.sideLevel) || 1),
+            passive: String(combat.passive || ''),
+            actionDp: parseInt(combat.actionDp) || 0,
+            actionAoe: !!combat.actionAoe,
+            actionStatuses: Array.isArray(combat.actionStatuses)
+                ? combat.actionStatuses
+                    .filter(s => s && s.id)
+                    .map(s => ({ id: String(s.id), stacks: parseInt(s.stacks) || 0 }))
+                : [],
+            actionNote: String(combat.actionNote || '')
+        }
+    };
+}
+
+/**
+ * 保存單位模板（新增）
+ * @param {Object} template - 見 normalizeUnitTemplate
  * @returns {Object} 保存的模板（含 ID）
  */
 function saveUnitTemplate(template) {
     try {
         const templates = getUnitTemplates();
-        const combat = (template.combat && typeof template.combat === 'object') ? template.combat : {};
-
-        const newTemplate = {
+        const newTemplate = Object.assign(normalizeUnitTemplate(template), {
             id: Date.now().toString() + '_' + Math.floor(Math.random() * 10000).toString(),
-            name: template.name || 'Template',
-            hp: template.hp || 10,
-            type: template.type || 'enemy',
-            size: template.size || 1,
-            avatar: template.avatar || null,
-            // 完整戰鬥數值：讓 ST 設定好一隻小怪後可直接套用到其他同類小怪，不必每隻重新填一次
-            combat: {
-                defDp: parseInt(combat.defDp) || 0,
-                defAuto: parseInt(combat.defAuto) || 0,
-                saveWill: parseInt(combat.saveWill) || 0,
-                saveReflex: parseInt(combat.saveReflex) || 0,
-                saveTenacity: parseInt(combat.saveTenacity) || 0,
-                allAttr: parseInt(combat.allAttr) || 0,
-                allSkill: parseInt(combat.allSkill) || 0,
-                sideLevel: Math.max(1, parseInt(combat.sideLevel) || 1),
-                passive: String(combat.passive || ''),
-                actionDp: parseInt(combat.actionDp) || 0,
-                actionAoe: !!combat.actionAoe,
-                actionStatuses: Array.isArray(combat.actionStatuses)
-                    ? combat.actionStatuses
-                        .filter(s => s && s.id)
-                        .map(s => ({ id: String(s.id), stacks: parseInt(s.stacks) || 0 }))
-                    : []
-            },
             createdAt: Date.now()
-        };
+        });
 
         templates.push(newTemplate);
         localStorage.setItem(STORAGE_KEYS.UNIT_TEMPLATES, JSON.stringify(templates));
@@ -312,6 +323,58 @@ function saveUnitTemplate(template) {
         console.error('Failed to save unit template:', e);
         return null;
     }
+}
+
+/**
+ * 更新既有單位模板（保留原 id / createdAt），讓模板存檔後仍可修改。
+ * @param {string} id - 模板 ID
+ * @param {Object} template - 見 normalizeUnitTemplate
+ * @returns {Object|null} 更新後的模板；找不到時回傳 null
+ */
+function updateUnitTemplate(id, template) {
+    try {
+        const templates = getUnitTemplates();
+        const idx = templates.findIndex(t => t.id === id);
+        if (idx === -1) return null;
+
+        templates[idx] = Object.assign(normalizeUnitTemplate(template), {
+            id: templates[idx].id,
+            createdAt: templates[idx].createdAt || Date.now(),
+            updatedAt: Date.now()
+        });
+        localStorage.setItem(STORAGE_KEYS.UNIT_TEMPLATES, JSON.stringify(templates));
+        return templates[idx];
+    } catch (e) {
+        console.error('Failed to update unit template:', e);
+        return null;
+    }
+}
+
+/**
+ * 依名稱尋找模板（供「同名覆蓋更新」的 upsert 流程）
+ * @param {string} name
+ * @returns {Object|null}
+ */
+function findUnitTemplateByName(name) {
+    const n = String(name || '').trim();
+    if (!n) return null;
+    return getUnitTemplates().find(t => t.name === n) || null;
+}
+
+/**
+ * 依名稱 upsert 模板：同名者存在→覆蓋更新（保留 id），否則新增。
+ * 各處「存為模板」按鈕共用，讓「重新儲存同名模板」即等於「修改模板」。
+ * @param {Object} template - 見 normalizeUnitTemplate
+ * @returns {{ template: Object, updated: boolean }|null}
+ */
+function upsertUnitTemplateByName(template) {
+    const existing = findUnitTemplateByName(template && template.name);
+    if (existing) {
+        const t = updateUnitTemplate(existing.id, template);
+        return t ? { template: t, updated: true } : null;
+    }
+    const t = saveUnitTemplate(template);
+    return t ? { template: t, updated: false } : null;
 }
 
 /**

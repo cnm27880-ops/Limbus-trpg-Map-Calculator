@@ -77,6 +77,15 @@ function initModals() {
                     <button onclick="closeModal('modal-batch')">×</button>
                 </div>
                 <div class="modal-body">
+                    <!-- 模板選擇區：載入完整模板（殼子＋戰鬥數值），批量生成同類小怪 -->
+                    <div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
+                        <select id="batch-template-select" onchange="loadBatchTemplate(this.value)" style="flex:1;">
+                            <option value="">-- 載入模板（含完整戰鬥數值） --</option>
+                        </select>
+                    </div>
+                    <!-- 隱藏欄位：批量套用的模板頭像 / 完整戰鬥數值（JSON） -->
+                    <input type="hidden" id="batch-template-avatar" value="">
+                    <input type="hidden" id="batch-template-combat" value="">
                     <input type="text" id="batch-prefix" placeholder="前綴 (例: 雜兵)">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                         <div class="calc-field">
@@ -247,20 +256,25 @@ function openAddUnitModal() {
 }
 
 /**
- * 刷新模板下拉選單
+ * 刷新模板下拉選單（新增單位 Modal 與批量新增 Modal 共用同一份模板庫）
+ * @param {string} [selectId='template-select'] - 下拉選單元素 ID
  */
-function refreshTemplateSelect() {
-    const select = document.getElementById('template-select');
+function refreshTemplateSelect(selectId = 'template-select') {
+    const select = document.getElementById(selectId);
     if (!select) return;
 
     const templates = typeof getUnitTemplates === 'function' ? getUnitTemplates() : [];
 
-    // 重建選項
-    select.innerHTML = '<option value="">-- 載入模板 --</option>';
+    // 重建選項（附上防禦/行動 DP 摘要，方便一眼分辨數值版本）
+    select.innerHTML = '<option value="">-- 載入模板（含完整戰鬥數值） --</option>';
     templates.forEach(t => {
+        const c = (t.combat && typeof t.combat === 'object') ? t.combat : {};
         const opt = document.createElement('option');
         opt.value = t.id;
-        opt.textContent = `${t.name} (HP:${t.hp}, ${t.type === 'boss' ? 'BOSS' : t.type === 'enemy' ? '敵方' : '我方'})`;
+        const typeTxt = t.type === 'boss' ? 'BOSS' : t.type === 'enemy' ? '敵方' : '我方';
+        const combatTxt = (c.defDp || c.defAuto || c.actionDp)
+            ? `, 防${c.defDp || 0}(+${c.defAuto || 0}), 攻DP${c.actionDp || 0}` : '';
+        opt.textContent = `${t.name} (HP:${t.hp}, ${typeTxt}${combatTxt})`;
         select.appendChild(opt);
     });
 }
@@ -318,7 +332,28 @@ function loadUnitTemplate(templateId) {
 }
 
 /**
- * 存為單位模板
+ * 各處「存為模板」按鈕共用的儲存流程：
+ * 同名模板已存在時詢問是否覆蓋更新（確定＝更新原模板，讓模板可修改；取消＝另存為新模板）。
+ * @param {Object} template - 見 storage.js normalizeUnitTemplate
+ * @returns {{ template: Object, updated: boolean }|null}
+ */
+function saveTemplateWithOverwritePrompt(template) {
+    if (typeof saveUnitTemplate !== 'function') return null;
+    const existing = (typeof findUnitTemplateByName === 'function') ? findUnitTemplateByName(template.name) : null;
+    if (existing && typeof updateUnitTemplate === 'function') {
+        if (confirm(`已有同名模板「${template.name}」。\n\n確定＝以目前數值覆蓋更新該模板\n取消＝另存為一個新模板`)) {
+            const t = updateUnitTemplate(existing.id, template);
+            return t ? { template: t, updated: true } : null;
+        }
+    }
+    const t = saveUnitTemplate(template);
+    return t ? { template: t, updated: false } : null;
+}
+
+/**
+ * 存為單位模板（新增單位 Modal）。
+ * 模板為「殼子＋數值」合一：除了名稱/HP/類型/大小/頭像，
+ * 也一併保留目前已載入的完整戰鬥數值（隱藏欄位），不會存成只有殼子的閹割版。
  */
 function saveAsUnitTemplate() {
     const name = document.getElementById('add-name').value;
@@ -331,25 +366,31 @@ function saveAsUnitTemplate() {
     const type = document.getElementById('add-type').value;
     const size = parseInt(document.getElementById('add-size').value) || 1;
     const avatar = document.getElementById('add-template-avatar').value || null;
+    let combat = null;
+    try {
+        const raw = document.getElementById('add-template-combat').value;
+        combat = raw ? JSON.parse(raw) : null;
+    } catch (e) { combat = null; }
 
     if (typeof saveUnitTemplate !== 'function') {
         showToast('模板功能不可用');
         return;
     }
 
-    const saved = saveUnitTemplate({
+    const result = saveTemplateWithOverwritePrompt({
         name: name.trim(),
         hp: hp,
         type: type,
         size: size,
-        avatar: avatar
+        avatar: avatar,
+        combat: combat
     });
 
-    if (saved) {
-        showToast(`已儲存模板：${saved.name}`);
+    if (result) {
+        showToast(result.updated ? `已更新模板：${result.template.name}` : `已儲存模板：${result.template.name}`);
         refreshTemplateSelect();
         // 選中剛儲存的模板
-        document.getElementById('template-select').value = saved.id;
+        document.getElementById('template-select').value = result.template.id;
     } else {
         showToast('儲存模板失敗');
     }
@@ -402,7 +443,46 @@ function clearTemplateAvatar() {
  * 開啟批量新增 Modal
  */
 function openBatchModal() {
+    // 與「新增單位」共用同一份模板庫，批量生成同類小怪不必逐隻新增
+    refreshTemplateSelect('batch-template-select');
+    const sel = document.getElementById('batch-template-select');
+    if (sel) sel.value = '';
+    const avatarEl = document.getElementById('batch-template-avatar');
+    if (avatarEl) avatarEl.value = '';
+    const combatEl = document.getElementById('batch-template-combat');
+    if (combatEl) combatEl.value = '';
     openModal('modal-batch');
+}
+
+/**
+ * 批量新增：載入模板 → 帶入前綴/HP/類型/大小，並暫存頭像與完整戰鬥數值
+ * @param {string} templateId
+ */
+function loadBatchTemplate(templateId) {
+    const avatarEl = document.getElementById('batch-template-avatar');
+    const combatEl = document.getElementById('batch-template-combat');
+    if (!templateId) {
+        if (avatarEl) avatarEl.value = '';
+        if (combatEl) combatEl.value = '';
+        return;
+    }
+
+    const templates = typeof getUnitTemplates === 'function' ? getUnitTemplates() : [];
+    const template = templates.find(t => t.id === templateId);
+    if (!template) {
+        showToast('找不到該模板');
+        return;
+    }
+
+    document.getElementById('batch-prefix').value = template.name || 'Unit';
+    document.getElementById('batch-hp').value = template.hp || 10;
+    document.getElementById('batch-type').value = template.type || 'enemy';
+    document.getElementById('batch-size').value = template.size || 1;
+    if (avatarEl) avatarEl.value = template.avatar || '';
+    if (combatEl) combatEl.value =
+        (template.combat && typeof template.combat === 'object') ? JSON.stringify(template.combat) : '';
+
+    showToast(`已載入模板：${template.name}（批量生成將套用完整戰鬥數值）`);
 }
 
 // ===== 新增單位 =====
@@ -475,8 +555,19 @@ function confirmBatchAdd() {
     const type = document.getElementById('batch-type').value;
     const size = parseInt(document.getElementById('batch-size').value) || 1;
 
+    // 模板帶入的頭像與完整戰鬥數值：套用到每一隻批量生成的單位
+    const templateAvatar = document.getElementById('batch-template-avatar')?.value || '';
+    let templateCombat = null;
+    try {
+        const raw = document.getElementById('batch-template-combat')?.value;
+        templateCombat = raw ? JSON.parse(raw) : null;
+    } catch (e) { templateCombat = null; }
+
     for (let i = 0; i < count; i++) {
-        state.units.push(createUnit(`${prefix}${start + i}`, hp, type, myPlayerId, myName, size));
+        const u = createUnit(`${prefix}${start + i}`, hp, type, myPlayerId, myName, size);
+        if (templateAvatar) u.avatar = templateAvatar;
+        if (templateCombat && typeof templateCombat === 'object') Object.assign(u, templateCombat);
+        state.units.push(u);
     }
 
     closeModal('modal-batch');

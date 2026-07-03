@@ -1587,6 +1587,9 @@ function saveMultiAction(bossId) {
     boss.maxHp = Math.max(1, parseInt(document.getElementById('ma-boss-max-hp')?.value) || 1);
     boss.defDp = parseInt(document.getElementById('ma-boss-def-dp')?.value) || 0;
     boss.defAuto = parseInt(document.getElementById('ma-boss-def-auto')?.value) || 0;
+    // 與 boss-battle-hud.js 的數值面板一致：儲存時以新 defAuto 重置本回合剩餘資源池，
+    // 避免資源池已存在（曾被攻擊）時調整 defAuto 無效
+    boss.defAutoRemaining = boss.defAuto;
     boss.saveWill = parseInt(document.getElementById('ma-boss-save-will')?.value) || 0;
     boss.saveReflex = parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0;
     boss.saveTenacity = parseInt(document.getElementById('ma-boss-save-tenacity')?.value) || 0;
@@ -1657,7 +1660,7 @@ function saveMultiActionAsTemplate(bossId) {
     }
 
     const action0 = maEdit.actions[0] || { dp: 0, statuses: [], aoe: false };
-    const saved = saveUnitTemplate({
+    const templateData = {
         name: boss.name || 'Template',
         hp: Math.max(1, parseInt(document.getElementById('ma-boss-max-hp')?.value) || boss.maxHp || 10),
         type: boss.type || 'enemy',
@@ -1666,6 +1669,7 @@ function saveMultiActionAsTemplate(bossId) {
         combat: {
             defDp: parseInt(document.getElementById('ma-boss-def-dp')?.value) || 0,
             defAuto: parseInt(document.getElementById('ma-boss-def-auto')?.value) || 0,
+            init: parseInt(action0.init) || boss.init || 0,
             saveWill: parseInt(document.getElementById('ma-boss-save-will')?.value) || 0,
             saveReflex: parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0,
             saveTenacity: parseInt(document.getElementById('ma-boss-save-tenacity')?.value) || 0,
@@ -1675,12 +1679,18 @@ function saveMultiActionAsTemplate(bossId) {
             passive: (typeof readPassiveEditor === 'function') ? readPassiveEditor('ma-boss-passive-editor') : (boss.passive || ''),
             actionDp: action0.dp || 0,
             actionAoe: !!action0.aoe,
-            actionStatuses: action0.statuses.map(s => ({ ...s }))
+            actionStatuses: action0.statuses.map(s => ({ ...s })),
+            actionNote: boss.actionNote || ''
         }
-    });
+    };
 
-    if (saved) {
-        showToast(`已將「${boss.name || '單位'}」的完整戰鬥數值存為模板：${saved.name}`);
+    // 同名模板存在時詢問是否覆蓋更新（模板可修改：調整數值後重存同名即更新）
+    const result = (typeof saveTemplateWithOverwritePrompt === 'function')
+        ? saveTemplateWithOverwritePrompt(templateData)
+        : (saveUnitTemplate(templateData) ? { template: templateData, updated: false } : null);
+
+    if (result) {
+        showToast(`已將「${boss.name || '單位'}」的完整戰鬥數值${result.updated ? '更新' : '存為'}模板：${result.template.name}`);
     } else {
         showToast('儲存模板失敗');
     }

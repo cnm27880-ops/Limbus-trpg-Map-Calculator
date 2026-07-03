@@ -5370,6 +5370,7 @@ body.combat-mode .boss-hud-container {
 .monster-lib-passive { font-size: .72rem; color: var(--accent-purple, #8e24aa); margin-top: 2px; line-height: 1.5; }
 .monster-lib-actions { display: flex; gap: 6px; flex: 0 0 auto; }
 .lv-btn-deploy { background: #14301a; border-color: var(--accent-green, #43a047); color: #8fe08f; white-space: nowrap; }
+.lv-btn-tpl { background: #241a33; border-color: var(--accent-purple, #7e57c2); color: #c9aaff; white-space: nowrap; }
 .lv-btn-del { background: #2a1414; border-color: var(--accent-red, #e53935); color: #ff8080; }
 
 /* 手機版：日誌與構築室改為上下排列 */

@@ -104,6 +104,11 @@ function saveBossUnitModal(unitId) {
     u.maxHp = Math.max(1, parseInt(document.getElementById('boss-unit-max-hp')?.value) || 1);
     u.defDp = parseInt(document.getElementById('boss-unit-def-dp')?.value) || 0;
     u.defAuto = parseInt(document.getElementById('boss-unit-def-auto')?.value) || 0;
+    // 防禦附加成功的「本回合剩餘資源池」同步重置：
+    // 黑箱引擎只在 defAutoRemaining 不是數字時才用 defAuto 初始化，
+    // 若單位曾被攻擊過（資源池已是 0 等數字），事後調高 defAuto 會完全無效——
+    // 故每次在數值面板儲存時，一律以新的 defAuto 重置剩餘池。
+    u.defAutoRemaining = u.defAuto;
     u.saveWill = parseInt(document.getElementById('boss-unit-save-will')?.value) || 0;
     u.saveReflex = parseInt(document.getElementById('boss-unit-save-reflex')?.value) || 0;
     u.saveTenacity = parseInt(document.getElementById('boss-unit-save-tenacity')?.value) || 0;
@@ -137,7 +142,7 @@ function saveBossUnitAsTemplate(unitId) {
         return;
     }
 
-    const saved = saveUnitTemplate({
+    const templateData = {
         name: u.name || 'Template',
         hp: Math.max(1, parseInt(document.getElementById('boss-unit-max-hp')?.value) || u.maxHp || 10),
         type: u.type || 'enemy',
@@ -146,6 +151,7 @@ function saveBossUnitAsTemplate(unitId) {
         combat: {
             defDp: parseInt(document.getElementById('boss-unit-def-dp')?.value) || 0,
             defAuto: parseInt(document.getElementById('boss-unit-def-auto')?.value) || 0,
+            init: parseInt(document.getElementById('boss-unit-init')?.value) || 0,
             saveWill: parseInt(document.getElementById('boss-unit-save-will')?.value) || 0,
             saveReflex: parseInt(document.getElementById('boss-unit-save-reflex')?.value) || 0,
             saveTenacity: parseInt(document.getElementById('boss-unit-save-tenacity')?.value) || 0,
@@ -155,12 +161,19 @@ function saveBossUnitAsTemplate(unitId) {
             passive: (typeof readPassiveEditor === 'function') ? readPassiveEditor('boss-unit-passive-editor') : (u.passive || ''),
             actionDp: u.actionDp || 0,
             actionAoe: !!u.actionAoe,
-            actionStatuses: Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : []
+            actionStatuses: Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [],
+            actionNote: u.actionNote || ''
         }
-    });
+    };
 
-    if (saved) {
-        if (typeof showToast === 'function') showToast(`已將「${u.name || '單位'}」的完整戰鬥數值存為模板：${saved.name}`);
+    // 同名模板存在時詢問是否覆蓋更新（模板可修改：調整數值後重存同名即更新）
+    const result = (typeof saveTemplateWithOverwritePrompt === 'function')
+        ? saveTemplateWithOverwritePrompt(templateData)
+        : (saveUnitTemplate(templateData) ? { template: templateData, updated: false } : null);
+
+    if (result) {
+        const verb = result.updated ? '更新' : '存為';
+        if (typeof showToast === 'function') showToast(`已將「${u.name || '單位'}」的完整戰鬥數值${verb}模板：${result.template.name}`);
     } else {
         if (typeof showToast === 'function') showToast('儲存模板失敗');
     }

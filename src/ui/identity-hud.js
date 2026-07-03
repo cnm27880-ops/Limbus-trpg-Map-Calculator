@@ -709,8 +709,83 @@ function computeIdentityResult(silent) {
     const result = evaluatePlayerAttack(owned, attacker, target);
     // 附加「資源提醒」（如：暗型態自傷扣血、光型態 -4 意志力），供 ST/玩家確認資源增減
     result.reminders = collectIdentityReminders(owned, attacker, target);
+    // 附加「未觸發的加值」清單：大多數人格卡的 DP／傷害加值都有觸發條件
+    //（目標狀態達門檻、先攻比較、自身資源等），條件未達時引擎不計入。
+    // 過去這些效果會直接從結果消失，看起來像「DP 加值沒被顯示」的 bug——
+    // 現在明確列出哪些加值存在但未觸發、以及未觸發的原因。
+    result.untriggered = collectUntriggeredBonusHooks(owned, attacker, target);
+    result.noTarget = !identityHudState.targetId;
     identityHudState.lastResult = result;
     return true;
+}
+
+// 引擎數值加值欄位 → 顯示名稱（與 identity-engine.js 的 IDENTITY_BONUS_KEYS 對應）
+const IDT_BONUS_FIELD_LABELS = {
+    dpBonus: 'DP', weaponDamage: '武器傷害', extraSuccess: '附加成功',
+    spellPower: '法術威力', finalDamage: '最終傷害', selfShield: '一次性護盾'
+};
+
+/**
+ * 巡覽持有卡的 onAttack / onHit hook，找出「帶有數值加值、但本次結算未計入」者：
+ *  - 重複抽取解鎖技未勾選解鎖
+ *  - 條件未達（目標／自身狀態門檻、先攻比較等）
+ *  - 條件成立但動態數值目前為 0（如魔法阿卡納 0 層）
+ * 回傳 [{ identityName, phase, source, bonusTxt, reason }]，供結果面板顯示。
+ * @param {Array<{id:string, unlocked:boolean}>} owned
+ * @param {object} attacker - 引擎格式的攻擊者狀態
+ * @param {object} target - 引擎格式的目標狀態
+ */
+function collectUntriggeredBonusHooks(owned, attacker, target) {
+    const out = [];
+    if (typeof getIdentityById !== 'function') return out;
+    const bonusKeys = Object.keys(IDT_BONUS_FIELD_LABELS);
+
+    for (const { id, unlocked } of owned) {
+        const card = getIdentityById(id);
+        if (!card || !card.hooks) continue;
+
+        for (const [phase, hooks] of [['attack', card.hooks.onAttack], ['hit', card.hooks.onHit]]) {
+            if (!Array.isArray(hooks)) continue;
+            for (const hook of hooks) {
+                if (!hook || hook.manual) continue;
+                if (!bonusKeys.some(k => hook[k] !== undefined)) continue;
+
+                let reason = '';
+                if (hook.locked && !unlocked) {
+                    reason = '未勾選解鎖三技';
+                } else {
+                    let pass = true;
+                    if (hook.condition) {
+                        try { pass = !!hook.condition(target, attacker); } catch (e) { pass = false; }
+                    }
+                    if (pass) {
+                        // 條件成立：檢查是否有任一非零數值（有→已計入結果，不列）
+                        const anyNonZero = bonusKeys.some(k => {
+                            if (hook[k] === undefined) return false;
+                            try {
+                                const v = (typeof hook[k] === 'function') ? hook[k](target, attacker) : hook[k];
+                                return (Number(v) || 0) !== 0;
+                            } catch (e) { return false; }
+                        });
+                        if (anyNonZero) continue;
+                        reason = '動態數值目前為 0（依資源／狀態層數計算）';
+                    } else {
+                        reason = '條件未達（目標／自身狀態或先攻門檻）';
+                    }
+                }
+
+                const bonusTxt = bonusKeys.map(k => {
+                    if (hook[k] === undefined) return '';
+                    return (typeof hook[k] === 'function')
+                        ? `${IDT_BONUS_FIELD_LABELS[k]}+動態`
+                        : `${IDT_BONUS_FIELD_LABELS[k]}+${hook[k]}`;
+                }).filter(Boolean).join('、');
+
+                out.push({ identityName: card.name || '', phase, source: hook.source || hook.skill || '', bonusTxt, reason });
+            }
+        }
+    }
+    return out;
 }
 
 /**
@@ -1072,6 +1147,19 @@ function renderIdentityResult() {
     if (autoLogs.length) {
         html += '<div class="idt-log-title">觸發明細</div>' + autoLogs.map(logRow).join('');
     }
+    // 未觸發的加值：讓玩家一眼看出「加值存在但這次沒觸發」與原因，
+    // 而不是加值直接從結果消失（過去常被誤判為 DP 加值顯示錯誤）
+    if (Array.isArray(r.untriggered) && r.untriggered.length) {
+        const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+        html += '<div class="idt-log-title idt-untrig-title">⏸ 未觸發的加值（本次不計入）</div>';
+        if (r.noTarget) {
+            html += '<div class="idt-remind idt-remind-note">尚未在 ② 指定目標單位：所有依「目標狀態門檻」的加值都無法觸發。指定目標後會依其實際狀態即時重算。</div>';
+        }
+        html += r.untriggered.map(u => {
+            const phase = u.phase === 'attack' ? '攻擊' : (u.phase === 'hit' ? '命中' : u.phase);
+            return `<div class="idt-log idt-untrig"><span class="idt-log-src">[${phase}] ${esc(u.source)}</span><span class="idt-log-eff">${esc(u.bonusTxt)}｜${esc(u.reason)}</span></div>`;
+        }).join('');
+    }
     if (manualLogs.length) {
         html += '<div class="idt-log-title idt-manual-title">⚠ 需手動判定（擲骰／指定友軍／特殊結算）</div>';
         html += manualLogs.map(l => {
@@ -1237,6 +1325,9 @@ function injectIdentityStyles() {
         .idt-mi-hint{font-size:.7rem;color:var(--text-dim,#999);}
         .idt-mi-field input{width:90px;flex:0 0 auto;}
         .idt-remind-title{color:var(--accent-blue,#4aa3ff);}
+        .idt-untrig-title{color:var(--text-dim,#999);}
+        .idt-log.idt-untrig{opacity:.62;}
+        .idt-log.idt-untrig .idt-log-eff{color:var(--text-dim,#999);}
         .idt-remind{font-size:.82rem;color:var(--text,#eee);background:rgba(74,163,255,.08);border-left:3px solid var(--accent-blue,#4aa3ff);border-radius:4px;padding:6px 8px;margin:4px 0;line-height:1.5;}
         .idt-remind-note{border-left-color:var(--accent-purple,#7e57c2);background:rgba(126,87,194,.08);color:var(--text-dim,#bbb);font-size:.78rem;}
         .idt-forge-area{width:100%;resize:vertical;line-height:1.5;margin-bottom:8px;}

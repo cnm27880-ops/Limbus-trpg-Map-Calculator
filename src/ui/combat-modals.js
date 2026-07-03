@@ -149,8 +149,18 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     }).filter(c => c.owned).map(c => ({ id: c.id, unlocked: c.unlocked }));
     if (!ownedCards.length) return empty;
 
-    const attackerState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(attackerUnit) : (attackerUnit || {});
+    // 與人格卡面板的計算一致：帶入先攻序位（延續進攻／向您致敬等依序位的條件）
+    const attackerExtra = {};
+    if (attackerUnit && typeof autoInitiativeRank === 'function') {
+        attackerExtra.initiativeRank = autoInitiativeRank(attackerUnit.id);
+    }
+    const attackerState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(attackerUnit, attackerExtra) : (attackerUnit || {});
     const targetState = (typeof buildEngineUnitState === 'function') ? buildEngineUnitState(targetUnit) : (targetUnit || {});
+    // 疊加人格卡面板填寫的手動資源（意志力／魔法阿卡納層數等），
+    // 否則依這些資源觸發的 DP／武器傷害加值在實際攻擊時永遠不會生效（面板顯示有、實戰卻沒有）
+    if (typeof applyManualInputsToAttacker === 'function') {
+        applyManualInputsToAttacker(ownedCards, attackerState);
+    }
     const result = evaluatePlayerAttack(ownedCards, attackerState, targetState);
 
     // 人格引擎在攻擊／命中時會對目標（減益）與攻擊者自身（如迅捷/呼吸法等資源）施加的狀態。
@@ -212,10 +222,18 @@ function submitAttackModal() {
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
     const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
 
-    // 玩家發起攻擊：若本回合未對抗任何 BOSS 行動，自動套用對抗分配的自身 DP 加成
+    // 玩家發起攻擊：若本回合未對抗任何 BOSS 行動，自動套用對抗分配的自身 DP 加成。
+    // 「未對抗加成」是 BOSS 多重行動（對抗分配）專屬規則——只有攻擊「該 BOSS 本體或其行動條目」
+    // 時才生效；攻擊一般小怪／其他敵方單位不觸發。
     let counterPhaseDpBonus = 0;
-    if (myRole !== 'st' && attackerUnit && typeof cpResolvePlayerMods === 'function') {
-        counterPhaseDpBonus = cpResolvePlayerMods(myPlayerId, attackerUnit.init || 0).selfBonus;
+    if (myRole !== 'st' && attackerUnit && typeof cpResolvePlayerMods === 'function'
+        && typeof counterPhaseState !== 'undefined' && counterPhaseState.started) {
+        const cpBossId = counterPhaseState.bossId;
+        const isCounterBossTarget = !!(targetUnit && cpBossId
+            && (targetUnit.id === cpBossId || targetUnit.actionSlotOf === cpBossId));
+        if (isCounterBossTarget) {
+            counterPhaseDpBonus = cpResolvePlayerMods(myPlayerId, attackerUnit.init || 0).selfBonus;
+        }
     }
 
     const attacker = {

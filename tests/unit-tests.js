@@ -365,9 +365,9 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         'src/ui/combat-modals.js'
     ];
     const combinedIdentity = identityFiles.map(f => readSource(f)).join('\n;\n')
-        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState };';
+        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks };';
     vm.runInContext(combinedIdentity, idSandbox, { filename: 'combined-identity.js' });
-    const { cmResolveIdentityBonus, identityHudState } = idSandbox.__identityExports;
+    const { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks } = idSandbox.__identityExports;
 
     test('唐吉訶德「延續進攻」命中同時算出 targetStatus 與 selfStatus，兩者皆不遺漏', () => {
         identityHudState.owner = '唐吉訶德';
@@ -382,6 +382,85 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         assert.ok(result.onHitSelfStatusNotes.length > 0, 'onHitSelfStatusNotes 不應為空');
         assert.ok(result.onHitSelfStatusNotes.some(n => n.includes('+4')), 'onHitSelfStatusNotes 應包含層數敘述');
         assert.strictEqual(result.onHitTargetStatus.bind, 2, '目標應疊加 2 層束縛（延續進攻+雙旋飛刺）');
+    });
+
+    test('格里高爾：目標無沮喪 → 條件式 DP 加值列入「未觸發」清單而非直接消失', () => {
+        const owned = [{ id: 'gregor_edgar', unlocked: false }];
+        const list = collectUntriggeredBonusHooks(owned, { status: {} }, { status: {} });
+        // 長劍劈砍 x2 / 延續進攻（條件未達）＋ 噩夢狩獵（未解鎖）
+        assert.ok(list.length >= 4, `應列出 4 筆未觸發的 DP 加值，實得 ${list.length}`);
+        assert.ok(list.every(u => u.reason && u.bonusTxt), '每筆未觸發項目都應附原因與加值內容');
+        assert.ok(list.some(u => u.reason.includes('解鎖')), '未解鎖的三技應標示原因為未解鎖');
+        assert.ok(list.some(u => u.reason.includes('條件未達')), '狀態門檻未達者應標示條件未達');
+    });
+
+    test('格里高爾：目標沮喪 10＋已解鎖 → 全部觸發，未觸發清單為空', () => {
+        const owned = [{ id: 'gregor_edgar', unlocked: true }];
+        const list = collectUntriggeredBonusHooks(owned, { status: {} }, { status: { depression: 10 } });
+        assert.strictEqual(list.length, 0, `不應有未觸發項目，實得 ${list.length}`);
+    });
+
+    test('人格卡面板的手動資源（魔法阿卡納）在實際攻擊路徑同樣生效', () => {
+        identityHudState.owner = '唐吉訶德';
+        identityHudState.cards = { don_ego: { owned: true, unlocked: false } };
+        identityHudState.cardInputs = { don_ego: { arcana: 3, will: 0, loveHate: 0 } };
+        const result = cmResolveIdentityBonus({ id: 'atk1', status: {}, init: 10 }, { id: 'tgt1', status: {} });
+        // 魔法阿卡納：攻擊檢定 +層數（修正前實際攻擊不讀面板手動資源，這裡會是 0）
+        assert.strictEqual(result.dpBonus, 3, `阿卡納 3 層應轉為 DP +3，實得 ${result.dpBonus}`);
+        identityHudState.cardInputs = {};
+    });
+})();
+
+// ====================================================================
+console.log('\n[模板整併] 單位模板：完整數值保存與同名覆蓋更新');
+// ====================================================================
+(function () {
+    const store = {};
+    const stSandbox = {
+        console, JSON, Object, Array, Math, Date, parseInt, String, Number,
+        localStorage: {
+            getItem: (k) => (k in store ? store[k] : null),
+            setItem: (k, v) => { store[k] = String(v); },
+            removeItem: (k) => { delete store[k]; }
+        },
+        state: { units: [] },
+        location: { reload() {} }
+    };
+    vm.createContext(stSandbox);
+    vm.runInContext(readSource('src/data/storage.js')
+        + '\n;\nvar __stExports = { saveUnitTemplate, updateUnitTemplate, findUnitTemplateByName, upsertUnitTemplateByName, getUnitTemplates };',
+        stSandbox, { filename: 'storage.js' });
+    const { saveUnitTemplate, findUnitTemplateByName, upsertUnitTemplateByName, getUnitTemplates } = stSandbox.__stExports;
+
+    test('模板保存完整戰鬥數值（含先攻 init 與行動說明 actionNote）', () => {
+        const saved = saveUnitTemplate({
+            name: '腐化清掃工', hp: 18, type: 'enemy', size: 1, avatar: null,
+            combat: { defDp: 9, defAuto: 1, init: 6, actionDp: 11, passive: '腐化滲出', actionNote: '近戰' }
+        });
+        assert.ok(saved && saved.id, '應成功保存並回傳含 id 的模板');
+        assert.strictEqual(saved.combat.init, 6, 'init 應存入 combat');
+        assert.strictEqual(saved.combat.actionNote, '近戰', 'actionNote 應存入 combat');
+        assert.strictEqual(saved.combat.defAuto, 1, 'defAuto 應存入 combat');
+    });
+
+    test('同名 upsert 覆蓋更新原模板（保留 id、不產生重複模板）', () => {
+        const before = findUnitTemplateByName('腐化清掃工');
+        const result = upsertUnitTemplateByName({
+            name: '腐化清掃工', hp: 24, type: 'enemy', size: 1, avatar: null,
+            combat: { defDp: 12, defAuto: 2, init: 8, actionDp: 13 }
+        });
+        assert.ok(result && result.updated, '同名模板應走更新路徑');
+        assert.strictEqual(result.template.id, before.id, '更新後 id 不變');
+        assert.strictEqual(result.template.hp, 24, 'hp 應更新');
+        assert.strictEqual(result.template.combat.defAuto, 2, 'combat 數值應更新');
+        const all = getUnitTemplates().filter(t => t.name === '腐化清掃工');
+        assert.strictEqual(all.length, 1, '不應出現同名重複模板');
+    });
+
+    test('不同名 upsert 走新增路徑', () => {
+        const result = upsertUnitTemplateByName({ name: '另一隻怪', hp: 10, type: 'enemy' });
+        assert.ok(result && !result.updated, '不同名應新增');
+        assert.strictEqual(getUnitTemplates().length, 2, '模板總數應為 2');
     });
 })();
 

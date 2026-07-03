@@ -698,14 +698,20 @@ function submitCounterAssign() {
 function cpShowFloatPanel(forceRestore) {
     const panel = document.getElementById('counter-float-panel');
     if (!panel) return;
-    if (typeof PanelDock !== 'undefined' && PanelDock.isDocked('counter-float-panel')) {
+    // 收納狀態同時檢查 PanelDock（記憶體）與 localStorage（持久化）：
+    // 頁面載入初期若收納還原尚未完成，僅靠記憶體判斷會把收納中的面板誤彈出到畫面上
+    let dockPersisted = false;
+    try { dockPersisted = !!(JSON.parse(localStorage.getItem('limbus_counter_float_panel') || '{}').isDocked); } catch (e) { /* ignore */ }
+    if ((typeof PanelDock !== 'undefined' && PanelDock.isDocked('counter-float-panel')) || dockPersisted) {
         if (!forceRestore) {
-            PanelDock.setHint(true);
-            setTimeout(() => PanelDock.setHint(false), 1600);
+            if (typeof PanelDock !== 'undefined') {
+                PanelDock.setHint(true);
+                setTimeout(() => PanelDock.setHint(false), 1600);
+            }
             if (typeof showToast === 'function') showToast('⚔️ 對抗分配面板收納於右側邊條，按住圖標拖出查看');
             return;
         }
-        PanelDock.restore('counter-float-panel');
+        if (typeof PanelDock !== 'undefined') PanelDock.restore('counter-float-panel');
     }
     panel.classList.remove('hidden');
     if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);

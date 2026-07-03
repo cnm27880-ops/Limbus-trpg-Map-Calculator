@@ -1438,6 +1438,11 @@ function sendToHost(message) {
             roomRef.child(`units/${message.unitId}/init`).set(message.init);
             break;
 
+        case 'updateMoveSpeed':
+            // 移動速度（米）：戰術移動限制來源，夾限 0~999
+            roomRef.child(`units/${message.unitId}/moveSpeed`).set(Math.max(0, Math.min(999, parseInt(message.moveSpeed) || 0)));
+            break;
+
         case 'modifyMaxHp':
             const maxHpUnit = state.units.find(u => u.id === message.unitId);
             if (maxHpUnit && message.newMaxHp >= 1) {

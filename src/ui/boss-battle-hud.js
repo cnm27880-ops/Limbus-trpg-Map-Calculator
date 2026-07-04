@@ -58,7 +58,7 @@ function openBossUnitModal(unitId) {
                     <label class="stat-field"><span>支線等級</span><input type="number" id="boss-unit-side-level" value="${u.sideLevel || 1}" min="1" max="99" title="「對抗分配」修正基數 = 等級 × 10"></label>
                 </div>
                 <div class="stat-grid cols-3">
-                    <label class="stat-field"><span>先攻加值</span><input type="number" id="boss-unit-init" value="${u.init || 0}"></label>
+                    <label class="stat-field"><span>先攻加值</span><input type="number" id="boss-unit-init" value="${u.initBonus || 0}" title="骰先攻時 1D10 + 此加值 = 先攻序列"></label>
                 </div>
                 <div class="stat-field">
                     <span>被動能力／特性（逐條新增，供 ST 臨場參考）</span>
@@ -100,7 +100,7 @@ function saveBossUnitModal(unitId) {
     const u = findUnitById(unitId);
     if (!u) return;
 
-    u.init = parseInt(document.getElementById('boss-unit-init')?.value) || 0;
+    u.initBonus = parseInt(document.getElementById('boss-unit-init')?.value) || 0;
     u.maxHp = Math.max(1, parseInt(document.getElementById('boss-unit-max-hp')?.value) || 1);
     u.defDp = parseInt(document.getElementById('boss-unit-def-dp')?.value) || 0;
     u.defAuto = parseInt(document.getElementById('boss-unit-def-auto')?.value) || 0;
@@ -151,7 +151,7 @@ function saveBossUnitAsTemplate(unitId) {
         combat: {
             defDp: parseInt(document.getElementById('boss-unit-def-dp')?.value) || 0,
             defAuto: parseInt(document.getElementById('boss-unit-def-auto')?.value) || 0,
-            init: parseInt(document.getElementById('boss-unit-init')?.value) || 0,
+            initBonus: parseInt(document.getElementById('boss-unit-init')?.value) || 0,
             saveWill: parseInt(document.getElementById('boss-unit-save-will')?.value) || 0,
             saveReflex: parseInt(document.getElementById('boss-unit-save-reflex')?.value) || 0,
             saveTenacity: parseInt(document.getElementById('boss-unit-save-tenacity')?.value) || 0,

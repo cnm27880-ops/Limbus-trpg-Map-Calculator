@@ -117,6 +117,7 @@ function renderUnitsToolbar() {
             ${turnControls}
             <button class="units-btn" onclick="openAddUnitModal()">+ 新增</button>
             <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
+            <button class="units-btn" onclick="openInitRollModal()" title="全體骰先攻：1D10 + 先攻加值，自動填入先攻序列">🎲 先攻</button>
             <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
         `;
     } else {
@@ -145,7 +146,7 @@ function renderUnitsList() {
             const parent = findUnitById(u.actionSlotOf);
             const label = parent ? `${parent.name}・行動${u.slotIndex || ''}` : (u.name || '行動');
             const slotClasses = ['unit-card', 'unit-card-subaction', 'action-slot', u.type, isTurn ? 'active-turn' : ''].filter(Boolean).join(' ');
-            const slotInit = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${isStView ? '' : 'readonly'}>`;
+            const slotInit = `<div class="unit-init-seq${isStView ? '' : ' readonly'}" data-unit-id="${u.id}" title="先攻序列（滑鼠滾輪調整）">${u.init || 0}</div>`;
             const slotDel = isStView ? `<button class="action-btn" onclick="deleteUnit('${u.id}')" title="刪除此行動條目">✕</button>` : '';
             return `
                 <div class="${slotClasses}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
@@ -298,7 +299,7 @@ function renderUnitsList() {
             const pending = hpPending[u.id] || { b: 0, l: 0, a: 0 };
             // 戰術切換開關（暗黑工業風方塊切換器）：未勾選＝傷害（紅光）、勾選＝治療（綠光）
             const modeSwitch = `
-                <label class="tactical-toggle" title="切換扣血／治療模式（目前：${mode === 'heal' ? '治療' : '扣血'}）">
+                <label class="tactical-toggle wheel-toggle" title="切換扣血／治療模式（目前：${mode === 'heal' ? '治療' : '扣血'}）">
                     <input type="checkbox" ${mode === 'heal' ? 'checked' : ''} onchange="toggleHpAdjustMode('${u.id}')">
                     <span class="toggle-track"></span>
                 </label>`;
@@ -332,9 +333,8 @@ function renderUnitsList() {
 
         const safeAvatar = (u.avatar && typeof u.avatar === 'string' && u.avatar.startsWith('data:image/')) ? u.avatar : '';
         const avaStyle = safeAvatar ? `background-image:url(${safeAvatar});color:transparent;` : '';
-        const initReadonly = !canControlUnit(u) ? 'readonly' : '';
-        // 移除 inline style，使用 CSS 設定的樣式（width: 70px, height: 36px, font-size: 1.1rem）
-        const initInput = `<input type="number" class="unit-init" value="${u.init || 0}" onchange="updateInit('${u.id}',this.value)" ${initReadonly}>`;
+        // 先攻序列：不可打字的短框，滑鼠滾輪調整（可控單位限定）
+        const initInput = `<div class="unit-init-seq${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" title="先攻序列（滑鼠滾輪調整）">${u.init || 0}</div>`;
         const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
         // 使用者自己的單位有特殊邊框；ST 看到隱藏單位時降低透明度
@@ -742,6 +742,124 @@ function updateInit(id, val) {
     }
 }
 
+// ===== 先攻序列滾輪調整 =====
+// 單位頁的先攻序列框不可打字，改用滑鼠滾輪 ±1；
+// 連續滾動以 400ms 去抖後才提交（updateInit → 廣播），避免每格都觸發一次同步。
+const initSeqCommitTimers = {};
+function handleInitSeqWheel(e) {
+    const box = e.target && e.target.closest ? e.target.closest('.unit-init-seq') : null;
+    if (!box || box.classList.contains('readonly')) return;
+    e.preventDefault();
+    const id = box.dataset.unitId;
+    if (!id) return;
+    const dir = e.deltaY > 0 ? -1 : 1;  // 向上滾＝增加
+    const next = Math.max(-999, Math.min(999, (parseInt(box.textContent) || 0) + dir));
+    box.textContent = next;
+    box.classList.remove('wheel-flash');
+    void box.offsetWidth;
+    box.classList.add('wheel-flash');
+    clearTimeout(initSeqCommitTimers[id]);
+    initSeqCommitTimers[id] = setTimeout(() => {
+        delete initSeqCommitTimers[id];
+        updateInit(id, next);
+    }, 400);
+}
+if (typeof document !== 'undefined') {
+    document.addEventListener('wheel', handleInitSeqWheel, { passive: false });
+}
+
+// ===== 全體骰先攻（ST）=====
+/**
+ * 開啟骰先攻 Modal：列出所有單位（可勾選），一鍵擲 1D10 + 先攻加值並自動填入先攻序列。
+ */
+function openInitRollModal() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以擲全體先攻');
+        return;
+    }
+    const existing = document.getElementById('init-roll-modal');
+    if (existing) existing.remove();
+
+    const rows = state.units.map(u => {
+        const isSlot = !!u.actionSlotOf;
+        const label = isSlot
+            ? `${(findUnitById(u.actionSlotOf)?.name) || ''}・行動${u.slotIndex || ''}`
+            : (u.name || '未命名');
+        const typeTxt = u.type === 'boss' ? 'BOSS' : u.type === 'enemy' ? '敵方' : '我方';
+        return `
+            <label class="init-roll-row">
+                <input type="checkbox" class="ir-check" value="${u.id}" data-type="${u.type}" checked>
+                <span class="irr-name">${escapeHtml(label)}</span>
+                <span class="irr-bonus">${typeTxt}｜加值 ${u.initBonus || 0}</span>
+                <span class="irr-result" id="ir-result-${u.id}">目前 ${u.init || 0}</span>
+            </label>`;
+    }).join('');
+
+    const html = `
+        <div class="modal-overlay show" id="init-roll-modal" onclick="if(event.target.id==='init-roll-modal')closeInitRollModal()">
+            <div class="modal" style="max-width:440px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">🎲 全體骰先攻（1D10 + 先攻加值）</span>
+                    <button onclick="closeInitRollModal()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                        <button class="modal-btn" onclick="irSetAll('all')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">全選</button>
+                        <button class="modal-btn" onclick="irSetAll('enemy')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">僅敵方/BOSS</button>
+                        <button class="modal-btn" onclick="irSetAll('player')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">僅我方</button>
+                        <button class="modal-btn" onclick="irSetAll('none')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">清除</button>
+                    </div>
+                    <div style="max-height:46vh;overflow-y:auto;">${rows || '<div style="color:var(--text-dim);padding:12px;">尚無單位</div>'}</div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="closeInitRollModal()" style="background:var(--bg-card);">關閉</button>
+                    <button class="modal-btn" onclick="rollInitiative()" style="background:var(--accent-green);color:#000;">🎲 擲先攻並填入</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
+}
+
+function closeInitRollModal() {
+    const modal = document.getElementById('init-roll-modal');
+    if (modal) modal.remove();
+}
+
+/** 快速勾選：all＝全選、enemy＝敵方/BOSS、player＝我方、none＝清除 */
+function irSetAll(mode) {
+    document.querySelectorAll('#init-roll-modal .ir-check').forEach(c => {
+        const t = c.dataset.type;
+        if (mode === 'all') c.checked = true;
+        else if (mode === 'none') c.checked = false;
+        else if (mode === 'enemy') c.checked = (t === 'enemy' || t === 'boss');
+        else if (mode === 'player') c.checked = (t === 'player');
+    });
+}
+
+/** 對勾選單位各擲 1D10 + 先攻加值，寫入先攻序列並廣播 */
+function rollInitiative() {
+    if (myRole !== 'st') return;
+    const checks = document.querySelectorAll('#init-roll-modal .ir-check:checked');
+    if (!checks.length) {
+        showToast('未勾選任何單位');
+        return;
+    }
+    let rolled = 0;
+    checks.forEach(c => {
+        const u = findUnitById(c.value);
+        if (!u) return;
+        const d10 = Math.floor(Math.random() * 10) + 1;
+        const bonus = parseInt(u.initBonus) || 0;
+        u.init = d10 + bonus;
+        rolled++;
+        const cell = document.getElementById('ir-result-' + u.id);
+        if (cell) cell.textContent = `${d10}+${bonus} = ${u.init}`;
+    });
+    broadcastState();
+    showToast(`🎲 已為 ${rolled} 個單位擲先攻並填入`);
+}
+
 /**
  * 依先攻排序
  */
@@ -1111,22 +1229,25 @@ function openPlayerStatsModal(unitId) {
                     <button onclick="closePlayerStatsModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">
-                    <div class="calc-field">
-                        <span class="calc-label">三豁免（骰數，受攻擊需豁免抵擋時自動擲骰）</span>
-                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
-                            <div class="calc-field"><span class="calc-label">意志</span>
-                                <input type="number" id="ps-save-will" value="${u.saveWill || 0}"></div>
-                            <div class="calc-field"><span class="calc-label">反射</span>
-                                <input type="number" id="ps-save-reflex" value="${u.saveReflex || 0}"></div>
-                            <div class="calc-field"><span class="calc-label">強韌</span>
-                                <input type="number" id="ps-save-tenacity" value="${u.saveTenacity || 0}"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                        <div class="calc-field"><span class="calc-label">意志豁免</span>
+                            <input type="number" id="ps-save-will" value="${u.saveWill || 0}"></div>
+                        <div class="calc-field"><span class="calc-label">反射豁免</span>
+                            <input type="number" id="ps-save-reflex" value="${u.saveReflex || 0}"></div>
+                        <div class="calc-field"><span class="calc-label">強韌豁免</span>
+                            <input type="number" id="ps-save-tenacity" value="${u.saveTenacity || 0}"></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div class="calc-field">
+                            <span class="calc-label">移動速度（米）</span>
+                            <input type="number" id="ps-move-speed" value="${(u.moveSpeed !== undefined && u.moveSpeed !== null) ? u.moveSpeed : 20}" min="0" max="999">
+                        </div>
+                        <div class="calc-field">
+                            <span class="calc-label">先攻加值</span>
+                            <input type="number" id="ps-init-bonus" value="${u.initBonus || 0}" title="骰先攻時 1D10 + 此加值 = 先攻序列">
                         </div>
                     </div>
-                    <div class="calc-field">
-                        <span class="calc-label">移動速度（米）</span>
-                        <input type="number" id="ps-move-speed" value="${(u.moveSpeed !== undefined && u.moveSpeed !== null) ? u.moveSpeed : 20}" min="0" max="999">
-                        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px;">5 米 = 1 格；每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2。</div>
-                    </div>
+                    <div style="font-size:0.72rem;color:var(--text-dim);">5 米 = 1 格；每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2。</div>
                 </div>
                 <div class="modal-footer">
                     <button class="modal-btn" onclick="closePlayerStatsModal()" style="background:var(--bg-card);">取消</button>
@@ -1159,11 +1280,13 @@ function savePlayerStats(unitId) {
     const saveTenacity = clampSave(document.getElementById('ps-save-tenacity')?.value);
     const msRaw = parseInt(document.getElementById('ps-move-speed')?.value);
     const moveSpeed = (Number.isFinite(msRaw) && msRaw >= 0) ? Math.min(999, msRaw) : 20;
+    const initBonus = clampSave(document.getElementById('ps-init-bonus')?.value);
 
     u.saveWill = saveWill;
     u.saveReflex = saveReflex;
     u.saveTenacity = saveTenacity;
     u.moveSpeed = moveSpeed;
+    u.initBonus = initBonus;
 
     if (myRole === 'st') {
         broadcastState();
@@ -1175,7 +1298,8 @@ function savePlayerStats(unitId) {
             saveWill: saveWill,
             saveReflex: saveReflex,
             saveTenacity: saveTenacity,
-            moveSpeed: moveSpeed
+            moveSpeed: moveSpeed,
+            initBonus: initBonus
         });
         renderAll();
     }
@@ -1325,7 +1449,7 @@ function openUnitContextMenu(event, unitId) {
     if (canControl && u.actionSlotOf) {
         // 多重行動條目：只提供設定與刪除
         items = [
-            { icon: '⚔', label: 'BOSS 設定（數值＋多重行動）', fn: `openMultiActionModal('${u.actionSlotOf}')` },
+            { icon: '⚔', label: 'BOSS 設定', fn: `openMultiActionModal('${u.actionSlotOf}')` },
             { icon: '✕', label: '刪除此行動', cls: 'danger', fn: `deleteUnit('${u.id}')` }
         ];
     } else {
@@ -1337,12 +1461,12 @@ function openUnitContextMenu(event, unitId) {
             );
             // 玩家角色：填寫三豁免與移速（攻擊/防禦 DP 維持戰鬥當下填寫）
             if (typeof isPlayerCharacterUnit === 'function' && isPlayerCharacterUnit(u)) {
-                items.push({ icon: '📊', label: '角色數值（豁免/移速）', fn: `openPlayerStatsModal('${u.id}')` });
+                items.push({ icon: '📊', label: '角色數值', fn: `openPlayerStatsModal('${u.id}')` });
             }
             if (isSt) {
                 // BOSS：戰鬥數值＋多重行動已合併進同一個 Modal，只需一個入口，不必來回切換兩個視窗
                 if (u.type === 'boss') {
-                    items.push({ icon: '👹', label: 'BOSS 設定（數值＋多重行動）', fn: `openMultiActionModal('${u.id}')` });
+                    items.push({ icon: '👹', label: 'BOSS 設定', fn: `openMultiActionModal('${u.id}')` });
                 } else if (isBoss || u.type === 'enemy') {
                     items.push({ icon: '👹', label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });
                 }
@@ -1356,7 +1480,7 @@ function openUnitContextMenu(event, unitId) {
         if (canAttack) {
             items.push({ icon: '⚔️', label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
         } else if (isSt && u.type === 'player') {
-            items.push({ icon: '🗡️', label: '發起威脅 (QTE)', fn: `openThreatModal('${u.id}')` });
+            items.push({ icon: '🗡️', label: '發起威脅', fn: `openThreatModal('${u.id}')` });
         }
 
         if (canControl) {
@@ -1579,13 +1703,15 @@ function renderMultiActionCounterStatus() {
         </button>`;
 }
 
-/** 從單位讀取行動設定（先攻 / DP / 狀態 / 是否為AOE行動），含舊資料相容 */
+/** 從單位讀取行動設定（先攻 / DP / 狀態 / AOE / 豁免抵擋），含舊資料相容 */
 function maReadActionFrom(unit) {
     return {
         init: unit.init || 0,
         dp: unit.actionDp || 0,
         statuses: Array.isArray(unit.actionStatuses) ? unit.actionStatuses.map(s => ({ ...s })) : [],
-        aoe: !!unit.actionAoe
+        aoe: !!unit.actionAoe,
+        saveResist: !!unit.actionSaveResist,
+        saveType: ['saveWill', 'saveReflex', 'saveTenacity'].includes(unit.actionSaveType) ? unit.actionSaveType : 'saveReflex'
     };
 }
 
@@ -1615,7 +1741,7 @@ function maSetCount(value) {
     const count = Math.max(1, Math.min(12, parseInt(value) || 1));
     const cur = maEdit.actions;
     if (count > cur.length) {
-        while (maEdit.actions.length < count) maEdit.actions.push({ init: 0, dp: 0, statuses: [], aoe: false });
+        while (maEdit.actions.length < count) maEdit.actions.push({ init: 0, dp: 0, statuses: [], aoe: false, saveResist: false, saveType: 'saveReflex' });
     } else if (count < cur.length) {
         maEdit.actions = cur.slice(0, count);
     }
@@ -1639,8 +1765,10 @@ function maSyncFromDom() {
     maEdit.actions.forEach((a, i) => {
         const initEl = document.getElementById(`ma-init-${i}`);
         const dpEl = document.getElementById(`ma-dp-${i}`);
+        const saveTypeEl = document.getElementById(`ma-savetype-${i}`);
         if (initEl) a.init = parseInt(initEl.value) || 0;
         if (dpEl) a.dp = parseInt(dpEl.value) || 0;
+        if (saveTypeEl) a.saveType = saveTypeEl.value;
     });
 }
 
@@ -1648,7 +1776,21 @@ function maSyncFromDom() {
 function maToggleAoe(index, checked) {
     if (!maEdit || !maEdit.actions[index]) return;
     maEdit.actions[index].aoe = !!checked;
-    // 只更新暫存，不重建列表：重建會使頁面捲動跳回頂端，且勾選框本身已反映新狀態
+    // 只更新暫存，不重建列表：勾選框本身已反映新狀態，無需重繪
+}
+
+/** 切換某行動是否走「豁免抵擋」結算（開啟後行動卡顯示豁免類型選擇） */
+function maToggleSaveResist(index, checked) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    maEdit.actions[index].saveResist = !!checked;
+    // 需要重建列表以顯示/隱藏豁免類型選擇（renderMultiActionList 會先收回輸入值並保留捲動位置）
+    renderMultiActionList();
+}
+
+/** 更新某行動的豁免類型（豁免抵擋開啟時的下拉選擇） */
+function maUpdateSaveType(index, value) {
+    if (!maEdit || !maEdit.actions[index]) return;
+    maEdit.actions[index].saveType = ['saveWill', 'saveReflex', 'saveTenacity'].includes(value) ? value : 'saveReflex';
 }
 
 /** 由輸入框（狀態名稱 + 層數）新增一個狀態到指定行動 */
@@ -1696,19 +1838,35 @@ function renderMultiActionList() {
                 `<span class="ma-status-chip">${maStatusLabel(s)}<button onclick="maRemoveStatus(${i},${si})" title="移除">×</button></span>`
               ).join('')
             : '<span style="font-size:0.7rem;color:var(--text-dim);">無</span>';
+        const saveTypeSelect = a.saveResist ? `
+                <label class="ma-f-narrow">豁免
+                    <select class="wheel-cycle" id="ma-savetype-${i}" onchange="maUpdateSaveType(${i}, this.value)" title="此行動由目標用哪一項豁免抵擋">
+                        <option value="saveReflex" ${a.saveType === 'saveReflex' ? 'selected' : ''}>反射</option>
+                        <option value="saveWill" ${a.saveType === 'saveWill' ? 'selected' : ''}>意志</option>
+                        <option value="saveTenacity" ${a.saveType === 'saveTenacity' ? 'selected' : ''}>強韌</option>
+                    </select>
+                </label>` : '';
         return `
         <div class="ma-action-card">
             <div class="ma-action-head">
                 行動${i + 1}${i === 0 ? '（本體）' : ''}
-                <label class="ma-aoe-switch" title="開啟後此行動視為群體(AOE)效果，以長按 T 鍵的選取模式結算，不會出現在單體威脅快選中">
+                <span style="margin-left:auto;display:inline-flex;align-items:center;">
+                <label class="ma-save-switch wheel-toggle" title="開啟後此行動改走「豁免抵擋」結算：發起威脅時自動帶入豁免攻擊面板，由目標擲豁免對抗">
+                    <input type="checkbox" ${a.saveResist ? 'checked' : ''} onchange="maToggleSaveResist(${i}, this.checked)">
+                    <span class="save-text">豁免抵擋</span>
+                    <span class="save-track"></span>
+                </label>
+                <label class="ma-aoe-switch wheel-toggle" title="開啟後此行動視為群體(AOE)效果，以長按 T 鍵的選取模式結算，不會出現在單體威脅快選中">
                     <input type="checkbox" ${a.aoe ? 'checked' : ''} onchange="maToggleAoe(${i}, this.checked)">
                     <span class="aoe-text">AOE</span>
                     <span class="aoe-track"></span>
                 </label>
+                </span>
             </div>
             <div class="ma-action-fields">
                 <label class="ma-f-narrow">先攻<input type="number" id="ma-init-${i}" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
                 <label class="ma-f-narrow">DP<input type="number" id="ma-dp-${i}" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
+                ${saveTypeSelect}
                 <label class="ma-f-wide">命中施加狀態<input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="例：破裂"></label>
             </div>
             <div class="ma-status-row">
@@ -1759,6 +1917,8 @@ function saveMultiAction(bossId) {
     boss.actionDp = actions[0].dp;
     boss.actionStatuses = actions[0].statuses.map(s => ({ ...s }));
     boss.actionAoe = !!actions[0].aoe;
+    boss.actionSaveResist = !!actions[0].saveResist;
+    boss.actionSaveType = actions[0].saveType || 'saveReflex';
 
     const slots = getActionSlots(bossId);
 
@@ -1770,6 +1930,8 @@ function saveMultiAction(bossId) {
             slots[i - 1].actionDp = data.dp;
             slots[i - 1].actionStatuses = data.statuses.map(s => ({ ...s }));
             slots[i - 1].actionAoe = !!data.aoe;
+            slots[i - 1].actionSaveResist = !!data.saveResist;
+            slots[i - 1].actionSaveType = data.saveType || 'saveReflex';
             slots[i - 1].slotIndex = i + 1;
         } else {
             const slot = createUnit(`${boss.name}・行動${i + 1}`, 1, boss.type);
@@ -1779,6 +1941,8 @@ function saveMultiAction(bossId) {
             slot.actionDp = data.dp;
             slot.actionStatuses = data.statuses.map(s => ({ ...s }));
             slot.actionAoe = !!data.aoe;
+            slot.actionSaveResist = !!data.saveResist;
+            slot.actionSaveType = data.saveType || 'saveReflex';
             state.units.push(slot);
         }
     }
@@ -1819,6 +1983,7 @@ function saveMultiActionAsTemplate(bossId) {
         combat: {
             defDp: parseInt(document.getElementById('ma-boss-def-dp')?.value) || 0,
             defAuto: parseInt(document.getElementById('ma-boss-def-auto')?.value) || 0,
+            initBonus: parseInt(boss.initBonus) || 0,
             init: parseInt(action0.init) || boss.init || 0,
             saveWill: parseInt(document.getElementById('ma-boss-save-will')?.value) || 0,
             saveReflex: parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0,

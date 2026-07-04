@@ -21,11 +21,11 @@ function initModals() {
                 </div>
                 <div class="modal-body">
                     <!-- 模板選擇區 -->
-                    <div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">
-                        <select id="template-select" onchange="loadUnitTemplate(this.value)" style="flex:1;">
+                    <div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);min-width:0;">
+                        <select id="template-select" onchange="loadUnitTemplate(this.value)" style="flex:1;min-width:0;">
                             <option value="">-- 載入模板 --</option>
                         </select>
-                        <button class="modal-btn tm-open-btn" onclick="openTemplateManager()" title="模板管理：查看／修改數值／刪除">🗂 管理</button>
+                        <button class="modal-btn tm-open-btn" onclick="openTemplateManager()" style="flex:0 0 auto;" title="模板管理：查看／修改數值／刪除">🗂 管理</button>
                     </div>
 
                     <!-- 頭像預覽區 -->
@@ -63,7 +63,7 @@ function initModals() {
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;">
                             <div class="calc-field"><span class="calc-label">防禦 DP</span><input type="number" id="add-c-defdp" value="0"></div>
                             <div class="calc-field"><span class="calc-label">防禦附加成功</span><input type="number" id="add-c-defauto" value="0"></div>
-                            <div class="calc-field"><span class="calc-label">先攻</span><input type="number" id="add-c-init" value="0"></div>
+                            <div class="calc-field"><span class="calc-label">先攻加值</span><input type="number" id="add-c-init" value="0" title="骰先攻時 1D10 + 此加值 = 先攻序列"></div>
                             <div class="calc-field"><span class="calc-label">意志豁免</span><input type="number" id="add-c-savewill" value="0"></div>
                             <div class="calc-field"><span class="calc-label">反射豁免</span><input type="number" id="add-c-savereflex" value="0"></div>
                             <div class="calc-field"><span class="calc-label">堅韌豁免</span><input type="number" id="add-c-savetenacity" value="0"></div>
@@ -322,7 +322,7 @@ function fillAddCombatFields(combat) {
     const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     setVal('add-c-defdp', parseInt(c.defDp) || 0);
     setVal('add-c-defauto', parseInt(c.defAuto) || 0);
-    setVal('add-c-init', parseInt(c.init) || 0);
+    setVal('add-c-init', parseInt(c.initBonus !== undefined ? c.initBonus : c.init) || 0);
     setVal('add-c-savewill', parseInt(c.saveWill) || 0);
     setVal('add-c-savereflex', parseInt(c.saveReflex) || 0);
     setVal('add-c-savetenacity', parseInt(c.saveTenacity) || 0);
@@ -351,7 +351,7 @@ function readAddCombatFields() {
     const fields = {
         defDp: num('add-c-defdp'),
         defAuto: num('add-c-defauto'),
-        init: num('add-c-init'),
+        initBonus: num('add-c-init'),
         saveWill: num('add-c-savewill'),
         saveReflex: num('add-c-savereflex'),
         saveTenacity: num('add-c-savetenacity'),
@@ -1230,7 +1230,7 @@ function tmRenderList() {
             ['tm-chip-move', `🏃 ${t.moveSpeed !== undefined ? t.moveSpeed : 20}米`],
             ['tm-chip-def', `防 ${c.defDp || 0}(+${c.defAuto || 0})`],
             ['tm-chip-atk', `攻DP ${c.actionDp || 0}`],
-            ['', `先攻 ${c.init || 0}`]
+            ['', `先攻加值 ${(c.initBonus !== undefined ? c.initBonus : c.init) || 0}`]
         ].map(([cls, txt]) => `<span class="tm-chip ${cls}">${escapeHtml(txt)}</span>`).join('');
         return `
             <div class="tm-card tm-type-${t.type || 'enemy'}" id="tm-card-${t.id}">
@@ -1292,7 +1292,7 @@ function tmToggleEdit(id) {
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
             ${numField('防禦 DP', 'defdp', c.defDp || 0)}
             ${numField('防禦附加', 'defauto', c.defAuto || 0)}
-            ${numField('先攻', 'init', c.init || 0)}
+            ${numField('先攻加值', 'init', (c.initBonus !== undefined ? c.initBonus : c.init) || 0)}
             ${numField('意志豁免', 'savewill', c.saveWill || 0)}
             ${numField('反射豁免', 'savereflex', c.saveReflex || 0)}
             ${numField('堅韌豁免', 'savetenacity', c.saveTenacity || 0)}
@@ -1334,7 +1334,7 @@ function tmSave(id) {
         combat: Object.assign({}, baseCombat, {
             defDp: num('defdp'),
             defAuto: num('defauto'),
-            init: num('init'),
+            initBonus: num('init'),
             saveWill: num('savewill'),
             saveReflex: num('savereflex'),
             saveTenacity: num('savetenacity'),

@@ -203,3 +203,49 @@ function initKeyboardControls() {
         }
     });
 }
+
+// ===== 滾輪切換控制（wheel-cycle / wheel-toggle）=====
+/**
+ * 滑鼠滾輪快速切換：
+ *   - select.wheel-cycle：滾輪循環切換選項（向下滾＝下一個），並觸發 change
+ *   - .wheel-toggle：內含 checkbox 的開關（傷/療、AOE、豁免抵擋等），滾輪直接切換
+ * 切換瞬間以黃色描邊閃爍（.wheel-flash）標示狀態改變。
+ */
+function initWheelControls() {
+    document.addEventListener('wheel', (e) => {
+        if (!e.target || !e.target.closest) return;
+
+        // 下拉選單：滾輪循環切換
+        const sel = e.target.closest('select.wheel-cycle');
+        if (sel && !sel.disabled && sel.options.length > 0) {
+            e.preventDefault();
+            const dir = e.deltaY > 0 ? 1 : -1;
+            const n = sel.options.length;
+            sel.selectedIndex = (sel.selectedIndex + dir + n) % n;
+            sel.dispatchEvent(new Event('change', { bubbles: false }));
+            sel.classList.remove('wheel-flash');
+            void sel.offsetWidth;
+            sel.classList.add('wheel-flash');
+            return;
+        }
+
+        // 開關：滾輪直接切換勾選狀態
+        const toggle = e.target.closest('.wheel-toggle');
+        if (toggle) {
+            const input = toggle.querySelector('input[type="checkbox"]');
+            if (input && !input.disabled) {
+                e.preventDefault();
+                input.checked = !input.checked;
+                input.dispatchEvent(new Event('change', { bubbles: false }));
+                const track = toggle.querySelector('.toggle-track, .aoe-track, .save-track') || toggle;
+                track.classList.remove('wheel-flash');
+                void track.offsetWidth;
+                track.classList.add('wheel-flash');
+            }
+        }
+    }, { passive: false });
+}
+
+if (typeof window !== 'undefined') {
+    initWheelControls();
+}

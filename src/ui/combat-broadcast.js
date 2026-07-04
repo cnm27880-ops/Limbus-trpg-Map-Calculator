@@ -38,10 +38,6 @@ function cqOnBroadcasting(data) {
         if (roll.extraSuccess > 0) text += ` ＋ 附加 ${roll.extraSuccess}`;
         if (roll.statusBonus > 0) text += ` ＋ ${roll.statusBonusText}`;
         if (roll.capApplied) text += ` ＝ ${roll.totalBeforeCap}，上限 ${roll.cap}`;
-        // 豁免抵擋模式：附上目標豁免對擲結果
-        if (roll.saveSuccesses !== null && roll.saveSuccesses !== undefined) {
-            text += `｜🛡 ${targetName} ${roll.saveName || '豁免'}豁免擲 ${roll.saveDice} 顆 → ${roll.saveSuccesses} 成功`;
-        }
         banner.appendChild(document.createTextNode(text + ' ➡️ 總傷害 '));
         const dmgSpan = document.createElement('span');
         dmgSpan.className = 'combat-broadcast-dice';
@@ -64,12 +60,6 @@ function cqOnBroadcasting(data) {
             banner.appendChild(document.createTextNode(' 個附加成功！'));
         } else {
             banner.appendChild(document.createTextNode(' 顆攻擊骰！'));
-        }
-        // 豁免抵擋＋手動擲骰：提示目標同時擲豁免對抗
-        if (data.saveInfo && typeof data.saveInfo === 'object') {
-            const si = data.saveInfo;
-            banner.appendChild(document.createTextNode(
-                `（豁免抵擋：目標請擲${si.saveName || '豁免'}豁免 ${Math.max(0, Number(si.saveDice) || 0)} 顆對抗）`));
         }
     }
 

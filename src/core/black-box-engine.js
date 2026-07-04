@@ -113,17 +113,35 @@ function bbRunBlackBoxCalculation(data) {
     const targetMods = bbSumStatusCalcMods(targetUnit);
 
     // ===== 結算模式：豁免抵擋（save）=====
-    // 攻擊方擲「全額攻擊 DP」（不被防禦扣減）；目標以三豁免其一為骰數自動對擲，
-    // 傷害 = max(0, 攻擊成功數 − 豁免成功數)（於 ST 審核確認、自動擲骰時結算）。
+    // 流程：攻擊方送出後「立即」擲全額攻擊 DP（不被防禦扣減）得成功數；
+    // ST 審核面板輸入目標豁免骰數／豁免附加／最終調整，確認時系統擲豁免對銷，
+    // 每個目標分別擲一次，傷害 = max(0, 攻擊成功+附加 − 豁免成功−豁免附加 ± 調整)。
     const saveMode = attacker.resolveMode === 'save';
     let saveInfo = null;
     if (saveMode) {
         const saveKey = ['saveWill', 'saveReflex', 'saveTenacity'].includes(attacker.saveType) ? attacker.saveType : 'saveReflex';
         const saveNames = { saveWill: '意志', saveReflex: '反射', saveTenacity: '強韌' };
-        // 豁免骰池 = 目標三豁免其一 + 目標狀態的防禦修正（麻痺/凍結等一樣削弱豁免），下限 0
-        const savePoolBase = targetUnit ? bbSafeNumber(targetUnit[saveKey]) : 0;
-        const saveDice = Math.max(0, savePoolBase + targetMods.defMod);
-        saveInfo = { saveType: saveKey, saveName: saveNames[saveKey], saveDice, savePoolBase, saveStatusMod: targetMods.defMod };
+
+        // 多目標：攻擊方勾選的目標清單（沒有就用單一目標）；各目標帶自己的預設豁免骰數
+        const rawTargets = (Array.isArray(data.targets) && data.targets.length) ? data.targets : [data.target].filter(Boolean);
+        const targets = rawTargets.map(t => {
+            const tu = (typeof findUnitById === 'function' && t && t.id) ? findUnitById(t.id) : null;
+            const mods = bbSumStatusCalcMods(tu);
+            const poolBase = tu ? bbSafeNumber(tu[saveKey]) : 0;
+            return {
+                id: (t && t.id) || '',
+                name: (tu && tu.name) || (t && t.name) || '目標',
+                saveDice: Math.max(0, poolBase + mods.defMod)
+            };
+        });
+
+        saveInfo = {
+            saveType: saveKey,
+            saveName: saveNames[saveKey],
+            // 預設豁免骰數（審核面板預填）：取第一個目標
+            saveDice: targets.length ? targets[0].saveDice : 0,
+            targets
+        };
     }
 
     // 防禦最終值＝基礎防禦 DP ＋ 全部狀態修正，並加上下限保護（扣到 0 為止，不可為負）。
@@ -180,9 +198,23 @@ function bbRunBlackBoxCalculation(data) {
 
     let debugStr;
     if (saveMode) {
-        const saveModTxt = saveInfo.saveStatusMod ? `${saveInfo.savePoolBase}${saveInfo.saveStatusMod > 0 ? '+' : ''}${saveInfo.saveStatusMod}(狀態)` : `${saveInfo.savePoolBase}`;
-        debugStr = `【攻擊判定｜豁免抵擋】攻: ${atkLabels.join('+')} = ${atkDpTotal}（不扣防禦） ➡️ ${diceStr}\n`
-            + `【目標豁免】${saveInfo.saveName}: ${saveModTxt} = ${saveInfo.saveDice} 顆（自動擲骰時傷害 = 攻擊成功+附加 − 豁免成功）\n`
+        // 豁免模式：攻擊骰「立即」自動擲出，審核面板直接顯示成功數
+        const explodeAt = parseInt(attacker.explodeAt, 10) || 10;
+        const atkRoll = bbRollAttackDice(baseDice, explodeAt);
+        saveInfo.atkRoll = {
+            successes: atkRoll.successes,
+            tens: atkRoll.rolls.filter(d => d === 10).length,
+            exploded: atkRoll.explodedCount,
+            totalRolled: atkRoll.totalRolled,
+            explodeAt: explodeAt,
+            // 骰點明細裁切上限，避免極端連鎖加骰塞爆 Firebase 節點
+            rolls: atkRoll.rolls.slice(0, 200)
+        };
+
+        const targetLines = saveInfo.targets.map(t => `${t.name}(${saveInfo.saveName}${t.saveDice})`).join('、');
+        debugStr = `【攻擊判定｜豁免抵擋】攻: ${atkLabels.join('+')} = ${atkDpTotal}（不扣防禦）\n`
+            + `【攻擊擲骰】擲 ${atkRoll.totalRolled} 顆 → ${atkRoll.successes} 成功${atkRoll.explodedCount ? `（加骰 ${atkRoll.explodedCount}）` : ''}\n`
+            + `【目標豁免】${targetLines}（審核輸入豁免骰數後由系統對擲）\n`
             + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal}（豁免模式不被防禦附加抵銷） ➡️ 附加成功: ${baseExtraSuccess}`;
     } else {
         debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ ${diceStr}\n`

@@ -27,6 +27,7 @@
             "size":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 3)" },
             "moveSpeed": { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 999)" },
             "moveUsed":  { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 999)" },
+            "initBonus":    { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -999 && newData.val() <= 999)" },
             "saveWill":     { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -999 && newData.val() <= 999)" },
             "saveReflex":   { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -999 && newData.val() <= 999)" },
             "saveTenacity": { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= -999 && newData.val() <= 999)" }

@@ -240,6 +240,8 @@
         </div>
         <div class="modal-body">
             <div class="combat-modal-target" id="attack-target-name">目標：---</div>
+            <!-- 豁免抵擋模式：可勾選多個攻擊對象（如 1/5/7 號小兵） -->
+            <div class="atk-multi-targets" id="attack-multi-targets" style="display:none;"></div>
             <div class="attack-boss-actions" id="attack-boss-actions" style="display:none;"></div>
 
             <!-- 攻擊動作：基礎判定數值＋穿透（破甲/高速/破魔，直接併入攻擊 DP 桶） -->
@@ -248,7 +250,7 @@
                 <div class="calc-grid cols-2" style="margin-bottom:8px;">
                     <div class="calc-field">
                         <span class="calc-label">結算模式</span>
-                        <select id="attack-resolve-mode" onchange="cmOnAttackModeChange()"
+                        <select id="attack-resolve-mode" class="wheel-cycle" onchange="cmOnAttackModeChange()"
                                 title="防禦扣除：攻 DP − 防 DP = 骰數。豁免抵擋：攻全額 DP 擲骰，目標自動擲豁免骰，傷害 = 攻擊成功 − 豁免成功">
                             <option value="def" selected>防禦扣除</option>
                             <option value="save">豁免抵擋</option>
@@ -256,7 +258,7 @@
                     </div>
                     <div class="calc-field" id="attack-save-type-field" style="display:none;">
                         <span class="calc-label">目標豁免</span>
-                        <select id="attack-save-type">
+                        <select id="attack-save-type" class="wheel-cycle">
                             <option value="saveReflex">反射</option>
                             <option value="saveWill">意志</option>
                             <option value="saveTenacity">強韌</option>
@@ -265,7 +267,7 @@
                 </div>
                 <div class="calc-grid cols-2">
                     <div class="calc-field">
-                        <span class="calc-label">總攻擊 DP</span>
+                        <span class="calc-label" id="attack-dp-label">總攻擊 DP</span>
                         <input type="number" id="attack-dp" value="0" min="0">
                     </div>
                     <div class="calc-field">
@@ -302,7 +304,7 @@
                     </div>
                     <div class="calc-field">
                         <span class="calc-label">加骰等級</span>
-                        <select id="attack-explode">
+                        <select id="attack-explode" class="wheel-cycle">
                             <option value="10" selected>10 加骰（預設）</option>
                             <option value="9">9 加骰</option>
                             <option value="8">8 加骰</option>
@@ -352,8 +354,22 @@
         <div class="modal-body">
             <div class="st-review-suggested" id="st-review-suggested">系統建議骰數：--- 顆</div>
             <div class="st-review-context" id="st-review-context"></div>
+            <!-- 豁免抵擋模式：攻擊已先擲，此處輸入目標豁免與附加後由系統對擲 -->
+            <div id="st-review-save-section" style="display:none;">
+                <div class="calc-grid cols-2">
+                    <div class="calc-field">
+                        <span class="calc-label" id="st-review-save-label">豁免骰數</span>
+                        <input type="number" id="st-review-save-dice" value="0" min="0">
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">豁免附加成功</span>
+                        <input type="number" id="st-review-save-extra" value="0" min="0">
+                    </div>
+                </div>
+                <div id="st-review-save-targets" style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;"></div>
+            </div>
             <div class="calc-field">
-                <span class="calc-label">最終微調增減</span>
+                <span class="calc-label" id="st-review-modifier-label">最終微調增減</span>
                 <input type="number" id="st-review-modifier" value="0">
             </div>
             <label class="st-review-autoroll-row" title="由系統代擲 D10（8/9/10 成功、加骰門檻依攻擊方宣告）。傷害＝成功數＋附加成功＋目標破裂/易損層數，合計後套用攻擊上限（玩家限定），自動扣血並寫入日誌（含各骰點數明細）">

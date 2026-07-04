@@ -237,7 +237,8 @@ function createUnit(name, hp, type, ownerId = null, ownerName = null, size = 1, 
         maxHp: hp,
         hpArr: Array(hp).fill(0),  // 0=完好, 1=B傷, 2=L傷, 3=A傷
         type: type,
-        init: 0,
+        init: 0,       // 先攻序列（排序/顯示；骰先攻結果）
+        initBonus: 0,  // 先攻加值（骰先攻 1D10 + 此值）
         x: -1,
         y: -1,
         avatar: null,

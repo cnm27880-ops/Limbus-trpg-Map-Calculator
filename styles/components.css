@@ -4273,6 +4273,9 @@ body.combat-mode .boss-hud-container {
     gap: 6px;
     cursor: pointer;
     user-select: none;
+    /* 隱藏的 checkbox 以 absolute 定位，label 必須是定位容器：
+       否則 checkbox 會落到面板/頁面頂端，點擊時瀏覽器把 focus 元素捲入視野 → 整頁往上跳 */
+    position: relative;
 }
 .ma-aoe-switch input { position: absolute; opacity: 0; pointer-events: none; }
 .ma-aoe-switch .aoe-text {
@@ -5818,3 +5821,140 @@ body.combat-mode .boss-hud-container {
 .aoe-save-result-row .asr-dmg { white-space: nowrap; font-weight: 700; }
 .aoe-save-result-row.hit .asr-dmg { color: #ff8a80; }
 .aoe-save-result-row.resisted .asr-dmg { color: #a5d6a7; }
+
+/* ===== 行動「豁免抵擋」開關（AOE 左側，藍色系）===== */
+.ma-save-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    position: relative; /* 同 ma-aoe-switch：隱藏 checkbox 的定位容器，避免 focus 捲動跳頁 */
+    margin-right: 8px;
+}
+.ma-save-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.ma-save-switch .save-text {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    transition: color 0.15s;
+}
+.ma-save-switch .save-track {
+    width: 34px;
+    height: 16px;
+    border-radius: 3px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    position: relative;
+    transition: background 0.15s, border-color 0.15s;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.ma-save-switch .save-track::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(180deg, #3a3a42, #26262c);
+    border: 1px solid #4a4a52;
+    border-radius: 2px;
+    box-sizing: border-box;
+    transition: left 0.15s, background 0.15s, border-color 0.15s;
+}
+.ma-save-switch input:checked ~ .save-track {
+    background: rgba(66, 165, 245, 0.35);
+    border-color: #42a5f5;
+}
+.ma-save-switch input:checked ~ .save-track::after {
+    left: 19px;
+    background: linear-gradient(180deg, #42a5f5, #1565c0);
+    border-color: #90caf9;
+}
+.ma-save-switch input:checked ~ .save-text { color: #64b5f6; }
+
+/* ===== 滾輪切換回饋：切換瞬間黃色描邊閃一下，看得出狀態改變 ===== */
+@keyframes wheelFlash {
+    0% { box-shadow: 0 0 0 2px var(--accent-yellow, #fdd835); }
+    100% { box-shadow: 0 0 0 0 rgba(253, 216, 53, 0); }
+}
+.wheel-flash { animation: wheelFlash 0.3s ease-out; }
+select.wheel-cycle { cursor: ns-resize; }
+.wheel-toggle { cursor: ns-resize; }
+
+/* ===== 先攻序列框（單位頁）：不可打字、滾輪調整，數字置中、預留兩位數 ===== */
+.unit-init-seq {
+    width: 52px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-main);
+    cursor: ns-resize;
+    user-select: none;
+}
+.unit-init-seq.readonly { cursor: default; color: var(--text-dim); }
+
+/* ===== 攻擊 Modal 多目標選擇（豁免抵擋模式）===== */
+.atk-multi-targets {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+}
+.atk-multi-targets .amt-title {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+}
+.atk-multi-targets .amt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.atk-target-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-input);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s, color .15s;
+}
+.atk-target-chip input { margin: 0; }
+.atk-target-chip:has(input:checked) {
+    border-color: var(--accent-red, #e53935);
+    color: #ff9e9e;
+    background: rgba(229, 57, 53, 0.12);
+}
+
+/* ===== 骰先攻 Modal ===== */
+.init-roll-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    margin-bottom: 4px;
+    font-size: 0.82rem;
+}
+.init-roll-row .irr-name { flex: 1; min-width: 0; font-weight: 600; }
+.init-roll-row .irr-bonus { color: var(--text-dim); font-size: 0.72rem; white-space: nowrap; }
+.init-roll-row .irr-result {
+    min-width: 64px;
+    text-align: right;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--accent-yellow, #fdd835);
+    white-space: nowrap;
+}

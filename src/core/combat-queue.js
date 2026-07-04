@@ -70,6 +70,7 @@ function cqInitiateAttack(payload) {
         status: 'calculating',
         attacker: payload.attacker,
         target: payload.target,
+        targets: payload.targets || null,  // 豁免抵擋模式的多目標清單（各目標分別擲豁免）
         defense: null,
         baseDice: null,
         baseExtraSuccess: null,

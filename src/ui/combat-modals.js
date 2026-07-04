@@ -95,7 +95,8 @@ function cmRenderThreatActions() {
                 return nm + (s.stacks > 0 ? ('x' + s.stacks) : '');
               }).join('、')
             : '無狀態';
-        return `<button type="button" class="threat-action-btn" onclick="cmApplyThreatAction('${u.id}')">行動${i + 1}${i === 0 ? '·本體' : ''}<small>DP ${dp}｜${escapeHtml(stTxt)}</small></button>`;
+        const saveTag = u.actionSaveResist ? '｜🛡豁免' : '';
+        return `<button type="button" class="threat-action-btn" onclick="cmApplyThreatAction('${u.id}')">行動${i + 1}${i === 0 ? '·本體' : ''}<small>DP ${dp}${saveTag}｜${escapeHtml(stTxt)}</small></button>`;
     }).filter(Boolean).join('');
 
     box.innerHTML = `<div class="threat-action-label">⚔ ${escapeHtml(boss.name || 'BOSS')} 行動（點選帶入 DP 與狀態）</div><div class="threat-action-btns">${btns}</div>`;
@@ -112,19 +113,69 @@ function cmApplyThreatAction(unitId) {
     const dp = (u.actionDp || 0) + (counterMod.mod || 0);
     document.getElementById('attack-dp').value = dp;
     threatPendingStatuses = Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [];
+
+    // 行動標記「豁免抵擋」時，自動切換結算模式並帶入該行動指定的豁免類型
+    const modeSel = document.getElementById('attack-resolve-mode');
+    const saveTypeSel = document.getElementById('attack-save-type');
+    if (modeSel) {
+        modeSel.value = u.actionSaveResist ? 'save' : 'def';
+        if (u.actionSaveResist && saveTypeSel) {
+            saveTypeSel.value = ['saveWill', 'saveReflex', 'saveTenacity'].includes(u.actionSaveType) ? u.actionSaveType : 'saveReflex';
+        }
+        cmOnAttackModeChange();
+    }
+
     const modTxt = counterMod.mod ? `（含對抗${escapeHtml(counterMod.playerName)} ${counterMod.mod > 0 ? '+' : ''}${counterMod.mod}）` : '';
-    if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${dp}${modTxt}`);
+    const saveTxt = u.actionSaveResist ? '｜豁免抵擋' : '';
+    if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${dp}${modTxt}${saveTxt}`);
 }
 
 function closeAttackModal() {
     closeModal('attack-modal');
 }
 
-/** 攻擊結算模式切換：豁免抵擋時顯示豁免類型選擇 */
+/** 攻擊結算模式切換：豁免抵擋時顯示豁免類型、攻擊欄改名「豁免攻擊」、開啟多目標選擇 */
 function cmOnAttackModeChange() {
     const mode = document.getElementById('attack-resolve-mode')?.value || 'def';
+    const isSave = mode === 'save';
     const saveField = document.getElementById('attack-save-type-field');
-    if (saveField) saveField.style.display = (mode === 'save') ? '' : 'none';
+    if (saveField) saveField.style.display = isSave ? '' : 'none';
+    const dpLabel = document.getElementById('attack-dp-label');
+    if (dpLabel) dpLabel.textContent = isSave ? '豁免攻擊（骰數）' : '總攻擊 DP';
+    cmRenderAttackTargets();
+}
+
+/**
+ * 豁免抵擋模式的多目標選擇：列出可攻擊的單位晶片（可複選），
+ * 右鍵發起的原始目標預設勾選。玩家攻擊列敵方/BOSS；ST 威脅列玩家角色。
+ */
+function cmRenderAttackTargets() {
+    const box = document.getElementById('attack-multi-targets');
+    if (!box) return;
+    const mode = document.getElementById('attack-resolve-mode')?.value || 'def';
+    if (mode !== 'save' || typeof state === 'undefined' || !Array.isArray(state.units)) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    const isSt = (typeof myRole !== 'undefined' && myRole === 'st');
+    const candidates = state.units.filter(u => {
+        if (u.actionSlotOf) return false;  // 多重行動條目非實體
+        if (isSt) return u.type === 'player' || (u.ownerId && !String(u.ownerId).startsWith('st_'));
+        return u.type === 'enemy' || u.type === 'boss' || u.isBoss === true;
+    });
+    if (!candidates.length) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    const chips = candidates.map(u => `
+        <label class="atk-target-chip">
+            <input type="checkbox" class="atk-target-check" value="${u.id}" ${attackModalTarget && u.id === attackModalTarget.id ? 'checked' : ''}>
+            ${escapeHtml(u.name || '未命名')}
+        </label>`).join('');
+    box.innerHTML = `<div class="amt-title">🎯 攻擊對象（可複選，各目標分別擲豁免）</div><div class="amt-chips">${chips}</div>`;
+    box.style.display = 'block';
 }
 
 /**
@@ -276,18 +327,36 @@ function submitAttackModal() {
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
+    // 豁免抵擋模式：收集勾選的多個攻擊對象（各目標分別擲豁免）；未勾任何目標時退回原始右鍵目標
+    let targets = null;
+    if (resolveMode === 'save') {
+        const checked = Array.from(document.querySelectorAll('#attack-multi-targets .atk-target-check:checked'));
+        targets = checked
+            .map(c => {
+                const u = (typeof findUnitById === 'function') ? findUnitById(c.value) : null;
+                return u ? { id: u.id, name: u.name || '目標' } : null;
+            })
+            .filter(Boolean);
+        if (!targets.length) targets = [target];
+    }
+
     if (myRole === 'st') {
         // 豁免抵擋模式：不需要玩家填防禦 QTE（用目標填好的三豁免自動對擲），直接進入計算
         if (resolveMode === 'save') {
-            cqInitiateAttack({ attacker, target });
+            cqInitiateAttack({ attacker, target: targets[0], targets });
         } else {
             cqInitiateThreat({ attacker, target });
         }
-        // 所選 BOSS 行動的狀態自動施加到目標玩家單位
+        // 所選 BOSS 行動的狀態自動施加到目標玩家單位（豁免模式套用到全部勾選目標）
         if (threatPendingStatuses.length && typeof addStatusToUnit === 'function') {
             const applied = [];
+            const statusTargets = (resolveMode === 'save') ? targets : [target];
+            statusTargets.forEach(t => {
+                threatPendingStatuses.forEach(s => {
+                    addStatusToUnit(t.id, s.id, s.stacks > 0 ? s.stacks : null);
+                });
+            });
             threatPendingStatuses.forEach(s => {
-                addStatusToUnit(target.id, s.id, s.stacks > 0 ? s.stacks : null);
                 const nm = (typeof getStatusDisplayName === 'function') ? getStatusDisplayName(s.id) : s.id;
                 applied.push(nm + (s.stacks > 0 ? ' x' + s.stacks : ''));
             });
@@ -295,10 +364,10 @@ function submitAttackModal() {
         }
         threatPendingStatuses = [];
         if (typeof showToast === 'function') {
-            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），系統以目標三豁免自動對擲...' : '威脅已發起，等待玩家防禦...');
+            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），攻擊骰已自動擲出，請至審核面板輸入豁免...' : '威脅已發起，等待玩家防禦...');
         }
     } else {
-        cqInitiateAttack({ attacker, target });
+        cqInitiateAttack(resolveMode === 'save' ? { attacker, target: targets[0], targets } : { attacker, target });
 
         // 人格引擎判定本次攻擊會對目標施加的負面狀態，於發起攻擊時自動套用到目標單位，
         // 讓 ST 不需在審核時手動補上玩家人格給予的減益。
@@ -373,14 +442,41 @@ function cqOnSTReview(data) {
         reviewModal.dataset.baseExtraSuccess = String(baseExtraSuccess);
         // 防禦方 id 一併釘上：確認廣播時自動消耗其受擊消耗狀態（破裂/震顫）
         reviewModal.dataset.targetId = (data.target && data.target.id) ? String(data.target.id) : '';
-        // 豁免抵擋模式：目標豁免骰數一併釘上，確認廣播（自動擲骰）時對擲
-        reviewModal.dataset.saveDice = saveInfo ? String(Math.max(0, parseInt(saveInfo.saveDice, 10) || 0)) : '';
-        reviewModal.dataset.saveName = saveInfo ? String(saveInfo.saveName || '豁免') : '';
+        // 豁免抵擋模式：完整 saveInfo（攻擊擲骰結果＋目標清單）釘上，確認時對擲
+        reviewModal.dataset.saveInfo = saveInfo ? JSON.stringify(saveInfo) : '';
     }
 
-    // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
-    const extraTxt = baseExtraSuccess > 0 ? ` + 附加成功 ${baseExtraSuccess}` : '';
-    document.getElementById('st-review-suggested').innerText = `系統建議骰數：${baseDice} 顆${extraTxt}`;
+    // 豁免抵擋模式：攻擊已自動擲出，顯示成功數並開啟豁免輸入區；防禦扣除模式維持原顯示
+    const saveSection = document.getElementById('st-review-save-section');
+    const modifierLabel = document.getElementById('st-review-modifier-label');
+    if (saveInfo && saveInfo.atkRoll) {
+        const ar = saveInfo.atkRoll;
+        const extraTxt = baseExtraSuccess > 0 ? ` ＋ 附加成功 ${baseExtraSuccess}` : '';
+        document.getElementById('st-review-suggested').innerText =
+            `🎲 攻擊已擲：${ar.totalRolled} 顆 → ${ar.successes} 成功${extraTxt}（${saveInfo.saveName || '豁免'}抵擋）`;
+        if (saveSection) {
+            saveSection.style.display = 'block';
+            const saveLabel = document.getElementById('st-review-save-label');
+            if (saveLabel) saveLabel.textContent = `${saveInfo.saveName || '豁免'}豁免骰數（套用到所有目標）`;
+            const saveDiceInput = document.getElementById('st-review-save-dice');
+            if (saveDiceInput) saveDiceInput.value = Math.max(0, parseInt(saveInfo.saveDice, 10) || 0);
+            const saveExtraInput = document.getElementById('st-review-save-extra');
+            if (saveExtraInput) saveExtraInput.value = 0;
+            const targetBox = document.getElementById('st-review-save-targets');
+            if (targetBox) {
+                targetBox.textContent = '目標：' + (saveInfo.targets || [])
+                    .map(t => `${t.name}（${saveInfo.saveName || '豁免'} ${t.saveDice} 顆）`)
+                    .join('、');
+            }
+        }
+        if (modifierLabel) modifierLabel.textContent = '最終調整（直接增減傷害）';
+    } else {
+        if (saveSection) saveSection.style.display = 'none';
+        if (modifierLabel) modifierLabel.textContent = '最終微調增減';
+        // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
+        const extraTxt = baseExtraSuccess > 0 ? ` + 附加成功 ${baseExtraSuccess}` : '';
+        document.getElementById('st-review-suggested').innerText = `系統建議骰數：${baseDice} 顆${extraTxt}`;
+    }
 
     // 顯示攻擊方宣告的特殊參數，供 ST 黑箱判定參考
     const atk = data.attacker || {};
@@ -485,6 +581,17 @@ function confirmSTReview() {
     // 全域 combatQueueLast 僅作為退路，避免監聽器更新時序造成骰數讀成 0。
     const reviewModal = document.getElementById('st-review-modal');
     const ds = reviewModal ? reviewModal.dataset : {};
+
+    // 豁免抵擋模式：攻擊已於黑箱端擲出，此處只需擲目標豁免並對銷，走專屬流程
+    let saveInfo = null;
+    if (ds.saveInfo) {
+        try { saveInfo = JSON.parse(ds.saveInfo); } catch (e) { saveInfo = null; }
+    }
+    if (saveInfo && saveInfo.atkRoll) {
+        confirmSTReviewSaveMode(saveInfo);
+        return;
+    }
+
     const dsDice = parseInt(ds.baseDice, 10);
     const dsExtra = parseInt(ds.baseExtraSuccess, 10);
     const baseDice = Number.isFinite(dsDice) ? dsDice : ((combatQueueLast && combatQueueLast.baseDice) || 0);
@@ -503,11 +610,8 @@ function confirmSTReview() {
     // ===== 自動擲骰＋套用傷害（骰數 0 的機運骰情境維持手動）=====
     let rollResult = null;
     const targetId = ds.targetId || '';
-    // 豁免抵擋模式：cqOnSTReview 釘上的目標豁免骰數（空字串 = 防禦扣除模式）
-    const saveDice = (ds.saveDice !== undefined && ds.saveDice !== '') ? Math.max(0, parseInt(ds.saveDice, 10) || 0) : null;
-    const saveName = ds.saveName || '豁免';
     if (autoroll && finalDice > 0 && typeof bbRollAttackDice === 'function') {
-        rollResult = cmAutoRollAndApply(finalDice, baseExtraSuccess, targetId, saveDice, saveName);
+        rollResult = cmAutoRollAndApply(finalDice, baseExtraSuccess, targetId);
     }
 
     closeModal('st-review-modal');
@@ -547,18 +651,16 @@ function confirmSTReview() {
 }
 
 /**
- * ST 端：自動擲骰並把最終傷害套用到防禦方。
+ * ST 端：自動擲骰並把最終傷害套用到防禦方（防禦扣除模式）。
  * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻追加骰子）＋ 附加成功
  * ＋ 目標身上的破裂（受擊消耗）與易損層數 → 合計後玩家攻擊受「攻擊上限」封頂
  * （破裂/易損計入上限內；BOSS 攻擊不受限）
- * → 豁免抵擋模式：再替目標自動擲豁免骰，最終傷害 = max(0, 上述合計 − 豁免成功數)
  * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。
  * 擲骰明細（各骰點數、10 的數量）隨廣播同步，供「骰到兩個 10 觸發」類人格卡判定。
- * @param {number|null} [saveDice] - 豁免抵擋模式的目標豁免骰數；null = 防禦扣除模式
- * @param {string} [saveName] - 豁免名稱（意志/反射/強韌，顯示用）
+ * 注意：豁免抵擋模式走 confirmSTReviewSaveMode，不經此函式。
  * @returns {object} rollResult（隨廣播同步給所有客戶端顯示）
  */
-function cmAutoRollAndApply(finalDice, extraSuccess, targetId, saveDice, saveName) {
+function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
     const atk = (combatQueueLast && combatQueueLast.attacker) || {};
     const isPlayerAttack = atk.attackerRole === 'player';
     const explodeAt = parseInt(atk.explodeAt, 10) || 10;
@@ -588,15 +690,7 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId, saveDice, saveNam
     const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus;
     const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
     const capApplied = (cap > 0 && totalBeforeCap > cap);
-    const atkTotal = capApplied ? cap : totalBeforeCap;
-
-    // 豁免抵擋模式：替目標自動擲豁免骰（門檻固定 10），最終傷害 = 攻擊合計 − 豁免成功數
-    let saveRoll = null;
-    const isSaveMode = (saveDice !== null && saveDice !== undefined);
-    if (isSaveMode) {
-        saveRoll = bbRollAttackDice(Math.max(0, saveDice), 10);
-    }
-    const damage = isSaveMode ? Math.max(0, atkTotal - saveRoll.successes) : atkTotal;
+    const damage = capApplied ? cap : totalBeforeCap;
 
     // 套用傷害：L 傷為主，「嚴重轉惡性」宣告的點數轉為 A 傷；走護盾吸收
     if (targetUnit && Array.isArray(targetUnit.hpArr) && typeof modifyHPInternal === 'function' && damage > 0) {
@@ -620,12 +714,121 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId, saveDice, saveNam
         capApplied: capApplied,
         statusBonus: statusBonus,
         statusBonusText: statusBonusParts.join('、'),
-        // 豁免抵擋模式欄位（防禦扣除模式為 null）：目標豁免擲骰明細
-        saveName: isSaveMode ? (saveName || '豁免') : null,
-        saveDice: isSaveMode ? Math.max(0, saveDice) : null,
-        saveSuccesses: isSaveMode ? saveRoll.successes : null,
         damage: damage
     };
+}
+
+/**
+ * ST 端：豁免抵擋模式的確認結算。
+ * 攻擊已於黑箱端擲出（saveInfo.atkRoll.successes）；此處讀取 ST 輸入的
+ * 豁免骰數／豁免附加成功／最終調整，替每個目標各擲一次豁免骰對銷：
+ *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 − 豁免成功 − 豁免附加 + 最終調整)
+ * 逐目標套用（護盾優先消耗），結算後廣播逐目標結果並寫入戰鬥日誌。
+ * @param {object} saveInfo - 黑箱釘上的豁免資訊（含 atkRoll 與 targets）
+ */
+function confirmSTReviewSaveMode(saveInfo) {
+    const atk = (combatQueueLast && combatQueueLast.attacker) || {};
+    const reviewModal = document.getElementById('st-review-modal');
+    const baseExtra = Math.max(0, parseInt(reviewModal && reviewModal.dataset.baseExtraSuccess, 10) || 0);
+    const atkSuccess = Math.max(0, parseInt(saveInfo.atkRoll.successes, 10) || 0);
+
+    const saveDiceInput = Math.max(0, parseInt(document.getElementById('st-review-save-dice')?.value, 10) || 0);
+    const saveExtra = Math.max(0, parseInt(document.getElementById('st-review-save-extra')?.value, 10) || 0);
+    const adjust = parseInt(document.getElementById('st-review-modifier')?.value, 10) || 0;
+    const saveName = saveInfo.saveName || '豁免';
+
+    const targets = (Array.isArray(saveInfo.targets) && saveInfo.targets.length)
+        ? saveInfo.targets
+        : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput }];
+
+    // 攻擊命中總量（成功 + 附加），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
+    const atkHitTotal = atkSuccess + baseExtra;
+    const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
+
+    const results = targets.map(t => {
+        // ST 輸入的豁免骰數統一套用到所有目標（面板預填第一個目標的預設值，ST 可改）；
+        // saveDiceInput 為 0 且該目標有自帶預設時，回退用目標預設，避免誤填 0 導致全額傷害
+        const pool = saveDiceInput > 0 ? saveDiceInput : Math.max(0, parseInt(t.saveDice, 10) || 0);
+        const saveRoll = (typeof bbRollAttackDice === 'function') ? bbRollAttackDice(pool, 10) : { successes: 0 };
+        const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust);
+
+        const u = (typeof findUnitById === 'function' && t.id) ? findUnitById(t.id) : null;
+        if (u && Array.isArray(u.hpArr) && typeof modifyHPInternal === 'function' && dmg > 0) {
+            const aPart = Math.min(critVicious, dmg);
+            const lPart = dmg - aPart;
+            if (aPart > 0) modifyHPInternal(u, 'a', aPart);
+            if (lPart > 0) modifyHPInternal(u, 'l', lPart);
+        }
+        return { name: (u && u.name) || t.name || '目標', pool, saveSuccess: saveRoll.successes, dmg };
+    });
+
+    if (typeof broadcastState === 'function') broadcastState();
+
+    const attackerName = String(atk.name || 'BOSS');
+    const detail = results.map(r => `${r.name}(${saveName}${r.saveSuccess}→受${r.dmg})`).join('、');
+    const summary = `【${attackerName}】豁免抵擋：攻擊 ${atkSuccess}${baseExtra ? `+附${baseExtra}` : ''} 成功｜${detail}`;
+
+    // 戰鬥日誌
+    if (typeof bbPushCombatLog === 'function') {
+        bbPushCombatLog({
+            entryType: 'attack',
+            attackerName: attackerName,
+            attackerRole: (atk.attackerRole === 'player') ? 'player' : 'enemy',
+            defenderName: results.map(r => r.name).join(', '),
+            broadcastText: summary,
+            round: (typeof state !== 'undefined' && state.roundNum) || 0,
+            damage: results.reduce((s, r) => s + r.dmg, 0)
+        });
+    }
+
+    // 全場廣播橫幅
+    const banner = document.getElementById('combat-broadcast-banner');
+    if (banner) {
+        banner.textContent = summary;
+        banner.classList.add('show');
+        setTimeout(() => banner.classList.remove('show'), 4500);
+    }
+
+    closeModal('st-review-modal');
+    if (reviewModalClearSaveInfo) reviewModalClearSaveInfo();
+
+    // 逐目標結果清單彈窗（ST 端確認用）
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
+    const rows = results.map(r => `
+        <div class="aoe-save-result-row${r.dmg > 0 ? ' hit' : ' resisted'}">
+            <span class="asr-name">${esc(r.name)}</span>
+            <span class="asr-roll">${esc(saveName)} ${r.pool} 顆 → ${r.saveSuccess} 成功</span>
+            <span class="asr-dmg">${r.dmg > 0 ? `受 ${r.dmg} 傷` : '完全抵擋'}</span>
+        </div>`).join('');
+    const html = `
+        <div class="modal-overlay show" id="save-mode-results" onclick="if(event.target.id==='save-mode-results')document.getElementById('save-mode-results').remove()">
+            <div class="modal" style="max-width:420px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">🎲 豁免抵擋結果</span>
+                    <button onclick="document.getElementById('save-mode-results').remove()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div style="font-size:0.85rem;color:var(--accent-orange);margin-bottom:4px;">⚔ 攻擊 ${atkSuccess} 成功${baseExtra ? ` ＋ 附加 ${baseExtra}` : ''}${adjust ? `，調整 ${adjust > 0 ? '+' : ''}${adjust}` : ''}</div>
+                    ${rows}
+                    <div style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;">傷害已套用（護盾優先消耗）。</div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="document.getElementById('save-mode-results').remove()" style="background:var(--accent-green);color:#000;">確認</button>
+                </div>
+            </div>
+        </div>`;
+    (document.getElementById('modals-container') || document.body).insertAdjacentHTML('beforeend', html);
+
+    if (typeof cqReset === 'function') cqReset();
+    if (typeof renderAll === 'function') renderAll();
+}
+
+/** 清掉審核 Modal 上釘的 saveInfo，避免殘留到下一場防禦扣除攻擊 */
+function reviewModalClearSaveInfo() {
+    const m = document.getElementById('st-review-modal');
+    if (m) { delete m.dataset.saveInfo; }
+    const sec = document.getElementById('st-review-save-section');
+    if (sec) sec.style.display = 'none';
 }
 
 /**

@@ -284,6 +284,8 @@ function normalizeUnitTemplate(template) {
         combat: {
             defDp: parseInt(combat.defDp) || 0,
             defAuto: parseInt(combat.defAuto) || 0,
+            // 先攻加值（骰先攻 1D10 + 加值）；舊模板只有 init（當時直接當序列用）時沿用其值
+            initBonus: parseInt(combat.initBonus !== undefined ? combat.initBonus : combat.init) || 0,
             init: parseInt(combat.init) || 0,
             saveWill: parseInt(combat.saveWill) || 0,
             saveReflex: parseInt(combat.saveReflex) || 0,

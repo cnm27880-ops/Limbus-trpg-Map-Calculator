@@ -654,33 +654,7 @@ body.aoe-select-active .token {
     color: #64b5f6;
 }
 
-/* 單位卡操作列的移動速度輸入（僅玩家角色）：黑灰方塊＋綠色圖標，與其他格子等寬 */
-.unit-move-speed {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    flex: 1 1 0;
-    min-width: 52px;
-    padding: 3px 4px;
-    background: var(--bg-input);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    color: var(--accent-green);
-    cursor: default;
-    white-space: nowrap;
-}
-.unit-move-speed input {
-    width: 40px;
-    padding: 1px 3px;
-    text-align: center;
-    background: var(--bg-card);
-    color: var(--text-main);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 0.8rem;
-}
+/* （移速輸入已移至右鍵「角色數值」Modal，操作列不再放輸入框） */
 
 .action-btn:hover {
     color: var(--text-main);
@@ -5818,3 +5792,29 @@ body.combat-mode .boss-hud-container {
     min-width: 0;
     box-sizing: border-box;
 }
+
+/* ===== AOE 豁免抵擋結果清單 ===== */
+.aoe-save-result-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border: 1px solid var(--border);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: var(--bg-card);
+    font-size: 0.82rem;
+}
+.aoe-save-result-row.hit { border-left-color: var(--accent-red, #e53935); }
+.aoe-save-result-row.resisted { border-left-color: var(--accent-green, #43a047); }
+.aoe-save-result-row .asr-name { font-weight: 700; flex: 1; min-width: 0; }
+.aoe-save-result-row .asr-roll {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    white-space: nowrap;
+}
+.aoe-save-result-row .asr-dmg { white-space: nowrap; font-weight: 700; }
+.aoe-save-result-row.hit .asr-dmg { color: #ff8a80; }
+.aoe-save-result-row.resisted .asr-dmg { color: #a5d6a7; }

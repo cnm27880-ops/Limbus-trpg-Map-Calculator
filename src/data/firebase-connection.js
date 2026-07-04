@@ -1443,6 +1443,18 @@ function sendToHost(message) {
             roomRef.child(`units/${message.unitId}/moveSpeed`).set(Math.max(0, Math.min(999, parseInt(message.moveSpeed) || 0)));
             break;
 
+        case 'updatePlayerStats': {
+            // 玩家角色數值：三豁免（骰數）＋移速（米），右鍵「角色數值」Modal 儲存
+            const clampSaveVal = v => Math.max(-999, Math.min(999, parseInt(v) || 0));
+            roomRef.child(`units/${message.unitId}`).update({
+                saveWill: clampSaveVal(message.saveWill),
+                saveReflex: clampSaveVal(message.saveReflex),
+                saveTenacity: clampSaveVal(message.saveTenacity),
+                moveSpeed: Math.max(0, Math.min(999, parseInt(message.moveSpeed) || 0))
+            });
+            break;
+        }
+
         case 'modifyMaxHp':
             const maxHpUnit = state.units.find(u => u.id === message.unitId);
             if (maxHpUnit && message.newMaxHp >= 1) {

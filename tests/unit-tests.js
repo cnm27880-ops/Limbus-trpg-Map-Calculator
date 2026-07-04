@@ -66,9 +66,9 @@ const sandbox = {
     state: { units: [], customStatuses: [], statusOverrides: {} },
     // 單位查詢
     findUnitById: (id) => sandbox.state.units.find(u => u && u.id === id) || null,
-    // 黑箱完成後的回呼：擷取 baseDice / baseExtraSuccess / debugStr
-    cqEnterSTReview: (baseDice, baseExtraSuccess, debugStr) => {
-        captured.stReview = { baseDice, baseExtraSuccess, debugStr };
+    // 黑箱完成後的回呼：擷取 baseDice / baseExtraSuccess / debugStr / extras（豁免抵擋 saveInfo）
+    cqEnterSTReview: (baseDice, baseExtraSuccess, debugStr, extras) => {
+        captured.stReview = { baseDice, baseExtraSuccess, debugStr, extras: extras || null };
     },
     // 狀態同步：測試中為 noop（沙箱無 Firebase）
     syncUnitStatus: () => {},
@@ -278,6 +278,51 @@ test('防禦方走 QTE（data.defense）時不動用資源池', () => {
     // 走 QTE：防附加成功取 data.defense.auto=1 → 5-1=4；資源池不變
     assert.strictEqual(captured.stReview.baseExtraSuccess, 4);
     assert.strictEqual(boss.defAutoRemaining, 3, '資源池不應被 QTE 流程改動');
+});
+
+// ====================================================================
+console.log('\n[豁免抵擋] 黑箱：resolveMode=save 不扣防禦、附上目標豁免骰數');
+// ====================================================================
+
+test('豁免模式：骰數 = 全額攻擊 DP（不扣防禦），saveInfo 帶目標豁免骰數', () => {
+    resetCaptures();
+    const boss = { id: 'boss', type: 'enemy', status: {}, defDp: 50, defAuto: 5, saveReflex: 12 };
+    sandbox.state.units = [boss];
+    bbRunBlackBoxCalculation({
+        attacker: { dp: 30, auto: 2, resolveMode: 'save', saveType: 'saveReflex' },
+        target: { id: 'boss' },
+        defense: null
+    });
+    // 不扣防禦：骰數 = 30（防 50 不參與）；附加成功不被防禦附加抵銷 = 2
+    assert.strictEqual(captured.stReview.baseDice, 30, '豁免模式骰數應為全額攻擊 DP');
+    assert.strictEqual(captured.stReview.baseExtraSuccess, 2, '豁免模式附加成功不被防禦附加抵銷');
+    const si = captured.stReview.extras && captured.stReview.extras.saveInfo;
+    assert.ok(si, '應附上 saveInfo');
+    assert.strictEqual(si.saveDice, 12, '目標反射豁免骰數 12');
+    assert.strictEqual(si.saveName, '反射');
+    assert.ok(/豁免抵擋/.test(captured.stReview.debugStr), 'debugStr 應標示豁免抵擋模式');
+});
+
+test('豁免模式：不消耗 BOSS 防禦附加成功資源池', () => {
+    resetCaptures();
+    const boss = { id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 3, defAutoRemaining: 3, saveWill: 6 };
+    sandbox.state.units = [boss];
+    bbRunBlackBoxCalculation({
+        attacker: { dp: 10, auto: 4, resolveMode: 'save', saveType: 'saveWill' },
+        target: { id: 'boss' },
+        defense: null
+    });
+    assert.strictEqual(captured.stReview.baseExtraSuccess, 4);
+    assert.strictEqual(boss.defAutoRemaining, 3, '豁免模式不應動用防禦附加資源池');
+});
+
+test('防禦扣除模式（未帶 resolveMode）行為不變，saveInfo 為空', () => {
+    resetCaptures();
+    sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 4, defAuto: 0, saveReflex: 99 }];
+    bbRunBlackBoxCalculation({ attacker: { dp: 10, auto: 0 }, target: { id: 'boss' }, defense: null });
+    assert.strictEqual(captured.stReview.baseDice, 6); // 10 - 4
+    const extras = captured.stReview.extras;
+    assert.ok(!extras || !extras.saveInfo, '防禦扣除模式不應附 saveInfo');
 });
 
 // ====================================================================

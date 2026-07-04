@@ -312,18 +312,6 @@ function renderUnitsList() {
                     <button class="stepper-btn plus" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">+</button>
                 </div>`;
 
-            // 移動速度（米）：戰術移動限制用，給玩家角色填寫——
-            // 「我方」類型、或已分配給玩家操控的單位（ownerId 非 ST）都算玩家角色；
-            // ST 自己的敵方/BOSS 不顯示（ST 移動不受限，不需要移速）
-            const isPlayerCharacter = u.type === 'player'
-                || (u.ownerId && !String(u.ownerId).startsWith('st_'));
-            const moveSpeedField = isPlayerCharacter
-                ? `<label class="unit-move-speed" title="移動速度（米）：5 米 = 1 格，每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2">
-                       🏃<input type="number" value="${(u.moveSpeed !== undefined && u.moveSpeed !== null) ? u.moveSpeed : 20}" min="0" max="999"
-                              onchange="updateMoveSpeed('${u.id}', this.value)">米
-                   </label>`
-                : '';
-
             actions = `
                 <div class="unit-actions">
                     ${modeSwitch}
@@ -331,8 +319,7 @@ function renderUnitsList() {
                     ${hpStepper('l', 'L')}
                     ${hpStepper('a', 'A')}
                     <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
-                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡️ 護盾</button>
-                    ${moveSpeedField}
+                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡️</button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
@@ -756,39 +743,6 @@ function updateInit(id, val) {
 }
 
 /**
- * 更新移動速度（米）：戰術移動限制的來源數值（5 米 = 1 格）。
- * 玩家可修改自己的單位；ST 可修改所有單位。
- * @param {string} id - 單位 ID
- * @param {string|number} val - 新的移動速度（米）
- */
-function updateMoveSpeed(id, val) {
-    const u = findUnitById(id);
-    if (!u) return;
-
-    if (!canControlUnit(u)) {
-        showToast('你無法修改其他人的單位');
-        return;
-    }
-
-    const parsed = parseInt(val);
-    const speed = (Number.isFinite(parsed) && parsed >= 0) ? Math.min(999, parsed) : 20;
-
-    if (myRole === 'st') {
-        u.moveSpeed = speed;
-        broadcastState();
-    } else {
-        u.moveSpeed = speed;
-        sendToHost({
-            type: 'updateMoveSpeed',
-            playerId: myPlayerId,
-            unitId: id,
-            moveSpeed: speed
-        });
-    }
-    showToast(`🏃 移動速度已設為 ${speed} 米（每回合 ${Math.floor(speed / 5)} 格）`);
-}
-
-/**
  * 依先攻排序
  */
 function sortByInit() {
@@ -1120,6 +1074,115 @@ function applyShieldChange(unitId, autoMax, autoCur, temp) {
     showToast('🛡 護盾已更新');
 }
 
+// ===== 玩家角色數值（三豁免 + 移速） =====
+/**
+ * 判斷是否為「玩家角色」：我方類型、或已分配給玩家操控（ownerId 非 ST）。
+ * 用於決定右鍵選單是否顯示「角色數值」與移動限制是否適用。
+ * @param {Object} u - 單位
+ * @returns {boolean}
+ */
+function isPlayerCharacterUnit(u) {
+    if (!u) return false;
+    return u.type === 'player' || (!!u.ownerId && !String(u.ownerId).startsWith('st_'));
+}
+
+/**
+ * 開啟「角色數值」Modal：玩家（或 ST）填寫該角色的三豁免與移動速度。
+ * 攻擊/防禦 DP 維持戰鬥當下填寫，這裡只保存常駐的角色資料。
+ * @param {string} unitId - 單位 ID
+ */
+function openPlayerStatsModal(unitId) {
+    const u = findUnitById(unitId);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    const existing = document.getElementById('player-stats-modal');
+    if (existing) existing.remove();
+
+    const html = `
+        <div class="modal-overlay show" id="player-stats-modal" onclick="if(event.target.id==='player-stats-modal')closePlayerStatsModal()">
+            <div class="modal" style="max-width:380px;" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <span style="font-weight:bold;">📊 角色數值 - ${escapeHtml(u.name || '單位')}</span>
+                    <button onclick="closePlayerStatsModal()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="calc-field">
+                        <span class="calc-label">三豁免（骰數，受攻擊需豁免抵擋時自動擲骰）</span>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                            <div class="calc-field"><span class="calc-label">意志</span>
+                                <input type="number" id="ps-save-will" value="${u.saveWill || 0}"></div>
+                            <div class="calc-field"><span class="calc-label">反射</span>
+                                <input type="number" id="ps-save-reflex" value="${u.saveReflex || 0}"></div>
+                            <div class="calc-field"><span class="calc-label">強韌</span>
+                                <input type="number" id="ps-save-tenacity" value="${u.saveTenacity || 0}"></div>
+                        </div>
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">移動速度（米）</span>
+                        <input type="number" id="ps-move-speed" value="${(u.moveSpeed !== undefined && u.moveSpeed !== null) ? u.moveSpeed : 20}" min="0" max="999">
+                        <div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px;">5 米 = 1 格；每回合可移動 floor(速度/5) 格，斜走 1 格消耗 2。</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="closePlayerStatsModal()" style="background:var(--bg-card);">取消</button>
+                    <button class="modal-btn" onclick="savePlayerStats('${u.id}')" style="background:var(--accent-green);color:#000;">儲存</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
+}
+
+function closePlayerStatsModal() {
+    const modal = document.getElementById('player-stats-modal');
+    if (modal) modal.remove();
+}
+
+/** 儲存角色數值：三豁免與移速寫入單位並同步（玩家經 sendToHost，ST 直接廣播） */
+function savePlayerStats(unitId) {
+    const u = findUnitById(unitId);
+    if (!u) return;
+
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+
+    const clampSave = v => Math.max(-999, Math.min(999, parseInt(v) || 0));
+    const saveWill = clampSave(document.getElementById('ps-save-will')?.value);
+    const saveReflex = clampSave(document.getElementById('ps-save-reflex')?.value);
+    const saveTenacity = clampSave(document.getElementById('ps-save-tenacity')?.value);
+    const msRaw = parseInt(document.getElementById('ps-move-speed')?.value);
+    const moveSpeed = (Number.isFinite(msRaw) && msRaw >= 0) ? Math.min(999, msRaw) : 20;
+
+    u.saveWill = saveWill;
+    u.saveReflex = saveReflex;
+    u.saveTenacity = saveTenacity;
+    u.moveSpeed = moveSpeed;
+
+    if (myRole === 'st') {
+        broadcastState();
+    } else {
+        sendToHost({
+            type: 'updatePlayerStats',
+            playerId: myPlayerId,
+            unitId: unitId,
+            saveWill: saveWill,
+            saveReflex: saveReflex,
+            saveTenacity: saveTenacity,
+            moveSpeed: moveSpeed
+        });
+        renderAll();
+    }
+    closePlayerStatsModal();
+    showToast(`📊 角色數值已儲存（移速 ${moveSpeed} 米 = 每回合 ${Math.floor(moveSpeed / 5)} 格）`);
+}
+
 // ===== 回合結束狀態結算提醒 =====
 /**
  * 可自動結算的狀態規則（key = 狀態名稱，與 unit.status 的 key 對應）
@@ -1272,6 +1335,10 @@ function openUnitContextMenu(event, unitId) {
                 { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
                 { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` }
             );
+            // 玩家角色：填寫三豁免與移速（攻擊/防禦 DP 維持戰鬥當下填寫）
+            if (typeof isPlayerCharacterUnit === 'function' && isPlayerCharacterUnit(u)) {
+                items.push({ icon: '📊', label: '角色數值（豁免/移速）', fn: `openPlayerStatsModal('${u.id}')` });
+            }
             if (isSt) {
                 // BOSS：戰鬥數值＋多重行動已合併進同一個 Modal，只需一個入口，不必來回切換兩個視窗
                 if (u.type === 'boss') {
@@ -1469,6 +1536,12 @@ function renderMultiActionCounterStatus() {
         box.innerHTML = '尚未開始本輪徵詢';
         return;
     }
+    // 只顯示「這隻 BOSS」的徵詢狀態：換一隻 BOSS 開設定視窗時，
+    // 不再殘留上一隻 BOSS 的行動與分配，每隻新 BOSS 都從空白開始
+    if (maEdit && counterPhaseState.bossId && counterPhaseState.bossId !== maEdit.bossId) {
+        box.innerHTML = '此 BOSS 尚未開始徵詢（目前進行中的是其他 BOSS 的輪次；按上方按鈕開始新輪次會重置所有分配）';
+        return;
+    }
     const actions = counterPhaseState.actions || [];
     const assignments = counterPhaseState.assignments || {};
     const submitted = Object.keys(assignments);
@@ -1556,11 +1629,26 @@ function maUpdateField(index, field, value) {
     maEdit.actions[index][field] = parseInt(value) || 0;
 }
 
+/**
+ * 把行動列表目前輸入框的值同步回 maEdit 暫存。
+ * 重新渲染或儲存前先呼叫，避免「先攻/DP 輸入後尚未觸發 onchange（未失焦）
+ * 就被 innerHTML 重建」導致輸入值默默遺失（AOE 行動 DP 顯示 0 的元凶）。
+ */
+function maSyncFromDom() {
+    if (!maEdit) return;
+    maEdit.actions.forEach((a, i) => {
+        const initEl = document.getElementById(`ma-init-${i}`);
+        const dpEl = document.getElementById(`ma-dp-${i}`);
+        if (initEl) a.init = parseInt(initEl.value) || 0;
+        if (dpEl) a.dp = parseInt(dpEl.value) || 0;
+    });
+}
+
 /** 切換某行動是否為 AOE 行動（群體效果，不走單體威脅/防禦QTE流程） */
 function maToggleAoe(index, checked) {
     if (!maEdit || !maEdit.actions[index]) return;
     maEdit.actions[index].aoe = !!checked;
-    renderMultiActionList();
+    // 只更新暫存，不重建列表：重建會使頁面捲動跳回頂端，且勾選框本身已反映新狀態
 }
 
 /** 由輸入框（狀態名稱 + 層數）新增一個狀態到指定行動 */
@@ -1593,10 +1681,15 @@ function maStatusLabel(s) {
     return escapeHtml(name) + (s.stacks > 0 ? ' x' + s.stacks : '');
 }
 
-/** 依暫存重新渲染行動列表（先攻/DP/狀態） */
+/** 依暫存重新渲染行動列表（先攻/DP/狀態）；重建前同步輸入值並保留捲動位置 */
 function renderMultiActionList() {
     const list = document.getElementById('ma-action-list');
     if (!list || !maEdit) return;
+    // 先把目前輸入框的值收回暫存（重建 DOM 會丟掉未觸發 onchange 的輸入）
+    if (list.children.length) maSyncFromDom();
+    // 重建會導致可捲動容器跳回頂端：記住位置，重建後還原
+    const scrollBox = list.closest('.modal-body');
+    const prevScroll = scrollBox ? scrollBox.scrollTop : 0;
     list.innerHTML = maEdit.actions.map((a, i) => {
         const chips = a.statuses.length
             ? a.statuses.map((s, si) =>
@@ -1614,8 +1707,8 @@ function renderMultiActionList() {
                 </label>
             </div>
             <div class="ma-action-fields">
-                <label class="ma-f-narrow">先攻<input type="number" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
-                <label class="ma-f-narrow">DP<input type="number" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
+                <label class="ma-f-narrow">先攻<input type="number" id="ma-init-${i}" value="${a.init}" onchange="maUpdateField(${i},'init',this.value)"></label>
+                <label class="ma-f-narrow">DP<input type="number" id="ma-dp-${i}" value="${a.dp}" onchange="maUpdateField(${i},'dp',this.value)"></label>
                 <label class="ma-f-wide">命中施加狀態<input type="text" id="ma-status-name-${i}" list="ma-status-options" placeholder="例：破裂"></label>
             </div>
             <div class="ma-status-row">
@@ -1625,6 +1718,7 @@ function renderMultiActionList() {
             </div>
         </div>`;
     }).join('');
+    if (scrollBox) scrollBox.scrollTop = prevScroll;
 }
 
 /**
@@ -1634,6 +1728,9 @@ function renderMultiActionList() {
 function saveMultiAction(bossId) {
     const boss = findUnitById(bossId);
     if (!boss || !maEdit) return;
+
+    // 先把行動列表輸入框的最新值收回暫存（未失焦的輸入也一併保住）
+    maSyncFromDom();
 
     // 戰鬥數值區塊（原獨立的「戰鬥數值設定」Modal，併入同一視窗一併儲存）
     boss.maxHp = Math.max(1, parseInt(document.getElementById('ma-boss-max-hp')?.value) || 1);
@@ -1706,6 +1803,7 @@ function saveMultiActionAsTemplate(bossId) {
     if (myRole !== 'st') return;
     const boss = findUnitById(bossId);
     if (!boss || !maEdit) return;
+    maSyncFromDom();
     if (typeof saveUnitTemplate !== 'function') {
         showToast('模板功能不可用');
         return;

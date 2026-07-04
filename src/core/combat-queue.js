@@ -115,16 +115,18 @@ function cqSubmitDefense(defense) {
 /**
  * ST 端：黑箱引擎完成基礎運算後，寫入 baseDice 與 baseExtraSuccess（兩者分開，不相加）
  * 與運算過程 debugStr，並轉入 st_review。
+ * @param {object|null} [extras] - 額外欄位（如豁免抵擋模式的 saveInfo），一併寫入隊列
  */
-function cqEnterSTReview(baseDice, baseExtraSuccess, debugStr) {
+function cqEnterSTReview(baseDice, baseExtraSuccess, debugStr, extras) {
     const ref = cqRef();
     if (!ref) return;
-    ref.update({
+    ref.update(Object.assign({
         status: 'st_review',
         baseDice: baseDice,
         baseExtraSuccess: baseExtraSuccess,
-        debugStr: debugStr || ''
-    });
+        debugStr: debugStr || '',
+        saveInfo: null  // 預設清空，避免上一場豁免模式的資料殘留到本場防禦扣除模式
+    }, (extras && typeof extras === 'object') ? extras : {}));
 }
 
 /**

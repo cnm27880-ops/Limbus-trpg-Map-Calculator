@@ -46,6 +46,12 @@ function openAttackModal(unitId) {
     if (capInput) capInput.value = memo.damageCap ?? 0;
     const explodeSel = document.getElementById('attack-explode');
     if (explodeSel) explodeSel.value = String(memo.explodeAt ?? 10);
+    // 結算模式（防禦扣除 / 豁免抵擋）與豁免類型
+    const modeSel = document.getElementById('attack-resolve-mode');
+    if (modeSel) modeSel.value = (memo.resolveMode === 'save') ? 'save' : 'def';
+    const saveTypeSel = document.getElementById('attack-save-type');
+    if (saveTypeSel) saveTypeSel.value = ['saveWill', 'saveReflex', 'saveTenacity'].includes(memo.saveType) ? memo.saveType : 'saveReflex';
+    cmOnAttackModeChange();
 
     // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
     threatPendingStatuses = [];
@@ -112,6 +118,13 @@ function cmApplyThreatAction(unitId) {
 
 function closeAttackModal() {
     closeModal('attack-modal');
+}
+
+/** 攻擊結算模式切換：豁免抵擋時顯示豁免類型選擇 */
+function cmOnAttackModeChange() {
+    const mode = document.getElementById('attack-resolve-mode')?.value || 'def';
+    const saveField = document.getElementById('attack-save-type-field');
+    if (saveField) saveField.style.display = (mode === 'save') ? '' : 'none';
 }
 
 /**
@@ -209,8 +222,12 @@ function submitAttackModal() {
     // 自動擲骰參數：攻擊上限（0=無上限；BOSS 不受上限影響）與加骰門檻（10/9/8）
     const damageCap = Math.max(0, parseInt(document.getElementById('attack-damage-cap')?.value, 10) || 0);
     const explodeAt = parseInt(document.getElementById('attack-explode')?.value, 10) || 10;
+    // 結算模式：防禦扣除（def，現行）或豁免抵擋（save：攻全額骰、目標擲豁免、傷害＝差值）
+    const resolveMode = (document.getElementById('attack-resolve-mode')?.value === 'save') ? 'save' : 'def';
+    const saveTypeRaw = document.getElementById('attack-save-type')?.value;
+    const saveType = ['saveWill', 'saveReflex', 'saveTenacity'].includes(saveTypeRaw) ? saveTypeRaw : 'saveReflex';
 
-    cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious, armorPierce, hastePierce, magicPierce, damageCap, explodeAt });
+    cmSaveMemo(ATTACK_MODAL_MEMO_KEY, { dp, auto, ignoreDef, critVicious, armorPierce, hastePierce, magicPierce, damageCap, explodeAt, resolveMode, saveType });
 
     // 攻擊方單位：玩家＝自己控制的單位；ST 發起威脅＝目前作用中的 BOSS（用於套用 BOSS 攻擊修正）
     let attackerUnit = null;
@@ -245,6 +262,7 @@ function submitAttackModal() {
         dp, auto, ignoreDef, critVicious,
         armorPierce, hastePierce, magicPierce,
         damageCap, explodeAt,
+        resolveMode, saveType,
         identityDpBonus: identityBonus.dpBonus,
         identityExtraSuccess: identityBonus.extraSuccess,
         identityNotes: identityBonus.names,
@@ -259,7 +277,12 @@ function submitAttackModal() {
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
     if (myRole === 'st') {
-        cqInitiateThreat({ attacker, target });
+        // 豁免抵擋模式：不需要玩家填防禦 QTE（用目標填好的三豁免自動對擲），直接進入計算
+        if (resolveMode === 'save') {
+            cqInitiateAttack({ attacker, target });
+        } else {
+            cqInitiateThreat({ attacker, target });
+        }
         // 所選 BOSS 行動的狀態自動施加到目標玩家單位
         if (threatPendingStatuses.length && typeof addStatusToUnit === 'function') {
             const applied = [];
@@ -271,7 +294,9 @@ function submitAttackModal() {
             if (applied.length && typeof showToast === 'function') showToast('已對目標施加：' + applied.join('、'));
         }
         threatPendingStatuses = [];
-        if (typeof showToast === 'function') showToast('威脅已發起，等待玩家防禦...');
+        if (typeof showToast === 'function') {
+            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），系統以目標三豁免自動對擲...' : '威脅已發起，等待玩家防禦...');
+        }
     } else {
         cqInitiateAttack({ attacker, target });
 
@@ -342,11 +367,15 @@ function cqOnSTReview(data) {
     // 「確認廣播」時改由這裡讀取，避免依賴 combatQueueLast 全域變數的更新時序，
     // 杜絕廣播骰數變成 0 的狀態遺失（State Loss）問題。
     const reviewModal = document.getElementById('st-review-modal');
+    const saveInfo = (data.saveInfo && typeof data.saveInfo === 'object') ? data.saveInfo : null;
     if (reviewModal) {
         reviewModal.dataset.baseDice = String(baseDice);
         reviewModal.dataset.baseExtraSuccess = String(baseExtraSuccess);
         // 防禦方 id 一併釘上：確認廣播時自動消耗其受擊消耗狀態（破裂/震顫）
         reviewModal.dataset.targetId = (data.target && data.target.id) ? String(data.target.id) : '';
+        // 豁免抵擋模式：目標豁免骰數一併釘上，確認廣播（自動擲骰）時對擲
+        reviewModal.dataset.saveDice = saveInfo ? String(Math.max(0, parseInt(saveInfo.saveDice, 10) || 0)) : '';
+        reviewModal.dataset.saveName = saveInfo ? String(saveInfo.saveName || '豁免') : '';
     }
 
     // DP 與附加成功是兩種不同的東西，分開顯示，絕不相加成單一數字
@@ -369,6 +398,11 @@ function cqOnSTReview(data) {
         // 卡片清單：每筆修正獨立色塊，依語意上色（加成=綠 / 減益=紅 / 資源類=藍），
         // ST 可一眼用顏色判斷修正方向，不必逐字閱讀。
         const rows = [];
+        if (saveInfo) rows.push({
+            label: '結算模式',
+            value: `豁免抵擋：目標${saveInfo.saveName || '豁免'} ${Math.max(0, parseInt(saveInfo.saveDice, 10) || 0)} 顆自動對擲（傷害 = 攻擊成功+附加 − 豁免成功）`,
+            cls: 'is-resource'
+        });
         if (ignoreDef > 0)            rows.push({ label: '無視防禦', value: `${ignoreDef} 點`, cls: 'is-resource' });
         if (critVicious > 0)          rows.push({ label: '嚴重轉惡性', value: `${critVicious} 點`, cls: 'is-resource' });
         if (identityDpBonus > 0)      rows.push({ label: '人格卡 DP', value: `+${identityDpBonus}`, cls: 'is-bonus' });
@@ -469,8 +503,11 @@ function confirmSTReview() {
     // ===== 自動擲骰＋套用傷害（骰數 0 的機運骰情境維持手動）=====
     let rollResult = null;
     const targetId = ds.targetId || '';
+    // 豁免抵擋模式：cqOnSTReview 釘上的目標豁免骰數（空字串 = 防禦扣除模式）
+    const saveDice = (ds.saveDice !== undefined && ds.saveDice !== '') ? Math.max(0, parseInt(ds.saveDice, 10) || 0) : null;
+    const saveName = ds.saveName || '豁免';
     if (autoroll && finalDice > 0 && typeof bbRollAttackDice === 'function') {
-        rollResult = cmAutoRollAndApply(finalDice, baseExtraSuccess, targetId);
+        rollResult = cmAutoRollAndApply(finalDice, baseExtraSuccess, targetId, saveDice, saveName);
     }
 
     closeModal('st-review-modal');
@@ -514,11 +551,14 @@ function confirmSTReview() {
  * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻追加骰子）＋ 附加成功
  * ＋ 目標身上的破裂（受擊消耗）與易損層數 → 合計後玩家攻擊受「攻擊上限」封頂
  * （破裂/易損計入上限內；BOSS 攻擊不受限）
+ * → 豁免抵擋模式：再替目標自動擲豁免骰，最終傷害 = max(0, 上述合計 − 豁免成功數)
  * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。
  * 擲骰明細（各骰點數、10 的數量）隨廣播同步，供「骰到兩個 10 觸發」類人格卡判定。
+ * @param {number|null} [saveDice] - 豁免抵擋模式的目標豁免骰數；null = 防禦扣除模式
+ * @param {string} [saveName] - 豁免名稱（意志/反射/強韌，顯示用）
  * @returns {object} rollResult（隨廣播同步給所有客戶端顯示）
  */
-function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
+function cmAutoRollAndApply(finalDice, extraSuccess, targetId, saveDice, saveName) {
     const atk = (combatQueueLast && combatQueueLast.attacker) || {};
     const isPlayerAttack = atk.attackerRole === 'player';
     const explodeAt = parseInt(atk.explodeAt, 10) || 10;
@@ -548,7 +588,15 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
     const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus;
     const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
     const capApplied = (cap > 0 && totalBeforeCap > cap);
-    const damage = capApplied ? cap : totalBeforeCap;
+    const atkTotal = capApplied ? cap : totalBeforeCap;
+
+    // 豁免抵擋模式：替目標自動擲豁免骰（門檻固定 10），最終傷害 = 攻擊合計 − 豁免成功數
+    let saveRoll = null;
+    const isSaveMode = (saveDice !== null && saveDice !== undefined);
+    if (isSaveMode) {
+        saveRoll = bbRollAttackDice(Math.max(0, saveDice), 10);
+    }
+    const damage = isSaveMode ? Math.max(0, atkTotal - saveRoll.successes) : atkTotal;
 
     // 套用傷害：L 傷為主，「嚴重轉惡性」宣告的點數轉為 A 傷；走護盾吸收
     if (targetUnit && Array.isArray(targetUnit.hpArr) && typeof modifyHPInternal === 'function' && damage > 0) {
@@ -572,6 +620,10 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         capApplied: capApplied,
         statusBonus: statusBonus,
         statusBonusText: statusBonusParts.join('、'),
+        // 豁免抵擋模式欄位（防禦扣除模式為 null）：目標豁免擲骰明細
+        saveName: isSaveMode ? (saveName || '豁免') : null,
+        saveDice: isSaveMode ? Math.max(0, saveDice) : null,
+        saveSuccesses: isSaveMode ? saveRoll.successes : null,
         damage: damage
     };
 }

@@ -245,6 +245,24 @@
             <!-- 攻擊動作：基礎判定數值＋穿透（破甲/高速/破魔，直接併入攻擊 DP 桶） -->
             <div class="identity-card">
                 <div class="identity-card-title">⚔️ 攻擊判定</div>
+                <div class="calc-grid cols-2" style="margin-bottom:8px;">
+                    <div class="calc-field">
+                        <span class="calc-label">結算模式</span>
+                        <select id="attack-resolve-mode" onchange="cmOnAttackModeChange()"
+                                title="防禦扣除：攻 DP − 防 DP = 骰數。豁免抵擋：攻全額 DP 擲骰，目標自動擲豁免骰，傷害 = 攻擊成功 − 豁免成功">
+                            <option value="def" selected>防禦扣除</option>
+                            <option value="save">豁免抵擋</option>
+                        </select>
+                    </div>
+                    <div class="calc-field" id="attack-save-type-field" style="display:none;">
+                        <span class="calc-label">目標豁免</span>
+                        <select id="attack-save-type">
+                            <option value="saveReflex">反射</option>
+                            <option value="saveWill">意志</option>
+                            <option value="saveTenacity">強韌</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="calc-grid cols-2">
                     <div class="calc-field">
                         <span class="calc-label">總攻擊 DP</span>

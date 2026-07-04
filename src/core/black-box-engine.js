@@ -112,6 +112,20 @@ function bbRunBlackBoxCalculation(data) {
     // 故多筆減益（如 -134、-3、-3）會正確相加，而不會只剩最後一筆。
     const targetMods = bbSumStatusCalcMods(targetUnit);
 
+    // ===== 結算模式：豁免抵擋（save）=====
+    // 攻擊方擲「全額攻擊 DP」（不被防禦扣減）；目標以三豁免其一為骰數自動對擲，
+    // 傷害 = max(0, 攻擊成功數 − 豁免成功數)（於 ST 審核確認、自動擲骰時結算）。
+    const saveMode = attacker.resolveMode === 'save';
+    let saveInfo = null;
+    if (saveMode) {
+        const saveKey = ['saveWill', 'saveReflex', 'saveTenacity'].includes(attacker.saveType) ? attacker.saveType : 'saveReflex';
+        const saveNames = { saveWill: '意志', saveReflex: '反射', saveTenacity: '強韌' };
+        // 豁免骰池 = 目標三豁免其一 + 目標狀態的防禦修正（麻痺/凍結等一樣削弱豁免），下限 0
+        const savePoolBase = targetUnit ? bbSafeNumber(targetUnit[saveKey]) : 0;
+        const saveDice = Math.max(0, savePoolBase + targetMods.defMod);
+        saveInfo = { saveType: saveKey, saveName: saveNames[saveKey], saveDice, savePoolBase, saveStatusMod: targetMods.defMod };
+    }
+
     // 防禦最終值＝基礎防禦 DP ＋ 全部狀態修正，並加上下限保護（扣到 0 為止，不可為負）。
     let finalDefense = Math.max(0, bbSafeNumber(defDpTotal + targetMods.defMod));
 
@@ -119,7 +133,10 @@ function bbRunBlackBoxCalculation(data) {
     const ignoreDef = Math.max(0, bbSafeNumber(attacker.ignoreDef));
     if (ignoreDef > 0) finalDefense = Math.max(0, finalDefense - ignoreDef);
 
-    const baseDice = Math.max(0, bbSafeNumber(atkDpTotal - finalDefense));
+    // 豁免抵擋模式不扣防禦：骰數 = 全額攻擊 DP
+    const baseDice = saveMode
+        ? Math.max(0, bbSafeNumber(atkDpTotal))
+        : Math.max(0, bbSafeNumber(atkDpTotal - finalDefense));
 
     // ===== 附加成功桶（與 DP 完全分開計算）=====
     const atkAutoDeclared = bbSafeNumber(attacker.auto);
@@ -129,8 +146,11 @@ function bbRunBlackBoxCalculation(data) {
     // BOSS 防禦附加成功（無防禦 QTE 時）是回合刷新資源，非每次攻擊都全額重新提供：
     // defAutoRemaining 由 nextTurn() 在輪到 BOSS 主體行動時重置為 defAuto，
     // 每次被攻擊只消耗「實際被攻擊方附加成功抵銷掉」的量，未用完的部分留到本回合下一次攻擊。
+    // 豁免抵擋模式下防禦附加成功不參與（豁免是獨立對擲），不扣減也不消耗資源池。
     let defExtraTotal;
-    if (data.defense) {
+    if (saveMode) {
+        defExtraTotal = 0;
+    } else if (data.defense) {
         defExtraTotal = bbSafeNumber(data.defense.auto);
     } else if (targetUnit) {
         if (typeof targetUnit.defAutoRemaining !== 'number') targetUnit.defAutoRemaining = bbSafeNumber(targetUnit.defAuto);
@@ -141,8 +161,8 @@ function bbRunBlackBoxCalculation(data) {
     const baseExtraSuccess = Math.max(0, bbSafeNumber(atkExtraTotal - defExtraTotal));
 
     // 消耗防禦資源池：扣除「實際被用掉抵銷攻擊附加成功」的量，剩餘留到本回合下次攻擊；
-    // 防禦方走 QTE（data.defense 存在）時不涉及資源池，跳過。
-    if (!data.defense && targetUnit) {
+    // 防禦方走 QTE（data.defense 存在）或豁免抵擋模式時不涉及資源池，跳過。
+    if (!saveMode && !data.defense && targetUnit) {
         const consumed = Math.min(defExtraTotal, atkExtraTotal);
         targetUnit.defAutoRemaining = defExtraTotal - consumed;
         if (typeof syncUnitStatus === 'function') syncUnitStatus(targetUnit.id);
@@ -156,12 +176,20 @@ function bbRunBlackBoxCalculation(data) {
     // 附加成功同樣分項列出人格引擎貢獻
     const atkExtraLabel = atkIdentityExtra ? `宣告${atkAutoDeclared}+人格+${atkIdentityExtra}` : `${atkAutoDeclared}`;
     let diceStr = `骰數: ${baseDice}`;
-    if (baseDice <= 0) diceStr = `骰數: 0 (防禦大於攻擊，請投擲機運骰)`;
+    if (baseDice <= 0) diceStr = saveMode ? `骰數: 0 (攻擊 DP 為 0，請投擲機運骰)` : `骰數: 0 (防禦大於攻擊，請投擲機運骰)`;
 
-    const debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ ${diceStr}\n`
-        + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
+    let debugStr;
+    if (saveMode) {
+        const saveModTxt = saveInfo.saveStatusMod ? `${saveInfo.savePoolBase}${saveInfo.saveStatusMod > 0 ? '+' : ''}${saveInfo.saveStatusMod}(狀態)` : `${saveInfo.savePoolBase}`;
+        debugStr = `【攻擊判定｜豁免抵擋】攻: ${atkLabels.join('+')} = ${atkDpTotal}（不扣防禦） ➡️ ${diceStr}\n`
+            + `【目標豁免】${saveInfo.saveName}: ${saveModTxt} = ${saveInfo.saveDice} 顆（自動擲骰時傷害 = 攻擊成功+附加 − 豁免成功）\n`
+            + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal}（豁免模式不被防禦附加抵銷） ➡️ 附加成功: ${baseExtraSuccess}`;
+    } else {
+        debugStr = `【攻擊判定】攻: ${atkLabels.join('+')} = ${atkDpTotal} | 防: ${defLabels.join('+')}${ignoreLabel} = ${finalDefense} ➡️ ${diceStr}\n`
+            + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
+    }
 
-    cqEnterSTReview(baseDice, baseExtraSuccess, debugStr);
+    cqEnterSTReview(baseDice, baseExtraSuccess, debugStr, saveInfo ? { saveInfo } : null);
 }
 
 /**

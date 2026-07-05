@@ -3253,6 +3253,13 @@ body.aoe-select-active .token {
     font-weight: 600;
 }
 
+.tile-editor-hint {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.4;
+}
+
 .tile-editor-select {
     flex: 1;
     min-width: 0;

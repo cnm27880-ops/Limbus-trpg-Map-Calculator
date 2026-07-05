@@ -20,7 +20,7 @@ const MAP_PRESETS = [
             { id: 20, color: '#4e342e', name: '生鏽掩體', effect: '硬掩體：不可通行。貼牆站立時，遠程防禦+4。' },
             { id: 21, color: '#0d47a1', name: '油污積水', effect: '濕滑：防禦-4。受火焰傷害時額外+3灼燒。' },
             { id: 22, color: '#fdd835', name: '路燈/霓虹', effect: '暴露：無法隱身。無視黑暗減值。' },
-            { id: 23, color: '#1b5e20', name: '垃圾堆', effect: '骯髒：移動困難。回合結束時受3點毒素(L)。' }
+            { id: 23, color: '#1b5e20', name: '垃圾堆', effect: '骯髒：移動困難。回合結束時受3點毒素(L)。', moveCostMultiplier: 2 }
         ]
     },
     { 
@@ -36,7 +36,7 @@ const MAP_PRESETS = [
         name: "W公司列車", 
         tiles: [
             { id: 40, color: '#00bcd4', name: '空間裂隙', effect: '相位傳送：強制傳送到隨機裂隙，結束移動。' },
-            { id: 41, color: '#f06292', name: '血肉座椅', effect: '黏著：移動困難。近戰攻擊DP-6。' },
+            { id: 41, color: '#f06292', name: '血肉座椅', effect: '黏著：移動困難。近戰攻擊DP-6。', moveCostMultiplier: 2 },
             { id: 42, color: '#ffd700', name: '頭等艙屏障', effect: '隔離：阻擋視線。需車票或20+傷害破壞。' },
             { id: 43, color: '#eeeeee', name: '時間停滯', effect: '凍結：狀態持續時間不減少。' }
         ]
@@ -71,7 +71,7 @@ const MAP_PRESETS = [
     {
         name: "血肉山丘",
         tiles: [
-            { id: 80, color: '#b71c1c', name: '蠕動屍骸', effect: '泥沼：移動困難。回合結束流血4層。' },
+            { id: 80, color: '#b71c1c', name: '蠕動屍骸', effect: '泥沼：移動困難。回合結束流血4層。', moveCostMultiplier: 2 },
             { id: 81, color: '#bf360c', name: '獻祭之火', effect: '燃燒：進入獲4燃燒。N社成員攻擊DP+6。' },
             { id: 82, color: '#3e2723', name: '穿刺樁', effect: '刑具：在此被擊中額外受4意志傷。' },
             { id: 83, color: '#ffd600', name: '金枝光輝', effect: '扭曲：回合開始回2意志，全技能加骰+1。' }
@@ -89,7 +89,7 @@ const MAP_PRESETS = [
     {
         name: "廢品蟹海灘",
         tiles: [
-            { id: 100, color: '#d4a574', name: '鬆軟沙地', effect: '【足下深陷】移動消耗x2(困難地形)。在此格閃避時，防禦-6。' },
+            { id: 100, color: '#d4a574', name: '鬆軟沙地', effect: '【足下深陷】移動消耗x2(困難地形)。在此格閃避時，防禦-6。', moveCostMultiplier: 2 },
             { id: 101, color: '#26c6da', name: '蘇打水窪', effect: '【黏稠充能】進入時選擇一個能量池恢復2點，但下回合移動速度歸零(腳被黏住)。' },
             { id: 102, color: '#a1453c', name: '銳利廢鐵堆', effect: '【破傷風】掩體+6防禦。但在此近戰攻擊或被擊退撞牆，受3點無屬性傷害。' },
             { id: 103, color: '#f9a825', name: '廢品壓縮機', effect: '【壓扁】致死機關格。每回合落下重錘，對格內單位造成12點L傷並暈眩。' }

@@ -163,7 +163,8 @@ function changeMapTheme(id) {
     const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
     state.mapPalette = theme.tiles.map(t => ({
         id: t.id, name: t.name,
-        color: t.color, effect: t.effect
+        color: t.color, effect: t.effect,
+        moveCostMultiplier: t.moveCostMultiplier || 1
     }));
 
     updateToolbar();
@@ -211,7 +212,9 @@ function updateToolbar() {
         const btn = document.createElement('button');
         btn.className = 'tool-btn' + (currentTool == tile.id ? ' active' : '');
         btn.dataset.tool = tile.id;
-        btn.title = `${tile.name}\n${tile.effect}\n(右鍵編輯)`;
+        const moveCostNote = (tile.moveCostMultiplier && tile.moveCostMultiplier !== 1)
+            ? `\n移動消耗 ×${tile.moveCostMultiplier}` : '';
+        btn.title = `${tile.name}\n${tile.effect}${moveCostNote}\n(右鍵編輯)`;
         btn.onclick = () => setTool(tile.id);
 
         // 右鍵編輯地形
@@ -893,7 +896,9 @@ function updateTileInfo(x, y) {
         ? getTileFromPalette(val) : null;
 
     if (tileDef) {
-        info.innerText = `座標 (${x}, ${y}): ${tileDef.name} - ${tileDef.effect}`;
+        const moveCostNote = (tileDef.moveCostMultiplier && tileDef.moveCostMultiplier !== 1)
+            ? `（移動消耗 ×${tileDef.moveCostMultiplier}）` : '';
+        info.innerText = `座標 (${x}, ${y}): ${tileDef.name} - ${tileDef.effect}${moveCostNote}`;
     } else {
         info.innerText = `座標 (${x}, ${y}): 未知地形`;
     }
@@ -952,7 +957,9 @@ function applyMoveCost(unit, targetX, targetY) {
     if (unit.x < 0 || targetX < 0) return true;           // 部署 / 收回不計消耗
     if (!state.isCombatActive) return true;               // 非戰鬥中不設限
 
-    const cost = calcTacticalCost(targetX - unit.x, targetY - unit.y);
+    const cost = (typeof calcTacticalPathCost === 'function')
+        ? calcTacticalPathCost(unit.x, unit.y, targetX, targetY)
+        : calcTacticalCost(targetX - unit.x, targetY - unit.y);
     if (cost === 0) return true;
 
     const remaining = getUnitMoveRemaining(unit);
@@ -975,9 +982,9 @@ function calcRulerDistance(points, current) {
     const all = current ? [...points, current] : points;
     let total = 0;
     for (let i = 1; i < all.length; i++) {
-        const dx = all[i].x - all[i - 1].x;
-        const dy = all[i].y - all[i - 1].y;
-        total += calcTacticalCost(dx, dy);
+        total += (typeof calcTacticalPathCost === 'function')
+            ? calcTacticalPathCost(all[i - 1].x, all[i - 1].y, all[i].x, all[i].y)
+            : calcTacticalCost(all[i].x - all[i - 1].x, all[i].y - all[i - 1].y);
     }
     return total;
 }

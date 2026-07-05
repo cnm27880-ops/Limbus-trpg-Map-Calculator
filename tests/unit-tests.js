@@ -590,13 +590,15 @@ console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
         document: { getElementById: () => null },
         window: undefined,
         myRole: 'player',
-        state: { isCombatActive: true },
+        state: { isCombatActive: true, mapData: [], mapPalette: [] },
+        // 困難地形查詢：簡化版，直接查 state.mapPalette（與 state.js 的 getTileFromPalette 行為一致）
+        getTileFromPalette: (id) => (mvSandbox.state.mapPalette || []).find(t => t.id === id) || null,
     };
     vm.createContext(mvSandbox);
     const mvCombined = ['src/utils/utils.js', 'src/ui/map.js'].map(f => readSource(f)).join('\n;\n')
-        + '\n;\nvar __mv = { calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining, calcRulerDistance, applyMoveCost };';
+        + '\n;\nvar __mv = { calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining, calcRulerDistance, applyMoveCost, calcTacticalPathCost, getTileMoveMultiplier };';
     vm.runInContext(mvCombined, mvSandbox, { filename: 'combined-move-sources.js' });
-    const { calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining, calcRulerDistance, applyMoveCost } = mvSandbox.__mv;
+    const { calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining, calcRulerDistance, applyMoveCost, calcTacticalPathCost, getTileMoveMultiplier } = mvSandbox.__mv;
 
     test('calcTacticalCost：純直走 → 每格消耗 1', () => {
         assert.strictEqual(calcTacticalCost(3, 0), 3);
@@ -659,6 +661,50 @@ console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
         const explorer = { x: 0, y: 0, moveSpeed: 20, moveUsed: 0 };
         assert.strictEqual(applyMoveCost(explorer, 10, 10), true);
         assert.strictEqual(explorer.moveUsed, 0);
+    });
+
+    // ----- 困難地形（移動消耗倍率）-----
+    test('getTileMoveMultiplier：地板／未設定倍率一律回傳 1', () => {
+        mvSandbox.state.mapData = [[0, 5]];
+        mvSandbox.state.mapPalette = [{ id: 5, name: '普通地形', effect: '' }]; // 無 moveCostMultiplier 欄位
+        assert.strictEqual(getTileMoveMultiplier(0, 0), 1); // 地板
+        assert.strictEqual(getTileMoveMultiplier(1, 0), 1); // 未設定倍率
+    });
+    test('getTileMoveMultiplier：讀取地形設定的倍率', () => {
+        mvSandbox.state.mapData = [[7]];
+        mvSandbox.state.mapPalette = [{ id: 7, name: '鬆軟沙地', effect: '', moveCostMultiplier: 2 }];
+        assert.strictEqual(getTileMoveMultiplier(0, 0), 2);
+    });
+    test('calcTacticalPathCost：全程困難地形（×2）→ 直走與斜走消耗皆加倍', () => {
+        // 3x3 全鋪困難地形（倍率2）
+        mvSandbox.state.mapPalette = [{ id: 9, name: '困難地形', effect: '', moveCostMultiplier: 2 }];
+        mvSandbox.state.mapData = Array.from({ length: 3 }, () => Array(3).fill(9));
+        // 純直走 2 格：一般消耗 2，困難地形應為 4
+        assert.strictEqual(calcTacticalPathCost(0, 0, 2, 0), 4);
+        // 純斜走 2 格：一般消耗 4，困難地形應為 8
+        assert.strictEqual(calcTacticalPathCost(0, 0, 2, 2), 8);
+    });
+    test('calcTacticalPathCost：僅終點是困難地形，其餘為地板 → 只有進入那格加倍', () => {
+        mvSandbox.state.mapPalette = [{ id: 9, name: '困難地形', effect: '', moveCostMultiplier: 2 }];
+        // (0,0)→(2,0)：中間(1,0)為地板，終點(2,0)為困難地形
+        mvSandbox.state.mapData = [[0, 0, 9]];
+        // 第一步（進入 1,0）消耗 1×1=1；第二步（進入 2,0 困難地形）消耗 1×2=2；合計 3
+        assert.strictEqual(calcTacticalPathCost(0, 0, 2, 0), 3);
+    });
+    test('calcTacticalPathCost：一般地板（無困難地形）與 calcTacticalCost 結果一致', () => {
+        mvSandbox.state.mapPalette = [];
+        mvSandbox.state.mapData = Array.from({ length: 5 }, () => Array(5).fill(0));
+        assert.strictEqual(calcTacticalPathCost(0, 0, 3, 2), calcTacticalCost(3, 2));
+    });
+    test('applyMoveCost：困難地形實際消耗更多移動能量', () => {
+        mvSandbox.myRole = 'player';
+        mvSandbox.state.isCombatActive = true;
+        mvSandbox.state.mapPalette = [{ id: 9, name: '困難地形', effect: '', moveCostMultiplier: 2 }];
+        mvSandbox.state.mapData = [[9, 9]]; // (0,0) 與 (1,0) 皆為困難地形
+        const u = { x: 0, y: 0, moveSpeed: 20, moveUsed: 0 };
+        // 直走 1 格，一般應消耗 1，困難地形應消耗 2
+        assert.strictEqual(applyMoveCost(u, 1, 0), true);
+        assert.strictEqual(u.moveUsed, 2);
     });
 })();
 

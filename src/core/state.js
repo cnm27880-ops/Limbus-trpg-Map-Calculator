@@ -92,7 +92,8 @@ function initMapPalette() {
         id: t.id,
         name: t.name,
         color: t.color,
-        effect: t.effect
+        effect: t.effect,
+        moveCostMultiplier: t.moveCostMultiplier || 1
     }));
 }
 

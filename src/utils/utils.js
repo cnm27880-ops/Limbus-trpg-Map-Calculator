@@ -269,6 +269,63 @@ function calcTacticalCost(dx, dy) {
 }
 
 /**
+ * 查詢指定格子的地形「移動消耗倍率」（困難地形設定，見地形編輯器）。
+ * 地板、超出範圍、或未設定倍率的地形一律回傳 1（不影響移動）。
+ * @param {number} x - 格子 X 座標
+ * @param {number} y - 格子 Y 座標
+ * @returns {number}
+ */
+function getTileMoveMultiplier(x, y) {
+    if (typeof state === 'undefined' || !state.mapData) return 1;
+    const val = state.mapData[y] && state.mapData[y][x];
+    if (!val) return 1; // 0 = 地板
+    const tileDef = (typeof getTileFromPalette === 'function') ? getTileFromPalette(val) : null;
+    const m = tileDef && parseFloat(tileDef.moveCostMultiplier);
+    return (Number.isFinite(m) && m > 0) ? m : 1;
+}
+
+/**
+ * 計算兩格間「考慮困難地形」的實際移動消耗：沿 calcTacticalCost 相同的走法
+ * （先斜走補齊短軸，再直走剩餘距離）逐格前進，每步消耗（斜走 2／直走 1）
+ * 再乘上「進入的那一格」的地形移動消耗倍率後加總。
+ * 一般地板（倍率 1）等同於原本的 calcTacticalCost，行為不變。
+ * @param {number} fromX - 起點 X
+ * @param {number} fromY - 起點 Y
+ * @param {number} toX - 終點 X
+ * @param {number} toY - 終點 Y
+ * @returns {number} 消耗格數（可能含小數，取決於地形倍率設定）
+ */
+function calcTacticalPathCost(fromX, fromY, toX, toY) {
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const sx = Math.sign(dx);
+    const sy = Math.sign(dy);
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    const diagSteps = Math.min(ax, ay);
+    const straightSteps = Math.max(ax, ay) - diagSteps;
+    const straightDx = ax > ay ? sx : 0;
+    const straightDy = ay > ax ? sy : 0;
+
+    let cx = fromX;
+    let cy = fromY;
+    let total = 0;
+
+    for (let i = 0; i < diagSteps; i++) {
+        cx += sx;
+        cy += sy;
+        total += 2 * getTileMoveMultiplier(cx, cy);
+    }
+    for (let i = 0; i < straightSteps; i++) {
+        cx += straightDx;
+        cy += straightDy;
+        total += 1 * getTileMoveMultiplier(cx, cy);
+    }
+
+    return total;
+}
+
+/**
  * 單位最大可移動格數 = floor(移動速度(米) / 5)，未設定時預設 20 米（4 格）。
  * @param {Object} unit - 單位物件
  * @returns {number}
@@ -354,6 +411,7 @@ export {
     generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
     calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
     calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
+    calcTacticalPathCost, getTileMoveMultiplier,
 };
 
 if (typeof window !== 'undefined') {
@@ -362,5 +420,6 @@ if (typeof window !== 'undefined') {
         generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
         calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
         calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
+    calcTacticalPathCost, getTileMoveMultiplier,
     });
 }

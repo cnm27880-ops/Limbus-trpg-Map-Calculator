@@ -905,6 +905,7 @@ function openTileEditorModal(existingTileId = null) {
     // 將 rgba/named colors 轉為 hex 以供 color picker
     const colorHex = colorToHex(tileColor);
     const tileEffect = tile ? tile.effect : '';
+    const tileMoveCost = tile && tile.moveCostMultiplier ? tile.moveCostMultiplier : 1;
 
     // 建立「從預設庫匯入」選項列表
     let presetOptions = '';
@@ -955,6 +956,12 @@ function openTileEditorModal(existingTileId = null) {
                         <div class="form-group">
                             <label class="tile-editor-label">效果描述</label>
                             <textarea id="tile-edit-effect" placeholder="例如：每回合受 2 點火焰傷害" rows="3">${escapeHtml(tileEffect)}</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="tile-editor-label">移動消耗倍率</label>
+                            <input type="number" id="tile-edit-move-cost" value="${tileMoveCost}" min="0.5" step="0.5" style="width:100px;">
+                            <div class="tile-editor-hint">困難地形：進入這格會照倍率乘算格數消耗（例：2 = 消耗雙倍移動力）。1 = 正常，不影響移動。</div>
                         </div>
                     </div>
                 </div>
@@ -1008,6 +1015,8 @@ function importPresetTile() {
     document.getElementById('tile-color-hex').textContent = colorToHex(tile.color);
     document.getElementById('tile-color-preview').style.background = tile.color;
     document.getElementById('tile-edit-effect').value = tile.effect;
+    const moveCostInput = document.getElementById('tile-edit-move-cost');
+    if (moveCostInput) moveCostInput.value = tile.moveCostMultiplier || 1;
 }
 
 /**
@@ -1018,6 +1027,7 @@ function saveTileFromEditor(existingId) {
     const name = document.getElementById('tile-edit-name')?.value.trim();
     const color = document.getElementById('tile-edit-color')?.value || '#666666';
     const effect = document.getElementById('tile-edit-effect')?.value.trim() || '';
+    const moveCostMultiplier = Math.max(0.5, parseFloat(document.getElementById('tile-edit-move-cost')?.value) || 1);
 
     if (!name) {
         showToast('請輸入地形名稱');
@@ -1033,12 +1043,13 @@ function saveTileFromEditor(existingId) {
             state.mapPalette[idx].name = name;
             state.mapPalette[idx].color = color;
             state.mapPalette[idx].effect = effect;
+            state.mapPalette[idx].moveCostMultiplier = moveCostMultiplier;
         }
         showToast(`已更新地形「${name}」`);
     } else {
         // 新增模式：生成唯一 ID
         const newId = Date.now() % 100000 + 1000;
-        state.mapPalette.push({ id: newId, name, color, effect });
+        state.mapPalette.push({ id: newId, name, color, effect, moveCostMultiplier });
         showToast(`已新增地形「${name}」`);
     }
 

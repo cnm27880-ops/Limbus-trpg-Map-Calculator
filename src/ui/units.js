@@ -804,10 +804,10 @@ function openInitRollModal() {
                 </div>
                 <div class="modal-body">
                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <button class="modal-btn" onclick="irSetAll('all')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">全選</button>
-                        <button class="modal-btn" onclick="irSetAll('enemy')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">僅敵方/BOSS</button>
-                        <button class="modal-btn" onclick="irSetAll('player')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">僅我方</button>
-                        <button class="modal-btn" onclick="irSetAll('none')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">清除</button>
+                        <button class="modal-btn" onclick="irSetAll('all')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">全選</button>
+                        <button class="modal-btn" onclick="irSetAll('enemy')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">僅敵方/BOSS</button>
+                        <button class="modal-btn" onclick="irSetAll('player')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">僅我方</button>
+                        <button class="modal-btn" onclick="irSetAll('none')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">清除</button>
                     </div>
                     <div style="max-height:46vh;overflow-y:auto;">${rows || '<div style="color:var(--text-dim);padding:12px;">尚無單位</div>'}</div>
                 </div>

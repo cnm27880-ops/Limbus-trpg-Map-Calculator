@@ -729,6 +729,11 @@ body.aoe-select-active .token {
 .modal-btn {
     padding: 8px 16px;
     border-radius: 6px;
+    color: var(--text-main);
+}
+
+.modal-btn:hover {
+    filter: brightness(1.2);
 }
 
 /* ===== Unit Init Input（優化版）===== */

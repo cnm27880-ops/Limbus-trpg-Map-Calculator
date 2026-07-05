@@ -660,6 +660,67 @@ console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
     });
 })();
 
+// ===== AOE 多重行動支援 =====
+// 驗證 BOSS 第 7 個行動也能被 AOE 模式辨識
+(function () {
+    // 載入 aoe-select.js 沙箱以測試 aoeGetBossAoeActions 對超過 5 個行動的支援
+    const aoeSandbox = {
+        console, JSON, Object, Set, Array, Map, Number, String, Boolean, parseInt, parseFloat, isNaN, Math, Date, RegExp,
+        myRole: 'st',
+        state: {
+            activeBossId: 1,
+            units: [
+                {
+                    id: 1, name: 'BOSS', isBoss: true, actionDp: 10,
+                    // 第 7 個行動（AOE 旗標 + 豁免類型）
+                    actionSubUnits: [
+                        { id: 101, actionDp: 5, actionAoe: false },
+                        { id: 102, actionDp: 5, actionAoe: false },
+                        { id: 103, actionDp: 5, actionAoe: false },
+                        { id: 104, actionDp: 5, actionAoe: false },
+                        { id: 105, actionDp: 5, actionAoe: false },
+                        { id: 106, actionDp: 5, actionAoe: false },
+                        { id: 107, actionDp: 12, actionAoe: true, actionSaveType: 'saveReflex', actionStatuses: [{ id: 'burn', value: 3 }] },
+                    ]
+                },
+            ],
+        },
+        // stub findUnitById / getActionSlots
+        findUnitById: function (id) { return this.state.units.find(u => u.id === id); },
+        getActionSlots: function (id) {
+            const u = this.state.units.find(x => x.id === id);
+            return Array.isArray(u && u.actionSubUnits) ? u.actionSubUnits : [];
+        },
+        window: { addEventListener() {} },
+        document: { getElementById: () => null, addEventListener() {}, querySelectorAll: () => [], createElement: () => ({ classList: { add() {}, remove() {}, toggle() {} }, appendChild() {}, addEventListener() {} }), body: { appendChild() {} } },
+    };
+    // bind `this`
+    aoeSandbox.findUnitById = aoeSandbox.findUnitById.bind(aoeSandbox);
+    aoeSandbox.getActionSlots = aoeSandbox.getActionSlots.bind(aoeSandbox);
+    vm.createContext(aoeSandbox);
+    const src = readSource('src/ui/aoe-select.js') +
+        '\n;\nvar __aoe = { getActions: aoeGetBossAoeActions };';
+    vm.runInContext(src, aoeSandbox, { filename: 'aoe-select.js' });
+    const getActions = aoeSandbox.__aoe.getActions;
+
+    test('BOSS 多重行動第 7 個行動：AOE 旗標與豁免類型正確讀出（修正「行動7抓不到」BUG）', () => {
+        const actions = getActions();
+        assert.strictEqual(actions.length, 1, 'AOE 旗標只有第 7 個行動 → 應回傳 1 筆');
+        const action7 = actions[0];
+        assert.strictEqual(action7.aoe, true, '第 7 個行動的 AOE 旗標應為 true');
+        assert.strictEqual(action7.saveType, 'saveReflex', '第 7 個行動的豁免類型應為 saveReflex');
+        assert.strictEqual(action7.dp, 12, '第 7 個行動的 DP 應為 12');
+        assert.strictEqual(action7.statuses.length, 1, '第 7 個行動應帶 1 個狀態');
+        assert.strictEqual(action7.statuses[0].id, 'burn');
+        assert.strictEqual(action7.statuses[0].value, 3);
+    });
+    test('BOSS 多重行動第 7 個行動：非法 saveType 回退到預設 saveReflex', () => {
+        aoeSandbox.state.units[0].actionSubUnits[6].actionSaveType = 'invalid_type';
+        const actions = getActions();
+        assert.strictEqual(actions[0].saveType, 'saveReflex', '非法 saveType 應回退到 saveReflex');
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

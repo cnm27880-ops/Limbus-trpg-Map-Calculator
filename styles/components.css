@@ -5497,6 +5497,101 @@ body.combat-mode .boss-hud-container {
 .aoe-boss-action-btn small { color: var(--text-dim); font-size: 0.68rem; }
 .aoe-boss-action-btn:hover { border-color: var(--accent-red); }
 
+/* 結算方式分頁（直接傷害 / 豁免抵擋 / 群體治療 / 附加狀態） */
+.aoe-mode-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+.aoe-mode-tab {
+    flex: 1 1 0;
+    min-width: 80px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-input);
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.aoe-mode-tab:hover { border-color: var(--accent-yellow); color: var(--text-main); }
+.aoe-mode-tab.active {
+    background: rgba(229, 57, 53, 0.18);
+    border-color: var(--accent-red, #e53935);
+    color: #ffb3b0;
+}
+
+/* 模式分頁的內容區塊 */
+.aoe-action-section {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 8px;
+    margin-top: 4px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* 豁免抵擋：每位目標的「豁免類型」下拉與三豁免值 */
+.aoe-target-save-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 4px;
+    background: var(--bg-input);
+    border-radius: 6px;
+}
+.aoe-save-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    padding: 3px 4px;
+    border-bottom: 1px dashed var(--border);
+}
+.aoe-save-row:last-child { border-bottom: none; }
+.aoe-save-name {
+    flex: 1 1 auto;
+    min-width: 60px;
+    color: var(--text-main);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.aoe-target-save {
+    flex: 0 0 auto;
+    min-width: 96px;
+    padding: 2px 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-main);
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.aoe-save-vals {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+/* 自動擲骰等說明列（與原本相同風格） */
+.aoe-autoroll-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    margin-top: 4px;
+}
+.aoe-autoroll-row input[type="checkbox"] { margin: 0; }
+
 .aoe-action-attack { border-left-color: var(--accent-red); }
 .aoe-action-status { border-left-color: var(--resource-color); }
 

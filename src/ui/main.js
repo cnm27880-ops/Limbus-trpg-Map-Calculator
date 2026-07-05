@@ -208,8 +208,9 @@ function initKeyboardControls() {
 /**
  * 滑鼠滾輪快速切換：
  *   - select.wheel-cycle：滾輪循環切換選項（向下滾＝下一個），並觸發 change
- *   - .wheel-toggle：內含 checkbox 的開關（傷/療、AOE、豁免抵擋等），滾輪直接切換
+ *   - .wheel-toggle：內含 checkbox 的開關（如單位卡的扣血/治療模式），滾輪直接切換
  * 切換瞬間以黃色描邊閃爍（.wheel-flash）標示狀態改變。
+ * 註：多重行動面板的 AOE / 豁免抵擋開關改為點擊切換（避免滾輪切換太敏感）。
  */
 function initWheelControls() {
     document.addEventListener('wheel', (e) => {

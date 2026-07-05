@@ -798,16 +798,16 @@ function openInitRollModal() {
     const html = `
         <div class="modal-overlay show" id="init-roll-modal" onclick="if(event.target.id==='init-roll-modal')closeInitRollModal()">
             <div class="modal" style="max-width:440px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--dice">
                     <span style="font-weight:bold;">🎲 全體骰先攻（1D10 + 先攻加值）</span>
                     <button onclick="closeInitRollModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">
                     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                        <button class="modal-btn" onclick="irSetAll('all')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">全選</button>
-                        <button class="modal-btn" onclick="irSetAll('enemy')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">僅敵方/BOSS</button>
-                        <button class="modal-btn" onclick="irSetAll('player')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">僅我方</button>
-                        <button class="modal-btn" onclick="irSetAll('none')" style="background:var(--bg-input);padding:4px 10px;font-size:0.78rem;">清除</button>
+                        <button class="modal-btn" onclick="irSetAll('all')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">全選</button>
+                        <button class="modal-btn" onclick="irSetAll('enemy')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">僅敵方/BOSS</button>
+                        <button class="modal-btn" onclick="irSetAll('player')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">僅我方</button>
+                        <button class="modal-btn" onclick="irSetAll('none')" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">清除</button>
                     </div>
                     <div style="max-height:46vh;overflow-y:auto;">${rows || '<div style="color:var(--text-dim);padding:12px;">尚無單位</div>'}</div>
                 </div>
@@ -1112,7 +1112,7 @@ function openShieldModal(unitId) {
     const html = `
         <div class="modal-overlay show" id="shield-modal" onclick="if(event.target.id==='shield-modal')closeShieldModal()">
             <div class="modal" style="max-width:380px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span style="font-weight:bold;">🛡 護盾設定 - ${escapeHtml(u.name || '單位')}</span>
                     <button onclick="closeShieldModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
@@ -1224,7 +1224,7 @@ function openPlayerStatsModal(unitId) {
     const html = `
         <div class="modal-overlay show" id="player-stats-modal" onclick="if(event.target.id==='player-stats-modal')closePlayerStatsModal()">
             <div class="modal" style="max-width:380px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span style="font-weight:bold;">📊 角色數值 - ${escapeHtml(u.name || '單位')}</span>
                     <button onclick="closePlayerStatsModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
@@ -1572,7 +1572,7 @@ function openMultiActionModal(bossId) {
 
     const html = `
         <div class="float-modal ma-float-panel" id="multi-action-modal">
-            <div class="modal-header" id="ma-float-header">
+            <div class="modal-header modal-header--combat" id="ma-float-header">
                 <span style="font-weight:bold;">👹 BOSS 設定 - ${escapeHtml(boss.name || '單位')}</span>
                 <span class="float-modal-btns">
                     <button class="float-modal-icon-btn" id="ma-collapse-btn" title="收起">▾</button>

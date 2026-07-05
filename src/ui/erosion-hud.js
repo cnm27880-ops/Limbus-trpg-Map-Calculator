@@ -129,38 +129,70 @@ if (document.readyState === 'loading') {
 }
 
 /**
- * 以 DOM 節點填充 <select>（option 文字用 textContent），避免把 Firebase 來源的
+ * 以 DOM 節點填充單選 <select>（option 文字用 textContent），避免把 Firebase 來源的
  * 單位名稱經由 innerHTML 注入，杜絕 XSS。
- * @param {string|string[]} selectedId - 單選傳字串；多選（select multiple）傳陣列，重繪時保留勾選狀態。
+ * @param {string} selectedId - 目前選取的單位 id。
  */
 function eroPopulateSelect(selectId, filterFn, selectedId) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
-    const selectedSet = new Set(Array.isArray(selectedId) ? selectedId : [selectedId]);
     sel.textContent = '';
-    if (!sel.multiple) {
-        const ph = document.createElement('option');
-        ph.value = '';
-        ph.textContent = '（請選擇）';
-        sel.appendChild(ph);
-    }
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '（請選擇）';
+    sel.appendChild(ph);
     if (typeof state !== 'undefined' && Array.isArray(state.units)) {
         for (const u of state.units) {
             if (!filterFn(u)) continue;
             const opt = document.createElement('option');
             opt.value = u.id;
             opt.textContent = u.name || '';
-            if (selectedSet.has(u.id)) opt.selected = true;
+            if (u.id === selectedId) opt.selected = true;
             sel.appendChild(opt);
         }
     }
 }
 
-/** 取得多選 <select> 目前所有被選取的單位 id。 */
-function eroGetSelectedValues(selectId) {
-    const sel = document.getElementById(selectId);
-    if (!sel) return [];
-    return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
+/**
+ * 以「可點擊複選 chip」取代原生 <select multiple>：原生多選需按住 Ctrl/⌘ 才能多選，
+ * 不夠直覺；改成點一下 chip 就切換勾選，體驗與 AOE 選目標／骰先攻勾選一致。
+ * 名稱一樣以 DOM 節點 + textContent 填入，避免 innerHTML 注入。
+ * @param {string[]} selectedIds - 重繪時保留勾選狀態的單位 id 清單。
+ * @param {string} chipClass - 額外的 chip 樣式 class（區分復活／吸收者的強調色）。
+ * @param {Function} [onChange] - 勾選狀態變更時的回呼（例如即時刷新暴走閾值顯示）。
+ */
+function eroPopulateChips(containerId, filterFn, selectedIds, chipClass, onChange) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    const selectedSet = new Set(Array.isArray(selectedIds) ? selectedIds : [selectedIds]);
+    box.textContent = '';
+    const units = (typeof state !== 'undefined' && Array.isArray(state.units)) ? state.units.filter(filterFn) : [];
+    if (!units.length) {
+        const empty = document.createElement('span');
+        empty.className = 'ero-chip-empty';
+        empty.textContent = '（無可選單位）';
+        box.appendChild(empty);
+        return;
+    }
+    for (const u of units) {
+        const label = document.createElement('label');
+        label.className = `ero-chip ${chipClass}`;
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = u.id;
+        input.checked = selectedSet.has(u.id);
+        if (onChange) input.addEventListener('change', onChange);
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(u.name || ''));
+        box.appendChild(label);
+    }
+}
+
+/** 取得複選 chip 容器目前所有被勾選的單位 id。 */
+function eroGetSelectedValues(containerId) {
+    const box = document.getElementById(containerId);
+    if (!box) return [];
+    return Array.from(box.querySelectorAll('input:checked')).map(i => i.value).filter(Boolean);
 }
 
 function eroIsEnemy(u) { return u && (u.type === 'enemy' || u.type === 'boss'); }
@@ -205,8 +237,8 @@ function renderErosionConsole() {
 
         <div class="ero-section">
             <div class="ero-section-title">⛑️ 復活與刻度連動</div>
-            <div class="ero-field"><label>目標玩家（可多選，同回合多人復活時請一起選取）</label>
-                <select id="ero-revive-target" class="ero-select" multiple size="4"></select></div>
+            <div class="ero-field"><label>目標玩家（可點多個，同回合多人復活時請一起選取）</label>
+                <div id="ero-revive-target" class="ero-chip-list"></div></div>
             <button class="ero-btn ero-revive" onclick="eroReviveTarget()">⛑️ 復活並重置血量</button>
             <div id="ero-revive-tick-prompt" class="ero-btn-row hidden">
                 <button class="ero-btn ero-minus" onclick="eroConfirmReviveTick(-1)">單人 -1</button>
@@ -219,8 +251,8 @@ function renderErosionConsole() {
             <div class="ero-section-title">🩸 罪業抽取與侵蝕暴走</div>
             <div class="ero-field"><label>來源（敵方）</label>
                 <select id="ero-source" class="ero-select"></select></div>
-            <div class="ero-field"><label>吸收者（玩家，可多選；多人復活時將均攤抽取到的侵蝕層數）</label>
-                <select id="ero-absorber" class="ero-select" multiple size="4" onchange="renderErosionConsole()"></select></div>
+            <div class="ero-field"><label>吸收者（玩家，可點多個；多人復活時將均攤抽取到的侵蝕層數）</label>
+                <div id="ero-absorber" class="ero-chip-list"></div></div>
             <div class="ero-field"><label>暴走閾值</label>
                 <input id="ero-threshold" class="ero-input" type="number" min="1" value="${threshold}" onchange="renderErosionConsole()"></div>
 
@@ -239,8 +271,8 @@ function renderErosionConsole() {
 
     // 單位下拉以 DOM 填充（名稱用 textContent，避免 innerHTML 注入）
     eroPopulateSelect('ero-source', eroIsEnemy, prevSource);
-    eroPopulateSelect('ero-absorber', eroIsPlayer, prevAbsorbers);
-    eroPopulateSelect('ero-revive-target', eroIsPlayer, prevReviveTargets);
+    eroPopulateChips('ero-absorber', eroIsPlayer, prevAbsorbers, 'ero-chip-absorber', renderErosionConsole);
+    eroPopulateChips('ero-revive-target', eroIsPlayer, prevReviveTargets, 'ero-chip-revive');
 }
 
 // ===== 復活並重置血量（與刻度連動） =====
@@ -338,7 +370,7 @@ function eroDrainSin() {
 // ===== 暴走 1D2 判定與全場廣播 =====
 function eroRollTarget() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const absorberId = document.getElementById('ero-absorber')?.value || '';
+    const absorberId = eroGetSelectedValues('ero-absorber')[0] || '';
     const threshold = parseInt(document.getElementById('ero-threshold')?.value, 10) || ERO_DEFAULT_THRESHOLD;
     const absorber = (typeof findUnitById === 'function') ? findUnitById(absorberId) : null;
     if (!absorber) { if (typeof showToast === 'function') showToast('請先選擇吸收者'); return; }
@@ -361,7 +393,7 @@ function eroRollTarget() {
 
 function eroBurnOut() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const absorberId = document.getElementById('ero-absorber')?.value || '';
+    const absorberId = eroGetSelectedValues('ero-absorber')[0] || '';
     const absorber = (typeof findUnitById === 'function') ? findUnitById(absorberId) : null;
     if (!absorber || !absorber.status) { if (typeof showToast === 'function') showToast('請先選擇吸收者'); return; }
     if (!absorber.status[ERO_STATUS_NAME]) { if (typeof showToast === 'function') showToast('該吸收者沒有侵蝕增幅'); return; }

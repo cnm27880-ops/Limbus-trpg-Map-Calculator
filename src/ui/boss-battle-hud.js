@@ -31,7 +31,7 @@ function openBossUnitModal(unitId) {
 
     const html = `
         <div class="float-modal" id="boss-unit-modal">
-            <div class="modal-header" id="boss-unit-float-header">
+            <div class="modal-header modal-header--combat" id="boss-unit-float-header">
                 <span style="font-weight:bold;">👹 戰鬥數值設定 - ${escapeHtml(u.name || '單位')}</span>
                 <span class="float-modal-btns">
                     <button class="float-modal-icon-btn" id="boss-unit-collapse-btn" title="收起">▾</button>

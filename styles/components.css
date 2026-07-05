@@ -711,6 +711,13 @@ body.aoe-select-active .token {
     align-items: center;
 }
 
+/* 依用途分色的 Modal 標題列：一眼分辨彈窗類型（戰鬥/狀態/新增/資訊/骰點） */
+.modal-header--combat { background: linear-gradient(90deg, rgba(229, 57, 53, .2), transparent 75%); border-bottom-color: rgba(229, 57, 53, .45); }
+.modal-header--status { background: linear-gradient(90deg, rgba(142, 36, 170, .2), transparent 75%); border-bottom-color: rgba(142, 36, 170, .45); }
+.modal-header--create { background: linear-gradient(90deg, rgba(67, 160, 71, .2), transparent 75%); border-bottom-color: rgba(67, 160, 71, .45); }
+.modal-header--info { background: linear-gradient(90deg, rgba(30, 136, 229, .2), transparent 75%); border-bottom-color: rgba(30, 136, 229, .45); }
+.modal-header--dice { background: linear-gradient(90deg, rgba(253, 216, 53, .2), transparent 75%); border-bottom-color: rgba(253, 216, 53, .45); }
+
 .modal-body {
     padding: 16px;
     display: flex;
@@ -729,6 +736,11 @@ body.aoe-select-active .token {
 .modal-btn {
     padding: 8px 16px;
     border-radius: 6px;
+    color: var(--text-main);
+}
+
+.modal-btn:hover {
+    filter: brightness(1.2);
 }
 
 /* ===== Unit Init Input（優化版）===== */
@@ -1695,6 +1707,8 @@ body.aoe-select-active .token {
     flex-wrap: wrap;
     gap: 4px;
     margin-bottom: 8px;
+    max-height: 148px;
+    overflow-y: auto;
 }
 
 .emoji-option {
@@ -1757,32 +1771,47 @@ body.aoe-select-active .token {
     width: 52px;
     height: 52px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent-yellow), #e6b800);
-    border: none;
-    color: #000;
+    background: radial-gradient(circle at 32% 28%, #ffe680, var(--accent-yellow) 55%, #b8860b 100%);
+    border: 1px solid rgba(255, 224, 130, 0.6);
+    color: #2a1a00;
     font-size: 1.5rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 15px rgba(253, 216, 53, 0.4);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.55),
+        inset 0 -4px 6px rgba(0, 0, 0, 0.25),
+        0 4px 16px rgba(253, 216, 53, 0.45),
+        0 0 0 4px rgba(253, 216, 53, 0.08);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, background 0.3s ease;
     z-index: 160;
 }
 
 .qab-main-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 6px 25px rgba(253, 216, 53, 0.5);
+    transform: scale(1.08);
+    box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.6),
+        inset 0 -4px 6px rgba(0, 0, 0, 0.25),
+        0 6px 22px rgba(253, 216, 53, 0.6),
+        0 0 0 6px rgba(253, 216, 53, 0.12);
 }
 
 .qab-main-btn.active {
     transform: rotate(45deg);
-    background: linear-gradient(135deg, var(--accent-red), #c62828);
-    box-shadow: 0 4px 15px rgba(229, 57, 53, 0.4);
+    background: radial-gradient(circle at 32% 28%, #ff8a80, var(--accent-red) 55%, #8e0000 100%);
+    border-color: rgba(255, 138, 128, 0.6);
+    color: #2a0000;
+    box-shadow:
+        inset 0 2px 3px rgba(255, 255, 255, 0.4),
+        inset 0 -4px 6px rgba(0, 0, 0, 0.3),
+        0 4px 16px rgba(229, 57, 53, 0.5),
+        0 0 0 4px rgba(229, 57, 53, 0.1);
 }
 
 .qab-icon {
     transition: transform 0.3s;
+    filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.35));
 }
 
 /* QAB Menu (Popup List) */
@@ -4445,13 +4474,33 @@ body.combat-mode .boss-hud-container {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 4px;
-    border-bottom: 1px solid var(--border);
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
     font-size: 0.85rem;
     cursor: pointer;
+    transition: border-color .12s, background .12s;
 }
 .counter-assign-row:last-child {
-    border-bottom: none;
+    margin-bottom: 0;
+}
+.counter-assign-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+/* 整列可點：隱藏原生方框，改用整列背景/邊框變色表示已選取 */
+.counter-assign-row input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    pointer-events: none;
+}
+.counter-assign-row:has(input:checked) {
+    border-color: var(--accent-green, #43a047);
+    background: rgba(67, 160, 71, 0.14);
+    box-shadow: 0 0 0 1px rgba(67, 160, 71, 0.35);
 }
 
 /* ===== 狀態庫編輯排列模式 ===== */
@@ -5234,6 +5283,35 @@ body.combat-mode .boss-hud-container {
 .ero-status-line b { color: #ff8a8a; }
 .ero-status-line b.ero-over { color: #ff3b3b; text-shadow: 0 0 8px rgba(255, 60, 60, .8); }
 
+/* 玩家複選 chip：取代原生 <select multiple>，點一下切換勾選，不必按住 Ctrl/⌘ */
+.ero-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.ero-chip-empty { font-size: .78rem; color: var(--text-dim, #aaa); }
+.ero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--border, #2a2a30);
+    border-radius: 12px;
+    background: var(--bg-input, #0d0d0f);
+    font-size: .8rem;
+    color: var(--text-dim, #aaa);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s, color .15s, background .15s;
+}
+.ero-chip input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; pointer-events: none; }
+.ero-chip-revive:has(input:checked) {
+    border-color: #2e6b2e;
+    color: #8fe08f;
+    background: rgba(46, 107, 46, 0.18);
+}
+.ero-chip-absorber:has(input:checked) {
+    border-color: #6b0d12;
+    color: #ff8080;
+    background: rgba(139, 0, 0, 0.18);
+}
+
 /* ===== 戰鬥日誌 / 構築室分頁 ===== */
 #page-log { flex-direction: column; }
 #view-log-encounter {
@@ -5278,8 +5356,22 @@ body.combat-mode .boss-hud-container {
 }
 .log-row-player { border-left-color: var(--accent-blue, #1e88e5); }
 .log-row-enemy { border-left-color: var(--accent-red, #e53935); }
-.log-row-editable { cursor: pointer; transition: background 0.15s ease; }
+.log-row-editable { cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease; }
 .log-row-editable:hover { background: rgba(255, 255, 255, 0.08); }
+/* 整列可點：隱藏原生方框，改用整列背景/邊框變色表示「將被刪除」 */
+.log-row-editable input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0 !important;
+    pointer-events: none;
+}
+.log-row-editable:has(input:checked) {
+    background: rgba(229, 57, 53, 0.16);
+    border-left-color: var(--accent-red, #e53935);
+    box-shadow: 0 0 0 1px rgba(229, 57, 53, 0.4);
+}
 .log-row-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
 .log-attacker { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); flex: 1; }
 .log-time { font-size: .72rem; color: var(--text-dim, #777); }
@@ -6025,7 +6117,7 @@ select.wheel-cycle { cursor: ns-resize; }
     user-select: none;
     transition: border-color .15s, color .15s;
 }
-.atk-target-chip input { margin: 0; }
+.atk-target-chip input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; pointer-events: none; }
 .atk-target-chip:has(input:checked) {
     border-color: var(--accent-red, #e53935);
     color: #ff9e9e;
@@ -6047,16 +6139,22 @@ select.wheel-cycle { cursor: ns-resize; }
     transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 }
 .init-roll-row:hover {
-    border-color: var(--accent-yellow);
+    border-color: var(--border-focus, #404048);
     background: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 0 0 1px rgba(253, 216, 53, 0.2);
 }
+/* 整列可點：隱藏原生方框，改用整列背景/邊框變色表示已選取 */
 .init-roll-row input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--accent-yellow, #fdd835);
-    flex-shrink: 0;
-    cursor: pointer;
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    pointer-events: none;
+}
+.init-roll-row:has(input:checked) {
+    border-color: var(--accent-yellow);
+    background: rgba(253, 216, 53, 0.12);
+    box-shadow: 0 0 0 1px rgba(253, 216, 53, 0.35);
 }
 .init-roll-row .irr-name {
     flex: 1;

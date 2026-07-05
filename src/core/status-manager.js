@@ -36,7 +36,7 @@ function openStatusModal(unitId) {
     const modalHtml = `
         <div class="modal-overlay show" id="status-modal" onclick="closeStatusModalOnOverlay(event)">
             <div class="modal status-modal" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--status">
                     <span style="font-weight:bold;">🏷️ 管理狀態 - ${escapeHtml(unit.name)}</span>
                     <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
                         ${editToggleBtn}
@@ -867,7 +867,7 @@ function openCustomStatusModal() {
                     <div class="form-group">
                         <label>圖示：</label>
                         <div class="emoji-picker" id="emoji-picker">
-                            ${['💀', '☠️', '⚡', '🔥', '❄️', '💧', '🌙', '☀️', '⭐', '💫', '🎯', '🔮', '💎', '🗡️', '🛡️', '💪', '👁️', '🧠', '❤️', '💔'].map(e =>
+                            ${STATUS_EDITOR_EMOJIS.map(e =>
                                 `<span class="emoji-option" onclick="selectCustomEmoji('${e}')">${e}</span>`
                             ).join('')}
                         </div>
@@ -1369,7 +1369,14 @@ console.log('🏷️ 狀態管理模組已載入');
 
 // ===== 狀態編輯器（ST 專用，可編輯常駐與自訂狀態） =====
 
-const STATUS_EDITOR_EMOJIS = ['💀', '☠️', '⚡', '🔥', '❄️', '💧', '🌙', '☀️', '⭐', '💫', '🎯', '🔮', '💎', '🗡️', '🛡️', '💪', '👁️', '🧠', '❤️', '💔', '🩸', '😱', '😴', '🕸️', '🌀', '🔒'];
+const STATUS_EDITOR_EMOJIS = [
+    '💀', '☠️', '⚡', '🔥', '❄️', '💧', '🌙', '☀️', '⭐', '💫',
+    '🎯', '🔮', '💎', '🗡️', '🛡️', '💪', '👁️', '🧠', '❤️', '💔',
+    '🩸', '😱', '😴', '🕸️', '🌀', '🔒', '⛓️', '🧊', '🌪️', '🌊',
+    '💥', '☣️', '🧟', '🎭', '🃏', '👑', '🩹', '🧪', '⚗️', '🔗',
+    '⏳', '🚫', '❗', '❓', '🔊', '🔇', '⬆️', '⬇️', '✨', '🌟',
+    '🍀', '💚', '🦴', '🖤', '🌸', '🔺', '🔻', '🌡️',
+];
 
 /**
  * 開啟狀態編輯器

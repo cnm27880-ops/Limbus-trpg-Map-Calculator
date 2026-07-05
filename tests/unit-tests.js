@@ -179,7 +179,9 @@ function setupDrain(sourceStatus) {
         { id: 'hero', type: 'player', status: {} }
     ];
     domTable['ero-source'] = { value: 'boss' };
-    domTable['ero-absorber'] = { selectedOptions: [{ value: 'hero' }] };
+    // ero-absorber 現在是「複選 chip」容器（見 erosion-hud.js eroGetSelectedValues），
+    // 以 querySelectorAll('input:checked') 讀取，故 stub 也改為同一介面。
+    domTable['ero-absorber'] = { querySelectorAll: () => [{ value: 'hero' }] };
 }
 
 test('只移除每個負面狀態的一半，保留另一半', () => {
@@ -657,6 +659,51 @@ console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
         const explorer = { x: 0, y: 0, moveSpeed: 20, moveUsed: 0 };
         assert.strictEqual(applyMoveCost(explorer, 10, 10), true);
         assert.strictEqual(explorer.moveUsed, 0);
+    });
+})();
+
+// ====================================================================
+console.log('\n[骰先攻面板] irSetAll 快速勾選（全選／僅敵方/BOSS／僅我方／清除）');
+// ====================================================================
+(() => {
+    // 模擬勾選框：只實作 irSetAll 會用到的 checked / dataset.type
+    function makeCheck(type, checked) {
+        return { checked, dataset: { type } };
+    }
+    let checks;
+    const irSandbox = {
+        console,
+        document: {
+            getElementById: () => null,
+            addEventListener() {},
+            querySelectorAll: (sel) => sel === '#init-roll-modal .ir-check' ? checks : [],
+        },
+        window: undefined,
+    };
+    vm.createContext(irSandbox);
+    const irSrc = readSource('src/ui/units.js') + '\n;\nvar __ir = { irSetAll };';
+    vm.runInContext(irSrc, irSandbox, { filename: 'units.js' });
+    const { irSetAll } = irSandbox.__ir;
+
+    test('irSetAll("all")：不論原本狀態或陣營，全部勾選', () => {
+        checks = [makeCheck('player', false), makeCheck('enemy', false), makeCheck('boss', true)];
+        irSetAll('all');
+        assert.ok(checks.every(c => c.checked === true));
+    });
+    test('irSetAll("none")：全部取消勾選', () => {
+        checks = [makeCheck('player', true), makeCheck('enemy', true), makeCheck('boss', true)];
+        irSetAll('none');
+        assert.ok(checks.every(c => c.checked === false));
+    });
+    test('irSetAll("enemy")：只勾選 enemy 與 boss，player 取消', () => {
+        checks = [makeCheck('player', true), makeCheck('enemy', false), makeCheck('boss', false)];
+        irSetAll('enemy');
+        assert.deepStrictEqual(checks.map(c => c.checked), [false, true, true]);
+    });
+    test('irSetAll("player")：只勾選 player，enemy/boss 取消', () => {
+        checks = [makeCheck('player', false), makeCheck('enemy', true), makeCheck('boss', true)];
+        irSetAll('player');
+        assert.deepStrictEqual(checks.map(c => c.checked), [true, false, false]);
     });
 })();
 

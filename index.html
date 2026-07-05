@@ -500,7 +500,7 @@
                 <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
                 <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="handleStopMusic()" title="停止">⏹</button>
                 <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
-                <button id="bgm-lyrics-pick-btn" class="music-ctrl-btn" onclick="toggleLyricsPicker()" title="選擇歌詞">🎤</button>
+                <button id="bgm-lyrics-pick-btn" class="music-ctrl-btn music-ctrl-btn-wide" onclick="toggleLyricsPicker()" title="選擇歌詞（自動播放，不必切換分頁）">歌詞</button>
                 <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
             </div>
             <div id="bgm-st-controls" class="music-st-section" style="display:none;">

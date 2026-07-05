@@ -2459,6 +2459,14 @@ body.aoe-select-active .token {
     border-color: var(--accent-yellow);
 }
 
+.music-ctrl-btn-wide {
+    width: auto;
+    padding: 0 12px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .music-ctrl-btn.active {
     background: rgba(33, 150, 243, 0.3);
     border-color: #64b5f6;

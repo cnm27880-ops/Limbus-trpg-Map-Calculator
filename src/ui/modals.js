@@ -15,7 +15,7 @@ function initModals() {
         <!-- Add Unit Modal -->
         <div class="modal-overlay" id="modal-add-unit">
             <div class="modal">
-                <div class="modal-header">
+                <div class="modal-header modal-header--create">
                     <span>新增單位</span>
                     <button onclick="closeModal('modal-add-unit')">×</button>
                 </div>
@@ -92,7 +92,7 @@ function initModals() {
         <!-- Batch Modal -->
         <div class="modal-overlay" id="modal-batch">
             <div class="modal">
-                <div class="modal-header">
+                <div class="modal-header modal-header--create">
                     <span>批量新增</span>
                     <button onclick="closeModal('modal-batch')">×</button>
                 </div>
@@ -198,7 +198,7 @@ function initModals() {
         <!-- Modify Max HP Modal -->
         <div class="modal-overlay" id="modal-max-hp">
             <div class="modal">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span id="max-hp-modal-title">修改生命上限</span>
                     <button onclick="closeModal('modal-max-hp')">×</button>
                 </div>
@@ -225,7 +225,7 @@ function initModals() {
         <!-- Assign Owner Modal (分配權限) -->
         <div class="modal-overlay" id="modal-assign-owner">
             <div class="modal">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span id="assign-modal-title">分配棋子給...</span>
                     <button onclick="closeModal('modal-assign-owner')">×</button>
                 </div>
@@ -917,7 +917,7 @@ function openTileEditorModal(existingTileId = null) {
     const modalHtml = `
         <div class="modal-overlay show" id="tile-editor-modal" onclick="closeTileEditorOnOverlay(event)">
             <div class="modal tile-editor-modal" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--create">
                     <span style="font-weight:bold;">🎨 ${isEdit ? '編輯地形' : '新增地形'}</span>
                     <button onclick="closeTileEditorModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
@@ -1184,7 +1184,7 @@ function openTemplateManager() {
     const html = `
         <div class="modal-overlay show" id="template-manager-modal" onclick="if(event.target.id==='template-manager-modal')closeTemplateManager()">
             <div class="modal" style="max-width:560px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span>🗂 模板管理</span>
                     <button onclick="closeTemplateManager()" style="background:none;font-size:1.2rem;">×</button>
                 </div>

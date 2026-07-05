@@ -3,6 +3,10 @@
  * 處理地圖渲染、工具、地形等
  */
 
+// ===== 工具列圖示（以單色線條 SVG 取代 emoji，跟隨按鈕文字色，質感較一致） =====
+const TOOL_ICON_CURSOR = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3l14 8-6.3 1.8L10.5 20z"/></svg>';
+const TOOL_ICON_ERASER = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M18.5 12.5l-7 7H6l-3-3a2 2 0 0 1 0-2.8l9-9a2 2 0 0 1 2.8 0l3.7 3.7a2 2 0 0 1 0 2.8z"/><path d="M13 6l5 5"/><path d="M8 20h9"/></svg>';
+
 // ===== 測距尺狀態 =====
 let isMeasuring = false;
 let rulerPoints = [];       // 所有折點的格子座標 [{x, y}, ...]
@@ -176,7 +180,8 @@ function updateToolbar() {
     const cursorBtn = document.createElement('button');
     cursorBtn.className = 'tool-btn' + (currentTool === 'cursor' ? ' active' : '');
     cursorBtn.dataset.tool = 'cursor';
-    cursorBtn.innerText = '👆';
+    cursorBtn.title = '選取／移動';
+    cursorBtn.innerHTML = TOOL_ICON_CURSOR;
     cursorBtn.onclick = () => setTool('cursor');
     container.appendChild(cursorBtn);
 
@@ -184,7 +189,8 @@ function updateToolbar() {
     const floorBtn = document.createElement('button');
     floorBtn.className = 'tool-btn' + (currentTool === 'floor' ? ' active' : '');
     floorBtn.dataset.tool = 'floor';
-    floorBtn.innerText = '🧹';
+    floorBtn.title = '清除地形（回復地板）';
+    floorBtn.innerHTML = TOOL_ICON_ERASER;
     floorBtn.onclick = () => setTool('floor');
     container.appendChild(floorBtn);
 

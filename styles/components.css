@@ -711,6 +711,13 @@ body.aoe-select-active .token {
     align-items: center;
 }
 
+/* 依用途分色的 Modal 標題列：一眼分辨彈窗類型（戰鬥/狀態/新增/資訊/骰點） */
+.modal-header--combat { background: linear-gradient(90deg, rgba(229, 57, 53, .2), transparent 75%); border-bottom-color: rgba(229, 57, 53, .45); }
+.modal-header--status { background: linear-gradient(90deg, rgba(142, 36, 170, .2), transparent 75%); border-bottom-color: rgba(142, 36, 170, .45); }
+.modal-header--create { background: linear-gradient(90deg, rgba(67, 160, 71, .2), transparent 75%); border-bottom-color: rgba(67, 160, 71, .45); }
+.modal-header--info { background: linear-gradient(90deg, rgba(30, 136, 229, .2), transparent 75%); border-bottom-color: rgba(30, 136, 229, .45); }
+.modal-header--dice { background: linear-gradient(90deg, rgba(253, 216, 53, .2), transparent 75%); border-bottom-color: rgba(253, 216, 53, .45); }
+
 .modal-body {
     padding: 16px;
     display: flex;
@@ -1700,6 +1707,8 @@ body.aoe-select-active .token {
     flex-wrap: wrap;
     gap: 4px;
     margin-bottom: 8px;
+    max-height: 148px;
+    overflow-y: auto;
 }
 
 .emoji-option {

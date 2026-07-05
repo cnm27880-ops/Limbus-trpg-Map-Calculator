@@ -803,7 +803,7 @@ function confirmSTReviewSaveMode(saveInfo) {
     const html = `
         <div class="modal-overlay show" id="save-mode-results" onclick="if(event.target.id==='save-mode-results')document.getElementById('save-mode-results').remove()">
             <div class="modal" style="max-width:420px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--combat">
                     <span style="font-weight:bold;">🎲 豁免抵擋結果</span>
                     <button onclick="document.getElementById('save-mode-results').remove()" style="background:none;font-size:1.2rem;">×</button>
                 </div>

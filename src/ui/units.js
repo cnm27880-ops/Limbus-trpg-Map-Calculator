@@ -798,7 +798,7 @@ function openInitRollModal() {
     const html = `
         <div class="modal-overlay show" id="init-roll-modal" onclick="if(event.target.id==='init-roll-modal')closeInitRollModal()">
             <div class="modal" style="max-width:440px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--dice">
                     <span style="font-weight:bold;">🎲 全體骰先攻（1D10 + 先攻加值）</span>
                     <button onclick="closeInitRollModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
@@ -1112,7 +1112,7 @@ function openShieldModal(unitId) {
     const html = `
         <div class="modal-overlay show" id="shield-modal" onclick="if(event.target.id==='shield-modal')closeShieldModal()">
             <div class="modal" style="max-width:380px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span style="font-weight:bold;">🛡 護盾設定 - ${escapeHtml(u.name || '單位')}</span>
                     <button onclick="closeShieldModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
@@ -1224,7 +1224,7 @@ function openPlayerStatsModal(unitId) {
     const html = `
         <div class="modal-overlay show" id="player-stats-modal" onclick="if(event.target.id==='player-stats-modal')closePlayerStatsModal()">
             <div class="modal" style="max-width:380px;" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span style="font-weight:bold;">📊 角色數值 - ${escapeHtml(u.name || '單位')}</span>
                     <button onclick="closePlayerStatsModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
@@ -1572,7 +1572,7 @@ function openMultiActionModal(bossId) {
 
     const html = `
         <div class="float-modal ma-float-panel" id="multi-action-modal">
-            <div class="modal-header" id="ma-float-header">
+            <div class="modal-header modal-header--combat" id="ma-float-header">
                 <span style="font-weight:bold;">👹 BOSS 設定 - ${escapeHtml(boss.name || '單位')}</span>
                 <span class="float-modal-btns">
                     <button class="float-modal-icon-btn" id="ma-collapse-btn" title="收起">▾</button>

@@ -42,7 +42,7 @@ function openMapManagerModal() {
     const modalHtml = `
         <div class="modal-overlay show" id="map-manager-modal" onclick="closeMapManagerOnOverlay(event)">
             <div class="modal map-manager-modal" onclick="event.stopPropagation()">
-                <div class="modal-header">
+                <div class="modal-header modal-header--info">
                     <span style="font-weight:bold;">🗺️ 地圖管理</span>
                     <button onclick="closeMapManagerModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>

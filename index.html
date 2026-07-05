@@ -108,12 +108,12 @@
         <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;">
             <div class="map-toolbar">
                 <div class="map-tools-scroll" id="dynamic-tools">
-                    <button class="tool-btn active" data-tool="cursor" onclick="setTool('cursor')">👆</button>
-                    <button class="tool-btn" data-tool="floor" onclick="setTool('floor')">🧹</button>
+                    <button class="tool-btn active" data-tool="cursor" onclick="setTool('cursor')" title="選取／移動"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3l14 8-6.3 1.8L10.5 20z"/></svg></button>
+                    <button class="tool-btn" data-tool="floor" onclick="setTool('floor')" title="清除地形（回復地板）"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M18.5 12.5l-7 7H6l-3-3a2 2 0 0 1 0-2.8l9-9a2 2 0 0 1 2.8 0l3.7 3.7a2 2 0 0 1 0 2.8z"/><path d="M13 6l5 5"/><path d="M8 20h9"/></svg></button>
                 </div>
                 <div class="tool-separator"></div>
-                <button class="tool-btn" onclick="resetCamera()" title="視角歸位">🎯</button>
-                <button class="tool-btn" onclick="clearSelection()" title="取消選取">✕</button>
+                <button class="tool-btn" onclick="resetCamera()" title="視角歸位"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+                <button class="tool-btn" onclick="clearSelection()" title="取消選取"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
 
                 <div class="map-controls-right" id="st-map-controls">
                     <button class="map-manager-btn" onclick="triggerMapBgUpload()" title="上傳地圖背景圖片">🖼️ 背景</button>
@@ -234,7 +234,7 @@
 <!-- 發起攻擊 Modal -->
 <div class="modal-overlay" id="attack-modal" onclick="if(event.target.id==='attack-modal')closeAttackModal()">
     <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
+        <div class="modal-header modal-header--combat">
             <span>⚔️ 發起攻擊</span>
             <button onclick="closeAttackModal()">×</button>
         </div>
@@ -323,7 +323,7 @@
 <!-- 防禦 QTE Modal -->
 <div class="modal-overlay" id="defense-qte-modal">
     <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
+        <div class="modal-header modal-header--combat">
             <span>🛡️ 防禦 QTE</span>
         </div>
         <div class="modal-body">
@@ -348,7 +348,7 @@
 <!-- ST 審核 Modal -->
 <div class="modal-overlay" id="st-review-modal">
     <div class="modal" onclick="event.stopPropagation()">
-        <div class="modal-header">
+        <div class="modal-header modal-header--combat">
             <span>🧮 ST 黑箱審核</span>
         </div>
         <div class="modal-body">

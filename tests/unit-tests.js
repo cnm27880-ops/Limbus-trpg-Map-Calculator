@@ -179,7 +179,9 @@ function setupDrain(sourceStatus) {
         { id: 'hero', type: 'player', status: {} }
     ];
     domTable['ero-source'] = { value: 'boss' };
-    domTable['ero-absorber'] = { selectedOptions: [{ value: 'hero' }] };
+    // ero-absorber 現在是「複選 chip」容器（見 erosion-hud.js eroGetSelectedValues），
+    // 以 querySelectorAll('input:checked') 讀取，故 stub 也改為同一介面。
+    domTable['ero-absorber'] = { querySelectorAll: () => [{ value: 'hero' }] };
 }
 
 test('只移除每個負面狀態的一半，保留另一半', () => {

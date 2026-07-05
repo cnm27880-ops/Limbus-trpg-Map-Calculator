@@ -5239,6 +5239,35 @@ body.combat-mode .boss-hud-container {
 .ero-status-line b { color: #ff8a8a; }
 .ero-status-line b.ero-over { color: #ff3b3b; text-shadow: 0 0 8px rgba(255, 60, 60, .8); }
 
+/* 玩家複選 chip：取代原生 <select multiple>，點一下切換勾選，不必按住 Ctrl/⌘ */
+.ero-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.ero-chip-empty { font-size: .78rem; color: var(--text-dim, #aaa); }
+.ero-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: 1px solid var(--border, #2a2a30);
+    border-radius: 12px;
+    background: var(--bg-input, #0d0d0f);
+    font-size: .8rem;
+    color: var(--text-dim, #aaa);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s, color .15s, background .15s;
+}
+.ero-chip input { margin: 0; }
+.ero-chip-revive:has(input:checked) {
+    border-color: #2e6b2e;
+    color: #8fe08f;
+    background: rgba(46, 107, 46, 0.18);
+}
+.ero-chip-absorber:has(input:checked) {
+    border-color: #6b0d12;
+    color: #ff8080;
+    background: rgba(139, 0, 0, 0.18);
+}
+
 /* ===== 戰鬥日誌 / 構築室分頁 ===== */
 #page-log { flex-direction: column; }
 #view-log-encounter {

@@ -500,7 +500,7 @@
                 <button id="bgm-play-btn" class="music-ctrl-btn" onclick="stTogglePlayback()" title="播放/暫停">▶</button>
                 <button id="bgm-stop-btn" class="music-ctrl-btn" onclick="handleStopMusic()" title="停止">⏹</button>
                 <button id="bgm-mute-btn" class="music-ctrl-btn" onclick="toggleMute()" title="靜音">🔊</button>
-                <button id="bgm-lyrics-pick-btn" class="music-ctrl-btn" onclick="toggleLyricsPicker()" title="選擇歌詞">🎤</button>
+                <button id="bgm-lyrics-pick-btn" class="music-ctrl-btn music-ctrl-btn-wide" onclick="toggleLyricsPicker()" title="選擇歌詞（自動播放，不必切換分頁）">歌詞</button>
                 <input type="range" id="bgm-volume" class="music-volume" min="0" max="100" value="50" oninput="setVolume(this.value / 100)" title="音量">
             </div>
             <div id="bgm-st-controls" class="music-st-section" style="display:none;">
@@ -691,6 +691,7 @@
 <!-- 戰鬥日誌 / 構築室（系統 A）與 E.G.O 侵蝕系統（系統 B）：依賴 status-manager / firebase-connection，於 main 之前載入 -->
 <script src="src/ui/log-view.js"></script>
 <script src="src/ui/erosion-hud.js"></script>
+<script src="src/ui/terrain-library.js"></script>
 <script src="src/ui/main.js"></script>
 
 <!-- 幸運大轉盤 -->

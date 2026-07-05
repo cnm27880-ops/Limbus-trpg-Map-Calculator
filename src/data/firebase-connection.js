@@ -889,6 +889,9 @@ function setupRoomListeners() {
 
     // 地形庫（AI 生成，房間共享）
     if (typeof tlSetupListener === 'function') tlSetupListener();
+
+    // AI 地圖助手（僅設定 QAB 選單可見性，對話本身不經 Firebase）
+    if (typeof maiGateUI === 'function') maiGateUI();
 }
 
 /**

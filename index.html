@@ -227,6 +227,25 @@
     <div id="erosion-hud-body" class="floating-hud-body"></div>
 </div>
 
+<!-- AI 地圖協作助手（ST 專屬浮動面板：對話式討論地形，建議先預覽再套用） -->
+<div id="map-ai-panel" class="floating-hud mai-panel hidden">
+    <div class="floating-hud-header" id="map-ai-panel-header">
+        <span>🧭 AI 地圖助手</span>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" onclick="maiClearChat()" title="清空對話">🗑</button>
+            <button class="float-modal-icon-btn" id="map-ai-panel-collapse" title="收起">▾</button>
+            <button class="floating-hud-close" onclick="maiClosePanel()">×</button>
+        </span>
+    </div>
+    <div class="floating-hud-body mai-body">
+        <div id="mai-messages" class="mai-messages"></div>
+        <div class="mai-input-row">
+            <textarea id="mai-input" class="mai-input" rows="1" placeholder="跟我說想要什麼地形／氛圍，或請我調整上一個建議..." onkeydown="maiHandleInputKeydown(event)"></textarea>
+            <button class="modal-btn mai-send-btn" onclick="maiSendMessage()">送出</button>
+        </div>
+    </div>
+</div>
+
 <!-- Modals -->
 <div id="modals-container"></div>
 
@@ -464,6 +483,10 @@
             <span class="qab-menu-icon">🔥</span>
             <span class="qab-menu-text">侵蝕控制台</span>
         </div>
+        <div class="qab-menu-item" id="qab-map-ai-item" style="display:none;" onclick="maiTogglePanel(); closeQABMenu();">
+            <span class="qab-menu-icon">🧭</span>
+            <span class="qab-menu-text">AI 地圖助手</span>
+        </div>
         <div class="qab-menu-item" id="qab-counter-panel-item" style="display:none;" onclick="cpToggleFloatPanel(); closeQABMenu();">
             <span class="qab-menu-icon">⚔️</span>
             <span class="qab-menu-text">本回合對抗分配</span>
@@ -692,6 +715,7 @@
 <script src="src/ui/log-view.js"></script>
 <script src="src/ui/erosion-hud.js"></script>
 <script src="src/ui/terrain-library.js"></script>
+<script src="src/ui/map-ai-assistant.js"></script>
 <script src="src/ui/main.js"></script>
 
 <!-- 幸運大轉盤 -->

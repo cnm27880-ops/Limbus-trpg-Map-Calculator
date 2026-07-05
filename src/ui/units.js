@@ -1851,12 +1851,12 @@ function renderMultiActionList() {
             <div class="ma-action-head">
                 行動${i + 1}${i === 0 ? '（本體）' : ''}
                 <span style="margin-left:auto;display:inline-flex;align-items:center;">
-                <label class="ma-save-switch wheel-toggle" title="開啟後此行動改走「豁免抵擋」結算：發起威脅時自動帶入豁免攻擊面板，由目標擲豁免對抗">
+                <label class="ma-save-switch" title="開啟後此行動改走「豁免抵擋」結算：發起威脅時自動帶入豁免攻擊面板，由目標擲豁免對抗（點擊切換）">
                     <input type="checkbox" ${a.saveResist ? 'checked' : ''} onchange="maToggleSaveResist(${i}, this.checked)">
                     <span class="save-text">豁免抵擋</span>
                     <span class="save-track"></span>
                 </label>
-                <label class="ma-aoe-switch wheel-toggle" title="開啟後此行動視為群體(AOE)效果，以長按 T 鍵的選取模式結算，不會出現在單體威脅快選中">
+                <label class="ma-aoe-switch" title="開啟後此行動視為群體(AOE)效果，以長按 T 鍵的選取模式結算，不會出現在單體威脅快選中（點擊切換）">
                     <input type="checkbox" ${a.aoe ? 'checked' : ''} onchange="maToggleAoe(${i}, this.checked)">
                     <span class="aoe-text">AOE</span>
                     <span class="aoe-track"></span>

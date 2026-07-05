@@ -886,6 +886,9 @@ function setupRoomListeners() {
 
     // 系統 B：刻度時鐘與 E.G.O 侵蝕監聽（clockTicks / events/erosion）
     if (typeof erosionSetupListener === 'function') erosionSetupListener();
+
+    // 地形庫（AI 生成，房間共享）
+    if (typeof tlSetupListener === 'function') tlSetupListener();
 }
 
 /**

@@ -162,7 +162,6 @@ function renderCombatLogs() {
             row.classList.add('log-row-editable');
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.style.marginRight = '8px';
             cb.checked = lvSelectedLogs.has(log.id);
             cb.onchange = () => toggleLogSelection(log.id);
             row.appendChild(cb);

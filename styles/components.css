@@ -32,6 +32,15 @@
     cursor: grabbing;
 }
 
+/* 長按拿起拖曳中：浮起效果 + 蓋過其他棋子，讓落點與標尺清楚可見 */
+.token-dragging {
+    z-index: 200 !important;
+    opacity: 0.88;
+    cursor: grabbing;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55), 0 0 0 3px var(--accent-yellow);
+    transition: transform 0.1s, left 0.08s linear, top 0.08s linear;
+}
+
 .token.selected {
     transform: scale(1.15);
     box-shadow:
@@ -3365,6 +3374,12 @@ body.aoe-select-active .token {
     z-index: 101;
     transform: translate(-50%, -120%);
     box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+
+/* 拖曳移動時消耗超過剩餘移動能量：標籤變紅提醒 */
+.ruler-label-over {
+    color: #ff6b6b;
+    border-color: var(--accent-red);
 }
 
 /* ===== BOSS HUD (魂系風格血條) ===== */

@@ -12,6 +12,15 @@ let isMeasuring = false;
 let rulerPoints = [];       // 所有折點的格子座標 [{x, y}, ...]
 let rulerCurrentPos = null; // 目前游標的格子座標
 
+// ===== 拖曳移動棋子（長按拿起，拖曳中即時顯示標尺）=====
+let dragUnitId = null;             // 目前正在拖曳的單位 id（null = 未拖曳）
+let dragOriginCell = null;         // 拖曳起點格子座標 {x, y}
+let dragHoverCell = null;          // 拖曳中目前懸停的格子座標 {x, y}
+let dragLongPressTimer = null;     // 長按計時器
+let dragCandidateStartPos = null;  // 長按計時中的起始螢幕座標，供中途取消判斷
+const TOKEN_DRAG_LONGPRESS_MS = 250;
+const TOKEN_DRAG_CANCEL_PX = 10;   // 長按計時中若已移動超過此距離，視為一般手勢而取消長按
+
 // ===== 地圖背景圖 =====
 
 function triggerMapBgUpload() {
@@ -405,6 +414,8 @@ function renderMap() {
         if (isBoss) tokenClasses.push('boss');
         if (unitSize === 2) tokenClasses.push('size-2x2');
         if (unitSize === 3) tokenClasses.push('size-3x3');
+        // 拖曳中的棋子：即使因遠端更新觸發重繪，也維持懸停格視覺（不彈回原位）
+        if (u.id === dragUnitId && dragHoverCell) tokenClasses.push('token-dragging');
         
         t.className = tokenClasses.join(' ');
         t.dataset.unitId = u.id;
@@ -415,8 +426,10 @@ function renderMap() {
         t.style.height = tokenSize + 'px';
 
         // +2 是為了配合 CSS 的邊框內縮，使用 Math.round() 避免小數座標導致模糊
-        t.style.left = Math.round(u.x * gridSize + 2) + 'px';
-        t.style.top = Math.round(u.y * gridSize + 2) + 'px';
+        // 拖曳中的棋子：以懸停格取代實際座標，避免重繪時彈回原位
+        const posCell = (u.id === dragUnitId && dragHoverCell) ? dragHoverCell : u;
+        t.style.left = Math.round(posCell.x * gridSize + 2) + 'px';
+        t.style.top = Math.round(posCell.y * gridSize + 2) + 'px';
 
         // GPU 加速，提升渲染清晰度
         t.style.transform = 'translateZ(0)';
@@ -512,12 +525,39 @@ function renderMap() {
             // 記錄起始座標
             tokenClickStartX = e.clientX;
             tokenClickStartY = e.clientY;
+
+            // 長按拿起：僅可操控的單位、且非群體選取模式時才啟動拖曳移動計時
+            const controllable = (typeof canControlUnit === 'function') ? canControlUnit(u) : true;
+            const inAoeMode = (typeof aoeIsSelecting === 'function') && aoeIsSelecting();
+            if (controllable && !inAoeMode) {
+                dragCandidateStartPos = { x: e.clientX, y: e.clientY };
+                clearTimeout(dragLongPressTimer);
+                dragLongPressTimer = setTimeout(() => {
+                    dragLongPressTimer = null;
+                    startTokenDrag(u);
+                }, TOKEN_DRAG_LONGPRESS_MS);
+            }
         };
 
         t.onpointerup = (e) => {
             if (currentTool !== 'cursor') return;
             // 只處理左鍵
             if (e.button !== undefined && e.button !== 0) return;
+
+            clearTimeout(dragLongPressTimer);
+            dragLongPressTimer = null;
+            dragCandidateStartPos = null;
+
+            // 長按已啟動拖曳：放開即落地結算，不走一般選取/點擊流程
+            if (dragUnitId === u.id) {
+                e.stopPropagation();
+                e.preventDefault();
+                finishTokenDrag();
+                tokenClickStartX = null;
+                tokenClickStartY = null;
+                return;
+            }
+
             if (tokenClickStartX === null || tokenClickStartY === null) return;
 
             // 阻止格子接收點擊事件
@@ -989,6 +1029,152 @@ function clearRuler() {
 
     const label = document.getElementById('ruler-label');
     if (label) label.style.display = 'none';
+}
+
+// ===== 拖曳移動棋子（長按拿起，拖曳中即時顯示標尺）=====
+// 不快取 Token DOM 節點：renderMap() 可能因遠端 Firebase 更新而在拖曳中重繪，
+// 每次都以 querySelector 重新取得目前存在的節點，避免操作到已被移除的舊節點。
+function _dragTokenEl(unitId) {
+    return document.querySelector(`.token[data-unit-id="${CSS.escape(String(unitId))}"]`);
+}
+
+/** 長按判定通過：進入拖曳模式，標尺起點設為棋子目前所在格 */
+function startTokenDrag(u) {
+    if (dragUnitId || !u) return;
+    dragUnitId = u.id;
+    dragOriginCell = { x: u.x, y: u.y };
+    dragHoverCell = { x: u.x, y: u.y };
+
+    rulerPoints = [{ ...dragOriginCell }];
+    rulerCurrentPos = null;
+    renderRuler();
+
+    const el = _dragTokenEl(u.id);
+    if (el) el.classList.add('token-dragging');
+}
+
+/** 拖曳中移動：格子變化時才更新（避免同格內小幅移動觸發過多重繪） */
+function updateTokenDragPosition(clientX, clientY) {
+    if (!dragUnitId) return;
+    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
+    const cell = screenToGrid(clientX, clientY);
+    if (dragHoverCell && cell.x === dragHoverCell.x && cell.y === dragHoverCell.y) return;
+    dragHoverCell = cell;
+
+    const el = _dragTokenEl(dragUnitId);
+    if (el) {
+        el.style.left = Math.round(cell.x * gridSize + 2) + 'px';
+        el.style.top = Math.round(cell.y * gridSize + 2) + 'px';
+    }
+
+    rulerCurrentPos = { ...cell };
+    renderRuler();
+    updateDragRulerLabel(clientX, clientY);
+}
+
+/** 更新拖曳中的標尺文字：玩家顯示「消耗／剩餘」，超出移動能量時標紅 */
+function updateDragRulerLabel(clientX, clientY) {
+    const label = document.getElementById('ruler-label');
+    const vp = document.getElementById('map-viewport');
+    if (!label || !vp) return;
+
+    const cost = calcRulerDistance(rulerPoints, rulerCurrentPos);
+    const unit = (typeof findUnitById === 'function') ? findUnitById(dragUnitId) : null;
+
+    let text = `消耗 ${cost} 格`;
+    let over = false;
+    if (unit && myRole !== 'st' && state.isCombatActive && typeof getUnitMoveRemaining === 'function') {
+        const remaining = getUnitMoveRemaining(unit);
+        text = `消耗 ${cost}／剩 ${remaining} 格`;
+        over = cost > remaining;
+    }
+    label.classList.toggle('ruler-label-over', over);
+    label.style.display = 'block';
+    label.textContent = text;
+
+    const vpRect = vp.getBoundingClientRect();
+    label.style.left = (clientX - vpRect.left) + 'px';
+    label.style.top = (clientY - vpRect.top) + 'px';
+}
+
+/** 放開：落地結算移動（沿用既有的能量攔截／ST 自由移動邏輯） */
+function finishTokenDrag() {
+    if (!dragUnitId) return;
+    const unitId = dragUnitId;
+    const origin = dragOriginCell;
+    const cell = dragHoverCell;
+
+    const el = _dragTokenEl(unitId);
+    if (el) el.classList.remove('token-dragging');
+    dragUnitId = null;
+    dragOriginCell = null;
+    dragHoverCell = null;
+    clearRuler();
+
+    if (!cell || !origin || (cell.x === origin.x && cell.y === origin.y)) return;
+
+    const u = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    if (!u) return;
+
+    if (myRole === 'st') {
+        u.x = cell.x;
+        u.y = cell.y;
+        broadcastState();
+    } else {
+        if (typeof applyMoveCost === 'function' && !applyMoveCost(u, cell.x, cell.y)) {
+            renderAll();  // 能量不足：applyMoveCost 已顯示 toast，重繪讓棋子彈回原位
+            return;
+        }
+        sendToHost({ type: 'moveUnit', playerId: myPlayerId, unitId: u.id, x: cell.x, y: cell.y, moveUsed: u.moveUsed || 0 });
+        u.x = cell.x;
+        u.y = cell.y;
+        renderAll();
+    }
+}
+
+/** 中途取消（例如 pointercancel）：不落地，直接還原視覺狀態 */
+function cancelTokenDrag() {
+    if (!dragUnitId) return;
+    const el = _dragTokenEl(dragUnitId);
+    if (el) el.classList.remove('token-dragging');
+    dragUnitId = null;
+    dragOriginCell = null;
+    dragHoverCell = null;
+    clearRuler();
+}
+
+/** 全域指標事件：追蹤長按拿起後的拖曳移動（由 main.js 初始化時呼叫一次） */
+function initTokenDragEvents() {
+    window.addEventListener('pointermove', (e) => {
+        if (dragUnitId) {
+            updateTokenDragPosition(e.clientX, e.clientY);
+            return;
+        }
+        // 長按計時中：移動過多視為一般手勢（例如相機平移），取消長按判定
+        if (dragCandidateStartPos && dragLongPressTimer) {
+            const dist = Math.hypot(e.clientX - dragCandidateStartPos.x, e.clientY - dragCandidateStartPos.y);
+            if (dist > TOKEN_DRAG_CANCEL_PX) {
+                clearTimeout(dragLongPressTimer);
+                dragLongPressTimer = null;
+                dragCandidateStartPos = null;
+            }
+        }
+    });
+
+    // 放開時可能不在棋子元素上方（拖到空地放開），故需全域監聽作為保底結算
+    window.addEventListener('pointerup', () => {
+        clearTimeout(dragLongPressTimer);
+        dragLongPressTimer = null;
+        dragCandidateStartPos = null;
+        if (dragUnitId) finishTokenDrag();
+    });
+
+    window.addEventListener('pointercancel', () => {
+        clearTimeout(dragLongPressTimer);
+        dragLongPressTimer = null;
+        dragCandidateStartPos = null;
+        if (dragUnitId) cancelTokenDrag();
+    });
 }
 
 /**

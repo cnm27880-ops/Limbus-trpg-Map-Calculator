@@ -140,7 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 初始化測距尺事件 (Alt + 拖曳)
     if (typeof initRulerEvents === 'function') initRulerEvents();
-    
+
+    // 初始化棋子長按拖曳移動事件
+    if (typeof initTokenDragEvents === 'function') initTokenDragEvents();
+
     console.log('Limbus Command v7.5 initialized');
 });
 

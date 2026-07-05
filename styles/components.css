@@ -6037,19 +6037,46 @@ select.wheel-cycle { cursor: ns-resize; }
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 8px;
+    padding: 6px 10px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--bg-card);
     margin-bottom: 4px;
     font-size: 0.82rem;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 }
-.init-roll-row .irr-name { flex: 1; min-width: 0; font-weight: 600; }
-.init-roll-row .irr-bonus { color: var(--text-dim); font-size: 0.72rem; white-space: nowrap; }
+.init-roll-row:hover {
+    border-color: var(--accent-yellow);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0 1px rgba(253, 216, 53, 0.2);
+}
+.init-roll-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-yellow, #fdd835);
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.init-roll-row .irr-name {
+    flex: 1;
+    min-width: 0;
+    font-weight: 700;
+    color: var(--text-main);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.init-roll-row .irr-bonus {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
 .init-roll-row .irr-result {
     min-width: 64px;
     text-align: right;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
     color: var(--accent-yellow, #fdd835);
     white-space: nowrap;
+    font-weight: 700;
 }

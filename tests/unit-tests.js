@@ -699,9 +699,9 @@ console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
     aoeSandbox.getActionSlots = aoeSandbox.getActionSlots.bind(aoeSandbox);
     vm.createContext(aoeSandbox);
     const src = readSource('src/ui/aoe-select.js') +
-        '\n;\nvar __aoe = { getActions: aoeGetBossAoeActions };';
+        '\n;\nvar __aoe = { getActions: aoeGetBossAoeActions, resolveName: aoeResolveAttackerName };';
     vm.runInContext(src, aoeSandbox, { filename: 'aoe-select.js' });
-    const getActions = aoeSandbox.__aoe.getActions;
+    const { getActions, resolveName } = aoeSandbox.__aoe;
 
     test('BOSS 多重行動第 7 個行動：AOE 旗標與豁免類型正確讀出（修正「行動7抓不到」BUG）', () => {
         const actions = getActions();
@@ -718,6 +718,17 @@ console.log('\n[Item 6] 戰術移動系統（5 米 1 格，斜走加倍）');
         aoeSandbox.state.units[0].actionSubUnits[6].actionSaveType = 'invalid_type';
         const actions = getActions();
         assert.strictEqual(actions[0].saveType, 'saveReflex', '非法 saveType 應回退到 saveReflex');
+    });
+    test('AOE 模式：未設定 activeBossId 時自動找到本體BOSS（有行動但未點👑的情況）', () => {
+        aoeSandbox.state.activeBossId = null;  // 未點 👑
+        const actions = getActions();
+        assert.strictEqual(actions.length, 1, '即使未設定 activeBossId，仍應找到行動 7');
+        assert.strictEqual(actions[0].aoe, true);
+    });
+    test('AOE 模式：攻擊者名稱在未設定 activeBossId 時也能正確回退', () => {
+        aoeSandbox.state.activeBossId = null;
+        const name = resolveName();
+        assert.strictEqual(name, 'BOSS', '未設定 activeBossId 時應回退到「BOSS」');
     });
 })();
 

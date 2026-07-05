@@ -143,8 +143,12 @@ function aoeResolveSelectedUnits() {
 /** 解析攻擊者名稱：ST 取作用中 BOSS 名稱，玩家取自己控制的單位名稱 */
 function aoeResolveAttackerName() {
     if (typeof myRole !== 'undefined' && myRole === 'st') {
-        const boss = (typeof state !== 'undefined' && state.activeBossId && typeof findUnitById === 'function')
-            ? findUnitById(state.activeBossId) : null;
+        // 優先取 👑 標記的BOSS，沒有的話找第一個本體BOSS
+        let boss = (state.activeBossId && typeof findUnitById === 'function') ? findUnitById(state.activeBossId) : null;
+        if (!boss) {
+            const allUnits = typeof state !== 'undefined' ? state.units : [];
+            boss = allUnits.find(u => (u.type === 'boss' || u.isBoss) && !u.actionSlotOf);
+        }
         if (boss && boss.name) return boss.name;
         return 'BOSS';
     }
@@ -161,8 +165,15 @@ function aoeResolveAttackerName() {
  */
 function aoeGetBossAoeActions() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return [];
-    if (typeof state === 'undefined' || !state.activeBossId || typeof findUnitById !== 'function') return [];
-    const boss = findUnitById(state.activeBossId);
+    if (typeof state === 'undefined' || typeof findUnitById !== 'function') return [];
+
+    // 優先取「作用中的BOSS」（👑按鈕設定的），沒設的話找第一個有行動的本體BOSS
+    let boss = state.activeBossId ? findUnitById(state.activeBossId) : null;
+    if (!boss) {
+        // 找不到時：找任何「本體BOSS」（有行動設定但不是行動條目）
+        const allUnits = typeof state !== 'undefined' ? state.units : [];
+        boss = allUnits.find(u => (u.type === 'boss' || u.isBoss) && !u.actionSlotOf && (!!u.actionAoe || (typeof getActionSlots === 'function' && getActionSlots(u.id).some(s => !!s.actionAoe))));
+    }
     if (!boss) return [];
 
     const all = [boss];
@@ -590,17 +601,22 @@ function aoeExecuteSaveMode(units, atkValue, dmgType, autoRoll, applyStatus) {
 
     // BOSS 動作指定的附加狀態（若有，目前從作用中 BOSS 的 AOE 行動讀取；若 ST 沒選則為空陣列）
     let actionStatuses = [];
-    if (applyStatus && typeof state !== 'undefined' && state.activeBossId && typeof findUnitById === 'function') {
-        const boss = findUnitById(state.activeBossId);
-        if (boss && Array.isArray(boss.actionStatuses)) actionStatuses = boss.actionStatuses.map(s => ({ ...s }));
-        if (typeof getActionSlots === 'function') {
-            const slots = getActionSlots(boss.id);
-            // 合併所有 AOE 動作的狀態（避免 ST 在「AOE 動作快選」選了不同動作，卻被只套本體的狀態）
-            slots.forEach(s => {
-                if (s.actionAoe && Array.isArray(s.actionStatuses)) {
-                    s.actionStatuses.forEach(st => actionStatuses.push({ ...st }));
-                }
-            });
+    if (applyStatus && typeof state !== 'undefined' && typeof findUnitById === 'function') {
+        let boss = state.activeBossId ? findUnitById(state.activeBossId) : null;
+        if (!boss) {
+            const allUnits = state.units || [];
+            boss = allUnits.find(u => (u.type === 'boss' || u.isBoss) && !u.actionSlotOf);
+        }
+        if (boss) {
+            if (Array.isArray(boss.actionStatuses)) actionStatuses = boss.actionStatuses.map(s => ({ ...s }));
+            if (typeof getActionSlots === 'function') {
+                const slots = getActionSlots(boss.id);
+                slots.forEach(s => {
+                    if (s.actionAoe && Array.isArray(s.actionStatuses)) {
+                        s.actionStatuses.forEach(st => actionStatuses.push({ ...st }));
+                    }
+                });
+            }
         }
     }
 

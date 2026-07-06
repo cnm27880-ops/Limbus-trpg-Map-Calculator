@@ -887,9 +887,6 @@ function setupRoomListeners() {
     // 系統 B：刻度時鐘與 E.G.O 侵蝕監聽（clockTicks / events/erosion）
     if (typeof erosionSetupListener === 'function') erosionSetupListener();
 
-    // 地形庫（AI 生成，房間共享）
-    if (typeof tlSetupListener === 'function') tlSetupListener();
-
     // AI 地圖助手：QAB 選單可見性 + 地圖庫房間共享（對話本身/畫布不經 Firebase，只有存檔的地圖庫同步）
     if (typeof maiGateUI === 'function') maiGateUI();
     if (typeof maiSetupListener === 'function') maiSetupListener();

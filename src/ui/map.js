@@ -6,7 +6,6 @@
 // ===== 工具列圖示（以單色線條 SVG 取代 emoji，跟隨按鈕文字色，質感較一致） =====
 const TOOL_ICON_CURSOR = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3l14 8-6.3 1.8L10.5 20z"/></svg>';
 const TOOL_ICON_ERASER = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M18.5 12.5l-7 7H6l-3-3a2 2 0 0 1 0-2.8l9-9a2 2 0 0 1 2.8 0l3.7 3.7a2 2 0 0 1 0 2.8z"/><path d="M13 6l5 5"/><path d="M8 20h9"/></svg>';
-const TOOL_ICON_LIBRARY = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M4 4.5C4 3.7 4.7 3 5.5 3H11v18H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M20 4.5c0-.8-.7-1.5-1.5-1.5H13v18h5.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M11 3v18M13 3v18"/></svg>';
 
 // ===== 測距尺狀態 =====
 let isMeasuring = false;
@@ -235,7 +234,7 @@ function updateToolbar() {
         container.appendChild(btn);
     });
 
-    // ST 才顯示「+」新增地形按鈕，以及「地形庫」AI 生成入口
+    // ST 才顯示「+」新增地形按鈕
     if (myRole === 'st') {
         const addBtn = document.createElement('button');
         addBtn.className = 'tool-btn tool-btn-add';
@@ -245,15 +244,6 @@ function updateToolbar() {
             if (typeof openTileEditorModal === 'function') openTileEditorModal();
         };
         container.appendChild(addBtn);
-
-        const libBtn = document.createElement('button');
-        libBtn.className = 'tool-btn tool-btn-wide';
-        libBtn.title = '用 AI 依主題生成一組地形，存起來隨時套用';
-        libBtn.innerHTML = TOOL_ICON_LIBRARY + '<span>地形庫</span>';
-        libBtn.onclick = () => {
-            if (typeof tlOpenModal === 'function') tlOpenModal();
-        };
-        container.appendChild(libBtn);
     }
 }
 

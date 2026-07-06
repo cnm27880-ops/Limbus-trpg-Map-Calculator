@@ -7,7 +7,7 @@
  * 的紀錄，之後隨時可以：套用到正式地圖（覆蓋現有版面，套用前會提示確認）、載回畫布繼續編輯、
  * 複製成新的一份、改名、刪除。
  *
- * 沿用「人格鍛造爐」/「怪物庫」/「地形庫」的 AI 連線設定（同一組 localStorage 金鑰）。
+ * 沿用「人格鍛造爐」/「怪物庫」的 AI 連線設定（同一組 localStorage 金鑰）。
  * 權限分離：僅 ST 可開啟與操作，玩家看不到入口。
  * 防禦性：所有 Firebase / DOM / AI 操作皆以 typeof 與 try-catch 防呆，絕不影響地圖與單位同步。
  */
@@ -119,7 +119,7 @@ async function maiSendMessage() {
     const apiKey = (maiGetSetting(MAI_AI_KEY_KEY, '') || '').trim();
     const model = (maiGetSetting(MAI_AI_MODEL_KEY, MAI_AI_DEFAULT_MODEL) || '').trim() || MAI_AI_DEFAULT_MODEL;
     if (!apiKey) {
-        maiMessages.push({ role: 'system', text: '請先在「人格鍛造爐」填入 API Key（與怪物庫/地形庫共用同一組設定）。' });
+        maiMessages.push({ role: 'system', text: '請先在「人格鍛造爐」填入 API Key（與怪物庫共用同一組設定）。' });
         maiRenderMessages();
         return;
     }

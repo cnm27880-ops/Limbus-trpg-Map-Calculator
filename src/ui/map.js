@@ -630,29 +630,45 @@ function renderMap() {
             }
         }
 
-        // ===== 懸浮狀態提示框 (Tooltip) =====
+        // ===== 懸浮狀態提示框 (Tooltip)：每個狀態一個色塊小卡，依增益/減益上色，多狀態時自動換行 =====
         if (u.status && typeof u.status === 'object' && Object.keys(u.status).length > 0) {
             const statusKeys = Object.keys(u.status);
+            const tooltip = document.createElement('div');
+            tooltip.className = 'token-tooltip';
             let hasValidStatus = false;
-            let tooltipContent = '';
 
             statusKeys.forEach(key => {
                 if (!key) return;
                 const val = parseInt(u.status[key]);
-                if (val > 0) {
-                    hasValidStatus = true;
-                    // 呼叫 getStatusById 取得中文名稱和圖示 (定義於 status-config.js)
-                    const statusDef = typeof getStatusById === 'function' ? getStatusById(key) : null;
-                    const statusName = statusDef ? `${statusDef.icon || ''} ${statusDef.name}` : key;
-                    tooltipContent += `<div>${statusName}: ${val}</div>`;
+                if (val <= 0) return;
+                hasValidStatus = true;
+
+                // 呼叫 getStatusById 取得中文名稱和圖示 (定義於 status-config.js)
+                const statusDef = (typeof getStatusById === 'function') ? getStatusById(key) : null;
+                const isDebuff = (typeof isDebuffStatus === 'function') ? isDebuffStatus(key) : false;
+
+                const chip = document.createElement('span');
+                chip.className = 'token-status-chip ' + (isDebuff ? 'is-debuff' : 'is-buff');
+
+                if (statusDef && statusDef.icon) {
+                    const icon = document.createElement('span');
+                    icon.className = 'token-status-icon';
+                    icon.textContent = statusDef.icon;
+                    chip.appendChild(icon);
                 }
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = statusDef ? statusDef.name : key;
+                chip.appendChild(nameSpan);
+                const valSpan = document.createElement('span');
+                valSpan.className = 'token-status-val';
+                valSpan.textContent = val;
+                chip.appendChild(valSpan);
+
+                tooltip.appendChild(chip);
             });
 
             if (hasValidStatus) {
                 t.classList.add('token-has-status');
-                const tooltip = document.createElement('div');
-                tooltip.className = 'token-tooltip';
-                tooltip.innerHTML = tooltipContent;
                 t.appendChild(tooltip);
 
                 // 手機端支援：長按/右鍵切換顯示 tooltip

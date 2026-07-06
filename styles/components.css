@@ -3907,26 +3907,58 @@ body.combat-mode .boss-hud-container {
 
 .token-tooltip {
     position: absolute;
-    top: -100%;
+    bottom: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(12, 12, 15, 0.95);
     border: 1px solid var(--border);
-    color: #fff;
-    padding: 6px 10px;
-    border-radius: 4px;
+    border-radius: 8px;
+    padding: 5px;
     font-size: 11px;
-    line-height: 1.4;
-    white-space: nowrap;
+    line-height: 1.3;
     z-index: 1000;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.15s ease;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    width: max-content;
+    max-width: 200px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 
 .token:hover .token-tooltip,
 .token.show-tooltip .token-tooltip {
     opacity: 1;
+}
+
+.token-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-main, #e8e8ec);
+}
+.token-status-chip.is-debuff {
+    background: rgba(229, 57, 53, 0.16);
+    border-color: rgba(229, 57, 53, 0.4);
+    color: #ff9e9e;
+}
+.token-status-chip.is-buff {
+    background: rgba(67, 160, 71, 0.16);
+    border-color: rgba(67, 160, 71, 0.4);
+    color: #8fe08f;
+}
+.token-status-icon { font-size: 11px; line-height: 1; }
+.token-status-val {
+    font-family: var(--font-mono, monospace);
+    font-weight: 700;
+    opacity: 0.9;
 }
 
 /* ===== 戰鬥 QTE / 黑箱審核 Modals ===== */
@@ -3937,6 +3969,14 @@ body.combat-mode .boss-hud-container {
     text-align: center;
     margin-bottom: 6px;
 }
+
+.combat-modal-distance {
+    font-size: .78rem;
+    color: var(--text-dim, #999);
+    text-align: center;
+    margin: -4px 0 8px;
+}
+.combat-modal-distance:empty { display: none; }
 
 /* 戰鬥 Modal 欄位寬度保護：避免 number 輸入框溢出格子 */
 #attack-modal .calc-field,
@@ -6350,6 +6390,11 @@ select.wheel-cycle { cursor: ns-resize; }
     border-color: var(--accent-red, #e53935);
     color: #ff9e9e;
     background: rgba(229, 57, 53, 0.12);
+}
+.atk-target-dist {
+    font-family: var(--font-mono, monospace);
+    font-size: .7rem;
+    opacity: .7;
 }
 
 /* ===== 骰先攻 Modal ===== */

@@ -2121,154 +2121,7 @@ body.aoe-select-active .token {
 
 /* Hotkey panel responsive - handled by QAB responsive rules */
 
-/* ===== Map Manager Modal ===== */
-.map-manager-modal {
-    max-width: 500px;
-    width: 95vw;
-}
-
-.map-save-section {
-    padding: 15px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-card);
-}
-
-.map-save-section .section-title,
-.map-list-section .section-title {
-    font-weight: bold;
-    margin-bottom: 10px;
-    color: var(--accent-yellow);
-}
-
-.save-form {
-    display: flex;
-    gap: 8px;
-}
-
-.save-form input {
-    flex: 1;
-    padding: 10px 12px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-size: 0.9rem;
-}
-
-.save-form input:focus {
-    border-color: var(--accent-green);
-    outline: none;
-}
-
-.save-btn {
-    padding: 10px 20px;
-    background: var(--accent-green);
-    color: #000;
-    border: none;
-    border-radius: 6px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.save-btn:hover {
-    filter: brightness(1.1);
-}
-
-.map-info {
-    margin-top: 8px;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-}
-
-.map-list-section {
-    padding: 15px;
-    max-height: 350px;
-    overflow-y: auto;
-}
-
-.map-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.no-maps {
-    text-align: center;
-    padding: 30px;
-    color: var(--text-dim);
-}
-
-.saved-map-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    transition: all 0.15s;
-}
-
-.saved-map-item:hover {
-    border-color: var(--accent-blue);
-    transform: translateX(3px);
-}
-
-.map-item-info {
-    flex: 1;
-    min-width: 0;
-}
-
-.map-item-name {
-    font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.map-item-meta {
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    margin-top: 2px;
-}
-
-.map-item-actions {
-    display: flex;
-    gap: 6px;
-    margin-left: 10px;
-}
-
-.map-action-btn {
-    padding: 6px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.15s;
-}
-
-.map-action-btn.load {
-    background: var(--accent-blue);
-    color: #fff;
-}
-
-.map-action-btn.load:hover {
-    filter: brightness(1.15);
-}
-
-.map-action-btn.delete {
-    background: var(--bg-input);
-    color: var(--text-dim);
-}
-
-.map-action-btn.delete:hover {
-    background: var(--accent-red);
-    color: #fff;
-}
-
-/* Map Manager Button in Toolbar */
+/* 地圖工具列按鈕（背景圖上傳／清除共用樣式） */
 .map-manager-btn {
     padding: 6px 12px;
     background: var(--accent-purple);
@@ -5321,12 +5174,14 @@ body.combat-mode .boss-hud-container {
 /* ===== AI 地圖畫布助手（大型置中彈窗，左畫布／右聊天，紫色系跟其他 AI 功能一致） ===== */
 .mai-overlay { z-index: 9600; } /* 蓋過浮動面板（BOSS/侵蝕控制台等），確保置中彈窗在最上層 */
 .mai-panel {
-    width: 80vw;
-    height: 80vh;
-    max-width: 80vw;
-    max-height: 80vh;
+    width: 90vw;
+    height: 90vh;
+    max-width: 90vw;
+    max-height: 90vh;
     display: flex;
     flex-direction: column;
+    border: 3px solid var(--accent-purple, #8e24aa);
+    box-shadow: 0 0 0 1px rgba(142, 36, 170, 0.35), 0 12px 48px rgba(0, 0, 0, 0.65), 0 0 32px rgba(142, 36, 170, 0.25);
 }
 .mai-body { display: flex; flex-direction: column; padding: 12px; overflow-y: auto; flex: 1; min-height: 0; gap: 10px; }
 
@@ -5425,7 +5280,53 @@ body.combat-mode .boss-hud-container {
     min-width: 10px;
     background: #17171b;
     border-radius: 1px;
+    cursor: pointer;
 }
+.mai-canvas-cell:hover { outline: 1px solid rgba(253, 216, 53, 0.6); outline-offset: -1px; }
+
+/* 畫布素材列：可直接沿用正式地圖現有地形，也能隨時新增／刪除，選取後直接在畫布上塗 */
+.mai-materials-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border, #2a2a30);
+}
+.mai-materials { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.mai-materials-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.mai-materials-btn { padding: 4px 9px; font-size: .7rem; background: var(--bg-input, #0d0d0f); white-space: nowrap; }
+.mai-material-wrap {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 6px 2px 2px;
+    border-radius: 12px;
+    background: var(--bg-input, #0d0d0f);
+    border: 1px solid transparent;
+}
+.mai-material-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--border, #2a2a30);
+    cursor: pointer;
+    padding: 0;
+    flex: 0 0 auto;
+}
+.mai-material-swatch.active { border-color: var(--accent-yellow, #fdd835); box-shadow: 0 0 0 1px var(--accent-yellow, #fdd835); }
+.mai-material-name { font-size: .68rem; color: var(--text-dim, #999); max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mai-material-del {
+    background: none;
+    border: none;
+    color: var(--text-dim, #999);
+    font-size: .8rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+.mai-material-del:hover { color: var(--accent-red, #e53935); }
 .mai-canvas-save-row {
     display: flex;
     gap: 6px;
@@ -5536,6 +5437,68 @@ body.combat-mode .boss-hud-container {
     border-color: #6b0d12;
     color: #ff8080;
     background: rgba(139, 0, 0, 0.18);
+}
+
+/* ===== 戰爭迷霧管理面板 ===== */
+.fog-section { margin-bottom: 14px; }
+.fog-section-title {
+    font-weight: bold;
+    color: var(--accent-yellow, #fdd835);
+    font-size: .85rem;
+    margin-bottom: 6px;
+}
+.fog-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .88rem;
+    color: var(--text-main, #e8e8ec);
+    cursor: pointer;
+}
+.fog-hint { font-size: .74rem; color: var(--text-dim, #999); line-height: 1.5; margin: 6px 0 0; }
+.fog-field { margin-bottom: 8px; }
+.fog-field label { display: block; font-size: .75rem; color: var(--text-dim, #aaa); margin-bottom: 3px; }
+.fog-select {
+    width: 100%;
+    background: #0e0e11;
+    border: 1px solid var(--border, #2a2a30);
+    color: var(--text-main, #e8e8ec);
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: .85rem;
+}
+.fog-btn-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.fog-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 7px 10px;
+    background: var(--bg-input, #0d0d0f);
+    border: 1px solid var(--border, #2a2a30);
+    border-radius: 6px;
+    color: var(--text-main, #e8e8ec);
+    font-size: .8rem;
+    cursor: pointer;
+    transition: filter .15s, border-color .15s, background .15s;
+}
+.fog-btn:hover { filter: brightness(1.2); }
+.fog-btn.active {
+    border-color: var(--accent-purple, #8e24aa);
+    background: rgba(142, 36, 170, 0.25);
+    color: #e5c6f2;
+}
+.fog-btn.fog-btn-reset { width: 100%; border-color: var(--accent-red, #e53935); color: #ff8a8a; }
+.fog-shared-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.fog-shared-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border, #2a2a30);
+    border-radius: 6px;
+    background: var(--bg-card, #1a1a1f);
+    font-size: .8rem;
+    color: var(--text-main, #e8e8ec);
 }
 
 /* ===== 戰鬥日誌 / 構築室分頁 ===== */

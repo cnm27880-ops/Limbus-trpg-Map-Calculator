@@ -893,6 +893,9 @@ function setupRoomListeners() {
     // AI 地圖助手：QAB 選單可見性 + 地圖庫房間共享（對話本身/畫布不經 Firebase，只有存檔的地圖庫同步）
     if (typeof maiGateUI === 'function') maiGateUI();
     if (typeof maiSetupListener === 'function') maiSetupListener();
+
+    // 戰爭迷霧：啟用開關 + 各玩家的已探索紀錄
+    if (typeof fogSetupListener === 'function') fogSetupListener();
 }
 
 /**

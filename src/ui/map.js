@@ -277,6 +277,10 @@ function setTool(tool) {
             desc = "清除格子";
         } else if (tool === 'cursor') {
             desc = "選擇單位 / 查看格子";
+        } else if (tool === 'fog-hide') {
+            desc = "迷霧補畫：恢復迷霧（隱藏）";
+        } else if (tool === 'fog-reveal') {
+            desc = "迷霧補畫：手動顯示（清除迷霧）";
         } else {
             const t = (typeof getTileFromPalette === 'function')
                 ? getTileFromPalette(parseInt(tool))
@@ -405,6 +409,9 @@ function renderMap() {
 
     // 在 canvas 上繪製格子地形、格線與部署高亮
     drawMapCanvas();
+
+    // 戰爭迷霧疊加層（獨立 canvas，蓋在 Token 之上；由自身的動畫迴圈持續重繪翻滾效果）
+    if (typeof ensureFogCanvas === 'function') ensureFogCanvas();
 
     // 渲染 Tokens（先渲染大型單位，再渲染小型單位，確保小單位不被遮蓋）
     const sortedUnits = state.units.filter(u => u.x >= 0).sort((a, b) => {
@@ -794,6 +801,9 @@ let mapSyncTimeout = null;
 function handleMapInput(x, y, e) {
     if (currentTool === 'cursor') return;
     if (myRole !== 'st') return;
+
+    // 戰爭迷霧補畫筆刷：交給 fog.js 處理，不繼續套用地形繪製
+    if (typeof fogHandleToolPaint === 'function' && fogHandleToolPaint(currentTool, x, y)) return;
 
     let newVal = (currentTool === 'floor') ? 0 : parseInt(currentTool);
 

@@ -543,40 +543,19 @@ function maiTogglePanel() {
         if (typeof showToast === 'function') showToast('只有 ST 可以使用 AI 地圖助手');
         return;
     }
-    const panel = document.getElementById('map-ai-panel');
-    if (!panel) return;
-    if (panel.classList.contains('hidden')) {
-        panel.classList.remove('hidden');
-        if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);
+    const overlay = document.getElementById('map-ai-overlay');
+    if (!overlay) return;
+    if (!overlay.classList.contains('show')) {
+        overlay.classList.add('show');
         maiRenderMessages();
         maiRenderCanvas();
         maiRenderLibrary();
     } else {
-        panel.classList.add('hidden');
+        overlay.classList.remove('show');
     }
 }
 
 function maiClosePanel() {
-    const panel = document.getElementById('map-ai-panel');
-    if (panel) panel.classList.add('hidden');
-}
-
-function maiInitFloatPanel() {
-    if (typeof makeFloatingPanel !== 'function') return;
-    makeFloatingPanel({
-        panelId: 'map-ai-panel',
-        headerId: 'map-ai-panel-header',
-        collapseBtnId: 'map-ai-panel-collapse',
-        storageKey: 'limbus_map_ai_panel',
-        defaultPos: { x: Math.max(20, window.innerWidth - 700), y: 70 },
-        dock: { icon: '🧭', title: 'AI 地圖助手' },
-        restoreDock: true,
-    });
-}
-if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', maiInitFloatPanel);
-    } else {
-        maiInitFloatPanel();
-    }
+    const overlay = document.getElementById('map-ai-overlay');
+    if (overlay) overlay.classList.remove('show');
 }

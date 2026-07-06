@@ -227,25 +227,18 @@
     <div id="erosion-hud-body" class="floating-hud-body"></div>
 </div>
 
-<!-- AI 地圖畫布助手（ST 專屬浮動面板：左邊聊天、右邊獨立畫布，滿意後存入地圖庫再套用到正式地圖） -->
-<div id="map-ai-panel" class="floating-hud mai-panel hidden">
-    <div class="floating-hud-header" id="map-ai-panel-header">
+<!-- AI 地圖畫布助手（ST 專屬大型置中彈窗：左邊獨立畫布、右邊聊天，滿意後存入地圖庫再套用到正式地圖） -->
+<div class="modal-overlay mai-overlay" id="map-ai-overlay" onclick="if(event.target.id==='map-ai-overlay')maiClosePanel()">
+<div id="map-ai-panel" class="modal mai-panel" onclick="event.stopPropagation()">
+    <div class="modal-header modal-header--ai" id="map-ai-panel-header">
         <span>🧭 AI 地圖畫布</span>
         <span class="float-modal-btns">
             <button class="float-modal-icon-btn" onclick="maiClearChat()" title="清空對話">🗑</button>
-            <button class="float-modal-icon-btn" id="map-ai-panel-collapse" title="收起">▾</button>
-            <button class="floating-hud-close" onclick="maiClosePanel()">×</button>
+            <button onclick="maiClosePanel()" style="background:none;font-size:1.2rem;">×</button>
         </span>
     </div>
-    <div class="floating-hud-body mai-body">
+    <div class="mai-body">
         <div class="mai-main-row">
-            <div class="mai-chat-col">
-                <div id="mai-messages" class="mai-messages"></div>
-                <div class="mai-input-row">
-                    <textarea id="mai-input" class="mai-input" rows="1" placeholder="跟我說想要什麼地形／氛圍..." onkeydown="maiHandleInputKeydown(event)"></textarea>
-                    <button class="modal-btn mai-send-btn" onclick="maiSendMessage()">送出</button>
-                </div>
-            </div>
             <div class="mai-canvas-col">
                 <div class="mai-canvas-toolbar">
                     <span class="mai-canvas-size" id="mai-canvas-size-label">15 x 15</span>
@@ -260,6 +253,13 @@
                     <button class="modal-btn mai-save-btn" onclick="maiSaveCanvasToLibrary()">💾 儲存到地圖庫</button>
                 </div>
             </div>
+            <div class="mai-chat-col">
+                <div id="mai-messages" class="mai-messages"></div>
+                <div class="mai-input-row">
+                    <textarea id="mai-input" class="mai-input" rows="1" placeholder="跟我說想要什麼地形／氛圍..." onkeydown="maiHandleInputKeydown(event)"></textarea>
+                    <button class="modal-btn mai-send-btn" onclick="maiSendMessage()">送出</button>
+                </div>
+            </div>
         </div>
         <div class="tile-editor-divider"></div>
         <div class="mai-library-section">
@@ -267,6 +267,7 @@
             <div id="mai-library-list" class="mai-library-list"></div>
         </div>
     </div>
+</div>
 </div>
 
 <!-- Modals -->

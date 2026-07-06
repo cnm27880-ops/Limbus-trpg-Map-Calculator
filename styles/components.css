@@ -726,6 +726,7 @@ body.aoe-select-active .token {
 .modal-header--create { background: linear-gradient(90deg, rgba(67, 160, 71, .2), transparent 75%); border-bottom-color: rgba(67, 160, 71, .45); }
 .modal-header--info { background: linear-gradient(90deg, rgba(30, 136, 229, .2), transparent 75%); border-bottom-color: rgba(30, 136, 229, .45); }
 .modal-header--dice { background: linear-gradient(90deg, rgba(253, 216, 53, .2), transparent 75%); border-bottom-color: rgba(253, 216, 53, .45); }
+.modal-header--ai { background: linear-gradient(90deg, rgba(142, 36, 170, .2), transparent 75%); border-bottom-color: rgba(142, 36, 170, .45); }
 
 .modal-body {
     padding: 16px;
@@ -5277,24 +5278,21 @@ body.combat-mode .boss-hud-container {
 }
 .floating-hud-body { padding: 12px 14px; overflow-y: auto; }
 
-/* ===== AI 地圖畫布助手（左聊天／右畫布，紫色系跟其他 AI 功能一致） ===== */
+/* ===== AI 地圖畫布助手（大型置中彈窗，左畫布／右聊天，紫色系跟其他 AI 功能一致） ===== */
+.mai-overlay { z-index: 9600; } /* 蓋過浮動面板（BOSS/侵蝕控制台等），確保置中彈窗在最上層 */
 .mai-panel {
-    border-color: #4a2a6b;
-    bottom: auto;
-    width: min(680px, 94vw);
-    height: min(620px, 86vh);
+    width: 80vw;
+    height: 80vh;
+    max-width: 80vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
 }
-.mai-panel .floating-hud-header {
-    color: #c9aaff;
-    background: linear-gradient(135deg, #180a24, #101012);
-    border-bottom-color: #4a2a6b;
-}
-.mai-panel.collapsed { height: auto; }
 .mai-body { display: flex; flex-direction: column; padding: 12px; overflow-y: auto; flex: 1; min-height: 0; gap: 10px; }
 
-.mai-main-row { display: flex; gap: 10px; flex: 1; min-height: 280px; }
-.mai-chat-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border, #2a2a30); border-radius: 8px; overflow: hidden; }
-.mai-canvas-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border, #2a2a30); border-radius: 8px; overflow: hidden; background: var(--bg-card, #1a1a1f); }
+.mai-main-row { display: flex; gap: 10px; flex: 1; min-height: 0; }
+.mai-canvas-col { flex: 1 1 55%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border, #2a2a30); border-radius: 8px; overflow: hidden; background: var(--bg-card, #1a1a1f); }
+.mai-chat-col { flex: 1 1 45%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border, #2a2a30); border-radius: 8px; overflow: hidden; }
 
 .mai-messages {
     flex: 1;

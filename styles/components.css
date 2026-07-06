@@ -1833,7 +1833,10 @@ body.aoe-select-active .token {
     border: 1px solid var(--border);
     border-radius: 10px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
+    /* 選單項目會隨功能增加持續變長；用捲動取代 hidden，避免在較矮的視窗被裁到畫面外而「找不到」某個選項 */
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
     opacity: 0;
     transform: translateY(10px) scale(0.95);
     pointer-events: none;
@@ -3474,6 +3477,7 @@ body.combat-mode .boss-hud-container {
     .qab-menu {
         min-width: 150px;
         bottom: 55px;
+        max-height: calc(100vh - 90px);
     }
 
     .qab-menu-item {
@@ -5274,19 +5278,28 @@ body.combat-mode .boss-hud-container {
 }
 .mai-canvas-cell:hover { outline: 1px solid rgba(253, 216, 53, 0.6); outline-offset: -1px; }
 
-/* 畫布素材列：可直接沿用正式地圖現有地形，也能隨時新增／刪除，選取後直接在畫布上塗 */
+/* 畫布素材列：可直接沿用正式地圖現有地形，也能隨時新增／刪除，選取後直接在畫布上塗。
+   永遠維持單排：素材多到放不下時，左側清單自己橫向捲動，右側兩顆按鈕固定不換行。 */
 .mai-materials-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     padding: 5px 8px;
     border-bottom: 1px solid var(--border, #2a2a30);
     background: rgba(255, 255, 255, 0.015);
 }
-.mai-materials { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
-.mai-materials-actions { display: flex; gap: 5px; flex: 0 0 auto; }
+.mai-materials {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+}
+.mai-materials-actions { display: flex; gap: 5px; flex: 0 0 auto; white-space: nowrap; }
 .mai-materials-btn {
     display: inline-flex;
     align-items: center;
@@ -5312,6 +5325,7 @@ body.combat-mode .boss-hud-container {
     border-radius: 12px;
     background: var(--bg-input, #0d0d0f);
     border: 1px solid transparent;
+    flex: 0 0 auto;
 }
 .mai-material-swatch {
     width: 16px;

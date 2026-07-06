@@ -17,8 +17,8 @@
  * 防禦性：所有 Firebase / DOM 操作皆以 typeof 與 try-catch 防呆，絕不影響地圖與單位同步。
  */
 
-const FOG_TEMP_ALPHA = 0.5;  // 暫時視野（半透明）
-const FOG_FULL_ALPHA = 0.88; // 完全未探索
+const FOG_TEMP_ALPHA = 0.5;  // 暫時視野（半透明，站在附近但還沒踏進去）
+const FOG_FULL_ALPHA = 0.985; // 完全未探索：幾乎不透明，看不到底下的地形顏色
 const FOG_MASK_CELL_PX = 16; // 遮罩畫布每格的像素數（刻意降解析度，配合模糊營造柔和邊界，效能也更省）
 const FOG_MASK_BLUR_PX = 11; // 遮罩模糊半徑：讓格子邊界暈開，不再稜角分明
 
@@ -192,7 +192,8 @@ function drawFogCanvas(t) {
 
     const temp = fogRecomputeMyVisibility();
     const alphaGrid = fogBuildAlphaGrid(fogRevealedMine, temp);
-    fogDrawCloudLayer(ctx, w, h, t, alphaGrid);
+    // allowHover=false：真正的玩家畫面不套用滑鼠撥霧效果，避免拿滑鼠掃過整張地圖偷看地形
+    fogDrawCloudLayer(ctx, w, h, t, alphaGrid, false);
 }
 
 /**
@@ -292,10 +293,13 @@ function fogApplyHoverDisturbance(blurCanvas) {
 
 /**
  * 畫出一片連續飄流的雲霧材質，範圍橫跨整張地圖、不受格子邊界限制——多團柔和光斑
- * 以各自的相位緩慢飄移、彼此重疊，營造「身在霧氣中、霧氣繚繞」的流動感；滑鼠附近
- * 的光斑會暫時放大翻騰幅度與速度，呈現被擾動的樣子。畫完後用模糊遮罩裁切能見度。
+ * 以各自的相位緩慢飄移、彼此重疊，營造「身在霧氣中、霧氣繚繞」的流動感。
+ *
+ * @param {boolean} allowHover 是否套用「滑鼠撥開霧氣」的翻騰/擾動效果。
+ *   只有 ST 自己看畫面時（補畫預覽／玩家視角預覽）才會是 true——玩家的實際畫面
+ *   一律 false，否則玩家可以拿滑鼠掃過整張地圖，靠撥開的縫隙偷看迷霧下的地形。
  */
-function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
+function fogDrawCloudLayer(ctx, w, h, t, alphaGrid, allowHover) {
     ctx.save();
 
     // 基礎柔霧色調（之後會被遮罩裁切出濃淡分佈，本身不分格子）
@@ -306,6 +310,7 @@ function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
     const spacing = gridSize * 1.7; // 光斑基準間距：刻意跟格線錯開分佈，避免視覺上又對齊回格子
     const nx = Math.max(1, Math.ceil(w / spacing) + 2);
     const ny = Math.max(1, Math.ceil(h / spacing) + 2);
+    const hoverPx = allowHover ? fogHoverPx : null;
 
     for (let iy = -1; iy < ny; iy++) {
         for (let ix = -1; ix < nx; ix++) {
@@ -313,7 +318,7 @@ function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
             const baseX = ix * spacing + seed * spacing * 0.6;
             const baseY = iy * spacing + (1 - seed) * spacing * 0.6;
 
-            const distToHover = fogHoverPx ? Math.hypot(baseX - fogHoverPx.x, baseY - fogHoverPx.y) : Infinity;
+            const distToHover = hoverPx ? Math.hypot(baseX - hoverPx.x, baseY - hoverPx.y) : Infinity;
             const hovering = distToHover < gridSize * 2.6;
 
             const phase = seed * 62.8;
@@ -338,7 +343,7 @@ function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
     // 用模糊後的每格能見度遮罩裁切雲霧：destination-in 會讓結果透明度 = 雲霧本身 × 遮罩，
     // 遮罩本身已模糊過，邊界自然是暈開的濃淡漸層，不是硬邊方塊。
     const blurCanvas = fogBuildBlurredMask(alphaGrid);
-    fogApplyHoverDisturbance(blurCanvas);
+    if (allowHover) fogApplyHoverDisturbance(blurCanvas);
     ctx.save();
     ctx.globalCompositeOperation = 'destination-in';
     ctx.drawImage(blurCanvas, 0, 0, blurCanvas.width, blurCanvas.height, 0, 0, w, h);
@@ -396,7 +401,8 @@ function drawFogPreviewAsPlayer(ctx, w, h, t, targetId) {
     });
 
     const alphaGrid = fogBuildAlphaGrid(revealed, temp);
-    fogDrawCloudLayer(ctx, w, h, t, alphaGrid);
+    // allowHover=true：這是 ST 自己畫面上的預覽，撥霧效果只有 ST 看得到，不影響玩家實際視野
+    fogDrawCloudLayer(ctx, w, h, t, alphaGrid, true);
 }
 
 // ===== 動畫迴圈（節流至約 12fps，足夠呈現緩慢翻滾感） =====

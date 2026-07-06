@@ -213,11 +213,14 @@ function attachMapCanvasEvents(canvas) {
                 updateTileInfo(cell.x, cell.y);
             }
         } else if (myRole === 'st') {
-            // 繪製工具：開始繪製，阻止冒泡避免相機平移
-            isPaintingDrag = true;
-            mapCanvasPaintLast = { x: cell.x, y: cell.y };
             handleMapInput(cell.x, cell.y, e);
-            e.stopPropagation();
+            // 迷霧補畫筆刷：只點一下塗一格，不吃掉這次指標事件，讓 ST 仍可正常拖曳平移地圖
+            // （不像地形筆刷需要拖曳連續繪製一大片，迷霧補畫通常是單點調整，不必犧牲平移能力）
+            if (currentTool !== 'fog-reveal' && currentTool !== 'fog-hide') {
+                isPaintingDrag = true;
+                mapCanvasPaintLast = { x: cell.x, y: cell.y };
+                e.stopPropagation();
+            }
         }
     });
 

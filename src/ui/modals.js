@@ -1062,6 +1062,10 @@ function saveTileFromEditor(existingId) {
 
     // 重繪地圖以反映顏色變更
     renderMap();
+
+    // AI 地圖助手的素材列直接沿用這份共用調色盤，若面板開著就一併刷新
+    if (typeof maiRenderMaterials === 'function') maiRenderMaterials();
+    if (typeof maiRenderCanvas === 'function') maiRenderCanvas();
 }
 
 /**
@@ -1079,6 +1083,10 @@ function deletePaletteTile(tileId) {
 
     if (typeof syncMapPalette === 'function') syncMapPalette();
     if (myRole === 'st') sendState();
+
+    // AI 地圖助手的素材列直接沿用這份共用調色盤，若面板開著就一併刷新
+    if (typeof maiRenderMaterials === 'function') maiRenderMaterials();
+    if (typeof maiRenderCanvas === 'function') maiRenderCanvas();
 }
 
 /**

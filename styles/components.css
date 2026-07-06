@@ -5167,6 +5167,8 @@ body.combat-mode .boss-hud-container {
 
 /* ===== AI 地圖畫布助手（大型置中彈窗，左畫布／右聊天，紫色系跟其他 AI 功能一致） ===== */
 .mai-overlay { z-index: 9600; } /* 蓋過浮動面板（BOSS/侵蝕控制台等），確保置中彈窗在最上層 */
+/* 地形編輯器可能從 AI 地圖助手內部開啟（新增／編輯共用素材庫），z-index 需蓋過 .mai-overlay 才不會被擋住 */
+#tile-editor-modal { z-index: 9700; }
 .mai-panel {
     width: 90vw;
     height: 90vh;
@@ -5315,7 +5317,6 @@ body.combat-mode .boss-hud-container {
     transition: filter .15s, border-color .15s, background .15s, color .15s;
 }
 .mai-materials-btn:hover { filter: brightness(1.15); }
-.mai-materials-btn.mai-materials-btn-import { border-color: var(--accent-blue, #1e88e5); color: #8ec5f5; background: rgba(30, 136, 229, 0.12); }
 .mai-materials-btn.mai-materials-btn-add { border-color: var(--accent-green, #43a047); color: #8fe08f; background: rgba(67, 160, 71, 0.12); }
 .mai-material-wrap {
     display: flex;

@@ -34,6 +34,10 @@ let maiBusy = false;
 let maiCanvas = maiCreateEmptyCanvas(MAI_DEFAULT_CANVAS_SIZE, MAI_DEFAULT_CANVAS_SIZE);
 let maiLoadedLibraryId = null; // 目前畫布是從地圖庫哪一筆載入的（null = 全新畫布，「儲存」時只能存為新的一筆）
 
+// ===== 手動繪製狀態（ST 也能直接動手畫，不必只靠 AI）=====
+let maiSelectedTool = 0;    // 目前選取的素材 id（0 = 地板／橡皮擦）
+let maiPaintDragActive = false;
+
 function maiCreateEmptyCanvas(w, h) {
     return {
         mapW: w,
@@ -240,6 +244,15 @@ function maiRenderCanvas() {
             } else {
                 cell.title = '地板';
             }
+            // ST 手動繪製：按下開始畫、拖曳中持續套用選取的素材（跟正式地圖的地形工具操作一致）
+            cell.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                maiPaintDragActive = true;
+                maiPaintCell(x, y);
+            });
+            cell.addEventListener('pointerenter', () => {
+                if (maiPaintDragActive) maiPaintCell(x, y);
+            });
             frag.appendChild(cell);
         }
     }
@@ -247,6 +260,185 @@ function maiRenderCanvas() {
 
     const sizeLabel = document.getElementById('mai-canvas-size-label');
     if (sizeLabel) sizeLabel.textContent = `${maiCanvas.mapW} x ${maiCanvas.mapH}`;
+
+    maiRenderMaterials();
+}
+
+// 放開指標即結束拖曳繪製（可能在格子外放開，故全域監聽保底）
+if (typeof window !== 'undefined') {
+    window.addEventListener('pointerup', () => { maiPaintDragActive = false; });
+    window.addEventListener('pointercancel', () => { maiPaintDragActive = false; });
+}
+
+/** 用目前選取的素材塗一格；素材 0 代表地板／橡皮擦。 */
+function maiPaintCell(x, y) {
+    if (!maiCanvas.mapData[y] || x < 0 || x >= maiCanvas.mapW) return;
+    if (maiCanvas.mapData[y][x] === maiSelectedTool) return;
+    maiCanvas.mapData[y][x] = maiSelectedTool;
+    maiRenderCanvas();
+}
+
+// ===== 素材（畫布調色盤）管理：可直接沿用正式地圖現有地形，也能隨時新增／刪除 =====
+
+function maiSelectMaterial(id) {
+    maiSelectedTool = id;
+    maiRenderMaterials();
+}
+
+/** 把正式地圖目前的地形調色盤（state.mapPalette）匯入成畫布素材（依名稱去重，不覆蓋畫布已有的同名素材）。 */
+function maiImportLiveTerrain() {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const live = (typeof state !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [];
+    const importable = live.filter(t => t.name !== '地板');
+    if (!importable.length) {
+        if (typeof showToast === 'function') showToast('正式地圖目前沒有可匯入的地形');
+        return;
+    }
+
+    let nextId = Date.now() % 100000 + 1000;
+    const existingNames = new Set(maiCanvas.palette.map(t => t.name));
+    let added = 0;
+    importable.forEach(t => {
+        if (existingNames.has(t.name)) return;
+        maiCanvas.palette.push({
+            id: nextId++,
+            name: t.name,
+            color: t.color,
+            effect: t.effect || '',
+            moveCostMultiplier: t.moveCostMultiplier || 1
+        });
+        existingNames.add(t.name);
+        added++;
+    });
+
+    maiRenderMaterials();
+    if (typeof showToast === 'function') {
+        showToast(added ? `已匯入 ${added} 種地形作為畫布素材` : '正式地圖的地形都已經在畫布素材裡了');
+    }
+}
+
+/** 從畫布素材移除一種地形；用到該素材的格子一併恢復成地板。 */
+function maiRemoveMaterial(id) {
+    const t = maiCanvas.palette.find(p => p.id === id);
+    if (!t) return;
+    if (!confirm(`從畫布素材移除「${t.name}」？（畫布上用到這個素材的格子會恢復成地板）`)) return;
+
+    maiCanvas.palette = maiCanvas.palette.filter(p => p.id !== id);
+    maiCanvas.mapData = maiCanvas.mapData.map(row => row.map(v => v === id ? 0 : v));
+    if (maiSelectedTool === id) maiSelectedTool = 0;
+    maiRenderCanvas();
+}
+
+function maiRenderMaterials() {
+    const box = document.getElementById('mai-materials');
+    if (!box) return;
+    box.textContent = '';
+
+    const mkSwatch = (id, name, color, removable) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'mai-material-wrap';
+
+        const btn = document.createElement('button');
+        btn.className = 'mai-material-swatch' + (maiSelectedTool === id ? ' active' : '');
+        btn.title = name;
+        btn.style.background = color;
+        btn.addEventListener('click', () => maiSelectMaterial(id));
+        wrap.appendChild(btn);
+
+        const label = document.createElement('span');
+        label.className = 'mai-material-name';
+        label.textContent = name;
+        wrap.appendChild(label);
+
+        if (removable) {
+            const del = document.createElement('button');
+            del.className = 'mai-material-del';
+            del.title = `移除「${name}」`;
+            del.textContent = '×';
+            del.addEventListener('click', (e) => { e.stopPropagation(); maiRemoveMaterial(id); });
+            wrap.appendChild(del);
+        }
+        box.appendChild(wrap);
+    };
+
+    mkSwatch(0, '地板／橡皮擦', '#17171b', false);
+    maiCanvas.palette.forEach(t => mkSwatch(t.id, t.name, t.color, true));
+}
+
+/** 開啟「新增素材」小表單（獨立於正式地圖的地形編輯器，直接寫進畫布調色盤）。 */
+function maiOpenAddMaterialForm() {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const existing = document.getElementById('mai-material-form-modal');
+    if (existing) existing.remove();
+
+    const html = `
+        <div class="modal-overlay show" id="mai-material-form-modal" onclick="if(event.target.id==='mai-material-form-modal')maiCloseAddMaterialForm()">
+            <div class="modal tile-editor-modal" onclick="event.stopPropagation()">
+                <div class="modal-header modal-header--create">
+                    <span style="font-weight:bold;">➕ 新增畫布素材</span>
+                    <button onclick="maiCloseAddMaterialForm()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="tile-editor-form">
+                        <div class="form-group">
+                            <label class="tile-editor-label">素材名稱</label>
+                            <input type="text" id="mai-mat-name" placeholder="例如：船艙地板" maxlength="20">
+                        </div>
+                        <div class="form-group">
+                            <label class="tile-editor-label">顏色</label>
+                            <div class="tile-color-row">
+                                <input type="color" id="mai-mat-color" value="#666666" class="tile-color-picker">
+                                <span class="tile-color-hex" id="mai-mat-color-hex">#666666</span>
+                                <div class="tile-color-preview" id="mai-mat-color-preview" style="background:#666666;"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="tile-editor-label">效果描述</label>
+                            <textarea id="mai-mat-effect" placeholder="例如：【搖晃】移動消耗x2" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="tile-editor-label">移動消耗倍率</label>
+                            <input type="number" id="mai-mat-move-cost" value="1" min="0.5" step="0.5" style="width:100px;">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button onclick="maiCloseAddMaterialForm()" class="modal-btn" style="background:var(--bg-card);">取消</button>
+                    <button onclick="maiSaveMaterialFromForm()" class="modal-btn" style="background:var(--accent-green);color:#000;">新增素材</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
+
+    const colorInput = document.getElementById('mai-mat-color');
+    if (colorInput) {
+        colorInput.addEventListener('input', () => {
+            const hex = colorInput.value;
+            document.getElementById('mai-mat-color-hex').textContent = hex;
+            document.getElementById('mai-mat-color-preview').style.background = hex;
+        });
+    }
+}
+
+function maiCloseAddMaterialForm() {
+    const modal = document.getElementById('mai-material-form-modal');
+    if (modal) modal.remove();
+}
+
+function maiSaveMaterialFromForm() {
+    const name = document.getElementById('mai-mat-name')?.value.trim();
+    if (!name) { if (typeof showToast === 'function') showToast('請輸入素材名稱'); return; }
+    const color = document.getElementById('mai-mat-color')?.value || '#666666';
+    const effect = document.getElementById('mai-mat-effect')?.value.trim() || '';
+    const moveCostMultiplier = Math.max(0.5, parseFloat(document.getElementById('mai-mat-move-cost')?.value) || 1);
+
+    const id = Date.now() % 100000 + 1000;
+    maiCanvas.palette.push({ id, name, color, effect, moveCostMultiplier });
+    maiSelectedTool = id;
+    maiCloseAddMaterialForm();
+    maiRenderMaterials();
+    if (typeof showToast === 'function') showToast(`已新增素材「${name}」，可直接在畫布上繪製`);
 }
 
 function maiResetCanvas() {
@@ -257,6 +449,7 @@ function maiResetCanvas() {
     const h = Math.max(5, Math.min(50, parseInt(hInput?.value) || MAI_DEFAULT_CANVAS_SIZE));
     maiCanvas = maiCreateEmptyCanvas(w, h);
     maiLoadedLibraryId = null;
+    maiSelectedTool = 0;
     maiRenderCanvas();
     maiRenderLibrary();
 }
@@ -342,6 +535,7 @@ function maiLoadEntryToCanvas(id) {
         palette: entry.palette.map(t => ({ ...t }))
     };
     maiLoadedLibraryId = id;
+    maiSelectedTool = 0;
     const nameInput = document.getElementById('mai-save-name');
     if (nameInput) nameInput.value = entry.name;
     maiRenderCanvas();
@@ -366,6 +560,7 @@ function maiDuplicateEntry(id) {
 
     maiCanvas = { mapW: newEntry.mapW, mapH: newEntry.mapH, mapData: newEntry.mapData.map(row => [...row]), palette: newEntry.palette.map(t => ({ ...t })) };
     maiLoadedLibraryId = newEntry.id;
+    maiSelectedTool = 0;
     const nameInput = document.getElementById('mai-save-name');
     if (nameInput) nameInput.value = newEntry.name;
     maiRenderCanvas();

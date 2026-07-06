@@ -972,6 +972,22 @@ function toggleUnitVisibility(id) {
     renderAll();
 }
 
+/**
+ * 切換單位的「分享視野」狀態（ST 專用，戰爭迷霧系統）
+ * 開啟後，這個單位（例如船隻）周圍的視野會提供給所有玩家，
+ * 即使玩家自己的棋子不在場上也能靠它看到迷霧下的地圖。
+ * @param {string} id - 單位 ID
+ */
+function toggleUnitSharedVision(id) {
+    if (myRole !== 'st') return;
+    const u = findUnitById(id);
+    if (!u) return;
+    u.sharedVision = !u.sharedVision;
+    broadcastState();
+    if (typeof fogRenderPanel === 'function') fogRenderPanel();
+    if (typeof showToast === 'function') showToast(u.sharedVision ? `已將「${u.name}」的視野分享給全體玩家` : `已取消「${u.name}」的視野分享`);
+}
+
 // ===== 頭像上傳 =====
 /**
  * 上傳頭像
@@ -1471,6 +1487,7 @@ function openUnitContextMenu(event, unitId) {
                     items.push({ icon: '👹', label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });
                 }
                 items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
+                items.push({ icon: '📡', label: u.sharedVision ? '取消分享視野' : '分享視野給全員', fn: `toggleUnitSharedVision('${u.id}')` });
                 if (isBoss) {
                     items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
                 }

@@ -118,7 +118,6 @@
                 <div class="map-controls-right" id="st-map-controls">
                     <button class="map-manager-btn" onclick="triggerMapBgUpload()" title="上傳地圖背景圖片">🖼️ 背景</button>
                     <button class="map-manager-btn" id="clear-map-bg-btn" onclick="clearMapBg()" title="清除背景圖" style="display:none;">✕ 背景</button>
-                    <button class="map-manager-btn" onclick="openMapManagerModal()" title="儲存/載入地圖">📂 地圖</button>
                     <!-- 轉盤管理入口已整併到右下角幸運轉盤視窗內（ST 專用按鈕），此處不再重複 -->
 
                     <select id="map-theme-select" class="map-select" onchange="changeMapTheme(this.value)">
@@ -227,6 +226,18 @@
     <div id="erosion-hud-body" class="floating-hud-body"></div>
 </div>
 
+<!-- 戰爭迷霧管理（ST 專屬浮動面板） -->
+<div id="fog-hud" class="floating-hud hidden">
+    <div class="floating-hud-header" id="fog-hud-header">
+        <span>🌫️ 戰爭迷霧管理</span>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" id="fog-hud-collapse" title="收起">▾</button>
+            <button class="floating-hud-close" onclick="closeFogHud()">×</button>
+        </span>
+    </div>
+    <div id="fog-hud-body" class="floating-hud-body"></div>
+</div>
+
 <!-- AI 地圖畫布助手（ST 專屬大型置中彈窗：左邊獨立畫布、右邊聊天，滿意後存入地圖庫再套用到正式地圖） -->
 <div class="modal-overlay mai-overlay" id="map-ai-overlay" onclick="if(event.target.id==='map-ai-overlay')maiClosePanel()">
 <div id="map-ai-panel" class="modal mai-panel" onclick="event.stopPropagation()">
@@ -246,6 +257,13 @@
                     <span>x</span>
                     <input type="number" id="mai-canvas-h" value="15" min="5" max="50" class="mai-canvas-size-input" title="畫布高度（下次新畫布生效）">
                     <button class="modal-btn mai-canvas-reset-btn" onclick="maiResetCanvas()">🔄 新畫布</button>
+                </div>
+                <div class="mai-materials-row">
+                    <div id="mai-materials" class="mai-materials"></div>
+                    <div class="mai-materials-actions">
+                        <button class="modal-btn mai-materials-btn" onclick="maiImportLiveTerrain()" title="把正式地圖目前的地形調色盤匯入成畫布素材">📥 匯入現有地形</button>
+                        <button class="modal-btn mai-materials-btn" onclick="maiOpenAddMaterialForm()" title="新增自訂素材">➕ 新增素材</button>
+                    </div>
                 </div>
                 <div id="mai-canvas-grid" class="mai-canvas-grid"></div>
                 <div class="mai-canvas-save-row">
@@ -508,6 +526,10 @@
             <span class="qab-menu-icon">🔥</span>
             <span class="qab-menu-text">侵蝕控制台</span>
         </div>
+        <div class="qab-menu-item" id="qab-fog-item" style="display:none;" onclick="toggleFogHud(); closeQABMenu();">
+            <span class="qab-menu-icon">🌫️</span>
+            <span class="qab-menu-text">戰爭迷霧</span>
+        </div>
         <div class="qab-menu-item" id="qab-map-ai-item" style="display:none;" onclick="maiTogglePanel(); closeQABMenu();">
             <span class="qab-menu-icon">🧭</span>
             <span class="qab-menu-text">AI 地圖助手</span>
@@ -723,7 +745,6 @@
 <script src="src/ui/camera.js"></script>
 <script src="src/ui/map-canvas.js"></script>
 <script src="src/ui/map.js"></script>
-<script src="src/core/map-manager.js"></script>
 <script src="src/ui/units.js"></script>
 <script src="src/core/status-manager.js"></script>
 <script src="src/ui/hotkeys.js"></script>
@@ -739,6 +760,7 @@
 <!-- 戰鬥日誌 / 構築室（系統 A）與 E.G.O 侵蝕系統（系統 B）：依賴 status-manager / firebase-connection，於 main 之前載入 -->
 <script src="src/ui/log-view.js"></script>
 <script src="src/ui/erosion-hud.js"></script>
+<script src="src/ui/fog.js"></script>
 <script src="src/ui/terrain-library.js"></script>
 <script src="src/ui/map-ai-assistant.js"></script>
 <script src="src/ui/main.js"></script>

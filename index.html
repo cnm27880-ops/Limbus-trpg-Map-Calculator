@@ -227,6 +227,49 @@
     <div id="erosion-hud-body" class="floating-hud-body"></div>
 </div>
 
+<!-- AI 地圖畫布助手（ST 專屬大型置中彈窗：左邊獨立畫布、右邊聊天，滿意後存入地圖庫再套用到正式地圖） -->
+<div class="modal-overlay mai-overlay" id="map-ai-overlay" onclick="if(event.target.id==='map-ai-overlay')maiClosePanel()">
+<div id="map-ai-panel" class="modal mai-panel" onclick="event.stopPropagation()">
+    <div class="modal-header modal-header--ai" id="map-ai-panel-header">
+        <span>🧭 AI 地圖畫布</span>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" onclick="maiClearChat()" title="清空對話">🗑</button>
+            <button onclick="maiClosePanel()" style="background:none;font-size:1.2rem;">×</button>
+        </span>
+    </div>
+    <div class="mai-body">
+        <div class="mai-main-row">
+            <div class="mai-canvas-col">
+                <div class="mai-canvas-toolbar">
+                    <span class="mai-canvas-size" id="mai-canvas-size-label">15 x 15</span>
+                    <input type="number" id="mai-canvas-w" value="15" min="5" max="50" class="mai-canvas-size-input" title="畫布寬度（下次新畫布生效）">
+                    <span>x</span>
+                    <input type="number" id="mai-canvas-h" value="15" min="5" max="50" class="mai-canvas-size-input" title="畫布高度（下次新畫布生效）">
+                    <button class="modal-btn mai-canvas-reset-btn" onclick="maiResetCanvas()">🔄 新畫布</button>
+                </div>
+                <div id="mai-canvas-grid" class="mai-canvas-grid"></div>
+                <div class="mai-canvas-save-row">
+                    <input type="text" id="mai-save-name" placeholder="地圖名稱..." class="mai-save-name-input">
+                    <button class="modal-btn mai-save-btn" onclick="maiSaveCanvasToLibrary()">💾 儲存到地圖庫</button>
+                </div>
+            </div>
+            <div class="mai-chat-col">
+                <div id="mai-messages" class="mai-messages"></div>
+                <div class="mai-input-row">
+                    <textarea id="mai-input" class="mai-input" rows="1" placeholder="跟我說想要什麼地形／氛圍..." onkeydown="maiHandleInputKeydown(event)"></textarea>
+                    <button class="modal-btn mai-send-btn" onclick="maiSendMessage()">送出</button>
+                </div>
+            </div>
+        </div>
+        <div class="tile-editor-divider"></div>
+        <div class="mai-library-section">
+            <div class="tile-editor-label">📚 地圖庫</div>
+            <div id="mai-library-list" class="mai-library-list"></div>
+        </div>
+    </div>
+</div>
+</div>
+
 <!-- Modals -->
 <div id="modals-container"></div>
 
@@ -240,6 +283,7 @@
         </div>
         <div class="modal-body">
             <div class="combat-modal-target" id="attack-target-name">目標：---</div>
+            <div class="combat-modal-distance" id="attack-target-distance"></div>
             <!-- 豁免抵擋模式：可勾選多個攻擊對象（如 1/5/7 號小兵） -->
             <div class="atk-multi-targets" id="attack-multi-targets" style="display:none;"></div>
             <div class="attack-boss-actions" id="attack-boss-actions" style="display:none;"></div>
@@ -463,6 +507,10 @@
         <div class="qab-menu-item" id="qab-erosion-item" style="display:none;" onclick="toggleErosionHud(); closeQABMenu();">
             <span class="qab-menu-icon">🔥</span>
             <span class="qab-menu-text">侵蝕控制台</span>
+        </div>
+        <div class="qab-menu-item" id="qab-map-ai-item" style="display:none;" onclick="maiTogglePanel(); closeQABMenu();">
+            <span class="qab-menu-icon">🧭</span>
+            <span class="qab-menu-text">AI 地圖助手</span>
         </div>
         <div class="qab-menu-item" id="qab-counter-panel-item" style="display:none;" onclick="cpToggleFloatPanel(); closeQABMenu();">
             <span class="qab-menu-icon">⚔️</span>
@@ -692,6 +740,7 @@
 <script src="src/ui/log-view.js"></script>
 <script src="src/ui/erosion-hud.js"></script>
 <script src="src/ui/terrain-library.js"></script>
+<script src="src/ui/map-ai-assistant.js"></script>
 <script src="src/ui/main.js"></script>
 
 <!-- 幸運大轉盤 -->

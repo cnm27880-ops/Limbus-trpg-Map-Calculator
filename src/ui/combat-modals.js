@@ -25,6 +25,45 @@ function cmSaveMemo(key, data) {
 }
 
 /**
+ * 解析目前的攻擊者單位：ST 取作用中 BOSS（優先 👑 標記，否則第一個本體 BOSS），
+ * 玩家取自己控制的單位。邏輯與 aoe-select.js 的 aoeResolveAttackerName 一致。
+ * @returns {Object|null}
+ */
+function cmResolveAttackerUnit() {
+    if (typeof myRole !== 'undefined' && myRole === 'st') {
+        let boss = (state.activeBossId && typeof findUnitById === 'function') ? findUnitById(state.activeBossId) : null;
+        if (!boss && typeof state !== 'undefined' && Array.isArray(state.units)) {
+            boss = state.units.find(u => (u.type === 'boss' || u.isBoss) && !u.actionSlotOf);
+        }
+        return boss || null;
+    }
+    if (typeof state !== 'undefined' && Array.isArray(state.units) && typeof myPlayerId !== 'undefined') {
+        return state.units.find(u => u.ownerId === myPlayerId) || null;
+    }
+    return null;
+}
+
+/**
+ * 兩單位間的棋盤格距離（king-move／Chebyshev：斜角不額外計算），
+ * 配合「移動消耗 1格=5米，攻擊距離 1格=1米」的換算慣例——攻擊距離看的是實際直線距離，不是移動消耗。
+ * 任一單位尚未上場（x/y < 0）時回傳 null。
+ * @returns {number|null}
+ */
+function cmCalcGridDistance(a, b) {
+    if (!a || !b || a.x < 0 || a.y < 0 || b.x < 0 || b.y < 0) return null;
+    return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/** 更新攻擊 Modal 頂部「距離攻擊者 X 格」的顯示。 */
+function cmUpdateAttackDistance(target) {
+    const el = document.getElementById('attack-target-distance');
+    if (!el) return;
+    const attacker = cmResolveAttackerUnit();
+    const dist = cmCalcGridDistance(attacker, target);
+    el.textContent = (dist === null) ? '' : `距離攻擊者 ${dist} 格`;
+}
+
+/**
  * 玩家對敵方/BOSS 右鍵點擊「發起攻擊」
  */
 function openAttackModal(unitId) {
@@ -33,6 +72,7 @@ function openAttackModal(unitId) {
     attackModalTarget = { id: u.id, name: u.name || '目標' };
 
     document.getElementById('attack-target-name').innerText = `目標：${u.name || '---'}`;
+    cmUpdateAttackDistance(u);
 
     const memo = cmLoadMemo(ATTACK_MODAL_MEMO_KEY) || {};
     document.getElementById('attack-dp').value = memo.dp ?? 0;
@@ -169,11 +209,16 @@ function cmRenderAttackTargets() {
         box.innerHTML = '';
         return;
     }
-    const chips = candidates.map(u => `
+    const attacker = cmResolveAttackerUnit();
+    const chips = candidates.map(u => {
+        const dist = cmCalcGridDistance(attacker, u);
+        const distTxt = (dist === null) ? '' : ` <span class="atk-target-dist">${dist}格</span>`;
+        return `
         <label class="atk-target-chip">
             <input type="checkbox" class="atk-target-check" value="${u.id}" ${attackModalTarget && u.id === attackModalTarget.id ? 'checked' : ''}>
-            ${escapeHtml(u.name || '未命名')}
-        </label>`).join('');
+            ${escapeHtml(u.name || '未命名')}${distTxt}
+        </label>`;
+    }).join('');
     box.innerHTML = `<div class="amt-title">🎯 攻擊對象（可複選，各目標分別擲豁免）</div><div class="amt-chips">${chips}</div>`;
     box.style.display = 'block';
 }

@@ -3362,25 +3362,6 @@ body.aoe-select-active .token {
     overflow: visible;
 }
 
-/* AI 地圖助手：套用前的半透明建議預覽（跟 ruler-overlay 同一套定位邏輯） */
-#mai-preview-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 90;
-    overflow: visible;
-}
-.mai-preview-cell {
-    fill-opacity: 0.45;
-    stroke: rgba(255, 255, 255, 0.8);
-    stroke-width: 2;
-    stroke-dasharray: 6 4;
-    animation: ruler-dash 1s linear infinite;
-}
-
 /* 測距線條 */
 .ruler-line {
     stroke: var(--accent-yellow);
@@ -5296,11 +5277,12 @@ body.combat-mode .boss-hud-container {
 }
 .floating-hud-body { padding: 12px 14px; overflow-y: auto; }
 
-/* ===== AI 地圖助手（對話面板，紫色系跟其他 AI 功能一致） ===== */
+/* ===== AI 地圖畫布助手（左聊天／右畫布，紫色系跟其他 AI 功能一致） ===== */
 .mai-panel {
     border-color: #4a2a6b;
     bottom: auto;
-    height: 460px;
+    width: min(680px, 94vw);
+    height: min(620px, 86vh);
 }
 .mai-panel .floating-hud-header {
     color: #c9aaff;
@@ -5308,23 +5290,28 @@ body.combat-mode .boss-hud-container {
     border-bottom-color: #4a2a6b;
 }
 .mai-panel.collapsed { height: auto; }
-.mai-body { display: flex; flex-direction: column; padding: 0; overflow: hidden; flex: 1; min-height: 0; }
+.mai-body { display: flex; flex-direction: column; padding: 12px; overflow-y: auto; flex: 1; min-height: 0; gap: 10px; }
+
+.mai-main-row { display: flex; gap: 10px; flex: 1; min-height: 280px; }
+.mai-chat-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border, #2a2a30); border-radius: 8px; overflow: hidden; }
+.mai-canvas-col { flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--border, #2a2a30); border-radius: 8px; overflow: hidden; background: var(--bg-card, #1a1a1f); }
+
 .mai-messages {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 12px 14px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
-.mai-empty { font-size: .78rem; color: var(--text-dim, #999); text-align: center; padding: 20px 10px; line-height: 1.6; }
+.mai-empty { font-size: .76rem; color: var(--text-dim, #999); text-align: center; padding: 16px 6px; line-height: 1.6; }
 .mai-msg {
-    max-width: 88%;
-    padding: 8px 12px;
+    max-width: 92%;
+    padding: 7px 10px;
     border-radius: 10px;
-    font-size: .82rem;
-    line-height: 1.55;
+    font-size: .8rem;
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -5346,24 +5333,13 @@ body.combat-mode .boss-hud-container {
     align-self: center;
     background: rgba(229, 57, 53, 0.12);
     color: #ff8a8a;
-    font-size: .74rem;
+    font-size: .72rem;
     border: 1px solid rgba(229, 57, 53, 0.35);
 }
-.mai-action-card {
-    align-self: stretch;
-    border: 1px dashed var(--accent-purple, #8e24aa);
-    border-radius: 8px;
-    padding: 8px 10px;
-    background: rgba(142, 36, 170, 0.08);
-    margin-top: -2px;
-}
-.mai-action-summary { font-size: .74rem; color: var(--text-dim, #ccc); margin-bottom: 8px; line-height: 1.5; }
-.mai-action-btns { display: flex; gap: 6px; }
-.mai-action-btns .modal-btn { flex: 1; padding: 6px 10px; font-size: .78rem; }
 .mai-input-row {
     display: flex;
     gap: 6px;
-    padding: 10px;
+    padding: 8px;
     border-top: 1px solid var(--border, #2a2a30);
     flex: 0 0 auto;
     align-items: flex-end;
@@ -5375,12 +5351,79 @@ body.combat-mode .boss-hud-container {
     border: 1px solid var(--border, #2a2a30);
     color: var(--text-main, #e8e8ec);
     border-radius: 6px;
-    padding: 8px;
-    font-size: .82rem;
+    padding: 7px 8px;
+    font-size: .8rem;
     font-family: inherit;
-    max-height: 90px;
+    max-height: 80px;
 }
-.mai-send-btn { background: var(--accent-purple, #8e24aa); color: #fff; flex: 0 0 auto; padding: 8px 14px; }
+.mai-send-btn { background: var(--accent-purple, #8e24aa); color: #fff; flex: 0 0 auto; padding: 7px 12px; font-size: .8rem; }
+
+/* 畫布：CSS grid 小格子，跟聊天欄並排，畫布本身是草稿區、不是正式地圖 */
+.mai-canvas-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border, #2a2a30);
+    font-size: .72rem;
+    color: var(--text-dim, #999);
+}
+.mai-canvas-size { flex: 1; }
+.mai-canvas-size-input { width: 40px; background: #0e0e11; border: 1px solid var(--border, #2a2a30); color: var(--text-main, #e8e8ec); border-radius: 4px; padding: 3px 4px; font-size: .72rem; }
+.mai-canvas-reset-btn { padding: 3px 8px; font-size: .7rem; background: var(--bg-input, #0d0d0f); }
+.mai-canvas-grid {
+    --mai-cols: 15;
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--mai-cols), 1fr);
+    gap: 1px;
+    padding: 6px;
+    overflow: auto;
+    background: #0a0a0c;
+}
+.mai-canvas-cell {
+    aspect-ratio: 1;
+    min-width: 10px;
+    background: #17171b;
+    border-radius: 1px;
+}
+.mai-canvas-save-row {
+    display: flex;
+    gap: 6px;
+    padding: 8px;
+    border-top: 1px solid var(--border, #2a2a30);
+}
+.mai-save-name-input {
+    flex: 1;
+    min-width: 0;
+    background: #0e0e11;
+    border: 1px solid var(--border, #2a2a30);
+    color: var(--text-main, #e8e8ec);
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: .78rem;
+}
+.mai-save-btn { background: var(--accent-green, #43a047); color: #000; flex: 0 0 auto; padding: 7px 12px; font-size: .78rem; white-space: nowrap; }
+
+/* 地圖庫卡片列表 */
+.mai-library-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-height: 220px; overflow-y: auto; }
+.mai-lib-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border, #2a2a30);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--bg-card, #1a1a1f);
+    flex-wrap: wrap;
+}
+.mai-lib-card.active { border-color: var(--accent-purple, #8e24aa); box-shadow: 0 0 0 1px rgba(142, 36, 170, 0.35); }
+.mai-lib-name { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); }
+.mai-lib-size { font-size: .72rem; color: var(--text-dim, #999); margin-top: 2px; }
+.mai-lib-actions { display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; }
+.mai-lib-actions .lv-btn { padding: 3px 7px; font-size: .68rem; border-radius: 5px; }
 
 /* ===== 侵蝕控制台內容 ===== */
 .ero-section { margin-bottom: 14px; }

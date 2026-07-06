@@ -1,12 +1,11 @@
 /**
- * Limbus Command - AI 地圖協作助手
+ * Limbus Command - AI 地圖畫布助手
  *
- * 職責：常駐的對話式 AI 副駕駛，讓 ST 一邊看著目前地圖的實際格子排列，一邊跟 AI
- * 討論「這裡該放什麼地形」，AI 可以：
- *   1. 建議新的地形效果（沿用地形庫/地形編輯器同一套 schema：name/color/effect/moveCostMultiplier）
- *   2. 建議把（新的或既有的）地形標記到地圖上的哪些格子
- * 建議一律先以半透明色塊疊加預覽在地圖上，ST 確認滿意後才按「套用」寫入 state.mapData，
- * 不滿意可以直接在對話框繼續要求調整，或按「捨棄」清除預覽（對話紀錄仍保留）。
+ * 職責：常駐的懸浮面板，左邊聊天、右邊是一塊獨立的「畫布」（不是正式地圖，是安全的草稿區）。
+ * ST 跟 AI 討論想要的地圖版面，AI 每次回覆直接把建議畫進畫布（新增地形種類／在畫布格子上
+ * 標記地形），可以自由來回調整、完全不影響正式地圖。畫布滿意後存成「地圖庫」裡一筆有名字
+ * 的紀錄，之後隨時可以：套用到正式地圖（覆蓋現有版面，套用前會提示確認）、載回畫布繼續編輯、
+ * 複製成新的一份、改名、刪除。
  *
  * 沿用「人格鍛造爐」/「怪物庫」/「地形庫」的 AI 連線設定（同一組 localStorage 金鑰）。
  * 權限分離：僅 ST 可開啟與操作，玩家看不到入口。
@@ -19,57 +18,61 @@ const MAI_AI_KEY_KEY = 'limbus-ai-key';
 const MAI_AI_MODEL_KEY = 'limbus-ai-model';
 const MAI_AI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const MAI_AI_DEFAULT_MODEL = 'gpt-4o-mini';
-const MAI_MAX_CELLS_IN_CONTEXT = 500; // 序列化目前地圖給 AI 時，非地板格子的上限（避免超大地圖 token 爆量）
+const MAI_MAX_CELLS_IN_CONTEXT = 500; // 序列化畫布給 AI 時，非地板格子的上限（避免超大畫布 token 爆量）
+const MAI_DEFAULT_CANVAS_SIZE = 15;
+const MAI_MAP_LIB_KEY = 'limbus-map-library';
 
 function maiGetSetting(key, fallback) {
     try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
 }
 
 // ===== 對話狀態（僅存在本機記憶體，重整頁面即清空，符合「臨時討論」定位）=====
-let maiMessages = [];       // [{ role: 'user'|'assistant'|'system', text, action? }]
-let maiPendingAction = null; // 目前預覽中、尚未套用/捨棄的建議（來自最新一則 assistant 訊息）
+let maiMessages = []; // [{ role: 'user'|'assistant'|'system', text }]
 let maiBusy = false;
 
-// ===== 目前地圖狀態序列化（給 AI 當上下文）=====
+// ===== 畫布狀態（獨立於正式地圖 state.mapData／state.mapPalette）=====
+let maiCanvas = maiCreateEmptyCanvas(MAI_DEFAULT_CANVAS_SIZE, MAI_DEFAULT_CANVAS_SIZE);
+let maiLoadedLibraryId = null; // 目前畫布是從地圖庫哪一筆載入的（null = 全新畫布，「儲存」時只能存為新的一筆）
 
-/** 把目前調色盤整理成給 AI 看的精簡清單。 */
-function maiSerializePalette() {
-    const palette = (typeof state !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [];
-    return palette
-        .filter(t => t.name !== '地板')
-        .map(t => ({ name: t.name, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier || 1 }));
+function maiCreateEmptyCanvas(w, h) {
+    return {
+        mapW: w,
+        mapH: h,
+        mapData: Array.from({ length: h }, () => Array(w).fill(0)),
+        palette: [] // { id, name, color, effect, moveCostMultiplier }
+    };
 }
 
-/** 把目前地圖的非地板格子整理成 {x,y,tileName} 清單（超過上限則截斷並註記）。 */
-function maiSerializeMapCells() {
-    if (typeof state === 'undefined' || !Array.isArray(state.mapData)) return { cells: [], truncated: false };
-    const palette = (typeof state.mapPalette !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [];
+// ===== 畫布序列化（給 AI 當上下文）=====
+
+function maiSerializeCanvasPalette() {
+    return maiCanvas.palette.map(t => ({ name: t.name, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier || 1 }));
+}
+
+function maiSerializeCanvasCells() {
     const nameOf = (id) => {
-        const t = palette.find(p => p.id === id);
+        const t = maiCanvas.palette.find(p => p.id === id);
         return t ? t.name : `未知地形#${id}`;
     };
     const cells = [];
-    for (let y = 0; y < state.mapData.length; y++) {
-        const row = state.mapData[y] || [];
+    for (let y = 0; y < maiCanvas.mapData.length; y++) {
+        const row = maiCanvas.mapData[y] || [];
         for (let x = 0; x < row.length; x++) {
             const val = row[x];
             if (val) cells.push({ x, y, tileName: nameOf(val) });
-            if (cells.length >= MAI_MAX_CELLS_IN_CONTEXT) {
-                return { cells, truncated: true };
-            }
+            if (cells.length >= MAI_MAX_CELLS_IN_CONTEXT) return { cells, truncated: true };
         }
     }
     return { cells, truncated: false };
 }
 
 function maiBuildSystemPrompt() {
-    const mapW = (typeof state !== 'undefined' && state.mapW) || 15;
-    const mapH = (typeof state !== 'undefined' && state.mapH) || 15;
-    const palette = maiSerializePalette();
-    const { cells, truncated } = maiSerializeMapCells();
+    const palette = maiSerializeCanvasPalette();
+    const { cells, truncated } = maiSerializeCanvasCells();
 
     return [
-        '你是《邊獄公司》(Limbus Company) 戰棋跑團工具的地圖設計副駕駛，跟 ST 對話討論地圖上要放什麼地形。',
+        '你是《邊獄公司》(Limbus Company) 戰棋跑團工具的地圖設計副駕駛，跟 ST 在一塊獨立的「畫布」上',
+        '討論設計地圖版面。這塊畫布不是正式地圖，你可以自由提案，ST 會自己決定何時存檔、何時套用到正式地圖。',
         '每次回覆都只能輸出一個 JSON 物件、不要任何說明文字或 markdown 圍欄，格式如下：',
         '{',
         '  "reply": "給 ST 看的自然語言回覆（可以說明你的設計想法、或回答 ST 的問題）",',
@@ -78,18 +81,21 @@ function maiBuildSystemPrompt() {
         '}',
         '',
         'newTiles 和 placements 都是可省略的（純聊天、純回答問題時可以只有 reply，兩者都不給）。',
+        '你的建議會直接畫到畫布上（不需要額外確認這一步，畫布本身就是草稿），所以請放心提案、',
+        '也可以在 ST 要求調整時直接修改畫布上的格子（例如換一種地形、清空某些格子改回地板：',
+        '清空地板可以用 tileName 設為 "地板"）。',
         '規則：',
-        '- 若既有調色盤已經有合適的地形，placements 直接引用該地形的 name，不要重複新增。',
-        '- 只有目前調色盤裡真的沒有合適效果時，才透過 newTiles 新增；newTiles 的 name 必須跟 placements 引用的 tileName 對上。',
+        '- 若畫布現有地形已經有合適的，placements 直接引用該地形的 name，不要重複新增。',
+        '- 只有畫布現有地形真的沒有合適效果時，才透過 newTiles 新增；newTiles 的 name 必須跟 placements 引用的 tileName 對上。',
         '- effect 只是好看的敘述沒有意義，必須是明確可執行的機制（移動消耗、防禦加減、傷害、施加狀態等）。',
         '- moveCostMultiplier：1 = 不影響移動；若 effect 提到「移動困難」「深陷」「泥濘」之類，必須設對應倍率（通常 2），不能只寫在文字裡卻留預設值 1。',
-        '- 座標系統：x 是欄（0 到 mapW-1），y 是列（0 到 mapH-1）。cells 只需列出「你建議變更」的格子，不用重複列出已經正確、不需要動的格子。',
-        '- 不要一次建議動用整張地圖所有格子，除非 ST 明確要求；先給一個合理範圍的提案，讓 ST 看預覽後再決定要不要擴大。',
+        '- 座標系統：x 是欄（0 到 mapW-1），y 是列（0 到 mapH-1）。cells 只需列出「你建議變更」的格子。',
+        '- 不要一次建議動用整塊畫布所有格子，除非 ST 明確要求；先給一個合理範圍的提案。',
         '',
-        `目前地圖尺寸：${mapW} x ${mapH}（x: 0~${mapW - 1}，y: 0~${mapH - 1}）。`,
-        `目前調色盤（可直接引用的地形名稱）：${palette.length ? JSON.stringify(palette) : '（目前只有地板，沒有其他地形）'}`,
-        `目前地圖上已標記的非地板格子${truncated ? `（僅列出前 ${MAI_MAX_CELLS_IN_CONTEXT} 格，地圖較密集，其餘省略）` : ''}：`,
-        cells.length ? JSON.stringify(cells) : '（目前整張地圖都是地板，還沒有任何地形）'
+        `目前畫布尺寸：${maiCanvas.mapW} x ${maiCanvas.mapH}（x: 0~${maiCanvas.mapW - 1}，y: 0~${maiCanvas.mapH - 1}）。`,
+        `目前畫布上的地形（可直接引用的名稱）：${palette.length ? JSON.stringify(palette) : '（畫布目前只有地板，沒有其他地形）'}`,
+        `目前畫布上已標記的非地板格子${truncated ? `（僅列出前 ${MAI_MAX_CELLS_IN_CONTEXT} 格，其餘省略）` : ''}：`,
+        cells.length ? JSON.stringify(cells) : '（畫布目前整片都是地板，還沒有任何地形）'
     ].join('\n');
 }
 
@@ -150,23 +156,21 @@ async function maiSendMessage() {
         catch (e) { parsed = { reply: content }; } // AI 沒照格式回傳 JSON 時，至少把原文當回覆顯示
 
         const action = maiNormalizeAction(parsed);
-        maiMessages.push({ role: 'assistant', text: String(parsed.reply || '（沒有文字回覆）'), action });
-        if (action) maiPreviewAction(action);
+        if (action) maiApplyActionToCanvas(action);
+        maiMessages.push({ role: 'assistant', text: String(parsed.reply || '（沒有文字回覆）') });
     } catch (err) {
         maiMessages.push({ role: 'system', text: `AI 請求失敗：${err && err.message ? err.message : err}` });
     } finally {
         maiBusy = false;
         maiRenderMessages();
+        maiRenderCanvas();
     }
 }
 
 /** 驗證/整理 AI 回傳的 newTiles + placements，過濾越界座標與對不上名稱的引用。回傳 null 代表沒有任何有效建議。 */
 function maiNormalizeAction(parsed) {
-    const mapW = (typeof state !== 'undefined' && state.mapW) || 15;
-    const mapH = (typeof state !== 'undefined' && state.mapH) || 15;
-
     const newTiles = Array.isArray(parsed.newTiles) ? parsed.newTiles
-        .filter(t => t && t.name)
+        .filter(t => t && t.name && t.name !== '地板')
         .map(t => ({
             name: String(t.name).slice(0, 20),
             color: String(t.color || '#666666').slice(0, 40),
@@ -174,7 +178,7 @@ function maiNormalizeAction(parsed) {
             moveCostMultiplier: Math.max(0.5, parseFloat(t.moveCostMultiplier) || 1)
         })) : [];
 
-    const knownNames = new Set([...maiSerializePalette().map(t => t.name), ...newTiles.map(t => t.name)]);
+    const knownNames = new Set(['地板', ...maiSerializeCanvasPalette().map(t => t.name), ...newTiles.map(t => t.name)]);
 
     const placements = Array.isArray(parsed.placements) ? parsed.placements
         .filter(p => p && p.tileName && knownNames.has(p.tileName) && Array.isArray(p.cells))
@@ -183,7 +187,7 @@ function maiNormalizeAction(parsed) {
             cells: p.cells
                 .filter(c => Array.isArray(c) && c.length === 2)
                 .map(([x, y]) => [parseInt(x), parseInt(y)])
-                .filter(([x, y]) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < mapW && y >= 0 && y < mapH)
+                .filter(([x, y]) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < maiCanvas.mapW && y >= 0 && y < maiCanvas.mapH)
         }))
         .filter(p => p.cells.length) : [];
 
@@ -191,98 +195,297 @@ function maiNormalizeAction(parsed) {
     return { newTiles, placements };
 }
 
-// ===== 預覽疊加（半透明色塊，套用前先看過）=====
-
-/** 依 action 解析每個 placement 的顯示顏色（newTiles 優先於既有調色盤同名項）。 */
-function maiResolveColor(tileName, action) {
-    const fromNew = action.newTiles.find(t => t.name === tileName);
-    if (fromNew) return fromNew.color;
-    const palette = (typeof state !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [];
-    const fromPalette = palette.find(t => t.name === tileName);
-    return fromPalette ? fromPalette.color : '#999';
-}
-
-function maiEnsureOverlay() {
-    const container = document.getElementById('map-container');
-    if (!container) return null;
-    let svg = document.getElementById('mai-preview-overlay');
-    if (!svg) {
-        svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.id = 'mai-preview-overlay';
-        container.appendChild(svg);
-    }
-    return svg;
-}
-
-function maiPreviewAction(action) {
-    maiPendingAction = action;
-    const svg = maiEnsureOverlay();
-    if (!svg) return;
-
-    const gridSize = (typeof MAP_DEFAULTS !== 'undefined') ? MAP_DEFAULTS.GRID_SIZE : 50;
-    let html = '';
-    action.placements.forEach(p => {
-        const color = maiResolveColor(p.tileName, action);
-        p.cells.forEach(([x, y]) => {
-            html += `<rect class="mai-preview-cell" x="${x * gridSize + 2}" y="${y * gridSize + 2}" width="${gridSize - 4}" height="${gridSize - 4}" fill="${color}"/>`;
-        });
-    });
-    svg.innerHTML = html;
-}
-
-function maiClearOverlay() {
-    const svg = document.getElementById('mai-preview-overlay');
-    if (svg) svg.innerHTML = '';
-}
-
-// ===== 套用 / 捨棄 =====
-
-function maiApplyAction() {
-    if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const action = maiPendingAction;
-    if (!action) return;
-
-    if (!state.mapPalette) state.mapPalette = [];
-    // newTiles：同名沿用既有 id（避免重複），否則配發新 id
+/** 把 AI 的建議直接寫進畫布（畫布本身就是草稿區，不需要額外的預覽/套用確認）。 */
+function maiApplyActionToCanvas(action) {
     let nextId = Date.now() % 100000 + 1000;
-    const nameToId = new Map(state.mapPalette.map(t => [t.name, t.id]));
+    const nameToId = new Map(maiCanvas.palette.map(t => [t.name, t.id]));
     action.newTiles.forEach(t => {
-        if (nameToId.has(t.name)) return; // 已存在同名地形，不重複新增
+        if (nameToId.has(t.name)) return;
         const id = nextId++;
-        state.mapPalette.push({ id, name: t.name, color: t.color, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier });
+        maiCanvas.palette.push({ id, name: t.name, color: t.color, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier });
         nameToId.set(t.name, id);
     });
 
-    let painted = 0;
     action.placements.forEach(p => {
-        const tileId = nameToId.get(p.tileName);
-        if (!tileId) return;
+        const tileId = p.tileName === '地板' ? 0 : nameToId.get(p.tileName);
+        if (tileId === undefined) return;
         p.cells.forEach(([x, y]) => {
-            if (state.mapData[y] && x >= 0 && x < state.mapData[y].length) {
-                state.mapData[y][x] = tileId;
-                painted++;
+            if (maiCanvas.mapData[y] && x >= 0 && x < maiCanvas.mapData[y].length) {
+                maiCanvas.mapData[y][x] = tileId;
             }
         });
     });
+}
 
-    maiClearOverlay();
-    maiPendingAction = null;
+// ===== 畫布渲染（獨立於正式地圖的小格子預覽） =====
+
+function maiRenderCanvas() {
+    const box = document.getElementById('mai-canvas-grid');
+    if (!box) return;
+    box.style.setProperty('--mai-cols', maiCanvas.mapW);
+    box.textContent = '';
+
+    const frag = document.createDocumentFragment();
+    for (let y = 0; y < maiCanvas.mapH; y++) {
+        for (let x = 0; x < maiCanvas.mapW; x++) {
+            const val = maiCanvas.mapData[y][x];
+            const cell = document.createElement('div');
+            cell.className = 'mai-canvas-cell';
+            if (val) {
+                const t = maiCanvas.palette.find(p => p.id === val);
+                if (t) {
+                    cell.style.background = t.color;
+                    cell.title = `${t.name}｜${t.effect || ''}`;
+                }
+            } else {
+                cell.title = '地板';
+            }
+            frag.appendChild(cell);
+        }
+    }
+    box.appendChild(frag);
+
+    const sizeLabel = document.getElementById('mai-canvas-size-label');
+    if (sizeLabel) sizeLabel.textContent = `${maiCanvas.mapW} x ${maiCanvas.mapH}`;
+}
+
+function maiResetCanvas() {
+    if (!confirm('清空目前畫布？（尚未存到地圖庫的內容會消失）')) return;
+    const wInput = document.getElementById('mai-canvas-w');
+    const hInput = document.getElementById('mai-canvas-h');
+    const w = Math.max(5, Math.min(50, parseInt(wInput?.value) || MAI_DEFAULT_CANVAS_SIZE));
+    const h = Math.max(5, Math.min(50, parseInt(hInput?.value) || MAI_DEFAULT_CANVAS_SIZE));
+    maiCanvas = maiCreateEmptyCanvas(w, h);
+    maiLoadedLibraryId = null;
+    maiRenderCanvas();
+    maiRenderLibrary();
+}
+
+// ===== 地圖庫（Firebase 房間共享，localStorage 作為離線快取／備援）=====
+let maiLibSynced = null;
+
+function maiLoadLibrary() {
+    if (Array.isArray(maiLibSynced)) return maiLibSynced;
+    try {
+        const raw = localStorage.getItem(MAI_MAP_LIB_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+}
+
+function maiSaveLibrary(arr) {
+    try { localStorage.setItem(MAI_MAP_LIB_KEY, JSON.stringify(arr)); } catch (e) { /* quota */ }
+    try {
+        if (typeof roomRef !== 'undefined' && roomRef && typeof myRole !== 'undefined' && myRole === 'st') {
+            roomRef.child('mapLibrary').set(arr);
+        }
+    } catch (e) { /* 同步失敗不影響本機快取 */ }
+    maiLibSynced = Array.isArray(arr) ? arr : [];
+}
+
+/** 監聽房間地圖庫（由 setupRoomListeners 呼叫）。首次同步時若房間為空而本機有存貨，ST 自動上傳。 */
+function maiSetupListener() {
+    if (typeof roomRef === 'undefined' || !roomRef) return;
+    const ref = roomRef.child('mapLibrary');
+    const listener = ref.on('value', snapshot => {
+        const val = snapshot.val();
+        const arr = Array.isArray(val) ? val.filter(Boolean)
+            : (val && typeof val === 'object') ? Object.values(val).filter(Boolean) : [];
+        if (!arr.length && maiLibSynced === null && typeof myRole !== 'undefined' && myRole === 'st') {
+            let local = [];
+            try { local = JSON.parse(localStorage.getItem(MAI_MAP_LIB_KEY) || '[]') || []; } catch (e) { local = []; }
+            maiLibSynced = Array.isArray(local) ? local : [];
+            if (maiLibSynced.length) ref.set(maiLibSynced);
+        } else {
+            maiLibSynced = arr;
+            try { localStorage.setItem(MAI_MAP_LIB_KEY, JSON.stringify(arr)); } catch (e) { /* quota */ }
+        }
+        maiRenderLibrary();
+    });
+    if (typeof unsubscribeListeners !== 'undefined') {
+        unsubscribeListeners.push(() => ref.off('value', listener));
+    }
+}
+
+function maiSaveCanvasToLibrary() {
+    const nameInput = document.getElementById('mai-save-name');
+    const name = (nameInput?.value || '').trim().slice(0, 30) || `未命名地圖 ${new Date().toLocaleString()}`;
+
+    const lib = maiLoadLibrary();
+    if (maiLoadedLibraryId && lib.some(e => e.id === maiLoadedLibraryId)) {
+        // 目前畫布是從某一筆載入的：直接覆蓋更新那一筆
+        const idx = lib.findIndex(e => e.id === maiLoadedLibraryId);
+        lib[idx] = { id: maiLoadedLibraryId, name, mapW: maiCanvas.mapW, mapH: maiCanvas.mapH, mapData: maiCanvas.mapData, palette: maiCanvas.palette };
+        maiSaveLibrary(lib);
+        if (typeof showToast === 'function') showToast(`已更新地圖庫「${name}」`);
+    } else {
+        const id = 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        lib.push({ id, name, mapW: maiCanvas.mapW, mapH: maiCanvas.mapH, mapData: maiCanvas.mapData, palette: maiCanvas.palette });
+        maiSaveLibrary(lib);
+        maiLoadedLibraryId = id;
+        if (typeof showToast === 'function') showToast(`已存入地圖庫「${name}」`);
+    }
+    if (nameInput) nameInput.value = name;
+    maiRenderLibrary();
+}
+
+/** 載入地圖庫的一筆到畫布繼續編輯（會覆蓋目前畫布內容，之後「儲存」會覆蓋更新這一筆）。 */
+function maiLoadEntryToCanvas(id) {
+    const entry = maiLoadLibrary().find(e => e.id === id);
+    if (!entry) return;
+    if (!confirm(`載入「${entry.name}」到畫布？（目前畫布上尚未存檔的內容會消失）`)) return;
+
+    maiCanvas = {
+        mapW: entry.mapW,
+        mapH: entry.mapH,
+        mapData: entry.mapData.map(row => [...row]),
+        palette: entry.palette.map(t => ({ ...t }))
+    };
+    maiLoadedLibraryId = id;
+    const nameInput = document.getElementById('mai-save-name');
+    if (nameInput) nameInput.value = entry.name;
+    maiRenderCanvas();
+    if (typeof showToast === 'function') showToast(`已載入「${entry.name}」到畫布`);
+}
+
+/** 複製一筆地圖庫紀錄成新的一份，並載入到畫布（原本那份不受影響）。 */
+function maiDuplicateEntry(id) {
+    const entry = maiLoadLibrary().find(e => e.id === id);
+    if (!entry) return;
+    const lib = maiLoadLibrary();
+    const newEntry = {
+        id: 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        name: `${entry.name}（副本）`,
+        mapW: entry.mapW,
+        mapH: entry.mapH,
+        mapData: entry.mapData.map(row => [...row]),
+        palette: entry.palette.map(t => ({ ...t }))
+    };
+    lib.push(newEntry);
+    maiSaveLibrary(lib);
+
+    maiCanvas = { mapW: newEntry.mapW, mapH: newEntry.mapH, mapData: newEntry.mapData.map(row => [...row]), palette: newEntry.palette.map(t => ({ ...t })) };
+    maiLoadedLibraryId = newEntry.id;
+    const nameInput = document.getElementById('mai-save-name');
+    if (nameInput) nameInput.value = newEntry.name;
+    maiRenderCanvas();
+    maiRenderLibrary();
+    if (typeof showToast === 'function') showToast(`已複製為「${newEntry.name}」並載入畫布`);
+}
+
+function maiRenameEntry(id) {
+    const lib = maiLoadLibrary();
+    const entry = lib.find(e => e.id === id);
+    if (!entry) return;
+    const name = prompt('新的名稱：', entry.name);
+    if (name === null) return;
+    const trimmed = name.trim().slice(0, 30);
+    if (!trimmed) return;
+    entry.name = trimmed;
+    maiSaveLibrary(lib);
+    if (maiLoadedLibraryId === id) {
+        const nameInput = document.getElementById('mai-save-name');
+        if (nameInput) nameInput.value = trimmed;
+    }
+    maiRenderLibrary();
+}
+
+function maiDeleteEntry(id) {
+    if (!confirm('從地圖庫刪除這筆紀錄？')) return;
+    maiSaveLibrary(maiLoadLibrary().filter(e => e.id !== id));
+    if (maiLoadedLibraryId === id) maiLoadedLibraryId = null;
+    maiRenderLibrary();
+}
+
+/** 套用到正式地圖：整個覆蓋目前的地圖版面與調色盤（會提示確認，因為會蓋掉現有版面）。僅 ST 可操作。 */
+function maiApplyEntryToLiveMap(id) {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const entry = maiLoadLibrary().find(e => e.id === id);
+    if (!entry) return;
+    if (!confirm(`套用「${entry.name}」到正式地圖？\n這會把地圖尺寸改成 ${entry.mapW}x${entry.mapH}，並覆蓋目前整個地圖版面，此動作無法復原。`)) return;
+
+    state.mapW = entry.mapW;
+    state.mapH = entry.mapH;
+    state.mapData = entry.mapData.map(row => [...row]);
+
+    if (!state.mapPalette) state.mapPalette = [];
+    let nextId = Date.now() % 100000 + 1000;
+    const nameToId = new Map(state.mapPalette.map(t => [t.name, t.id]));
+    const idRemap = new Map(); // 畫布庫的 tile id -> 正式地圖的 tile id
+    entry.palette.forEach(t => {
+        if (nameToId.has(t.name)) {
+            idRemap.set(t.id, nameToId.get(t.name));
+            return;
+        }
+        const newId = nextId++;
+        state.mapPalette.push({ id: newId, name: t.name, color: t.color, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier || 1 });
+        nameToId.set(t.name, newId);
+        idRemap.set(t.id, newId);
+    });
+    // 重新映射 mapData 裡的 tile id（地圖庫跟正式地圖的調色盤 id 不保證相同）
+    state.mapData = state.mapData.map(row => row.map(v => v ? (idRemap.get(v) || 0) : 0));
 
     if (typeof updateToolbar === 'function') updateToolbar();
     if (typeof renderMap === 'function') renderMap();
     if (typeof syncMapPalette === 'function') syncMapPalette();
     if (typeof sendState === 'function') sendState();
-    if (typeof showToast === 'function') showToast(`已套用 AI 建議（新增 ${action.newTiles.length} 種地形，標記 ${painted} 格）`);
-    maiRenderMessages();
+    if (typeof showToast === 'function') showToast(`已套用「${entry.name}」到正式地圖`);
 }
 
-function maiDiscardAction() {
-    maiClearOverlay();
-    maiPendingAction = null;
-    maiRenderMessages();
+function maiRenderLibrary() {
+    const box = document.getElementById('mai-library-list');
+    if (!box) return;
+    const lib = maiLoadLibrary();
+
+    box.textContent = '';
+    if (!lib.length) {
+        const empty = document.createElement('div');
+        empty.className = 'log-empty';
+        empty.textContent = '地圖庫是空的。在左邊畫布設計滿意後，按「儲存到地圖庫」存起來。';
+        box.appendChild(empty);
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    for (const entry of lib) {
+        const card = document.createElement('div');
+        card.className = 'mai-lib-card' + (maiLoadedLibraryId === entry.id ? ' active' : '');
+
+        const info = document.createElement('div');
+        info.className = 'mai-lib-info';
+        const name = document.createElement('div');
+        name.className = 'mai-lib-name';
+        name.textContent = entry.name;
+        info.appendChild(name);
+        const size = document.createElement('div');
+        size.className = 'mai-lib-size';
+        size.textContent = `${entry.mapW} x ${entry.mapH}｜${(entry.palette || []).length} 種地形`;
+        info.appendChild(size);
+        card.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.className = 'mai-lib-actions';
+        const mk = (label, title, fn, cls) => {
+            const btn = document.createElement('button');
+            btn.className = 'lv-btn ' + cls;
+            btn.title = title;
+            btn.textContent = label;
+            btn.addEventListener('click', () => fn(entry.id));
+            return btn;
+        };
+        actions.appendChild(mk('📥 套用', '套用到正式地圖（覆蓋現有版面）', maiApplyEntryToLiveMap, 'lv-btn-deploy'));
+        actions.appendChild(mk('✏️ 編輯', '載入到畫布繼續編輯', maiLoadEntryToCanvas, 'lv-btn-tpl'));
+        actions.appendChild(mk('📋 複製', '複製成新的一份', maiDuplicateEntry, 'lv-btn-tpl'));
+        actions.appendChild(mk('改名', '重新命名', maiRenameEntry, 'lv-btn-tpl'));
+        actions.appendChild(mk('🗑️', '刪除', maiDeleteEntry, 'lv-btn-del'));
+        card.appendChild(actions);
+
+        frag.appendChild(card);
+    }
+    box.appendChild(frag);
 }
 
-// ===== 渲染 =====
+// ===== 對話渲染 =====
 
 function maiRenderMessages() {
     const box = document.getElementById('mai-messages');
@@ -293,49 +496,15 @@ function maiRenderMessages() {
     if (!maiMessages.length) {
         const empty = document.createElement('div');
         empty.className = 'mai-empty';
-        empty.textContent = '跟我說說這張地圖想要什麼氛圍或需要什麼地形，我會直接在地圖上標記預覽給你看。';
+        empty.textContent = '跟我說說這張地圖想要什麼氛圍或需要什麼地形，我會直接畫在右邊的畫布上給你看。';
         box.appendChild(empty);
     }
 
-    maiMessages.forEach((m, idx) => {
+    maiMessages.forEach(m => {
         const row = document.createElement('div');
         row.className = 'mai-msg mai-msg-' + m.role;
         row.textContent = m.text;
         box.appendChild(row);
-
-        const isLatest = idx === maiMessages.length - 1;
-        if (m.action && isLatest && maiPendingAction === m.action) {
-            const card = document.createElement('div');
-            card.className = 'mai-action-card';
-
-            const summary = document.createElement('div');
-            summary.className = 'mai-action-summary';
-            const cellCount = m.action.placements.reduce((sum, p) => sum + p.cells.length, 0);
-            const parts = [];
-            if (m.action.newTiles.length) parts.push(`${m.action.newTiles.length} 種新地形`);
-            if (cellCount) parts.push(`${cellCount} 格標記`);
-            summary.textContent = `📍 建議：${parts.join('、') || '（無實際變更）'}（已預覽到地圖，半透明色塊）`;
-            card.appendChild(summary);
-
-            const btns = document.createElement('div');
-            btns.className = 'mai-action-btns';
-            const applyBtn = document.createElement('button');
-            applyBtn.className = 'modal-btn';
-            applyBtn.style.background = 'var(--accent-green)';
-            applyBtn.style.color = '#000';
-            applyBtn.textContent = '✅ 套用';
-            applyBtn.onclick = maiApplyAction;
-            const discardBtn = document.createElement('button');
-            discardBtn.className = 'modal-btn';
-            discardBtn.style.background = 'var(--bg-input)';
-            discardBtn.textContent = '✕ 捨棄';
-            discardBtn.onclick = maiDiscardAction;
-            btns.appendChild(applyBtn);
-            btns.appendChild(discardBtn);
-            card.appendChild(btns);
-
-            box.appendChild(card);
-        }
     });
 
     if (maiBusy) {
@@ -357,11 +526,10 @@ function maiHandleInputKeydown(e) {
 
 function maiClearChat() {
     maiMessages = [];
-    maiDiscardAction();
     maiRenderMessages();
 }
 
-/** 僅 ST 可見 QAB 選單入口（由 setupRoomListeners 呼叫，與侵蝕控制台的 eroGateUI 同一模式）。 */
+// ===== 僅 ST 可見 QAB 選單入口 =====
 function maiGateUI() {
     const isST = (typeof myRole !== 'undefined' && myRole === 'st');
     const item = document.getElementById('qab-map-ai-item');
@@ -381,6 +549,8 @@ function maiTogglePanel() {
         panel.classList.remove('hidden');
         if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(panel);
         maiRenderMessages();
+        maiRenderCanvas();
+        maiRenderLibrary();
     } else {
         panel.classList.add('hidden');
     }
@@ -398,7 +568,7 @@ function maiInitFloatPanel() {
         headerId: 'map-ai-panel-header',
         collapseBtnId: 'map-ai-panel-collapse',
         storageKey: 'limbus_map_ai_panel',
-        defaultPos: { x: Math.max(20, window.innerWidth - 380), y: 90 },
+        defaultPos: { x: Math.max(20, window.innerWidth - 700), y: 70 },
         dock: { icon: '🧭', title: 'AI 地圖助手' },
         restoreDock: true,
     });

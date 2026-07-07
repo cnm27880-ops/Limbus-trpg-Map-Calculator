@@ -5478,8 +5478,8 @@ body.combat-mode .boss-hud-container {
     cursor: pointer;
 }
 .fog-hint { font-size: .74rem; color: var(--text-dim, #999); line-height: 1.5; margin: 6px 0 0; }
-.fog-hint-warn { color: var(--accent-yellow, #fdd835); }
-.fog-preview-row { margin-top: 8px; }
+.fog-hint-tip { color: var(--accent-yellow, #fdd835); }
+.fog-hint-tip b { color: #ffe88a; }
 .fog-field { margin-bottom: 8px; }
 .fog-field label { display: block; font-size: .75rem; color: var(--text-dim, #aaa); margin-bottom: 3px; }
 .fog-select {

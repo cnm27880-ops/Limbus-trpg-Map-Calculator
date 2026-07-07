@@ -51,8 +51,9 @@ function initCameraEvents() {
         if (isMeasuring || e.altKey) return;
         // 點到 Token：交給 Token 自己的 handler（map.js）
         if (e.target.classList.contains('token')) return;
-        // 繪製工具且點在地圖層：canvas 會自行處理並 stopPropagation，這裡保險再擋一次
-        if (currentTool !== 'cursor' &&
+        // 繪製工具且點在地圖層：canvas 會自行處理並 stopPropagation，這裡保險再擋一次。
+        // 迷霧補畫筆刷例外：只點一下塗一格、不會 stopPropagation，讓 ST 仍可正常拖曳平移地圖。
+        if (currentTool !== 'cursor' && currentTool !== 'fog-reveal' && currentTool !== 'fog-hide' &&
             (e.target.id === 'map-canvas' || e.target.classList.contains('cell'))) {
             isPaintingDrag = true;
             return;

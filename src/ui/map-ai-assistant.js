@@ -42,20 +42,22 @@ function maiCreateEmptyCanvas(w, h) {
     return {
         mapW: w,
         mapH: h,
-        mapData: Array.from({ length: h }, () => Array(w).fill(0)),
-        palette: [] // { id, name, color, effect, moveCostMultiplier }
+        mapData: Array.from({ length: h }, () => Array(w).fill(0))
+        // 注意：素材（地形定義）不再屬於畫布本身，直接沿用正式地圖共用的 state.mapPalette，
+        // 隨取隨用、不需要匯入，新增/刪除也會同時反映在正式地圖的地形工具列上。
     };
 }
 
 // ===== 畫布序列化（給 AI 當上下文）=====
 
 function maiSerializeCanvasPalette() {
-    return maiCanvas.palette.map(t => ({ name: t.name, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier || 1 }));
+    const palette = (typeof state !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [];
+    return palette.filter(t => t.name !== '地板').map(t => ({ name: t.name, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier || 1 }));
 }
 
 function maiSerializeCanvasCells() {
     const nameOf = (id) => {
-        const t = maiCanvas.palette.find(p => p.id === id);
+        const t = (typeof getTileFromPalette === 'function') ? getTileFromPalette(id) : null;
         return t ? t.name : `未知地形#${id}`;
     };
     const cells = [];
@@ -88,16 +90,18 @@ function maiBuildSystemPrompt() {
         '你的建議會直接畫到畫布上（不需要額外確認這一步，畫布本身就是草稿），所以請放心提案、',
         '也可以在 ST 要求調整時直接修改畫布上的格子（例如換一種地形、清空某些格子改回地板：',
         '清空地板可以用 tileName 設為 "地板"）。',
+        '注意：newTiles 新增的地形會直接加入正式地圖共用的地形素材庫（跟 ST 手動新增的效果一樣，',
+        '所有人立刻看得到），所以請確實想清楚機制再新增，不要重複新增功能相同的地形。',
         '規則：',
-        '- 若畫布現有地形已經有合適的，placements 直接引用該地形的 name，不要重複新增。',
-        '- 只有畫布現有地形真的沒有合適效果時，才透過 newTiles 新增；newTiles 的 name 必須跟 placements 引用的 tileName 對上。',
+        '- 若素材庫已經有合適的地形，placements 直接引用該地形的 name，不要重複新增。',
+        '- 只有素材庫真的沒有合適效果時，才透過 newTiles 新增；newTiles 的 name 必須跟 placements 引用的 tileName 對上。',
         '- effect 只是好看的敘述沒有意義，必須是明確可執行的機制（移動消耗、防禦加減、傷害、施加狀態等）。',
         '- moveCostMultiplier：1 = 不影響移動；若 effect 提到「移動困難」「深陷」「泥濘」之類，必須設對應倍率（通常 2），不能只寫在文字裡卻留預設值 1。',
         '- 座標系統：x 是欄（0 到 mapW-1），y 是列（0 到 mapH-1）。cells 只需列出「你建議變更」的格子。',
         '- 不要一次建議動用整塊畫布所有格子，除非 ST 明確要求；先給一個合理範圍的提案。',
         '',
         `目前畫布尺寸：${maiCanvas.mapW} x ${maiCanvas.mapH}（x: 0~${maiCanvas.mapW - 1}，y: 0~${maiCanvas.mapH - 1}）。`,
-        `目前畫布上的地形（可直接引用的名稱）：${palette.length ? JSON.stringify(palette) : '（畫布目前只有地板，沒有其他地形）'}`,
+        `目前地形素材庫（跟正式地圖共用，可直接引用的名稱）：${palette.length ? JSON.stringify(palette) : '（素材庫目前是空的，只有地板）'}`,
         `目前畫布上已標記的非地板格子${truncated ? `（僅列出前 ${MAI_MAX_CELLS_IN_CONTEXT} 格，其餘省略）` : ''}：`,
         cells.length ? JSON.stringify(cells) : '（畫布目前整片都是地板，還沒有任何地形）'
     ].join('\n');
@@ -199,15 +203,24 @@ function maiNormalizeAction(parsed) {
     return { newTiles, placements };
 }
 
-/** 把 AI 的建議直接寫進畫布（畫布本身就是草稿區，不需要額外的預覽/套用確認）。 */
+/**
+ * 把 AI 的建議直接寫進畫布：placements 只影響畫布本身的草稿格子（不動正式地圖），
+ * 但 newTiles 新增的地形定義會直接加進正式地圖共用的 state.mapPalette（跟 ST 手動
+ * 新增素材效果一樣，兩邊即時共用），不需要額外的預覽/套用確認。
+ */
 function maiApplyActionToCanvas(action) {
+    if (typeof state === 'undefined') return;
+    if (!state.mapPalette) state.mapPalette = [];
+
     let nextId = Date.now() % 100000 + 1000;
-    const nameToId = new Map(maiCanvas.palette.map(t => [t.name, t.id]));
+    const nameToId = new Map(state.mapPalette.map(t => [t.name, t.id]));
+    let addedAny = false;
     action.newTiles.forEach(t => {
         if (nameToId.has(t.name)) return;
         const id = nextId++;
-        maiCanvas.palette.push({ id, name: t.name, color: t.color, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier });
+        state.mapPalette.push({ id, name: t.name, color: t.color, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier });
         nameToId.set(t.name, id);
+        addedAny = true;
     });
 
     action.placements.forEach(p => {
@@ -219,6 +232,13 @@ function maiApplyActionToCanvas(action) {
             }
         });
     });
+
+    if (addedAny) {
+        if (typeof updateToolbar === 'function') updateToolbar();
+        if (typeof syncMapPalette === 'function') syncMapPalette();
+        if (typeof myRole !== 'undefined' && myRole === 'st' && typeof sendState === 'function') sendState();
+        maiRenderMaterials();
+    }
 }
 
 // ===== 畫布渲染（獨立於正式地圖的小格子預覽） =====
@@ -236,7 +256,7 @@ function maiRenderCanvas() {
             const cell = document.createElement('div');
             cell.className = 'mai-canvas-cell';
             if (val) {
-                const t = maiCanvas.palette.find(p => p.id === val);
+                const t = (typeof getTileFromPalette === 'function') ? getTileFromPalette(val) : null;
                 if (t) {
                     cell.style.background = t.color;
                     cell.title = `${t.name}｜${t.effect || ''}`;
@@ -278,60 +298,28 @@ function maiPaintCell(x, y) {
     maiRenderCanvas();
 }
 
-// ===== 素材（畫布調色盤）管理：可直接沿用正式地圖現有地形，也能隨時新增／刪除 =====
+// ===== 素材：直接沿用正式地圖共用的 state.mapPalette，隨取隨用，不需要匯入 =====
+// 新增／刪除都走跟正式地圖工具列相同的地形編輯器（modals.js 的 openTileEditorModal／
+// deletePaletteTile），兩邊即時共用同一份素材庫；AI 在聊天中提出的新地形也是加進這裡。
 
 function maiSelectMaterial(id) {
     maiSelectedTool = id;
     maiRenderMaterials();
 }
 
-/** 把正式地圖目前的地形調色盤（state.mapPalette）匯入成畫布素材（依名稱去重，不覆蓋畫布已有的同名素材）。 */
-function maiImportLiveTerrain() {
-    if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const live = (typeof state !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [];
-    const importable = live.filter(t => t.name !== '地板');
-    if (!importable.length) {
-        if (typeof showToast === 'function') showToast('正式地圖目前沒有可匯入的地形');
-        return;
-    }
-
-    let nextId = Date.now() % 100000 + 1000;
-    const existingNames = new Set(maiCanvas.palette.map(t => t.name));
-    let added = 0;
-    importable.forEach(t => {
-        if (existingNames.has(t.name)) return;
-        maiCanvas.palette.push({
-            id: nextId++,
-            name: t.name,
-            color: t.color,
-            effect: t.effect || '',
-            moveCostMultiplier: t.moveCostMultiplier || 1
-        });
-        existingNames.add(t.name);
-        added++;
-    });
-
-    maiRenderMaterials();
-    if (typeof showToast === 'function') {
-        showToast(added ? `已匯入 ${added} 種地形作為畫布素材` : '正式地圖的地形都已經在畫布素材裡了');
-    }
-}
-
-/** 從畫布素材移除一種地形；用到該素材的格子一併恢復成地板。 */
-function maiRemoveMaterial(id) {
-    const t = maiCanvas.palette.find(p => p.id === id);
-    if (!t) return;
-    if (!confirm(`從畫布素材移除「${t.name}」？（畫布上用到這個素材的格子會恢復成地板）`)) return;
-
-    maiCanvas.palette = maiCanvas.palette.filter(p => p.id !== id);
-    maiCanvas.mapData = maiCanvas.mapData.map(row => row.map(v => v === id ? 0 : v));
-    if (maiSelectedTool === id) maiSelectedTool = 0;
-    maiRenderCanvas();
-}
-
 function maiRenderMaterials() {
     const box = document.getElementById('mai-materials');
     if (!box) return;
+
+    // 地形調色盤裡本來就有一筆真正名為「地板」的資料（id 不保證是 0），
+    // 這裡已經有固定的「地板／橡皮擦」代表項目了，要過濾掉避免重複出現。
+    const palette = ((typeof state !== 'undefined' && Array.isArray(state.mapPalette)) ? state.mapPalette : [])
+        .filter(t => t.name !== '地板');
+    // 素材被刪除後，若目前選取的正好是它，重置回地板／橡皮擦，避免拿不存在的素材繼續繪製
+    if (maiSelectedTool !== 0 && !palette.some(t => t.id === maiSelectedTool)) {
+        maiSelectedTool = 0;
+    }
+
     box.textContent = '';
 
     const mkSwatch = (id, name, color, removable) => {
@@ -353,92 +341,19 @@ function maiRenderMaterials() {
         if (removable) {
             const del = document.createElement('button');
             del.className = 'mai-material-del';
-            del.title = `移除「${name}」`;
+            del.title = `從素材庫移除「${name}」`;
             del.textContent = '×';
-            del.addEventListener('click', (e) => { e.stopPropagation(); maiRemoveMaterial(id); });
+            del.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (typeof deletePaletteTile === 'function') deletePaletteTile(id);
+            });
             wrap.appendChild(del);
         }
         box.appendChild(wrap);
     };
 
     mkSwatch(0, '地板／橡皮擦', '#17171b', false);
-    maiCanvas.palette.forEach(t => mkSwatch(t.id, t.name, t.color, true));
-}
-
-/** 開啟「新增素材」小表單（獨立於正式地圖的地形編輯器，直接寫進畫布調色盤）。 */
-function maiOpenAddMaterialForm() {
-    if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const existing = document.getElementById('mai-material-form-modal');
-    if (existing) existing.remove();
-
-    const html = `
-        <div class="modal-overlay show" id="mai-material-form-modal" onclick="if(event.target.id==='mai-material-form-modal')maiCloseAddMaterialForm()">
-            <div class="modal tile-editor-modal" onclick="event.stopPropagation()">
-                <div class="modal-header modal-header--create">
-                    <span style="font-weight:bold;">➕ 新增畫布素材</span>
-                    <button onclick="maiCloseAddMaterialForm()" style="background:none;font-size:1.2rem;">×</button>
-                </div>
-                <div class="modal-body">
-                    <div class="tile-editor-form">
-                        <div class="form-group">
-                            <label class="tile-editor-label">素材名稱</label>
-                            <input type="text" id="mai-mat-name" placeholder="例如：船艙地板" maxlength="20">
-                        </div>
-                        <div class="form-group">
-                            <label class="tile-editor-label">顏色</label>
-                            <div class="tile-color-row">
-                                <input type="color" id="mai-mat-color" value="#666666" class="tile-color-picker">
-                                <span class="tile-color-hex" id="mai-mat-color-hex">#666666</span>
-                                <div class="tile-color-preview" id="mai-mat-color-preview" style="background:#666666;"></div>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label class="tile-editor-label">效果描述</label>
-                            <textarea id="mai-mat-effect" placeholder="例如：【搖晃】移動消耗x2" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label class="tile-editor-label">移動消耗倍率</label>
-                            <input type="number" id="mai-mat-move-cost" value="1" min="0.5" step="0.5" style="width:100px;">
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button onclick="maiCloseAddMaterialForm()" class="modal-btn" style="background:var(--bg-card);">取消</button>
-                    <button onclick="maiSaveMaterialFromForm()" class="modal-btn" style="background:var(--accent-green);color:#000;">新增素材</button>
-                </div>
-            </div>
-        </div>
-    `;
-    document.getElementById('modals-container').insertAdjacentHTML('beforeend', html);
-
-    const colorInput = document.getElementById('mai-mat-color');
-    if (colorInput) {
-        colorInput.addEventListener('input', () => {
-            const hex = colorInput.value;
-            document.getElementById('mai-mat-color-hex').textContent = hex;
-            document.getElementById('mai-mat-color-preview').style.background = hex;
-        });
-    }
-}
-
-function maiCloseAddMaterialForm() {
-    const modal = document.getElementById('mai-material-form-modal');
-    if (modal) modal.remove();
-}
-
-function maiSaveMaterialFromForm() {
-    const name = document.getElementById('mai-mat-name')?.value.trim();
-    if (!name) { if (typeof showToast === 'function') showToast('請輸入素材名稱'); return; }
-    const color = document.getElementById('mai-mat-color')?.value || '#666666';
-    const effect = document.getElementById('mai-mat-effect')?.value.trim() || '';
-    const moveCostMultiplier = Math.max(0.5, parseFloat(document.getElementById('mai-mat-move-cost')?.value) || 1);
-
-    const id = Date.now() % 100000 + 1000;
-    maiCanvas.palette.push({ id, name, color, effect, moveCostMultiplier });
-    maiSelectedTool = id;
-    maiCloseAddMaterialForm();
-    maiRenderMaterials();
-    if (typeof showToast === 'function') showToast(`已新增素材「${name}」，可直接在畫布上繪製`);
+    palette.forEach(t => mkSwatch(t.id, t.name, t.color, true));
 }
 
 function maiResetCanvas() {
@@ -508,12 +423,12 @@ function maiSaveCanvasToLibrary() {
     if (maiLoadedLibraryId && lib.some(e => e.id === maiLoadedLibraryId)) {
         // 目前畫布是從某一筆載入的：直接覆蓋更新那一筆
         const idx = lib.findIndex(e => e.id === maiLoadedLibraryId);
-        lib[idx] = { id: maiLoadedLibraryId, name, mapW: maiCanvas.mapW, mapH: maiCanvas.mapH, mapData: maiCanvas.mapData, palette: maiCanvas.palette };
+        lib[idx] = { id: maiLoadedLibraryId, name, mapW: maiCanvas.mapW, mapH: maiCanvas.mapH, mapData: maiCanvas.mapData };
         maiSaveLibrary(lib);
         if (typeof showToast === 'function') showToast(`已更新地圖庫「${name}」`);
     } else {
         const id = 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-        lib.push({ id, name, mapW: maiCanvas.mapW, mapH: maiCanvas.mapH, mapData: maiCanvas.mapData, palette: maiCanvas.palette });
+        lib.push({ id, name, mapW: maiCanvas.mapW, mapH: maiCanvas.mapH, mapData: maiCanvas.mapData });
         maiSaveLibrary(lib);
         maiLoadedLibraryId = id;
         if (typeof showToast === 'function') showToast(`已存入地圖庫「${name}」`);
@@ -531,8 +446,7 @@ function maiLoadEntryToCanvas(id) {
     maiCanvas = {
         mapW: entry.mapW,
         mapH: entry.mapH,
-        mapData: entry.mapData.map(row => [...row]),
-        palette: entry.palette.map(t => ({ ...t }))
+        mapData: entry.mapData.map(row => [...row])
     };
     maiLoadedLibraryId = id;
     maiSelectedTool = 0;
@@ -552,13 +466,12 @@ function maiDuplicateEntry(id) {
         name: `${entry.name}（副本）`,
         mapW: entry.mapW,
         mapH: entry.mapH,
-        mapData: entry.mapData.map(row => [...row]),
-        palette: entry.palette.map(t => ({ ...t }))
+        mapData: entry.mapData.map(row => [...row])
     };
     lib.push(newEntry);
     maiSaveLibrary(lib);
 
-    maiCanvas = { mapW: newEntry.mapW, mapH: newEntry.mapH, mapData: newEntry.mapData.map(row => [...row]), palette: newEntry.palette.map(t => ({ ...t })) };
+    maiCanvas = { mapW: newEntry.mapW, mapH: newEntry.mapH, mapData: newEntry.mapData.map(row => [...row]) };
     maiLoadedLibraryId = newEntry.id;
     maiSelectedTool = 0;
     const nameInput = document.getElementById('mai-save-name');
@@ -592,7 +505,10 @@ function maiDeleteEntry(id) {
     maiRenderLibrary();
 }
 
-/** 套用到正式地圖：整個覆蓋目前的地圖版面與調色盤（會提示確認，因為會蓋掉現有版面）。僅 ST 可操作。 */
+/**
+ * 套用到正式地圖：整個覆蓋目前的地圖版面（會提示確認，因為會蓋掉現有版面）。僅 ST 可操作。
+ * 素材本來就是共用的 state.mapPalette，畫布跟正式地圖的地形 id 一直是同一份，不需要再重新映射。
+ */
 function maiApplyEntryToLiveMap(id) {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
     const entry = maiLoadLibrary().find(e => e.id === id);
@@ -603,26 +519,8 @@ function maiApplyEntryToLiveMap(id) {
     state.mapH = entry.mapH;
     state.mapData = entry.mapData.map(row => [...row]);
 
-    if (!state.mapPalette) state.mapPalette = [];
-    let nextId = Date.now() % 100000 + 1000;
-    const nameToId = new Map(state.mapPalette.map(t => [t.name, t.id]));
-    const idRemap = new Map(); // 畫布庫的 tile id -> 正式地圖的 tile id
-    entry.palette.forEach(t => {
-        if (nameToId.has(t.name)) {
-            idRemap.set(t.id, nameToId.get(t.name));
-            return;
-        }
-        const newId = nextId++;
-        state.mapPalette.push({ id: newId, name: t.name, color: t.color, effect: t.effect, moveCostMultiplier: t.moveCostMultiplier || 1 });
-        nameToId.set(t.name, newId);
-        idRemap.set(t.id, newId);
-    });
-    // 重新映射 mapData 裡的 tile id（地圖庫跟正式地圖的調色盤 id 不保證相同）
-    state.mapData = state.mapData.map(row => row.map(v => v ? (idRemap.get(v) || 0) : 0));
-
     if (typeof updateToolbar === 'function') updateToolbar();
     if (typeof renderMap === 'function') renderMap();
-    if (typeof syncMapPalette === 'function') syncMapPalette();
     if (typeof sendState === 'function') sendState();
     if (typeof showToast === 'function') showToast(`已套用「${entry.name}」到正式地圖`);
 }
@@ -654,7 +552,7 @@ function maiRenderLibrary() {
         info.appendChild(name);
         const size = document.createElement('div');
         size.className = 'mai-lib-size';
-        size.textContent = `${entry.mapW} x ${entry.mapH}｜${(entry.palette || []).length} 種地形`;
+        size.textContent = `${entry.mapW} x ${entry.mapH}`;
         info.appendChild(size);
         card.appendChild(info);
 

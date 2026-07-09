@@ -1527,7 +1527,7 @@ function openUnitContextMenu(event, unitId) {
     // ===== 環繞式選單：以棋子為圓心，極簡白灰圖標環繞展開，帶旋轉切入／切出動畫 =====
     const n = items.length;
     const itemR = 13;                              // 圖標命中半徑（對應 CSS 26px；視覺圖形更小）
-    const ringR = 62 + Math.max(0, n - 5) * 6;     // 環半徑：留出中央名牌空間並隨項目數外擴
+    const ringR = 44 + Math.max(0, n - 6) * 6;     // 環半徑：緊貼棋子，項目多時才外擴
 
     // 圓心：優先對準地圖上的棋子中心，找不到（未部署／隱藏）則退回游標位置
     let cx = event.clientX;
@@ -1548,11 +1548,6 @@ function openUnitContextMenu(event, unitId) {
     menu.className = 'radial-menu';
     menu.style.left = cx + 'px';
     menu.style.top = cy + 'px';
-
-    const hub = document.createElement('div');
-    hub.className = 'radial-hub';
-    hub.textContent = u.name || '單位';
-    menu.appendChild(hub);
 
     // 從正上方（-90°）順時針均分
     items.forEach((it, i) => {

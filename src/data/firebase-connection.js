@@ -450,9 +450,19 @@ function joinRoom(roomCode, isST) {
             if (!isST) {
                 // 保留返回玩家既有的轉盤資料（spins / inventory），避免重新加入時被重置
                 const existingPlayer = (data.players && data.players[myPlayerId]) || {};
-                // 代號沿用既有紀錄（返回玩家用同一識別碼登入 → 保留原本代號與棋子權限）；
-                // 全新玩家給預設「玩家####」，之後可自行修改。身分只綁識別碼，改代號不影響權限。
-                myName = existingPlayer.name || myName || ('玩家' + myPlayerCode);
+                // 代號解析：返回玩家（用同一識別碼登入）沿用既有代號，保留棋子權限；
+                // 全新玩家跳一次「設定代號」提示（可取消 → 用預設「玩家####」）。
+                // 身分只綁識別碼，代號僅為顯示名，改名不影響權限。
+                if (existingPlayer.name) {
+                    myName = existingPlayer.name;
+                } else if (!myName) {
+                    let input = null;
+                    try {
+                        input = prompt('歡迎加入！設定你的代號（其他人看到的名稱，之後可在右上角 👤 修改）', '');
+                    } catch (e) { /* prompt 不可用時退回預設 */ }
+                    const trimmed = (input || '').trim().substring(0, 30);
+                    myName = trimmed || ('玩家' + myPlayerCode);
+                }
                 const playerData = {
                     name: myName,
                     code: myPlayerCode,

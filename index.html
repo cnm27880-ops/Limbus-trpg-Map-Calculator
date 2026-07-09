@@ -31,7 +31,6 @@
     <div class="login-box" id="login-main">
         <div class="login-title">LIMBUS</div>
         <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統</div>
-        <input type="text" id="input-name" placeholder="輸入代號" style="width:100%;text-align:center;margin-bottom:10px;">
         <button class="login-btn btn-host" onclick="showSTStep()">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
     </div>
@@ -74,7 +73,8 @@
             <div class="conn-dot connecting" id="conn-dot"></div>
             <span id="conn-text">連線中</span>
         </div>
-        <span class="player-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼" style="font-size:0.9rem;padding:4px 8px;display:none;">----</span>
+        <span class="player-name-chip" id="my-name" onclick="renameMyCodename()" title="點擊修改代號（其他人看到的名稱）" style="display:none;"></span>
+        <span class="player-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼（登入用）" style="font-size:0.9rem;padding:4px 8px;display:none;">----</span>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋</button>
         <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製ID">---</span>
         <button class="logout-btn" id="logout-btn" onclick="logoutAndReset()" title="登出/切換帳號" style="display:none;">🚪</button>

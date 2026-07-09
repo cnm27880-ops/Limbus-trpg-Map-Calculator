@@ -82,6 +82,12 @@ function updateCodeDisplay() {
         codeEl.innerText = myPlayerCode;
         codeEl.style.display = 'inline-block';
     }
+    // 代號 chip（可點擊修改的全域顯示名稱）
+    const nameEl = document.getElementById('my-name');
+    if (nameEl && typeof myName !== 'undefined' && myName) {
+        nameEl.innerText = '👤 ' + myName;
+        nameEl.style.display = 'inline-block';
+    }
 }
 
 // ===== ID 生成 =====

@@ -189,9 +189,13 @@ function renderUnitsList() {
         let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
         if (hideDetails) statusText = `剩餘 ${hpPercent}%`;
 
-        // 擁有者標籤
+        // 擁有者代號標籤：ST 可點擊修改（辨識這是哪位玩家的單位）；其他人唯讀顯示
         let ownerTag = '';
-        if (u.ownerName) {
+        const isPlayerOwned = !!u.ownerId && !String(u.ownerId).startsWith('st_');
+        if (isSt && isPlayerOwned) {
+            const codeText = u.ownerName ? `[${escapeHtml(u.ownerName)}]` : '[＋代號]';
+            ownerTag = `<span class="owner-code-edit" onclick="event.stopPropagation();renameOwnerCode('${u.id}')" title="修改玩家代號（僅 ST）" style="font-size:0.65rem;margin-left:6px;">${codeText}</span>`;
+        } else if (u.ownerName) {
             const ownerColor = isMyUnit ? 'var(--accent-green)' : 'var(--text-dim)';
             ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
         }
@@ -360,7 +364,9 @@ function renderUnitsList() {
                 <div class="unit-header">
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
                     <div style="flex:1;min-width:0;">
-                        <div title="${escapeHtml(u.name)}" style="font-weight:600;">${escapeHtml(u.name)}${hiddenBadge}${ownerTag}${shieldBadges}</div>
+                        <div style="font-weight:600;">${canEdit
+                            ? `<span class="unit-name-edit" onclick="event.stopPropagation();renameUnit('${u.id}')" title="修改單位名稱（點擊）">${escapeHtml(u.name)}</span>`
+                            : `<span title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>`}${hiddenBadge}${ownerTag}${shieldBadges}</div>
                         <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
                     </div>
                     ${initInput}
@@ -627,6 +633,55 @@ function modifyHP(id, type, amount) {
             amount: amount
         });
     }
+}
+
+/**
+ * 修改「單位名稱」（玩家可改自己的、ST 可改全部）。單位名稱即戰鬥廣播顯示的名字。
+ * @param {string} id - 單位 ID
+ */
+function renameUnit(id) {
+    const u = findUnitById(id);
+    if (!u) return;
+    if (!canControlUnit(u)) {
+        showToast('你無法修改其他人的單位');
+        return;
+    }
+    const cur = u.name || '';
+    const input = prompt('修改單位名稱（戰鬥廣播會顯示這個名字）', cur);
+    if (input === null) return;                       // 取消
+    const name = input.trim().substring(0, 50);
+    if (!name) { showToast('名稱不可空白'); return; }
+    if (name === cur) return;
+
+    u.name = name;                                    // 本地樂觀更新
+    if (myRole === 'st') {
+        broadcastState();
+    } else {
+        sendToHost({ type: 'renameUnit', playerId: myPlayerId, unitId: id, name });
+        renderAll();
+    }
+    showToast('單位名稱已更新');
+}
+
+/**
+ * 修改「玩家代號」（僅 ST）。代號用來辨識這是哪位玩家的單位，不影響戰鬥廣播顯示名。
+ * @param {string} id - 單位 ID
+ */
+function renameOwnerCode(id) {
+    if (typeof myRole === 'undefined' || myRole !== 'st') {
+        showToast('只有 ST 可以修改代號');
+        return;
+    }
+    const u = findUnitById(id);
+    if (!u) return;
+    const cur = u.ownerName || '';
+    const input = prompt('修改玩家代號（僅 ST 可改，用來辨識這是誰的單位）', cur);
+    if (input === null) return;
+    const code = input.trim().substring(0, 30);
+    if (code === cur) return;
+    u.ownerName = code;
+    broadcastState();
+    showToast('玩家代號已更新');
 }
 
 /**
@@ -1527,7 +1582,7 @@ function openUnitContextMenu(event, unitId) {
     // ===== 環繞式選單：以棋子為圓心，極簡白灰圖標環繞展開，帶旋轉切入／切出動畫 =====
     const n = items.length;
     const itemR = 13;                              // 圖標命中半徑（對應 CSS 26px；視覺圖形更小）
-    const ringR = 62 + Math.max(0, n - 5) * 6;     // 環半徑：留出中央名牌空間並隨項目數外擴
+    const ringR = 44 + Math.max(0, n - 6) * 6;     // 環半徑：緊貼棋子，項目多時才外擴
 
     // 圓心：優先對準地圖上的棋子中心，找不到（未部署／隱藏）則退回游標位置
     let cx = event.clientX;
@@ -1548,11 +1603,6 @@ function openUnitContextMenu(event, unitId) {
     menu.className = 'radial-menu';
     menu.style.left = cx + 'px';
     menu.style.top = cy + 'px';
-
-    const hub = document.createElement('div');
-    hub.className = 'radial-hub';
-    hub.textContent = u.name || '單位';
-    menu.appendChild(hub);
 
     // 從正上方（-90°）順時針均分
     items.forEach((it, i) => {

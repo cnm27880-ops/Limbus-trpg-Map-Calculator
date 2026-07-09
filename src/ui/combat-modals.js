@@ -350,7 +350,8 @@ function submitAttackModal() {
     }
 
     const attacker = {
-        id: myPlayerId, name: myName,
+        // 廣播顯示名以「攻擊單位的名稱」為準（而非玩家代號 myName）；無單位時才退回代號
+        id: myPlayerId, name: (attackerUnit && attackerUnit.name) ? attackerUnit.name : myName,
         unitId: attackerUnit ? attackerUnit.id : null,
         // ST 在此 Modal 一律操作 BOSS/怪物發起威脅，即便 id 仍是 ST 的 myPlayerId 也不算玩家攻擊；
         // 火力統計／AI 遭遇構築需以此區分，避免 ST 擲骰污染玩家平均火力。

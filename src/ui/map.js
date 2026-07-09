@@ -544,10 +544,10 @@ function renderMap() {
         let tokenClickStartX = null;
         let tokenClickStartY = null;
 
-        // 右鍵開啟快速操作選單
+        // 右鍵開啟快速操作選單（地圖棋子用環繞式）
         t.oncontextmenu = (e) => {
             if (typeof openUnitContextMenu === 'function') {
-                openUnitContextMenu(e, u.id);
+                openUnitContextMenu(e, u.id, 'radial');
             }
         };
 

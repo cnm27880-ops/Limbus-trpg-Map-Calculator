@@ -390,3 +390,26 @@
 .radial-menu.closing .radial-item {
     transition-delay: 0s;
 }
+
+/* ============================================================
+   部署頁面：可點擊編輯的單位名稱 / 玩家代號
+   ============================================================ */
+.unit-name-edit {
+    cursor: pointer;
+    border-bottom: 1px dotted var(--border-focus, #404048);
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.unit-name-edit:hover {
+    color: var(--accent-yellow, #fdd835);
+    border-bottom-color: var(--accent-yellow, #fdd835);
+}
+.owner-code-edit {
+    cursor: pointer;
+    color: var(--text-dim, #9a9aa4);
+    border-bottom: 1px dotted transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+.owner-code-edit:hover {
+    color: var(--accent-yellow, #fdd835);
+    border-bottom-color: var(--accent-yellow, #fdd835);
+}

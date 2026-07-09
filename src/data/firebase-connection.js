@@ -1415,6 +1415,10 @@ function sendToHost(message) {
             roomRef.child(`units/${message.unitId}`).remove();
             break;
 
+        case 'renameUnit':
+            roomRef.child(`units/${message.unitId}/name`).set(String(message.name || '').substring(0, 50));
+            break;
+
         case 'modifyHP':
             const unit = state.units.find(u => u.id === message.unitId);
             if (unit) {

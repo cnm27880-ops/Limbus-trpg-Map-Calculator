@@ -289,13 +289,13 @@
     top: 0;
     transform: translate(-50%, -50%) scale(0.4);
     opacity: 0;
-    max-width: 120px;
-    padding: 5px 12px;
-    border-radius: 20px;
-    background: rgba(10, 10, 13, 0.86);
+    max-width: 82px;
+    padding: 4px 10px;
+    border-radius: 16px;
+    background: rgba(10, 10, 13, 0.82);
     border: 1px solid var(--border-focus, #404048);
-    color: #f0f0f4;
-    font-size: 0.78rem;
+    color: #e6e6ec;
+    font-size: 0.72rem;
     font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
@@ -310,59 +310,59 @@
     opacity: 1;
 }
 
-/* 環繞圖標：淺色圓形 */
+/* 環繞圖標：極簡白灰線條，無底色、無外框、約棋子的 1/4 大小 */
 .radial-item {
     position: absolute;
     left: 0;
     top: 0;
-    width: 48px;
-    height: 48px;
-    margin: -24px 0 0 -24px;                 /* 以圓心為錨點 */
+    width: 26px;                             /* 命中區（透明），略大於視覺圖形好點擊 */
+    height: 26px;
+    margin: -13px 0 0 -13px;                 /* 以圓心為錨點 */
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.65);
-    background: linear-gradient(180deg, #f6f6fa, #dcdce4);
-    color: #24242c;
+    border: none;
+    background: none;
+    color: #c7c7cf;                          /* 白灰 */
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.2rem;
     cursor: pointer;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    box-shadow: none;
     pointer-events: auto;
     /* 收合狀態：縮在圓心、旋轉、透明 */
     transform: translate(0px, 0px) scale(0.2) rotate(-150deg);
     opacity: 0;
     transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
-                opacity 0.3s ease, box-shadow 0.18s ease, filter 0.18s ease;
+                opacity 0.3s ease, color 0.15s ease, background 0.15s ease;
     transition-delay: calc(var(--i, 0) * 0.032s);
 }
+/* 視覺圖形本體：約 14px（棋子 ~48px 的 1/4 上下） */
+.radial-item .ri-icon {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));   /* 深色地圖上仍看得清 */
+    transition: transform 0.15s ease;
+}
+.radial-item .ri-icon svg { width: 100%; height: 100%; display: block; }
+
 /* 展開狀態：飛到環上各自的位置並轉正 */
 .radial-menu.open .radial-item {
     transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(1) rotate(0deg);
     opacity: 1;
 }
+/* hover：轉白、放大一點，並給極淡的圓形襯底（無彩色） */
 .radial-item:hover {
-    filter: brightness(1.06);
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(253, 216, 53, 0.55);
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
 }
-.radial-item.danger {
-    background: linear-gradient(180deg, #ffdad6, #f2a49d);
-    color: #7a1c17;
-    border-color: rgba(255, 220, 216, 0.8);
-}
-.radial-item.danger:hover {
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(229, 57, 53, 0.6);
-}
-.radial-item.attack {
-    background: linear-gradient(180deg, #ffe9b0, #f2c766);
-    color: #5b3d05;
-    border-color: rgba(255, 236, 190, 0.85);
-}
+.radial-item:hover .ri-icon { transform: scale(1.18); }
 
 /* 圖標下方的文字標籤：預設隱藏，hover 時浮現 */
 .radial-label {
     position: absolute;
-    top: 52px;
+    top: 30px;
     left: 50%;
     transform: translateX(-50%) translateY(-4px);
     padding: 2px 8px;

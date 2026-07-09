@@ -1435,6 +1435,22 @@ function applyAllTurnEndItems(unitId) {
 }
 
 // ===== 單位右鍵快速選單 =====
+// 環繞式選單用的極簡白灰線條圖標（單色，隨容器 color 上色）。刻意用細線 SVG 取代
+// 彩色 emoji，讓縮到極小時仍清晰、風格統一。
+const _ucmSvg = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const UCM_ICON = {
+    tag:    _ucmSvg('<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-6.2-6.2A2 2 0 0 1 3.8 13V5.8a2 2 0 0 1 2-2H13a2 2 0 0 1 1.4.6l6.2 6.2a2 2 0 0 1 0 2.8z"/><circle cx="8" cy="8" r="1.2"/>'),
+    pin:    _ucmSvg('<path d="M12 21.5c4-4.6 6.5-8 6.5-11a6.5 6.5 0 1 0-13 0c0 3 2.5 6.4 6.5 11z"/><circle cx="12" cy="10.5" r="2.3"/>'),
+    chart:  _ucmSvg('<path d="M5 20V11M12 20V4M19 20v-6"/>'),
+    gear:   _ucmSvg('<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M18.9 5.1l-2.1 2.1M7.2 16.8l-2.1 2.1"/>'),
+    eye:    _ucmSvg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.5"/>'),
+    eyeOff: _ucmSvg('<path d="M4 4l16 16M9.6 9.7A2.5 2.5 0 0 0 12 14.5c.7 0 1.3-.3 1.8-.7M6.5 6.7C3.8 8.3 2.5 12 2.5 12S6 18.5 12 18.5c1.4 0 2.7-.3 3.8-.8M10 5.7A9.7 9.7 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.4 3.2"/>'),
+    signal: _ucmSvg('<path d="M4.5 14.5a10 10 0 0 1 15 0M7.5 12a6 6 0 0 1 9 0"/><circle cx="12" cy="17.5" r="1.4"/>'),
+    crown:  _ucmSvg('<path d="M4 17.5h16M4.5 17.5l-1.3-9 4.8 3.4L12 5.5l4 6.4 4.8-3.4-1.3 9z"/>'),
+    sword:  _ucmSvg('<path d="M20.5 3.5l-9.5 9.5M14 4h6.5V10.5M9 15l-2.5 2.5M4 20l2.5-2.5M4 20l1.5.4M4 20l.4 1.5M11 13l-6.5 6.5"/>'),
+    x:      _ucmSvg('<path d="M6 6l12 12M18 6L6 18"/>'),
+};
+
 /**
  * 開啟單位快速操作選單（單位卡或地圖 token 按右鍵）
  * @param {Event} event - contextmenu 事件
@@ -1461,56 +1477,57 @@ function openUnitContextMenu(event, unitId) {
     // 既不能控制、也不能攻擊 → 不顯示任何選單
     if (!canControl && !canAttack) return;
 
+    const I = UCM_ICON;
     let items;
     if (canControl && u.actionSlotOf) {
         // 多重行動條目：只提供設定與刪除
         items = [
-            { icon: '⚔', label: 'BOSS 設定', fn: `openMultiActionModal('${u.actionSlotOf}')` },
-            { icon: '✕', label: '刪除此行動', cls: 'danger', fn: `deleteUnit('${u.id}')` }
+            { icon: I.gear, label: 'BOSS 設定', fn: `openMultiActionModal('${u.actionSlotOf}')` },
+            { icon: I.x, label: '刪除此行動', cls: 'danger', fn: `deleteUnit('${u.id}')` }
         ];
     } else {
         items = [];
         if (canControl) {
             items.push(
-                { icon: '🏷', label: '管理狀態', fn: `openStatusModal('${u.id}')` },
-                { icon: '📍', label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` }
+                { icon: I.tag, label: '管理狀態', fn: `openStatusModal('${u.id}')` },
+                { icon: I.pin, label: deployed ? '收回單位' : '部署單位', fn: deployed ? `recallUnit('${u.id}')` : `startDeploy('${u.id}')` }
             );
             // 玩家角色：填寫三豁免與移速（攻擊/防禦 DP 維持戰鬥當下填寫）
             if (typeof isPlayerCharacterUnit === 'function' && isPlayerCharacterUnit(u)) {
-                items.push({ icon: '📊', label: '角色數值', fn: `openPlayerStatsModal('${u.id}')` });
+                items.push({ icon: I.chart, label: '角色數值', fn: `openPlayerStatsModal('${u.id}')` });
             }
             if (isSt) {
                 // BOSS：戰鬥數值＋多重行動已合併進同一個 Modal，只需一個入口，不必來回切換兩個視窗
                 if (u.type === 'boss') {
-                    items.push({ icon: '👹', label: 'BOSS 設定', fn: `openMultiActionModal('${u.id}')` });
+                    items.push({ icon: I.gear, label: 'BOSS 設定', fn: `openMultiActionModal('${u.id}')` });
                 } else if (isBoss || u.type === 'enemy') {
-                    items.push({ icon: '👹', label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });
+                    items.push({ icon: I.gear, label: '戰鬥數值設定', fn: `openBossUnitModal('${u.id}')` });
                 }
-                items.push({ icon: '👁', label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
-                items.push({ icon: '📡', label: u.sharedVision ? '取消分享視野' : '分享視野給全員', fn: `toggleUnitSharedVision('${u.id}')` });
+                items.push({ icon: u.hidden ? I.eyeOff : I.eye, label: u.hidden ? '現身' : '隱藏', fn: `toggleUnitVisibility('${u.id}')` });
+                items.push({ icon: I.signal, label: u.sharedVision ? '取消分享視野' : '分享視野給全員', fn: `toggleUnitSharedVision('${u.id}')` });
                 if (isBoss) {
-                    items.push({ icon: '👑', label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
+                    items.push({ icon: I.crown, label: state.activeBossId === u.id ? '隱藏 BOSS 血條' : '顯示 BOSS 血條', fn: `toggleActiveBoss('${u.id}')` });
                 }
             }
         }
         // ===== 盲盒戰鬥與 QTE 系統：附加戰鬥按鈕（不影響原有操作項目） =====
         if (canAttack) {
-            items.push({ icon: '⚔️', label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
+            items.push({ icon: I.sword, label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
         } else if (isSt && u.type === 'player') {
-            items.push({ icon: '🗡️', label: '發起威脅', fn: `openThreatModal('${u.id}')` });
+            items.push({ icon: I.sword, label: '發起威脅', fn: `openThreatModal('${u.id}')` });
         }
 
         if (canControl) {
-            items.push({ icon: '✕', label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
+            items.push({ icon: I.x, label: '刪除單位', cls: 'danger', fn: `deleteUnit('${u.id}')` });
         }
     }
 
     if (!items.length) return;
 
-    // ===== 環繞式選單：以棋子為圓心，淺色圓形圖標環繞展開，帶旋轉切入／切出動畫 =====
+    // ===== 環繞式選單：以棋子為圓心，極簡白灰圖標環繞展開，帶旋轉切入／切出動畫 =====
     const n = items.length;
-    const itemR = 24;                              // 圖標半徑（對應 CSS 48px）
-    const ringR = 66 + Math.max(0, n - 5) * 8;     // 環半徑：項目多時外擴，避免重疊
+    const itemR = 13;                              // 圖標命中半徑（對應 CSS 26px；視覺圖形更小）
+    const ringR = 62 + Math.max(0, n - 5) * 6;     // 環半徑：留出中央名牌空間並隨項目數外擴
 
     // 圓心：優先對準地圖上的棋子中心，找不到（未部署／隱藏）則退回游標位置
     let cx = event.clientX;

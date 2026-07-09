@@ -806,6 +806,9 @@ function renderMap() {
         // 沒有 activeBoss，移除 HUD
         if (oldHud) oldHud.remove();
     }
+
+    // ===== 地圖行動軸 / 換回合提示（開戰時顯示於地圖底部） =====
+    if (typeof renderTurnAxis === 'function') renderTurnAxis();
 }
 
 /**

@@ -1,0 +1,271 @@
+/* ============================================================
+   Limbus Command - 地圖戰鬥 UI
+   行動軸（先攻順序）／換回合控制／換回合精美提示
+   全部疊在 #map-viewport 內，浮於地圖之上、不隨地圖平移縮放。
+   ============================================================ */
+
+/* ===== 行動軸容器：置於地圖底部中央 ===== */
+.turn-axis-overlay {
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%) translateY(0);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: calc(100% - 32px);
+    padding: 8px 12px;
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(26, 26, 31, 0.82), rgba(10, 10, 13, 0.9));
+    border: 1px solid var(--border, #2a2a30);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 70;
+    opacity: 1;
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    pointer-events: auto;
+}
+
+/* 未開戰時收合：淡出並下滑，不佔互動 */
+.turn-axis-overlay.hidden {
+    opacity: 0;
+    transform: translateX(-50%) translateY(24px);
+    pointer-events: none;
+}
+
+/* ===== 控制列（ST 專屬）：上一個／下一個／結束戰鬥 ===== */
+.turn-axis-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-right: 10px;
+    border-right: 1px solid var(--border, #2a2a30);
+}
+
+.ta-ctrl {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--border, #2a2a30);
+    background: linear-gradient(180deg, #24242b, #16161a);
+    color: #e8e8ee;
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.12s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.ta-ctrl:hover {
+    border-color: var(--border-focus, #404048);
+    transform: translateY(-1px);
+}
+.ta-ctrl:active { transform: translateY(0) scale(0.94); }
+
+/* 下一個行動：主要行動，鍍上黃色調 */
+.ta-ctrl-next {
+    background: radial-gradient(circle at 32% 28%, #ffe680, var(--accent-yellow, #fdd835) 70%, #b8860b 100%);
+    color: #1a1a10;
+    border-color: #b8860b;
+    font-weight: 700;
+    box-shadow: 0 0 12px rgba(253, 216, 53, 0.35);
+}
+.ta-ctrl-end:hover {
+    color: #fff;
+    background: linear-gradient(160deg, #ff6b60, var(--accent-red, #e53935) 60%, #a91f1c);
+    border-color: #a91f1c;
+}
+
+/* ===== 先攻軌道：橫向捲動的棋子頭像串 ===== */
+.turn-axis-track {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-focus, #404048) transparent;
+}
+.turn-axis-track::-webkit-scrollbar { height: 5px; }
+.turn-axis-track::-webkit-scrollbar-thumb {
+    background: var(--border-focus, #404048);
+    border-radius: 3px;
+}
+
+/* ===== 單一棋子晶片 ===== */
+.turn-chip {
+    position: relative;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--border-focus, #404048);
+    background: #101013;
+    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    opacity: 0.72;
+}
+.turn-chip:hover {
+    transform: translateY(-3px) scale(1.06);
+    opacity: 1;
+}
+
+/* 陣營色框 */
+.turn-chip.enemy  { border-color: #b5483f; }
+.turn-chip.player { border-color: #3f7fb5; }
+.turn-chip.boss   { border-color: #9c5bd0; }
+
+/* 多重行動子條目（共用本體血量）：略縮小並虛線框，表示是附屬行動 */
+.turn-chip.slot {
+    width: 34px;
+    height: 34px;
+    border-style: dashed;
+}
+
+/* 當前行動者：放大、實心黃框、發光、輕微呼吸 */
+.turn-chip.active {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.18);
+    border-color: var(--accent-yellow, #fdd835);
+    box-shadow: 0 0 0 2px rgba(253, 216, 53, 0.25), 0 0 16px rgba(253, 216, 53, 0.55);
+    animation: turnChipPulse 1.8s ease-in-out infinite;
+}
+@keyframes turnChipPulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(253, 216, 53, 0.25), 0 0 14px rgba(253, 216, 53, 0.45); }
+    50%      { box-shadow: 0 0 0 3px rgba(253, 216, 53, 0.4), 0 0 22px rgba(253, 216, 53, 0.75); }
+}
+
+/* 頭像／名字首字 */
+.tc-face {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.tc-face-text {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #d8d8e0;
+    background: radial-gradient(circle at 35% 30%, #2c2c34, #141418);
+}
+
+/* 先攻數字徽章 */
+.tc-init {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: 8px;
+    background: #0c0c0f;
+    border: 1px solid var(--border-focus, #404048);
+    color: #cfcfd6;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+}
+.turn-chip.active .tc-init {
+    background: var(--accent-yellow, #fdd835);
+    color: #1a1a10;
+    border-color: #b8860b;
+}
+
+/* ===== 換回合精美提示 ===== */
+.turn-banner {
+    position: absolute;
+    left: 50%;
+    top: 34%;
+    transform: translate(-50%, -50%) scale(0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 34px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(20, 20, 26, 0.72), rgba(8, 8, 11, 0.78));
+    border: 1px solid rgba(253, 216, 53, 0.35);
+    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 72;
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+}
+.turn-banner.show {
+    visibility: visible;
+    animation: turnBannerIn 1.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes turnBannerIn {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.8) rotateX(35deg); }
+    14%  { opacity: 1; transform: translate(-50%, -50%) scale(1.04) rotateX(0deg); }
+    24%  { transform: translate(-50%, -50%) scale(1) rotateX(0deg); }
+    80%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.02) translateY(-14px); }
+}
+
+.tb-round {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 0.9rem;
+    letter-spacing: 0.28em;
+    color: var(--accent-yellow, #fdd835);
+    text-transform: uppercase;
+    padding-left: 0.28em;
+}
+.tb-body {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.tb-face {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid var(--accent-yellow, #fdd835);
+    box-shadow: 0 0 18px rgba(253, 216, 53, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.5rem;
+    color: #d8d8e0;
+    flex: 0 0 auto;
+}
+.tb-name {
+    font-family: 'Noto Serif TC', serif;
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #f5f5f8;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
+}
+.tb-name .tb-suffix {
+    font-size: 1.1rem;
+    color: var(--text-dim, #9a9aa4);
+    margin-left: 6px;
+}
+.turn-banner.enemy  .tb-face { border-color: #e5766b; box-shadow: 0 0 18px rgba(229, 57, 53, 0.5); }
+.turn-banner.enemy  .tb-round { color: #e5766b; }
+.turn-banner.boss   .tb-face { border-color: #b57ce0; box-shadow: 0 0 20px rgba(156, 91, 208, 0.6); }
+.turn-banner.boss   .tb-round { color: #b57ce0; }
+
+/* ===== 手機：縮小尺寸 ===== */
+@media (max-width: 640px) {
+    .turn-chip { width: 34px; height: 34px; }
+    .turn-chip.active { transform: translateY(-3px) scale(1.14); }
+    .ta-ctrl { width: 30px; height: 30px; }
+    .tb-name { font-size: 1.3rem; }
+    .tb-face { width: 46px; height: 46px; font-size: 1.2rem; }
+}

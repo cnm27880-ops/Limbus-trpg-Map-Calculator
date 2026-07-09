@@ -1511,7 +1511,7 @@ const UCM_ICON = {
  * @param {Event} event - contextmenu 事件
  * @param {string} unitId - 單位 ID
  */
-function openUnitContextMenu(event, unitId) {
+function openUnitContextMenu(event, unitId, mode) {
     event.preventDefault();
     event.stopPropagation();
     // 避免同一棋子上其它 contextmenu 監聽器（地圖棋子的狀態 tooltip 切換）被一併觸發，造成 tooltip 卡住
@@ -1578,6 +1578,43 @@ function openUnitContextMenu(event, unitId) {
     }
 
     if (!items.length) return;
+
+    // ===== 條列式選單：單位頁／側欄的右鍵選單沿用原本的直式清單 =====
+    // 只有地圖棋子（mode === 'radial'）才用環繞式；其餘一律條列式。
+    if (mode !== 'radial') {
+        const menu = document.createElement('div');
+        menu.id = 'unit-context-menu';
+        menu.className = 'unit-context-menu';
+        menu.innerHTML =
+            `<div class="ucm-title">${escapeHtml(u.name || '單位')}</div>` +
+            items.map(it => `
+                <div class="ucm-item ${it.cls || ''}">
+                    <span class="ucm-icon">${it.icon}</span>${escapeHtml(it.label)}
+                </div>`).join('');
+        // 綁定點擊（避免 inline onclick 需處理 SVG 圖標與引號）
+        Array.from(menu.querySelectorAll('.ucm-item')).forEach((el, i) => {
+            el.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                closeUnitContextMenu();
+                try { (new Function(items[i].fn))(); } catch (err) { console.warn('選單動作執行失敗', err); }
+            });
+        });
+        document.body.appendChild(menu);
+
+        // 定位在游標附近並夾限在視窗內
+        const W = menu.offsetWidth || 170;
+        const H = menu.offsetHeight || 280;
+        let x = event.clientX, y = event.clientY;
+        if (x + W > window.innerWidth - 8) x = window.innerWidth - W - 8;
+        if (y + H > window.innerHeight - 8) y = window.innerHeight - H - 8;
+        menu.style.left = Math.max(8, x) + 'px';
+        menu.style.top = Math.max(8, y) + 'px';
+
+        setTimeout(() => {
+            document.addEventListener('pointerdown', handleUcmOutsideClick, true);
+        }, 0);
+        return;
+    }
 
     // ===== 環繞式選單：以棋子為圓心，極簡白灰圖標環繞展開，帶旋轉切入／切出動畫 =====
     const n = items.length;
@@ -1647,7 +1684,9 @@ function closeUnitContextMenu() {
     const menu = document.getElementById('unit-context-menu');
     document.removeEventListener('pointerdown', handleUcmOutsideClick, true);
     if (!menu) return;
-    // 若已在關閉中則不重複；播放收合動畫後才真正移除
+    // 條列式選單：直接移除（無展開動畫）
+    if (!menu.classList.contains('radial-menu')) { menu.remove(); return; }
+    // 環繞式：若已在關閉中則不重複；播放收合動畫後才真正移除
     if (menu.dataset.closing) return;
     menu.dataset.closing = '1';
     menu.classList.add('closing');

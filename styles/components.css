@@ -4141,8 +4141,16 @@ body.combat-mode .boss-hud-container {
 
 .unit-context-menu .ucm-icon {
     width: 18px;
-    text-align: center;
+    height: 16px;
     flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+/* 圖標為單色線條 SVG（隨項目文字色上色），在條列選單中固定尺寸 */
+.unit-context-menu .ucm-icon svg {
+    width: 15px;
+    height: 15px;
 }
 
 /* ===== BOSS 多重行動條目 ===== */

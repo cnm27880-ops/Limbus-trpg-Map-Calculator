@@ -269,3 +269,120 @@
     .tb-name { font-size: 1.3rem; }
     .tb-face { width: 46px; height: 46px; font-size: 1.2rem; }
 }
+
+/* ============================================================
+   環繞式棋子選單（Radial Context Menu）
+   圍繞棋子展開的淺色圓形圖標，帶旋轉切入／切出動畫。
+   ============================================================ */
+.radial-menu {
+    position: fixed;
+    z-index: 9999;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+/* 中央樞紐：顯示單位名稱 */
+.radial-hub {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+    opacity: 0;
+    max-width: 120px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    background: rgba(10, 10, 13, 0.86);
+    border: 1px solid var(--border-focus, #404048);
+    color: #f0f0f4;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+    pointer-events: none;
+}
+.radial-menu.open .radial-hub {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+}
+
+/* 環繞圖標：淺色圓形 */
+.radial-item {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 48px;
+    height: 48px;
+    margin: -24px 0 0 -24px;                 /* 以圓心為錨點 */
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    background: linear-gradient(180deg, #f6f6fa, #dcdce4);
+    color: #24242c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    pointer-events: auto;
+    /* 收合狀態：縮在圓心、旋轉、透明 */
+    transform: translate(0px, 0px) scale(0.2) rotate(-150deg);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+                opacity 0.3s ease, box-shadow 0.18s ease, filter 0.18s ease;
+    transition-delay: calc(var(--i, 0) * 0.032s);
+}
+/* 展開狀態：飛到環上各自的位置並轉正 */
+.radial-menu.open .radial-item {
+    transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(1) rotate(0deg);
+    opacity: 1;
+}
+.radial-item:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(253, 216, 53, 0.55);
+}
+.radial-item.danger {
+    background: linear-gradient(180deg, #ffdad6, #f2a49d);
+    color: #7a1c17;
+    border-color: rgba(255, 220, 216, 0.8);
+}
+.radial-item.danger:hover {
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(229, 57, 53, 0.6);
+}
+.radial-item.attack {
+    background: linear-gradient(180deg, #ffe9b0, #f2c766);
+    color: #5b3d05;
+    border-color: rgba(255, 236, 190, 0.85);
+}
+
+/* 圖標下方的文字標籤：預設隱藏，hover 時浮現 */
+.radial-label {
+    position: absolute;
+    top: 52px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: rgba(8, 8, 11, 0.92);
+    border: 1px solid var(--border, #2a2a30);
+    color: #eaeaf0;
+    font-size: 0.68rem;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.radial-item:hover .radial-label {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* 關閉中：整體反向收合（由 JS 移除 .open 觸發） */
+.radial-menu.closing .radial-item {
+    transition-delay: 0s;
+}

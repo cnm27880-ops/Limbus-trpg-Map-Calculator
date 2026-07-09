@@ -1507,28 +1507,64 @@ function openUnitContextMenu(event, unitId) {
 
     if (!items.length) return;
 
+    // ===== 環繞式選單：以棋子為圓心，淺色圓形圖標環繞展開，帶旋轉切入／切出動畫 =====
+    const n = items.length;
+    const itemR = 24;                              // 圖標半徑（對應 CSS 48px）
+    const ringR = 66 + Math.max(0, n - 5) * 8;     // 環半徑：項目多時外擴，避免重疊
+
+    // 圓心：優先對準地圖上的棋子中心，找不到（未部署／隱藏）則退回游標位置
+    let cx = event.clientX;
+    let cy = event.clientY;
+    const tokenEl = document.querySelector(`.token[data-unit-id="${u.id}"]`);
+    if (tokenEl) {
+        const r = tokenEl.getBoundingClientRect();
+        cx = r.left + r.width / 2;
+        cy = r.top + r.height / 2;
+    }
+    // 夾限圓心，讓整個環（含圖標與標籤）留在視窗內
+    const pad = ringR + itemR + 20;
+    cx = Math.max(pad, Math.min(window.innerWidth - pad, cx));
+    cy = Math.max(pad, Math.min(window.innerHeight - pad, cy));
+
     const menu = document.createElement('div');
     menu.id = 'unit-context-menu';
-    menu.className = 'unit-context-menu';
-    menu.innerHTML = `
-        <div class="ucm-title">${escapeHtml(u.name || '單位')}</div>
-        ${items.map(it => `
-            <div class="ucm-item ${it.cls || ''}" onclick="closeUnitContextMenu();${it.fn}">
-                <span class="ucm-icon">${it.icon}</span>${it.label}
-            </div>
-        `).join('')}
-    `;
+    menu.className = 'radial-menu';
+    menu.style.left = cx + 'px';
+    menu.style.top = cy + 'px';
+
+    const hub = document.createElement('div');
+    hub.className = 'radial-hub';
+    hub.textContent = u.name || '單位';
+    menu.appendChild(hub);
+
+    // 從正上方（-90°）順時針均分
+    items.forEach((it, i) => {
+        const ang = -Math.PI / 2 + i * (2 * Math.PI / n);
+        const tx = Math.round(Math.cos(ang) * ringR);
+        const ty = Math.round(Math.sin(ang) * ringR);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'radial-item ' + (it.cls || '');
+        btn.style.setProperty('--tx', tx + 'px');
+        btn.style.setProperty('--ty', ty + 'px');
+        btn.style.setProperty('--i', i);
+        btn.innerHTML = `<span class="ri-icon">${it.icon}</span><span class="radial-label">${escapeHtml(it.label)}</span>`;
+        // 點擊：先關閉（播放收合動畫），再執行原本的動作
+        btn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            closeUnitContextMenu();
+            try { (new Function(it.fn))(); } catch (err) { console.warn('選單動作執行失敗', err); }
+        });
+        menu.appendChild(btn);
+    });
+
     document.body.appendChild(menu);
 
-    // 定位在游標附近並夾限在視窗內
-    const W = menu.offsetWidth || 170;
-    const H = menu.offsetHeight || 280;
-    let x = event.clientX;
-    let y = event.clientY;
-    if (x + W > window.innerWidth - 8) x = window.innerWidth - W - 8;
-    if (y + H > window.innerHeight - 8) y = window.innerHeight - H - 8;
-    menu.style.left = Math.max(8, x) + 'px';
-    menu.style.top = Math.max(8, y) + 'px';
+    // 觸發展開動畫（下一影格加上 .open，讓 transition 從收合狀態播放到環上）
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => menu.classList.add('open'));
+    });
 
     setTimeout(() => {
         document.addEventListener('pointerdown', handleUcmOutsideClick, true);
@@ -1542,8 +1578,14 @@ function handleUcmOutsideClick(e) {
 
 function closeUnitContextMenu() {
     const menu = document.getElementById('unit-context-menu');
-    if (menu) menu.remove();
     document.removeEventListener('pointerdown', handleUcmOutsideClick, true);
+    if (!menu) return;
+    // 若已在關閉中則不重複；播放收合動畫後才真正移除
+    if (menu.dataset.closing) return;
+    menu.dataset.closing = '1';
+    menu.classList.add('closing');
+    menu.classList.remove('open');
+    setTimeout(() => menu.remove(), 260);
 }
 
 // ===== BOSS 多重行動系統 =====

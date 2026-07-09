@@ -232,10 +232,8 @@ function deleteRoomFromManager(code) {
  * @param {string} role - 角色 ('st' 或 'player')
  */
 function initSystem(role) {
-    const name = document.getElementById('input-name').value.trim();
-    if (!name) return showToast('請輸入代號');
-
-    myName = name;
+    // 代號不再於登入時輸入：改由登入後自行修改。實際代號在 joinRoom / createRoom 決定
+    // （返回玩家沿用既有代號，新玩家給預設）。身分與棋子權限只綁 4 碼識別碼。
     myRole = role;
 
     // 顯示載入畫面
@@ -295,6 +293,7 @@ function createRoom(roomCode) {
     currentRoomCode = roomCode;
     myPlayerCode = roomCode;  // ST 的識別碼就是房間號碼
     myPlayerId = 'st_' + roomCode;
+    if (!myName) myName = 'ST';  // 登入不再輸入代號，ST 給預設（登入後可自行修改）
 
     roomRef = database.ref('rooms/' + roomCode);
 
@@ -425,6 +424,7 @@ function initializeNewRoom() {
 function joinRoom(roomCode, isST) {
     currentRoomCode = roomCode;
     roomRef = database.ref('rooms/' + roomCode);
+    if (isST && !myName) myName = 'ST';  // ST 代號預設（登入不再輸入，可登入後自行修改）
 
     // 檢查房間是否存在
     roomRef.once('value')
@@ -450,6 +450,9 @@ function joinRoom(roomCode, isST) {
             if (!isST) {
                 // 保留返回玩家既有的轉盤資料（spins / inventory），避免重新加入時被重置
                 const existingPlayer = (data.players && data.players[myPlayerId]) || {};
+                // 代號沿用既有紀錄（返回玩家用同一識別碼登入 → 保留原本代號與棋子權限）；
+                // 全新玩家給預設「玩家####」，之後可自行修改。身分只綁識別碼，改代號不影響權限。
+                myName = existingPlayer.name || myName || ('玩家' + myPlayerCode);
                 const playerData = {
                     name: myName,
                     code: myPlayerCode,
@@ -1597,6 +1600,34 @@ function getSession() {
  */
 function clearSession() {
     localStorage.removeItem(SESSION_KEY);
+}
+
+/**
+ * 修改自己的「代號」（全域顯示名稱，任何人皆可改自己的）。
+ * 代號只是其他人看到的名稱，與登入識別碼、棋子權限完全無關，改名不會失去任何權限。
+ * 與「棋子代號」（unit.ownerName，由 ST 設定）是兩回事。
+ */
+function renameMyCodename() {
+    const cur = (typeof myName !== 'undefined' && myName) ? myName : '';
+    const input = prompt('修改你的代號（其他人看到的名稱；與登入識別碼、棋子權限無關）', cur);
+    if (input === null) return;                       // 取消
+    const name = input.trim().substring(0, 30);
+    if (!name) { showToast('代號不可空白'); return; }
+    if (name === cur) return;
+
+    myName = name;
+    if (roomRef && myPlayerId) {
+        // 玩家寫入 players 節點；ST 沒有 players 條目，只更新 users
+        if (myRole !== 'st') roomRef.child('players/' + myPlayerId + '/name').set(name);
+        roomRef.child('users/' + myPlayerId + '/name').set(name);
+    }
+    // 同步更新本機 session，避免下次自動登入又還原成舊代號
+    const s = getSession();
+    if (s) saveSession(Object.assign({}, s, { name: name }));
+
+    if (typeof updateCodeDisplay === 'function') updateCodeDisplay();
+    if (typeof renderAll === 'function') renderAll();
+    showToast('代號已更新');
 }
 
 /**

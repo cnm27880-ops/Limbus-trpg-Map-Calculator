@@ -413,3 +413,24 @@
     color: var(--accent-yellow, #fdd835);
     border-bottom-color: var(--accent-yellow, #fdd835);
 }
+
+/* 導覽列：可點擊修改的代號 chip（全域顯示名稱） */
+.player-name-chip {
+    font-size: 0.85rem;
+    padding: 4px 9px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border, #2a2a30);
+    color: #e6e6ec;
+    cursor: pointer;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.player-name-chip:hover {
+    color: var(--accent-yellow, #fdd835);
+    border-color: var(--accent-yellow, #fdd835);
+    background: rgba(253, 216, 53, 0.08);
+}

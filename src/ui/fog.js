@@ -35,6 +35,15 @@ let fogLastDrawTs = 0;
 let fogMaskRawCanvas = null;  // 未模糊的每格透明度遮罩（離屏畫布）
 let fogMaskBlurCanvas = null; // 模糊後的遮罩（離屏畫布），套用在雲霧材質上決定實際能見度
 
+// ===== 效能快取 =====
+// 模糊遮罩很貴（每格填色 + canvas blur 濾鏡），但它只在「探索紀錄」或「棋子位置」變動時
+// 才會改變；平時每幀只需重畫飄動的雲霧再套用同一張快取遮罩即可，不必每幀重建。
+let fogRevealRev = 0;         // 探索紀錄的版本號：任一揭露/隱藏/重置都會 +1，用來判斷遮罩是否需重建
+let fogMaskCacheSig = null;   // 上次建好的遮罩對應的簽章
+let fogMaskCacheCanvas = null;// 快取的模糊遮罩畫布
+let fogPuffSprite = null;     // 預先渲染一次的柔霧光斑，之後每幀只 drawImage 貼上，不再每幀建立漸層
+let fogWasDrawn = false;      // 上一幀是否有畫出霧（沒有要畫時可完全跳過，避免空轉造成的重排）
+
 function fogKey(x, y) { return x + ',' + y; }
 
 // ===== Firebase 同步（由 setupRoomListeners 呼叫） =====
@@ -55,6 +64,7 @@ function fogSetupListener() {
         // ST 快取所有玩家的揭露資料，供檢視玩家視角／補畫使用
         const allListener = roomRef.child('fog/revealed').on('value', snapshot => {
             fogRevealedAll = snapshot.val() || {};
+            fogRevealRev++;
         });
         if (typeof unsubscribeListeners !== 'undefined') {
             unsubscribeListeners.push(() => roomRef.child('fog/revealed').off('value', allListener));
@@ -62,6 +72,7 @@ function fogSetupListener() {
     } else if (typeof myPlayerId !== 'undefined' && myPlayerId) {
         const mineListener = roomRef.child('fog/revealed/' + myPlayerId).on('value', snapshot => {
             fogRevealedMine = snapshot.val() || {};
+            fogRevealRev++;
             if (typeof renderMap === 'function') renderMap();
         });
         if (typeof unsubscribeListeners !== 'undefined') {
@@ -119,6 +130,7 @@ function fogComputeVisibility(playerId, persist) {
     if (persist && newlyRevealed.length && typeof roomRef !== 'undefined' && roomRef && myPlayerId) {
         const updates = {};
         newlyRevealed.forEach(k => { updates[k] = true; fogRevealedMine[k] = true; });
+        fogRevealRev++;
         roomRef.child('fog/revealed/' + myPlayerId).update(updates);
     }
 
@@ -154,8 +166,9 @@ function ensureFogCanvas() {
     const gridSize = fogGridSize();
     const pxW = state.mapW * gridSize;
     const pxH = state.mapH * gridSize;
-    canvas.style.width = pxW + 'px';
-    canvas.style.height = pxH + 'px';
+    // 只在尺寸真的變動時才寫 style，避免每幀觸發不必要的版面重排（layout thrash）
+    if (canvas._cssW !== pxW) { canvas.style.width = pxW + 'px'; canvas._cssW = pxW; }
+    if (canvas._cssH !== pxH) { canvas.style.height = pxH + 'px'; canvas._cssH = pxH; }
 
     // 解析度考量 devicePixelRatio，但夾住單邊上限（與 map-canvas 一致），避免大地圖配置失敗變成整片空白
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -190,33 +203,58 @@ function fogSelectedPlayerId() {
  */
 function drawFogCanvas(t) {
     if (typeof state === 'undefined' || !state.mapData || !state.mapData.length) return;
+
+    // 先用最便宜的判斷決定這一幀「要不要畫、畫什麼」，避免在沒霧可畫時還去動 canvas。
+    const isSt = (typeof myRole !== 'undefined' && myRole === 'st');
+    let mode = null;          // null | 'edit' | 'player'
+    let viewedId = null;
+    if (isSt) {
+        if (fogEditTool) {
+            mode = 'edit';                              // 補畫模式：顯示揭露預覽
+        } else if (fogEnabled) {
+            viewedId = fogSelectedPlayerId();           // 選中玩家棋子 → 切成該玩家視角
+            if (viewedId) mode = 'player';
+        }
+    } else if (fogEnabled) {
+        mode = 'player';
+        viewedId = (typeof myPlayerId !== 'undefined') ? myPlayerId : null;
+        if (!viewedId) mode = null;
+    }
+
+    if (!mode) {
+        // 這一幀沒有霧要畫。若上一幀畫過，清空一次即可，之後就完全待機（不再每幀動 canvas）。
+        if (fogWasDrawn) {
+            const c = document.getElementById('fog-canvas');
+            if (c) {
+                const cx = c.getContext('2d');
+                cx.setTransform(1, 0, 0, 1, 0, 0);
+                cx.clearRect(0, 0, c.width, c.height);
+            }
+            fogWasDrawn = false;
+        }
+        return;
+    }
+
     const canvas = ensureFogCanvas();
     if (!canvas) return;
-
     const ctx = canvas.getContext('2d');
     const scale = canvas._scale || 1;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     const w = canvas.width / scale, h = canvas.height / scale;
     ctx.clearRect(0, 0, w, h);
 
-    const gridSize = fogGridSize();
-    const isSt = (typeof myRole !== 'undefined' && myRole === 'st');
-
-    if (isSt) {
-        if (fogEditTool) {
-            drawFogEditPreview(ctx, gridSize);          // 補畫模式：顯示揭露預覽
-        } else if (fogEnabled) {
-            const viewedId = fogSelectedPlayerId();     // 選中玩家棋子 → 切成該玩家視角
-            if (viewedId) drawFogAsPlayer(ctx, w, h, t, viewedId);
-        }
-        return;                                          // 其餘情況 ST 看不到霧（畫布已清空）
+    if (mode === 'edit') {
+        drawFogEditPreview(ctx, fogGridSize());
+    } else if (isSt) {
+        // ST 檢視玩家視角：唯讀，不寫入任何揭露資料。
+        const revealed = (fogRevealedAll && fogRevealedAll[viewedId]) || {};
+        const temp = fogComputeVisibility(viewedId, false);
+        fogDrawCloudLayer(ctx, w, h, t, revealed, temp, 'st:' + viewedId);
+    } else {
+        const temp = fogComputeVisibility(myPlayerId, true);
+        fogDrawCloudLayer(ctx, w, h, t, fogRevealedMine, temp, 'me:' + myPlayerId);
     }
-
-    if (!fogEnabled) return;
-
-    const temp = fogComputeVisibility(myPlayerId, true);
-    const alphaGrid = fogBuildAlphaGrid(fogRevealedMine, temp);
-    fogDrawCloudLayer(ctx, w, h, t, alphaGrid);
+    fogWasDrawn = true;
 }
 
 /**
@@ -289,11 +327,45 @@ function fogBuildBlurredMask(alphaGrid) {
 }
 
 /**
+ * 取得（必要時才重建）模糊過的能見度遮罩。遮罩只在探索紀錄（fogRevealRev）或棋子位置
+ * （tempSet）改變時才需要重建；否則直接沿用上次的快取，省下每幀最貴的填格 + blur 濾鏡。
+ */
+function fogGetBlurredMask(revealedSet, tempSet, viewId) {
+    // 簽章：視角 + 地圖尺寸 + 探索版本 + 目前所有暫時視野格（棋子移動時才會變）。
+    const tempSig = tempSet.size ? Array.from(tempSet).sort().join(';') : '';
+    const sig = viewId + '|' + state.mapW + 'x' + state.mapH + '|' + fogRevealRev + '|' + tempSig;
+    if (fogMaskCacheSig === sig && fogMaskCacheCanvas) return fogMaskCacheCanvas;
+
+    const alphaGrid = fogBuildAlphaGrid(revealedSet, tempSet);
+    fogMaskCacheCanvas = fogBuildBlurredMask(alphaGrid);
+    fogMaskCacheSig = sig;
+    return fogMaskCacheCanvas;
+}
+
+/** 預先渲染一次的柔霧光斑（白色徑向漸層）。之後每幀只需 drawImage 貼上並調整 globalAlpha。 */
+function fogGetPuffSprite() {
+    if (fogPuffSprite) return fogPuffSprite;
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const g = c.getContext('2d');
+    const r = size / 2;
+    const grad = g.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, 'rgba(240, 241, 245, 1)');
+    grad.addColorStop(1, 'rgba(240, 241, 245, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+    fogPuffSprite = c;
+    return c;
+}
+
+/**
  * 畫出一片連續飄流的雲霧材質，範圍橫跨整張地圖、不受格子邊界限制——多團柔和光斑
  * 以各自的相位緩慢飄移、彼此重疊，營造「身在霧氣中、霧氣繚繞」的流動感。畫完後用
  * 模糊過的每格能見度遮罩裁切，邊界自然是暈開的濃淡漸層，不是硬邊方塊。
  */
-function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
+function fogDrawCloudLayer(ctx, w, h, t, revealedSet, tempSet, viewId) {
     ctx.save();
 
     // 基礎柔霧色調（之後會被遮罩裁切出濃淡分佈，本身不分格子）
@@ -304,6 +376,9 @@ function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
     const spacing = gridSize * 1.7; // 光斑基準間距：刻意跟格線錯開分佈，避免視覺上又對齊回格子
     const nx = Math.max(1, Math.ceil(w / spacing) + 2);
     const ny = Math.max(1, Math.ceil(h / spacing) + 2);
+    const sprite = fogGetPuffSprite();   // 每幀重用同一張預渲染光斑，不再每幀建立漸層物件
+    const r = spacing * 0.85;
+    const amp = gridSize * 0.55;
 
     for (let iy = -1; iy < ny; iy++) {
         for (let ix = -1; ix < nx; ix++) {
@@ -312,25 +387,18 @@ function fogDrawCloudLayer(ctx, w, h, t, alphaGrid) {
             const baseY = iy * spacing + (1 - seed) * spacing * 0.6;
 
             const phase = seed * 62.8;
-            const amp = gridSize * 0.55;
             const speed = 0.32 + seed * 0.2;
-            const ox = Math.sin(t * speed + phase) * amp;
-            const oy = Math.cos(t * speed * 0.82 + phase * 1.3) * amp;
-            const cx = baseX + ox;
-            const cy = baseY + oy;
-            const r = spacing * 0.85;
-            const puffAlpha = 0.18 + seed * 0.08;
+            const cx = baseX + Math.sin(t * speed + phase) * amp;
+            const cy = baseY + Math.cos(t * speed * 0.82 + phase * 1.3) * amp;
 
-            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-            grad.addColorStop(0, `rgba(240, 241, 245, ${puffAlpha})`);
-            grad.addColorStop(1, 'rgba(240, 241, 245, 0)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+            ctx.globalAlpha = 0.18 + seed * 0.08;
+            ctx.drawImage(sprite, cx - r, cy - r, r * 2, r * 2);
         }
     }
+    ctx.globalAlpha = 1;
     ctx.restore();
 
-    const blurCanvas = fogBuildBlurredMask(alphaGrid);
+    const blurCanvas = fogGetBlurredMask(revealedSet, tempSet, viewId);
     ctx.save();
     ctx.globalCompositeOperation = 'destination-in';
     ctx.drawImage(blurCanvas, 0, 0, blurCanvas.width, blurCanvas.height, 0, 0, w, h);
@@ -362,18 +430,6 @@ function drawFogEditPreview(ctx, size) {
             }
         }
     }
-}
-
-/**
- * 以指定玩家的視角畫出動態煙霧（ST 選中該玩家的棋子時使用）：唯讀，不寫入任何揭露資料。
- * 用該玩家的永久揭露紀錄（fogRevealedAll[targetId]）＋該玩家在場棋子的即時視野合成。
- */
-function drawFogAsPlayer(ctx, w, h, t, targetId) {
-    if (!fogEnabled) return;
-    const revealed = (fogRevealedAll && fogRevealedAll[targetId]) || {};
-    const temp = fogComputeVisibility(targetId, false);
-    const alphaGrid = fogBuildAlphaGrid(revealed, temp);
-    fogDrawCloudLayer(ctx, w, h, t, alphaGrid);
 }
 
 // ===== 動畫迴圈（節流至約 12fps，足夠呈現緩慢翻滾感） =====
@@ -417,6 +473,7 @@ function fogHandleToolPaint(tool, x, y) {
             if (fogRevealedAll[pid]) delete fogRevealedAll[pid][key];
         }
     });
+    fogRevealRev++;
 
     if (typeof drawFogCanvas === 'function') drawFogCanvas(performance.now() / 1000);
     return true;
@@ -457,6 +514,7 @@ function fogResetTarget() {
         if (fogRevealedAll[target]) delete fogRevealedAll[target];
         if (myPlayerId === target) fogRevealedMine = {};
     }
+    fogRevealRev++;
 
     if (typeof showToast === 'function') showToast(`已重置「${label}」的迷霧`);
     if (typeof drawFogCanvas === 'function') drawFogCanvas(performance.now() / 1000);

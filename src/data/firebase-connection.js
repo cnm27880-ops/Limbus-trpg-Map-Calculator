@@ -633,7 +633,7 @@ function setupRoomListeners() {
             }
             // 記錄 Firebase 已確認的 mapData，供 syncMapData 判斷是否需要再寫入
             _syncedMapDataStr = JSON.stringify(state.mapData);
-            renderMap();
+            scheduleRenderMap();
         }
     });
     unsubscribeListeners.push(() => roomRef.child('mapData').off('value', mapDataListener));
@@ -650,7 +650,7 @@ function setupRoomListeners() {
         // 記錄 Firebase 已確認的 palette，供 syncMapPalette 判斷是否需要再寫入
         _syncedPaletteStr = JSON.stringify(state.mapPalette || []);
         updateToolbar();
-        renderMap();
+        scheduleRenderMap();
     });
     unsubscribeListeners.push(() => roomRef.child('mapPalette').off('value', paletteListener));
 
@@ -726,9 +726,7 @@ function setupRoomListeners() {
             state.units = [];
             _syncedUnits = {};
         }
-        renderUnitsList();
-        renderSidebarUnits();
-        renderMap();  // 重繪地圖上的 token
+        scheduleUnitsAndMapRefresh();  // 單位清單／側欄／地圖，合流成每影格一次重繪
     });
     unsubscribeListeners.push(() => roomRef.child('units').off('value', unitsListener));
 
@@ -756,7 +754,7 @@ function setupRoomListeners() {
             state.activeBossId = (typeof newState.activeBossId === 'string') ? newState.activeBossId : null;
             renderUnitsList();
             renderUnitsToolbar();
-            renderMap();
+            scheduleRenderMap();
 
             // 回合開始技能自動觸發：偵測到 turnIdx「真的改變」且新的當前行動單位是自己的單位時，
             // 由本客戶端自行用本地端 identityHudState（存在各玩家自己瀏覽器 localStorage）

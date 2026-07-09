@@ -315,6 +315,35 @@ function resizeMap() {
     if (applyBtn) applyBtn.classList.remove('has-changes');
 }
 
+// ===== 重繪合流（coalescing）=====
+// Firebase 監聽器在一次同步中可能連續觸發多次重繪（例如戰鬥中多個單位的 HP／狀態／
+// 位置陸續同步）。renderMap() 會整份重建所有 Token DOM，若每個事件都立即同步重繪，
+// 就會在同一個 tick 內重建多次，造成明顯卡頓。以下用 requestAnimationFrame 把連續的
+// 重繪請求合併成「每一影格最多一次」；狀態都在呼叫前就更新完畢，rAF 觸發時讀到的是
+// 最新資料，畫面結果與立即重繪一致，只是省去中間被覆蓋掉的白工。
+let _renderMapScheduled = false;
+function scheduleRenderMap() {
+    if (_renderMapScheduled) return;
+    _renderMapScheduled = true;
+    requestAnimationFrame(() => {
+        _renderMapScheduled = false;
+        renderMap();
+    });
+}
+
+// 單位資料變更時，單位清單／側欄／地圖三者需一起刷新；同樣合流成每影格一次。
+let _unitsMapRefreshScheduled = false;
+function scheduleUnitsAndMapRefresh() {
+    if (_unitsMapRefreshScheduled) return;
+    _unitsMapRefreshScheduled = true;
+    requestAnimationFrame(() => {
+        _unitsMapRefreshScheduled = false;
+        if (typeof renderUnitsList === 'function') renderUnitsList();
+        if (typeof renderSidebarUnits === 'function') renderSidebarUnits();
+        renderMap();
+    });
+}
+
 // ===== 地圖渲染 =====
 /**
  * 渲染地圖

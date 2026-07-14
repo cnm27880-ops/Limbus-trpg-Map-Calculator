@@ -21,18 +21,33 @@ function toggleQABMenu() {
         mainBtn.classList.toggle('active', qabMenuOpen);
     }
 
-    // 如果開啟選單，添加點擊外部關閉的監聽器
+    // 如果開啟選單，添加點擊外部關閉的監聽器。
+    // 改用「防誤關」辨識機制：只有在選單外真正點擊（按下＋放開、位移很小）才關閉，
+    // 避免指標稍微滑出就誤關。
     if (qabMenuOpen) {
-        setTimeout(() => {
-            document.addEventListener('click', handleQABOutsideClick);
-        }, 10);
-    } else {
-        document.removeEventListener('click', handleQABOutsideClick);
+        setTimeout(armQabOutsideDismiss, 10);
+    } else if (qabOutsideDetach) {
+        qabOutsideDetach();
+        qabOutsideDetach = null;
     }
 }
 
+let qabOutsideDetach = null;
+function armQabOutsideDismiss() {
+    if (qabOutsideDetach) { qabOutsideDetach(); qabOutsideDetach = null; }
+    const isOutside = (t) => {
+        const qab = document.getElementById('quick-action-ball');
+        return !qab || !qab.contains(t);
+    };
+    if (typeof attachOutsideDismiss !== 'function') {
+        document.addEventListener('click', handleQABOutsideClick);
+        return;
+    }
+    qabOutsideDetach = attachOutsideDismiss(isOutside, () => closeQABMenu());
+}
+
 /**
- * 處理點擊選單外部關閉
+ * 處理點擊選單外部關閉（辨識機制未載入時的保底）
  */
 function handleQABOutsideClick(e) {
     const qabContainer = document.getElementById('quick-action-ball');
@@ -51,6 +66,7 @@ function closeQABMenu() {
 
     if (menu) menu.classList.remove('show');
     if (mainBtn) mainBtn.classList.remove('active');
+    if (qabOutsideDetach) { qabOutsideDetach(); qabOutsideDetach = null; }
     document.removeEventListener('click', handleQABOutsideClick);
 }
 

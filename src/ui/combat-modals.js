@@ -545,7 +545,9 @@ function cqOnSTReview(data) {
             value: `豁免抵擋：目標${saveInfo.saveName || '豁免'} ${Math.max(0, parseInt(saveInfo.saveDice, 10) || 0)} 顆自動對擲（傷害 = 攻擊成功+附加 − 豁免成功）`,
             cls: 'is-resource'
         });
-        if (ignoreDef > 0)            rows.push({ label: '無視防禦', value: `${ignoreDef} 點`, cls: 'is-resource' });
+        // 無視防禦已由黑箱引擎直接扣減防禦、反映在「系統建議骰數」中；明確標示為已套用（綠色加成），
+        // 避免 ST 誤以為尚未計入而再手動扣一次，導致最終傷害反而變低。
+        if (ignoreDef > 0)            rows.push({ label: '無視防禦', value: `−${ignoreDef} 防禦（已計入建議骰數）`, cls: 'is-bonus' });
         if (critVicious > 0)          rows.push({ label: '嚴重轉惡性', value: `${critVicious} 點`, cls: 'is-resource' });
         if (identityDpBonus > 0)      rows.push({ label: '人格卡 DP', value: `+${identityDpBonus}`, cls: 'is-bonus' });
         if (identityExtraSuccess > 0) rows.push({ label: '人格卡額外成功', value: `+${identityExtraSuccess}`, cls: 'is-bonus' });

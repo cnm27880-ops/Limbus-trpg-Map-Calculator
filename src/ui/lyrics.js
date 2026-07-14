@@ -1814,10 +1814,29 @@ function toggleLyricsPicker() {
 
     document.body.appendChild(dropdown);
 
-    // 點選外部關閉
-    setTimeout(() => {
+    // 點選外部關閉：改用「防誤關」辨識機制，避免指標稍微滑出下拉選單就誤關
+    setTimeout(armLyricsPickerOutsideDismiss, 10);
+}
+
+let lyricsPickerDetach = null;
+function armLyricsPickerOutsideDismiss() {
+    if (lyricsPickerDetach) { lyricsPickerDetach(); lyricsPickerDetach = null; }
+    const isOutside = (t) => {
+        const dropdown = document.getElementById('lyrics-picker-dropdown');
+        const btn = document.getElementById('bgm-lyrics-pick-btn');
+        return dropdown && !dropdown.contains(t) && t !== btn;
+    };
+    const close = () => {
+        const dropdown = document.getElementById('lyrics-picker-dropdown');
+        if (dropdown) dropdown.remove();
+        if (lyricsPickerDetach) { lyricsPickerDetach(); lyricsPickerDetach = null; }
+        document.removeEventListener('click', closeLyricsPickerOutside);
+    };
+    if (typeof attachOutsideDismiss !== 'function') {
         document.addEventListener('click', closeLyricsPickerOutside);
-    }, 10);
+        return;
+    }
+    lyricsPickerDetach = attachOutsideDismiss(isOutside, close);
 }
 
 function closeLyricsPickerOutside(e) {
@@ -1825,6 +1844,7 @@ function closeLyricsPickerOutside(e) {
     const btn = document.getElementById('bgm-lyrics-pick-btn');
     if (dropdown && !dropdown.contains(e.target) && e.target !== btn) {
         dropdown.remove();
+        if (lyricsPickerDetach) { lyricsPickerDetach(); lyricsPickerDetach = null; }
         document.removeEventListener('click', closeLyricsPickerOutside);
     }
 }

@@ -1610,9 +1610,7 @@ function openUnitContextMenu(event, unitId, mode) {
         menu.style.left = Math.max(8, x) + 'px';
         menu.style.top = Math.max(8, y) + 'px';
 
-        setTimeout(() => {
-            document.addEventListener('pointerdown', handleUcmOutsideClick, true);
-        }, 0);
+        setTimeout(armUcmOutsideDismiss, 0);
         return;
     }
 
@@ -1670,9 +1668,23 @@ function openUnitContextMenu(event, unitId, mode) {
         requestAnimationFrame(() => menu.classList.add('open'));
     });
 
-    setTimeout(() => {
+    setTimeout(armUcmOutsideDismiss, 0);
+}
+
+// 點外面關閉：改用「防誤關」辨識機制——只有在選單外真正點擊（按下＋放開、位移很小）才關閉，
+// 避免指標稍微滑出選單、或按下要拖曳地圖時就誤關（環繞選單以棋子為圓心，指標常在其外圍游走）。
+let ucmOutsideDetach = null;
+function armUcmOutsideDismiss() {
+    if (ucmOutsideDetach) { ucmOutsideDetach(); ucmOutsideDetach = null; }
+    if (typeof attachOutsideDismiss !== 'function') {
+        // 保底：辨識機制未載入時退回原本的 pointerdown 關閉
         document.addEventListener('pointerdown', handleUcmOutsideClick, true);
-    }, 0);
+        return;
+    }
+    ucmOutsideDetach = attachOutsideDismiss(
+        (t) => { const m = document.getElementById('unit-context-menu'); return !m || !m.contains(t); },
+        () => closeUnitContextMenu()
+    );
 }
 
 function handleUcmOutsideClick(e) {
@@ -1682,6 +1694,7 @@ function handleUcmOutsideClick(e) {
 
 function closeUnitContextMenu() {
     const menu = document.getElementById('unit-context-menu');
+    if (ucmOutsideDetach) { ucmOutsideDetach(); ucmOutsideDetach = null; }
     document.removeEventListener('pointerdown', handleUcmOutsideClick, true);
     if (!menu) return;
     // 條列式選單：直接移除（無展開動畫）

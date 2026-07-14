@@ -248,6 +248,52 @@ test('未填破甲/高速/破魔時不影響計算', () => {
 });
 
 // ====================================================================
+console.log('\n[Bug1] 黑箱：無視防禦扣減防禦、增加骰數（不得反向）');
+// ====================================================================
+
+test('無視防禦扣減目標防禦 → 骰數增加（攻20/防10/無視5 → 15）', () => {
+    resetCaptures();
+    sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 10, defAuto: 0 }];
+    bbRunBlackBoxCalculation({
+        attacker: { dp: 20, auto: 0, ignoreDef: 5 },
+        target: { id: 'boss' },
+        defense: null
+    });
+    // finalDefense = 10 - 5 = 5；baseDice = 20 - 5 = 15
+    assert.strictEqual(captured.stReview.baseDice, 15, '無視防禦應扣防禦、增加骰數');
+    assert.ok(/無視防禦\(-5\)/.test(captured.stReview.debugStr), 'debugStr 應標示 無視防禦(-5)');
+});
+
+test('無視防禦骰數必 ≥ 不加無視時（永不使傷害變低）', () => {
+    resetCaptures();
+    sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 10, defAuto: 0 }];
+    bbRunBlackBoxCalculation({ attacker: { dp: 20, auto: 0, ignoreDef: 0 }, target: { id: 'boss' }, defense: null });
+    const without = captured.stReview.baseDice; // 20 - 10 = 10
+    resetCaptures();
+    sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 10, defAuto: 0 }];
+    bbRunBlackBoxCalculation({ attacker: { dp: 20, auto: 0, ignoreDef: 5 }, target: { id: 'boss' }, defense: null });
+    const withIgnore = captured.stReview.baseDice; // 20 - 5 = 15
+    assert.strictEqual(without, 10);
+    assert.ok(withIgnore >= without, `加無視防禦(${withIgnore})不得比不加(${without})低`);
+});
+
+test('無視防禦不影響附加成功（只扣防禦 DP）', () => {
+    resetCaptures();
+    sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 10, defAuto: 3 }];
+    bbRunBlackBoxCalculation({ attacker: { dp: 20, auto: 2, ignoreDef: 5 }, target: { id: 'boss' }, defense: null });
+    // 附加成功桶：攻 2 − 防 3 → max(0,-1)=0，與無視防禦無關
+    assert.strictEqual(captured.stReview.baseExtraSuccess, 0, '無視防禦不改變附加成功計算');
+});
+
+test('無視防禦超過防禦時，防禦扣到 0 為止（不使攻擊 DP 反被扣）', () => {
+    resetCaptures();
+    sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 3, defAuto: 0 }];
+    bbRunBlackBoxCalculation({ attacker: { dp: 20, auto: 0, ignoreDef: 10 }, target: { id: 'boss' }, defense: null });
+    // finalDefense = max(0, 3 - 10) = 0；baseDice = 20 - 0 = 20（不會變 20-(-7)=27，也不會反扣攻擊）
+    assert.strictEqual(captured.stReview.baseDice, 20);
+});
+
+// ====================================================================
 console.log('\n[Item 2] 黑箱：BOSS 防禦附加成功為回合刷新資源池');
 // ====================================================================
 

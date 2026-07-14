@@ -1101,10 +1101,23 @@ function openStatusQuickPopover(event, unitId, statusName, statusDef) {
     pop.style.left = x + 'px';
     pop.style.top = Math.max(8, y) + 'px';
 
-    // 點擊浮窗外部時關閉（延遲註冊，避免吃到當前點擊）
-    setTimeout(() => {
+    // 點擊浮窗外部時關閉（延遲註冊，避免吃到當前點擊）。
+    // 改用「防誤關」辨識機制：只有在浮窗外真正點擊（按下＋放開、位移很小）才關閉，
+    // 避免指標稍微滑出浮窗就誤關。
+    setTimeout(armPopoverOutsideDismiss, 0);
+}
+
+let statusPopoverDetach = null;
+function armPopoverOutsideDismiss() {
+    if (statusPopoverDetach) { statusPopoverDetach(); statusPopoverDetach = null; }
+    if (typeof attachOutsideDismiss !== 'function') {
         document.addEventListener('pointerdown', handlePopoverOutsideClick, true);
-    }, 0);
+        return;
+    }
+    statusPopoverDetach = attachOutsideDismiss(
+        (t) => { const pop = document.getElementById('status-quick-popover'); return !pop || !pop.contains(t); },
+        () => closeStatusQuickPopover()
+    );
 }
 
 function handlePopoverOutsideClick(e) {
@@ -1116,6 +1129,7 @@ function closeStatusQuickPopover() {
     const pop = document.getElementById('status-quick-popover');
     if (pop) pop.remove();
     statusPopoverTarget = null;
+    if (statusPopoverDetach) { statusPopoverDetach(); statusPopoverDetach = null; }
     document.removeEventListener('pointerdown', handlePopoverOutsideClick, true);
 }
 

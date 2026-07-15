@@ -636,6 +636,49 @@ function cqOnSTReview(data) {
 
 const ST_AUTOROLL_KEY = 'limbus-st-autoroll';
 
+/**
+ * 攻擊確定命中後，套用人格卡「命中時施加」的狀態——
+ * 目標減益逐一套用到所有命中的目標；自身增益（迅捷／呼吸法／充能等資源）套用到攻擊者單位。
+ * 防禦扣除（自動／手動擲骰）與豁免抵擋三種結算路徑共用，讓命中狀態全自動化。
+ * @param {object} atk - 戰鬥隊列上的攻擊方資料（含 onHit* 欄位與 unitId）
+ * @param {string[]} hitTargetIds - 確定命中的目標單位 id 清單（空陣列＝未命中，不套用）
+ * @returns {boolean} 是否有任何狀態被套用
+ */
+function cmApplyOnHitIdentityStatuses(atk, hitTargetIds) {
+    if (!atk || typeof applyEngineStatusesToUnit !== 'function') return false;
+    const hitIds = (hitTargetIds || []).filter(Boolean);
+    if (!hitIds.length) return false;
+
+    let applied = false;
+    if (atk.onHitTargetStatus && Object.keys(atk.onHitTargetStatus).length) {
+        let n = 0;
+        hitIds.forEach(id => { n += applyEngineStatusesToUnit(id, atk.onHitTargetStatus); });
+        if (n > 0) {
+            applied = true;
+            if (Array.isArray(atk.onHitTargetStatusNotes) && atk.onHitTargetStatusNotes.length && typeof showToast === 'function') {
+                showToast('命中效果已對目標施加：' + atk.onHitTargetStatusNotes.join('、'));
+            }
+        }
+    }
+    if (atk.unitId && atk.onHitSelfStatus && Object.keys(atk.onHitSelfStatus).length) {
+        if (applyEngineStatusesToUnit(atk.unitId, atk.onHitSelfStatus) > 0) {
+            applied = true;
+            if (Array.isArray(atk.onHitSelfStatusNotes) && atk.onHitSelfStatusNotes.length && typeof showToast === 'function') {
+                showToast('命中增益已對自己套用：' + atk.onHitSelfStatusNotes.join('、'));
+            }
+        }
+    }
+    return applied;
+}
+
+/** 攻擊方資料是否帶有任何「命中時施加」的人格卡狀態 */
+function cmHasOnHitIdentityStatuses(atk) {
+    return !!atk && (
+        (atk.onHitTargetStatus && Object.keys(atk.onHitTargetStatus).length > 0)
+        || (atk.onHitSelfStatus && Object.keys(atk.onHitSelfStatus).length > 0)
+    );
+}
+
 function confirmSTReview() {
     // 優先從 Modal 的 data-* 屬性讀取初步骰數（cqOnSTReview 渲染時已釘上），
     // 全域 combatQueueLast 僅作為退路，避免監聽器更新時序造成骰數讀成 0。
@@ -692,21 +735,15 @@ function confirmSTReview() {
     }
 
     // 命中判定後套用「命中時施加」的人格卡狀態（成功數 > 0 視為命中）。
-    // 手動擲骰（autoroll 關閉）時無從得知命中與否，由 ST 依審核提示列自行套用。
-    if (autoroll && rollResult && rollResult.successes > 0 && combatQueueLast && combatQueueLast.attacker) {
-        const atk = combatQueueLast.attacker;
-        if (atk.onHitTargetStatus && typeof applyEngineStatusesToUnit === 'function' && targetId) {
-            const appliedTgt = applyEngineStatusesToUnit(targetId, atk.onHitTargetStatus);
-            if (appliedTgt && atk.onHitTargetStatusNotes && atk.onHitTargetStatusNotes.length && typeof showToast === 'function') {
-                showToast('命中效果已對目標施加：' + atk.onHitTargetStatusNotes.join('、'));
-            }
-        }
-        if (atk.onHitSelfStatus && typeof applyEngineStatusesToUnit === 'function' && atk.unitId) {
-            const appliedSelf = applyEngineStatusesToUnit(atk.unitId, atk.onHitSelfStatus);
-            if (appliedSelf && atk.onHitSelfStatusNotes && atk.onHitSelfStatusNotes.length && typeof showToast === 'function') {
-                showToast('命中效果已對自己套用：' + atk.onHitSelfStatusNotes.join('、'));
-            }
-        }
+    // 自動擲骰：直接依擲骰結果判定；手動擲骰／機運骰（無系統擲骰結果）：
+    // 改以確認視窗詢問 ST 是否命中——確定即自動套用，讓命中狀態（含攻擊者
+    // 自身增益）在所有結算路徑都全自動化，ST 不再需要手動補狀態。
+    const hitAtk = (combatQueueLast && combatQueueLast.attacker) || null;
+    if (cmHasOnHitIdentityStatuses(hitAtk)) {
+        const hit = rollResult
+            ? rollResult.successes > 0
+            : confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）');
+        if (hit) cmApplyOnHitIdentityStatuses(hitAtk, [targetId]);
     }
 }
 
@@ -819,10 +856,14 @@ function confirmSTReviewSaveMode(saveInfo) {
             if (aPart > 0) modifyHPInternal(u, 'a', aPart);
             if (lPart > 0) modifyHPInternal(u, 'l', lPart);
         }
-        return { name: (u && u.name) || t.name || '目標', pool, saveSuccess: saveRoll.successes, dmg };
+        return { id: t.id || '', name: (u && u.name) || t.name || '目標', pool, saveSuccess: saveRoll.successes, dmg };
     });
 
     if (typeof broadcastState === 'function') broadcastState();
+
+    // 人格卡「命中時施加」狀態（豁免抵擋路徑）：只套用到實際受到傷害的目標；
+    // 任一目標受創即視為命中，一併套用攻擊者自身增益。ST 發起的 BOSS 威脅無 onHit 欄位，自然不套用。
+    cmApplyOnHitIdentityStatuses(atk, results.filter(r => r.dmg > 0).map(r => r.id));
 
     const attackerName = String(atk.name || 'BOSS');
     const detail = results.map(r => `${r.name}(${saveName}${r.saveSuccess}→受${r.dmg})`).join('、');

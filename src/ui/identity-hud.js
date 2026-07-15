@@ -843,47 +843,12 @@ function refreshIdentityResult() {
     if (identityHudState.lastResult) computeIdentityResult(true);
 }
 
-// ===== 套用（含二次確認防誤觸） =====
-
-/**
- * 套用目標/自身狀態按鈕的二次確認：第一次點擊只將按鈕文字改為「確認套用？」並武裝（armed），
- * 第二次點擊（仍處於武裝狀態）才真正執行 actionFnName；點擊其他地方使按鈕失焦（onblur）會還原。
- * @param {HTMLElement} btn
- * @param {string} actionFnName - 要執行的函式名稱（如 'applyIdentityTargetStatus'）
- */
-function idtConfirmClick(btn, actionFnName) {
-    if (!btn) return;
-    if (btn.dataset.armed === '1') {
-        idtResetConfirmBtn(btn);
-        if (typeof window[actionFnName] === 'function') window[actionFnName]();
-        return;
-    }
-    btn.dataset.armed = '1';
-    btn.textContent = '⚠️ 確認套用？';
-}
-
-/** 還原確認按鈕的武裝狀態與文字（失焦或執行後呼叫）。 */
-function idtResetConfirmBtn(btn) {
-    if (!btn) return;
-    btn.dataset.armed = '0';
-    btn.textContent = btn.dataset.label || btn.textContent;
-}
-
-function applyIdentityTargetStatus() {
-    const r = identityHudState.lastResult;
-    if (!r) return;
-    if (!identityHudState.targetId) { if (typeof showToast === 'function') showToast('請先指定目標單位'); return; }
-    const n = applyEngineStatusesToUnit(identityHudState.targetId, r.expectedTargetStatus);
-    if (typeof showToast === 'function') showToast(n ? `已對目標套用 ${n} 種狀態` : '無可套用的目標狀態');
-}
-
-function applyIdentitySelfStatus() {
-    const r = identityHudState.lastResult;
-    if (!r) return;
-    if (!identityHudState.attackerId) { if (typeof showToast === 'function') showToast('請先指定我方單位'); return; }
-    const n = applyEngineStatusesToUnit(identityHudState.attackerId, r.expectedSelfStatus);
-    if (typeof showToast === 'function') showToast(n ? `已對我方套用 ${n} 種狀態` : '無可套用的自身狀態');
-}
+// ===== 回合開始資源 =====
+// 舊的「🎯 套用目標狀態／🔵 套用自身狀態」手動按鈕（含二次確認）已移除：
+// 狀態套用已全自動化——攻擊宣告狀態於發起攻擊時套用（submitAttackModal），
+// 命中狀態（含自身增益）於 ST 命中判定後套用（cmApplyOnHitIdentityStatuses，
+// 涵蓋自動擲骰／手動擲骰確認／豁免抵擋三種結算路徑）。
+// 結果面板改為「攻擊宣告時／命中時」分階段的唯讀預覽（見 renderIdentityResult）。
 
 /**
  * 執行「回合開始資源獲取」的核心邏輯（手動按鈕與自動觸發共用）。
@@ -1145,8 +1110,6 @@ function renderIdentityResult() {
             if (typeof v !== 'number') return `${name}（${v}）`;
             return `${name} ${v >= 0 ? '+' : ''}${v}`;
         }).join('、');
-    const tgtStatus = fmtStatus(r.expectedTargetStatus);
-    const selfStatus = fmtStatus(r.expectedSelfStatus);
 
     const autoLogs = r.triggerLogs.filter(l => !l.manual);
     const manualLogs = r.triggerLogs.filter(l => l.manual);
@@ -1166,15 +1129,29 @@ function renderIdentityResult() {
         return `<div class="idt-log"><span class="idt-log-src">[${phase}] ${src}</span><span class="idt-log-eff">${parts.join('，')}</span></div>`;
     };
 
-    let html = '';
-    if (bonusRows) html += `<div class="idt-bonus-row">${bonusRows}</div>`;
-    if (tgtStatus) html += `<div class="idt-statline">🎯 預計施加目標：<b>${tgtStatus}</b></div>`;
-    if (selfStatus) html += `<div class="idt-statline">🔵 預計施加自身：<b>${selfStatus}</b></div>`;
+    // 分階段唯讀預覽：狀態套用已全自動化（宣告時／命中時各走自己的結算路徑），手動套用按鈕已移除
+    const atkTgt = fmtStatus(r.onAttackTargetStatus);
+    const atkSelf = fmtStatus(r.onAttackSelfStatus);
+    const hitTgt = fmtStatus(r.onHitTargetStatus);
+    const hitSelf = fmtStatus(r.onHitSelfStatus);
+    const line = (icon, label, txt) =>
+        `<div class="idt-phase-line">${icon} ${label}：${txt ? `<b>${txt}</b>` : '<span class="idt-phase-none">無</span>'}</div>`;
 
-    html += '<div class="idt-apply-row">'
-        + '<button type="button" class="idt-btn idt-btn-mini" data-label="🎯 套用目標狀態" onclick="idtConfirmClick(this, \'applyIdentityTargetStatus\')" onblur="idtResetConfirmBtn(this)">🎯 套用目標狀態</button>'
-        + '<button type="button" class="idt-btn idt-btn-mini" data-label="🔵 套用自身狀態" onclick="idtConfirmClick(this, \'applyIdentitySelfStatus\')" onblur="idtResetConfirmBtn(this)">🔵 套用自身狀態</button>'
-        + '</div>';
+    let html = '<div class="idt-auto-banner">⚙️ 全自動套用：發起攻擊 → 立即套用「攻擊宣告時」欄位；ST 判定命中 → 自動套用「命中時」欄位（含自身增益）。無需手動操作。</div>';
+    if (bonusRows) html += `<div class="idt-bonus-row">${bonusRows}</div>`;
+    html += `
+        <div class="idt-phase-grid">
+            <div class="idt-phase-card idt-phase-attack">
+                <div class="idt-phase-title">🗡 攻擊宣告時<span class="idt-phase-when">發起攻擊即套用</span></div>
+                ${line('🎯', '對目標', atkTgt)}
+                ${line('🔵', '對自身', atkSelf)}
+            </div>
+            <div class="idt-phase-card idt-phase-hit">
+                <div class="idt-phase-title">💥 命中時<span class="idt-phase-when">命中判定後自動套用</span></div>
+                ${line('🎯', '對目標', hitTgt)}
+                ${line('💠', '自身增益', hitSelf)}
+            </div>
+        </div>`;
 
     if (autoLogs.length) {
         html += '<div class="idt-log-title">觸發明細</div>' + autoLogs.map(logRow).join('');
@@ -1324,7 +1301,7 @@ function injectIdentityStyles() {
         .idt-field label{display:block;font-size:.8rem;color:var(--text-dim,#aaa);margin-bottom:3px;}
         .idt-checks{display:flex;flex-direction:column;gap:5px;margin:8px 0;font-size:.85rem;}
         .idt-checks label{display:flex;align-items:center;gap:7px;cursor:pointer;}
-        .idt-action-row,.idt-apply-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+        .idt-action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
         .idt-btn{flex:1;min-width:120px;background:var(--bg-input,#222);border:1px solid var(--border,#33333a);color:var(--text,#eee);border-radius:6px;padding:8px;cursor:pointer;font-size:.85rem;}
         .idt-btn-main{background:var(--accent-purple,#7e57c2);border-color:var(--accent-purple,#7e57c2);font-weight:bold;}
         .idt-btn-mini{flex:1;min-width:0;font-size:.78rem;padding:6px 4px;}
@@ -1335,6 +1312,19 @@ function injectIdentityStyles() {
         .idt-bonus b{color:var(--accent-green,#27ae60);margin-left:6px;}
         .idt-statline{font-size:.85rem;margin:4px 0;}
         .idt-statline b{color:var(--accent-orange,#e67e22);}
+        /* 分階段自動套用預覽（攻擊宣告時／命中時） */
+        .idt-auto-banner{font-size:.76rem;color:var(--accent-green,#8bd17c);background:rgba(39,174,96,.09);border-left:3px solid var(--accent-green,#27ae60);border-radius:4px;padding:6px 8px;margin-bottom:8px;line-height:1.5;}
+        .idt-phase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin:8px 0;}
+        .idt-phase-card{border:1px solid var(--border,#33333a);border-radius:8px;padding:8px 10px;}
+        .idt-phase-attack{border-color:var(--accent-purple,#7e57c2);background:rgba(126,87,194,.07);}
+        .idt-phase-hit{border-color:var(--accent-orange,#e67e22);background:rgba(230,126,34,.07);}
+        .idt-phase-title{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:.84rem;font-weight:bold;margin-bottom:6px;}
+        .idt-phase-attack .idt-phase-title{color:var(--accent-purple,#9b59b6);}
+        .idt-phase-hit .idt-phase-title{color:var(--accent-orange,#e67e22);}
+        .idt-phase-when{font-size:.64rem;font-weight:normal;color:var(--text-dim,#999);background:var(--bg-input,#15151b);border:1px solid var(--border,#33333a);border-radius:6px;padding:1px 6px;white-space:nowrap;}
+        .idt-phase-line{font-size:.8rem;margin:3px 0;line-height:1.5;}
+        .idt-phase-line b{color:var(--text,#eee);}
+        .idt-phase-none{color:var(--text-dim,#777);}
         .idt-log-title{font-size:.8rem;color:var(--text-dim,#aaa);margin:10px 0 4px;border-top:1px solid var(--border,#33333a);padding-top:6px;}
         .idt-manual-title{color:var(--accent-orange,#e67e22);}
         .idt-log{display:flex;justify-content:space-between;gap:10px;font-size:.8rem;padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.06);}
@@ -1397,8 +1387,6 @@ if (typeof window !== 'undefined') {
     window.runIdentityCalc = runIdentityCalc;
     window.runIdentityTurnStart = runIdentityTurnStart;
     window.autoTriggerIdentityTurnStart = autoTriggerIdentityTurnStart;
-    window.applyIdentityTargetStatus = applyIdentityTargetStatus;
-    window.applyIdentitySelfStatus = applyIdentitySelfStatus;
     window.renderIdentityModal = renderIdentityModal;
     // 自訂人格卡（AI 人格鍛造爐）
     window.openAddIdentityForm = openAddIdentityForm;

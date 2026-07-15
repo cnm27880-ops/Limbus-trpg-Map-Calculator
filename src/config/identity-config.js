@@ -440,6 +440,42 @@ const IDENTITY_LIBRARY = {
         }
     },
 
+    // 浮士德 - W公司 2 級清掃人員 ── 充能 / 束縛 / 麻痺
+    faust_wcorp: {
+        id: 'faust_wcorp',
+        name: '浮士德 - W公司 2 級清掃人員',
+        owner: '浮士德',
+        repeatUnlockSkill: '過度充能',
+        keyStatuses: ['charge', 'bind', 'paralyze'],
+        formNote: '【充能】特殊能量池，上限 20 層；自身回合結束時 −1 層，戰鬥結束後歸零。【束縛】目標先攻值減少等同層數。各段【超載】需在使用法術前宣告消耗充能。',
+        hooks: {
+            onAttack: [
+                // 能源循環①：使用法術時，自身獲得 4 層充能
+                { condition: () => true, selfStatus: { charge: 4 }, source: '能源循環', skill: '能源循環' },
+                // 過度充能①【重複抽取解鎖】：以法術攻擊且充能不低於 5 層 → 額外 +6 DP
+                { condition: (t, a) => (a.status.charge || 0) >= 5, dpBonus: 6, source: '過度充能', skill: '過度充能', locked: true }
+            ],
+            onHit: [
+                // 騰躍速攻①：法術命中目標時，自身再獲得 5 層充能
+                { condition: () => true, selfStatus: { charge: 5 }, source: '騰躍速攻', skill: '騰躍速攻' }
+            ],
+            onActive: [
+                { name: '超載 2 - 輕度運轉', source: '能源循環', skill: '能源循環',
+                  desc: '使用法術前宣告消耗 2 層充能，本次法術威力值 +2。', effect: { cost: { charge: 2 }, spellPower: 2 } },
+                { name: '騰躍速攻（命中施加束縛）', source: '騰躍速攻', skill: '騰躍速攻',
+                  desc: '法術命中目標時，可宣告消耗 3 層充能，對目標施加 4 層束縛。', effect: { cost: { charge: 3 }, targetStatus: { bind: 4 } } },
+                { name: '超載 5 - 空間阻滯', source: '騰躍速攻', skill: '騰躍速攻',
+                  desc: '使用法術前宣告消耗 5 層充能，本次法術威力值 +5。', effect: { cost: { charge: 5 }, spellPower: 5 } },
+                { name: '過度充能（命中施加麻痺與束縛）', source: '過度充能', skill: '過度充能', locked: true,
+                  desc: '法術命中目標時，可宣告消耗 6 層充能，對目標施加 3 點麻痺及 4 層束縛。', effect: { cost: { charge: 6 }, targetStatus: { paralyze: 3, bind: 4 } } },
+                { name: '超載 11 - 維度癱瘓', source: '過度充能', skill: '過度充能', locked: true,
+                  desc: '使用法術前宣告消耗 11 層充能，本次法術威力值 +7。', effect: { cost: { charge: 11 }, spellPower: 7 } },
+                { name: '超載 20 - 列車長權限', source: '過度充能', skill: '過度充能', locked: true,
+                  desc: '攻擊前宣告消耗 20 層充能，本次法術威力值 +10，並使你的加骰提升一級。', effect: { cost: { charge: 20 }, spellPower: 10 } }
+            ]
+        }
+    },
+
     // ========================================================================
     // 羅佳（Ryoshu）
     // ========================================================================

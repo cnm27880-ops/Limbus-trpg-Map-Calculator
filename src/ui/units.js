@@ -1783,6 +1783,10 @@ function openMultiActionModal(bossId) {
                     <div id="ma-boss-passive-editor"></div>
                 </div>
 
+                <!-- 區塊：部位破壞 / 混亂（Break / Stagger）——嚴重槽填滿 → 一回合混亂 -->
+                <div class="ma-section-title">💫 部位破壞 / 混亂</div>
+                <div id="ma-stagger-status"></div>
+
                 <!-- 區塊二：多重行動設定（原獨立的「多重行動設定」Modal） -->
                 <div class="ma-section-title">⚔ 多重行動設定</div>
                 <div class="form-group">
@@ -1813,6 +1817,7 @@ function openMultiActionModal(bossId) {
     if (typeof initPassiveEditor === 'function') initPassiveEditor('ma-boss-passive-editor', boss.passive);
     renderMultiActionList();
     renderMultiActionCounterStatus();
+    renderMultiActionStaggerStatus(bossId);
     // 轉為可拖曳 / 雙擊收起的浮動面板（記憶位置與收合狀態），預設落在右側不擋戰場
     if (typeof makeFloatingPanel === 'function') {
         makeFloatingPanel({
@@ -1865,12 +1870,18 @@ function renderMultiActionCounterStatus() {
             .concat(candidates.map(p =>
                 `<option value="${escapeHtml(p.id)}" ${r.playerId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`))
             .join('');
-        const modTxt = r.playerId ? `DP ${r.mod >= 0 ? '+' : ''}${r.mod}` : '';
+        // 公佈後無人對抗 → 依【單方面攻擊】規則顯示鎖定目標與直接 DP 加值（無視先攻）
+        const modTxt = r.playerId
+            ? `DP ${r.mod >= 0 ? '+' : ''}${r.mod}`
+            : (r.unopposed ? `⚡單方面 DP +${r.mod}` : '');
+        const unopposedNote = r.unopposed
+            ? `<div class="cp-st-unopposed">⚡ 單方面攻擊：鎖定血量最低的「${escapeHtml(r.victimName || '？')}」，其措手不及（支線+1＝${r.surpriseLevel} 級）</div>`
+            : '';
         return `<div class="cp-st-row">
             <span class="cp-st-label">${escapeHtml(a.label)}</span>
             <select onchange="cpSTAssign('${a.id}', this.value)" title="手動指定／改派此行動的對抗者">${options}</select>
             <span class="cp-st-mod">${modTxt}</span>
-        </div>`;
+        </div>${unopposedNote}`;
     }).join('');
 
     box.innerHTML = `
@@ -1879,6 +1890,41 @@ function renderMultiActionCounterStatus() {
         <button class="skill-action-btn" style="width:100%;margin-top:6px;" onclick="cpFinalizeRound()" ${finalized ? 'disabled' : ''}>
             ${finalized ? '✅ 已公佈最終結果' : '📢 公佈最終結果給玩家'}
         </button>`;
+}
+
+/**
+ * 渲染 BOSS 設定面板內的「部位破壞 / 混亂」區塊。
+ * 規則【部位破壞 / 混亂】：
+ *   1. BOSS 的嚴重槽（每一格 L 以上傷害佔一格）填滿時，陷入一回合混亂、本回合無法行動。
+ *      已滿時提供一鍵套用「混亂」狀態，讓全場在單位卡上看得到。
+ *   2. 部位破壞（頭部／上肢／軀幹／下肢）：條目尚未開放，僅保留說明。
+ * @param {string} bossId - 本體單位 ID
+ */
+function renderMultiActionStaggerStatus(bossId) {
+    const box = document.getElementById('ma-stagger-status');
+    if (!box) return;
+    const boss = findUnitById(bossId);
+    if (!boss) return;
+    const maxHp = boss.maxHp || (boss.hpArr || []).length || 0;
+    const severe = (typeof countSevereSlots === 'function') ? countSevereSlots(boss) : 0;
+    const full = (typeof isSevereGaugeFull === 'function') && isSevereGaugeFull(boss);
+
+    const fullBlock = full ? `
+        <div class="ma-stagger-warn">💫 嚴重槽已填滿：依規則 BOSS 陷入一回合混亂，本回合無法行動。</div>
+        <button class="skill-action-btn" style="width:100%;margin-top:4px;" onclick="maApplyBossStagger('${bossId}')">💫 套用「混亂」狀態（全場可見）</button>` : '';
+
+    box.innerHTML = `
+        <div class="ma-stagger-line${full ? ' is-full' : ''}">嚴重槽：${severe} / ${maxHp}${full ? '（已滿）' : ''}</div>
+        ${fullBlock}
+        <div class="ma-stagger-note">部位破壞（頭部／上肢／軀幹／下肢，攻擊可改為破壞部位而非削減血條）：此條目尚未開放。</div>`;
+}
+
+/** 一鍵對 BOSS 套用 1 層「混亂」狀態（嚴重槽填滿 → 一回合無法行動） */
+function maApplyBossStagger(bossId) {
+    if (myRole !== 'st') return;
+    if (typeof addStatusToUnit === 'function') addStatusToUnit(bossId, 'confusion', 1);
+    showToast('💫 已對 BOSS 套用混亂：本回合無法行動（回合結束請手動移除）');
+    renderMultiActionStaggerStatus(bossId);
 }
 
 /** 從單位讀取行動設定（先攻 / DP / 狀態 / AOE / 豁免抵擋），含舊資料相容 */

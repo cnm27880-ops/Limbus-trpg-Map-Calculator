@@ -1968,6 +1968,8 @@ body.aoe-select-active .token {
 
 .counter-float-row .ca-waiting { color: var(--text-dim); font-style: italic; }
 .counter-float-row .ca-taken { color: var(--accent-green); font-weight: bold; }
+/* 【單方面攻擊】：公佈後無人對抗的行動（鎖定血量最低玩家、措手不及、DP 直接加值） */
+.counter-float-row .ca-unopposed { color: var(--accent-red); font-weight: bold; font-size: 0.78rem; text-align: right; }
 
 .counter-float-check {
     margin-right: 6px;
@@ -2022,6 +2024,37 @@ body.aoe-select-active .token {
     flex: 0 0 auto;
     color: var(--accent-green);
     font-size: 0.75rem;
+}
+/* 【單方面攻擊】ST 端提示列：公佈後無人對抗的行動鎖定血量最低玩家 */
+.cp-st-unopposed {
+    color: var(--accent-red);
+    font-size: 0.72rem;
+    padding: 0 0 4px 2px;
+    line-height: 1.4;
+}
+
+/* 【部位破壞 / 混亂】BOSS 設定面板內的嚴重槽區塊 */
+.ma-stagger-line {
+    font-size: 0.8rem;
+    color: var(--text-main);
+    padding: 2px 0;
+}
+.ma-stagger-line.is-full { color: var(--accent-red); font-weight: bold; }
+.ma-stagger-warn {
+    font-size: 0.76rem;
+    color: var(--accent-red);
+    background: rgba(231, 76, 60, 0.1);
+    border-left: 3px solid var(--accent-red);
+    border-radius: 4px;
+    padding: 5px 8px;
+    margin: 4px 0;
+    line-height: 1.4;
+}
+.ma-stagger-note {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.4;
 }
 
 /* ===== Hotkey Help ===== */
@@ -5425,6 +5458,15 @@ body.combat-mode .boss-hud-container {
 .ero-btn.ero-roll { flex: 1; background: #2a1530; border-color: var(--accent-purple, #8e24aa); color: #d9a8ff; }
 .ero-btn.ero-burn { flex: 1; background: #2a1a0a; border-color: var(--accent-orange, #fb8c00); color: #ffba73; }
 .ero-overload-area { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+/* 補充規則：攻擊消耗侵蝕層數（未進入侵蝕狀態時） */
+.ero-subrule { border: 1px dashed var(--border, #33333a); border-radius: 6px; padding: 8px; margin-top: 8px; }
+.ero-subrule-title { font-size: .78rem; font-weight: 700; color: #ffba73; margin-bottom: 6px; }
+.ero-btn.ero-consume { width: 100%; background: #26150a; border-color: var(--accent-orange, #fb8c00); color: #ffba73; font-weight: 700; }
+.ero-subrule-note { font-size: .72rem; color: var(--text-dim, #aaa); line-height: 1.5; margin-top: 8px; border-top: 1px dashed var(--border, #33333a); padding-top: 6px; }
+/* 獲取刻度：基因鎖首開 / 轉盤兌換（輸入 + 兩顆快捷鈕同列） */
+.ero-gain-row { display: flex; gap: 6px; align-items: center; }
+.ero-gain-row .ero-input { flex: 0 0 64px; width: 64px; }
+.ero-gain-row .ero-btn { flex: 1; }
 .ero-field { margin-bottom: 8px; }
 .ero-field label { display: block; font-size: .75rem; color: var(--text-dim, #aaa); margin-bottom: 3px; }
 .ero-select, .ero-input {

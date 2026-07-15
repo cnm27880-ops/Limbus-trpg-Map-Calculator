@@ -165,9 +165,21 @@ function cmApplyThreatAction(unitId) {
         cmOnAttackModeChange();
     }
 
-    const modTxt = counterMod.mod ? `（含對抗${escapeHtml(counterMod.playerName)} ${counterMod.mod > 0 ? '+' : ''}${counterMod.mod}）` : '';
+    const modTxt = counterMod.unopposed
+        ? `（單方面攻擊 +${counterMod.mod}，無視先攻）`
+        : (counterMod.mod ? `（含對抗${escapeHtml(counterMod.playerName)} ${counterMod.mod > 0 ? '+' : ''}${counterMod.mod}）` : '');
     const saveTxt = u.actionSaveResist ? '｜豁免抵擋' : '';
     if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${dp}${modTxt}${saveTxt}`);
+
+    // 【單方面攻擊】提醒：強制鎖定血量最低的玩家並使其措手不及（支線等級+1 級）。
+    // 目標由 ST 右鍵發起時決定，這裡無法代為改選，若選錯目標則明確警告。
+    if (counterMod.unopposed && typeof showToast === 'function') {
+        const victimTxt = counterMod.victimName ? `「${counterMod.victimName}」` : '血量最低的玩家';
+        const mismatch = counterMod.victimId && attackModalTarget && attackModalTarget.id !== counterMod.victimId;
+        showToast(mismatch
+            ? `⚠️ 單方面攻擊須鎖定血量最低的 ${victimTxt}（目前目標不符，請改對其發起威脅）`
+            : `⚡ 單方面攻擊：強制鎖定 ${victimTxt}，其陷入措手不及（視為支線等級 +1 級，即 ${counterMod.surpriseLevel} 級）`);
+    }
 }
 
 function closeAttackModal() {
@@ -947,9 +959,16 @@ function cpRenderFloatPanel() {
     // 視圖 2 / 3：唯讀顯示每個行動目前（或最終）的對抗狀態
     const rows = actions.map(a => {
         const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
-        const statusHtml = r.playerId
-            ? `<span class="ca-taken">${escapeHtml(r.playerName)}（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）</span>`
-            : `<span class="ca-waiting">${finalized ? '無人對抗' : '等待對抗中……'}</span>`;
+        let statusHtml;
+        if (r.playerId) {
+            statusHtml = `<span class="ca-taken">${escapeHtml(r.playerName)}（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）</span>`;
+        } else if (r.unopposed) {
+            // 【單方面攻擊】：公佈後無人對抗 → 鎖定血量最低玩家、措手不及（支線+1級）、DP 直接加值
+            const victim = r.victimName ? escapeHtml(r.victimName) : '血量最低玩家';
+            statusHtml = `<span class="ca-unopposed">⚡ 單方面攻擊 → 鎖定 ${victim}（措手不及 ${r.surpriseLevel} 級，DP +${r.mod}）</span>`;
+        } else {
+            statusHtml = `<span class="ca-waiting">${finalized ? '無人對抗' : '等待對抗中……'}</span>`;
+        }
         return `<div class="counter-float-row"><span>${escapeHtml(a.label)}</span>${statusHtml}</div>`;
     }).join('');
     const submittedCount = Object.keys(assignments).length;

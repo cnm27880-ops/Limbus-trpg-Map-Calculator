@@ -1093,6 +1093,38 @@ function renderIdentityManualInputs() {
         </div>`;
 }
 
+/**
+ * 渲染「主動宣告技」區：列出持有卡的 onActive 技能（超載、震顫引爆、消耗愛憎等），
+ * 玩家自行宣告才生效，引擎不自動計入數值；重複抽取解鎖技未勾選解鎖時以半透明＋標籤顯示。
+ * 沒有任何持有卡帶主動宣告技時，整段不顯示。
+ */
+function renderIdentityActiveSkills() {
+    const owned = collectOwnedIdentities();
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+    let rows = '';
+    for (const { id, unlocked } of owned) {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
+        if (!card || !card.hooks || !Array.isArray(card.hooks.onActive) || !card.hooks.onActive.length) continue;
+        const items = card.hooks.onActive.map(h => {
+            if (!h) return '';
+            const lockedOut = !!h.locked && !unlocked;
+            const tag = lockedOut ? '<span class="idt-active-locked-tag">未解鎖</span>' : '';
+            return `<div class="idt-active-item${lockedOut ? ' idt-active-locked' : ''}">
+                        <span class="idt-active-name">${esc(h.name || h.source || '')}${tag}</span>
+                        <span class="idt-active-desc">${esc(h.desc || '')}</span>
+                    </div>`;
+        }).join('');
+        rows += `<div class="idt-mi-card"><div class="idt-mi-card-name">${esc(card.name)}</div>${items}</div>`;
+    }
+    if (!rows) return '';
+    return `
+        <div class="idt-section">
+            <div class="idt-section-title">②‧6 主動宣告技（宣告才生效，引擎不自動計入）</div>
+            <div class="idt-mi-hint-top">超載、引爆、消耗資源類技能需在攻擊前／命中時自行宣告；消耗與加值請依描述由 ST 結算。</div>
+            ${rows}
+        </div>`;
+}
+
 function renderIdentityResult() {
     const r = identityHudState.lastResult;
     if (!r) return '<div class="idt-result-empty">設定完成後按「⚡ 計算疊加效果」</div>';
@@ -1247,6 +1279,8 @@ function renderIdentityModal() {
 
                 ${renderIdentityManualInputs()}
 
+                ${renderIdentityActiveSkills()}
+
                 <div class="idt-section">
                     <div class="idt-section-title">③ 結算結果</div>
                     <div class="idt-result">${renderIdentityResult()}</div>
@@ -1331,6 +1365,12 @@ function injectIdentityStyles() {
         .idt-mi-label{font-size:.82rem;color:var(--text,#eee);display:flex;flex-direction:column;}
         .idt-mi-hint{font-size:.7rem;color:var(--text-dim,#999);}
         .idt-mi-field input{width:90px;flex:0 0 auto;}
+        .idt-active-item{display:flex;flex-direction:column;gap:2px;padding:4px 0;border-bottom:1px dashed rgba(255,255,255,.06);}
+        .idt-active-item:last-child{border-bottom:none;}
+        .idt-active-name{font-size:.82rem;font-weight:bold;color:var(--accent-orange,#e67e22);}
+        .idt-active-desc{font-size:.76rem;color:var(--text-dim,#aaa);line-height:1.5;}
+        .idt-active-locked{opacity:.5;}
+        .idt-active-locked-tag{font-size:.66rem;background:var(--bg-input,#222);border:1px solid var(--border,#33333a);color:var(--text-dim,#999);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
         .idt-remind-title{color:var(--accent-blue,#4aa3ff);}
         .idt-untrig-title{color:var(--text-dim,#999);}
         .idt-log.idt-untrig{opacity:.62;}

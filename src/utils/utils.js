@@ -206,6 +206,28 @@ function calculateWeightedHpPercent(unit) {
     return (remaining / maxWeight) * 100;
 }
 
+// ===== 嚴重槽（Severe Gauge） =====
+/**
+ * 統計單位嚴重槽的填格數：每一格 L（2）或 A（3）傷害都佔用一格嚴重槽。
+ * @param {Object} unit - 單位物件（含 hpArr）
+ * @returns {number}
+ */
+function countSevereSlots(unit) {
+    return ((unit && unit.hpArr) || []).filter(x => (Number(x) || 0) >= 2).length;
+}
+
+/**
+ * 嚴重槽是否已填滿（所有血格皆為 L 以上傷害）。
+ * 規則【部位破壞 / 混亂】：BOSS 的嚴重槽填滿時，陷入一回合混亂、無法行動。
+ * @param {Object} unit - 單位物件（含 hpArr / maxHp）
+ * @returns {boolean}
+ */
+function isSevereGaugeFull(unit) {
+    if (!unit) return false;
+    const maxHp = unit.maxHp || (unit.hpArr || []).length || 0;
+    return maxHp > 0 && countSevereSlots(unit) >= maxHp;
+}
+
 // ===== HP 狀態描述 =====
 /**
  * 取得模糊的 HP 狀態描述（用於隱藏敵人詳細資訊）
@@ -416,6 +438,7 @@ export {
     escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
     generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
     calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
+    countSevereSlots, isSevereGaugeFull,
     calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
     calcTacticalPathCost, getTileMoveMultiplier,
 };
@@ -425,6 +448,7 @@ if (typeof window !== 'undefined') {
         escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
         generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
         calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
+        countSevereSlots, isSevereGaugeFull,
         calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
     calcTacticalPathCost, getTileMoveMultiplier,
     });

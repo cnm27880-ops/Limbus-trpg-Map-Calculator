@@ -871,6 +871,175 @@ console.log('\n[骰先攻面板] irSetAll 快速勾選（全選／僅敵方/BOSS
     });
 })();
 
+// ====================================================================
+console.log('\n[新人格卡] 浮士德 - W公司 2 級清掃人員（充能 / 束縛）');
+// ====================================================================
+(function () {
+    const idSandbox = {
+        console, Object, Array, Math, JSON, Set, parseInt,
+        window: undefined,
+        document: { getElementById: () => null },
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'player',
+        state: { units: [] },
+        findUnitById: (id) => idSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        escapeHtml: (s) => s,
+    };
+    vm.createContext(idSandbox);
+    const identityFiles = [
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/core/identity-engine.js',
+        'src/ui/identity-hud.js',
+        'src/ui/combat-modals.js'
+    ];
+    vm.runInContext(identityFiles.map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __wExports = { cmResolveIdentityBonus, identityHudState, IDENTITY_LIBRARY };',
+        idSandbox, { filename: 'combined-faust-wcorp.js' });
+    const { cmResolveIdentityBonus, identityHudState, IDENTITY_LIBRARY } = idSandbox.__wExports;
+
+    test('人格庫已收錄 faust_wcorp（過度充能為重複抽取解鎖技）', () => {
+        const card = IDENTITY_LIBRARY.faust_wcorp;
+        assert.ok(card, '人格庫應包含 faust_wcorp');
+        assert.strictEqual(card.owner, '浮士德');
+        assert.strictEqual(card.repeatUnlockSkill, '過度充能');
+        assert.ok(Array.isArray(card.hooks.onActive) && card.hooks.onActive.length >= 6, '各段超載／消耗宣告技應收錄於 onActive');
+    });
+
+    test('能源循環＋騰躍速攻：施法獲得 4 層充能、命中再獲得 5 層', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = { faust_wcorp: { owned: true, unlocked: false } };
+        identityHudState.cardInputs = {};
+        const result = cmResolveIdentityBonus({ id: 'atk1', status: {}, init: 10 }, { id: 'tgt1', status: {} });
+        assert.strictEqual(result.onAttackSelfStatus.charge, 4, '宣告施法應獲得 4 層充能');
+        assert.strictEqual(result.onHitSelfStatus.charge, 5, '法術命中應再獲得 5 層充能');
+    });
+
+    test('過度充能：充能 5+ 且解鎖 → 額外 +6 DP；未解鎖不計入', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cardInputs = {};
+        // 充能以中文狀態名掛在單位上（buildEngineUnitState 會轉回引擎英文鍵）
+        const attacker = { id: 'atk1', status: { '充能': 6 }, init: 10 };
+        identityHudState.cards = { faust_wcorp: { owned: true, unlocked: true } };
+        let result = cmResolveIdentityBonus(attacker, { id: 'tgt1', status: {} });
+        assert.strictEqual(result.dpBonus, 6, `充能 6 層＋解鎖應 +6 DP，實得 ${result.dpBonus}`);
+
+        identityHudState.cards = { faust_wcorp: { owned: true, unlocked: false } };
+        result = cmResolveIdentityBonus(attacker, { id: 'tgt1', status: {} });
+        assert.strictEqual(result.dpBonus, 0, '未解鎖時不應計入 +6 DP');
+    });
+
+    test('過度充能：充能不足 5 層 → 解鎖也不觸發', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = { faust_wcorp: { owned: true, unlocked: true } };
+        const result = cmResolveIdentityBonus({ id: 'atk1', status: { '充能': 4 }, init: 10 }, { id: 'tgt1', status: {} });
+        assert.strictEqual(result.dpBonus, 0, '充能 4 層不應觸發 +6 DP');
+    });
+})();
+
+// ====================================================================
+console.log('\n[單方面攻擊] 無人對抗的 BOSS 行動 → 鎖定血量最低玩家、DP 直接加值');
+// ====================================================================
+(function () {
+    const cpSandbox = {
+        console, Object, Array, Math, JSON, Number, parseInt, Date,
+        window: undefined,
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'st',
+        myPlayerId: 'st_1',
+        state: { units: [] },
+        findUnitById: (id) => cpSandbox.state.units.find(u => u && u.id === id) || null,
+        // 與 utils.js 相同的加權剩餘血量百分比（B=1/L=2/A=3）
+        calculateWeightedHpPercent: (u) => {
+            const hpArr = (u && u.hpArr) || [];
+            const maxHp = (u && u.maxHp) || hpArr.length || 1;
+            const dmg = hpArr.reduce((s, x) => s + (Number(x) || 0), 0);
+            return (Math.max(0, maxHp * 3 - dmg) / (maxHp * 3)) * 100;
+        },
+        showToast: () => {},
+        confirm: () => true,
+    };
+    vm.createContext(cpSandbox);
+    vm.runInContext(readSource('src/core/counter-phase.js')
+        + '\n;\nvar __cpExports = { cpResolveActionMod, cpUnopposedLevel, cpUnopposedMod, cpFindLowestHpPlayer,'
+        + ' setCounterPhaseState: (s) => { counterPhaseState = s; } };',
+        cpSandbox, { filename: 'counter-phase.js' });
+    const { cpResolveActionMod, cpUnopposedLevel, cpUnopposedMod, cpFindLowestHpPlayer, setCounterPhaseState } = cpSandbox.__cpExports;
+
+    const setup = (finalized) => {
+        cpSandbox.state.units = [
+            { id: 'boss1', name: '尖笑', type: 'boss', sideLevel: 2, hpArr: [0, 0], maxHp: 2 },
+            { id: 'p_a', name: '滿血者', type: 'player', hpArr: [0, 0, 0], maxHp: 3 },
+            { id: 'p_b', name: '殘血者', type: 'player', hpArr: [3, 2, 0], maxHp: 3 },
+        ];
+        setCounterPhaseState({
+            started: true, roundId: 1, bossId: 'boss1',
+            actions: [{ id: 'boss1', init: 10, dp: 30, label: '行動1·本體' }],
+            assignments: {}, finalized: !!finalized
+        });
+    };
+
+    test('措手不及等級＝支線等級+1；DP 加值＝等級×10（無視先攻）', () => {
+        const boss = { sideLevel: 2 };
+        assert.strictEqual(cpUnopposedLevel(boss), 3);
+        assert.strictEqual(cpUnopposedMod(boss), 30);
+        assert.strictEqual(cpUnopposedLevel(null), 2, '無支線等級時以 1 級計，措手不及為 2 級');
+    });
+
+    test('強制鎖定：血量最低（加權）的玩家單位', () => {
+        setup(true);
+        const victim = cpFindLowestHpPlayer();
+        assert.ok(victim && victim.id === 'p_b', `應鎖定殘血者，實得 ${victim && victim.id}`);
+    });
+
+    test('公佈後無人對抗 → 單方面攻擊：unopposed、DP +30、附鎖定目標', () => {
+        setup(true);
+        const r = cpResolveActionMod('boss1');
+        assert.strictEqual(r.unopposed, true, '應標記為單方面攻擊');
+        assert.strictEqual(r.mod, 30, '支線 2 級 → 措手不及 3 級 → DP +30');
+        assert.strictEqual(r.surpriseLevel, 3);
+        assert.strictEqual(r.victimName, '殘血者');
+    });
+
+    test('公佈前無人對抗 → 不視為單方面攻擊（玩家可能還沒送出）', () => {
+        setup(false);
+        const r = cpResolveActionMod('boss1');
+        assert.ok(!r.unopposed, '公佈前不應標記單方面攻擊');
+        assert.strictEqual(r.mod, 0);
+    });
+})();
+
+// ====================================================================
+console.log('\n[部位破壞/混亂] 嚴重槽填滿判定');
+// ====================================================================
+(function () {
+    const utilSandbox = {
+        console, Object, Array, Math, JSON, Number, parseInt, Date, String,
+        window: undefined,
+        document: { getElementById: () => null, addEventListener() {} },
+        localStorage: { getItem: () => null, setItem() {} },
+        navigator: {},
+    };
+    vm.createContext(utilSandbox);
+    vm.runInContext(readSource('src/utils/utils.js')
+        + '\n;\nvar __utilExports = { countSevereSlots, isSevereGaugeFull };',
+        utilSandbox, { filename: 'utils.js' });
+    const { countSevereSlots, isSevereGaugeFull } = utilSandbox.__utilExports;
+
+    test('嚴重槽計數：L(2)/A(3) 佔格、B(1) 不計', () => {
+        assert.strictEqual(countSevereSlots({ hpArr: [3, 2, 1, 0] }), 2);
+        assert.strictEqual(countSevereSlots({ hpArr: [] }), 0);
+        assert.strictEqual(countSevereSlots(null), 0);
+    });
+
+    test('嚴重槽填滿：全部血格皆為 L 以上 → 觸發一回合混亂提示', () => {
+        assert.strictEqual(isSevereGaugeFull({ maxHp: 3, hpArr: [2, 2, 3] }), true);
+        assert.strictEqual(isSevereGaugeFull({ maxHp: 3, hpArr: [2, 2, 1] }), false, 'B 傷不佔嚴重槽');
+        assert.strictEqual(isSevereGaugeFull({ maxHp: 0, hpArr: [] }), false, '無血格不觸發');
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

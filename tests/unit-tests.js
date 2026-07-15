@@ -179,17 +179,18 @@ function setupDrain(sourceStatus) {
         { id: 'hero', type: 'player', status: {} }
     ];
     domTable['ero-source'] = { value: 'boss' };
-    // ero-absorber 現在是「複選 chip」容器（見 erosion-hud.js eroGetSelectedValues），
-    // 以 querySelectorAll('input:checked') 讀取，故 stub 也改為同一介面。
-    domTable['ero-absorber'] = { querySelectorAll: () => [{ value: 'hero' }] };
+    // ero-revive-target 是「復活目標」與「吸收者」共用的複選 chip 容器
+    // （見 erosion-hud.js eroGetSelectedValues），以 querySelectorAll('input:checked') 讀取。
+    domTable['ero-revive-target'] = { querySelectorAll: () => [{ value: 'hero' }] };
 }
 
-test('只移除每個負面狀態的一半，保留另一半', () => {
+test('抽取「總和」的一半（先加總、只取一次整），不是逐項各自取一半再加總', () => {
     setupDrain({ 燃燒: '5', 流血: '3' });
     eroDrainSin();
     const boss = sandbox.findUnitById('boss');
-    // 燃燒 5 → 移除 floor(5/2)=2 → 剩 3；流血 3 → 移除 1 → 剩 2
-    assert.strictEqual(boss.status['燃燒'], '3', '燃燒應剩 3');
+    // 總和 8 → floor(8/2)=4；先各自 floor(5/2)=2、floor(3/2)=1（共 3），
+    // 尾數 1 依序補回第一項 → 燃燒多扣 1 層：燃燒剩 2、流血剩 2
+    assert.strictEqual(boss.status['燃燒'], '2', '燃燒應剩 2');
     assert.strictEqual(boss.status['流血'], '2', '流血應剩 2');
 });
 
@@ -202,13 +203,13 @@ test('增益/侵蝕增幅不被抽取', () => {
     assert.strictEqual(boss.status['燃燒'], '2', '燃燒 4 → 剩 2');
 });
 
-test('吸收者獲得的侵蝕增幅 = 實際抽取量總和', () => {
-    setupDrain({ 燃燒: '5', 流血: '3' }); // 抽 2 + 1 = 3
+test('吸收者獲得的侵蝕增幅 = floor(負面層數總和 / 2)', () => {
+    setupDrain({ 燃燒: '5', 流血: '3' }); // 總和 8 → floor(8/2)=4
     eroDrainSin();
     const grant = captured.addStatus.find(a => a.statusId === 'erosion_amplify');
     assert.ok(grant, '應有侵蝕增幅授予');
     assert.strictEqual(grant.unitId, 'hero');
-    assert.strictEqual(grant.amount, 3, '應 +3 侵蝕增幅');
+    assert.strictEqual(grant.amount, 4, '應 +4 侵蝕增幅');
 });
 
 test('僅 1 層的負面狀態 floor(1/2)=0：不被移除', () => {

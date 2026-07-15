@@ -328,13 +328,10 @@
                     </div>
                 </div>
                 <div class="calc-grid cols-2">
-                    <div class="calc-field">
+                    <div class="calc-field" style="grid-column:1 / -1;">
                         <span class="calc-label" id="attack-dp-label">總攻擊 DP</span>
-                        <input type="number" id="attack-dp" value="0" min="0">
-                    </div>
-                    <div class="calc-field">
-                        <span class="calc-label">攻擊附加成功</span>
-                        <input type="number" id="attack-auto" value="0" min="0">
+                        <!-- A+B 記法：A＝亂數骰的 DP／骰數，B＝擲骰後直接加上的附加成功（取代獨立附加成功欄） -->
+                        <input type="text" inputmode="numeric" id="attack-dp" value="0" placeholder="例：12+3（12 骰＋3 附加成功）" title="A+B：A＝要擲骰的 DP，B＝附加成功（可省略，例：12 或 12+3）">
                     </div>
                     <div class="calc-field">
                         <span class="calc-label">無視防禦點數</span>
@@ -390,15 +387,10 @@
         </div>
         <div class="modal-body">
             <div class="qte-warning-banner" id="defense-qte-warning">⚠️ 你正遭受攻擊！立即填入防禦數值！</div>
-            <div class="calc-grid cols-2">
-                <div class="calc-field">
-                    <span class="calc-label">防禦總 DP</span>
-                    <input type="number" id="defense-dp" value="0" min="0">
-                </div>
-                <div class="calc-field">
-                    <span class="calc-label">防禦附加成功</span>
-                    <input type="number" id="defense-auto" value="0" min="0">
-                </div>
+            <div class="calc-field">
+                <span class="calc-label">防禦總 DP（A+B：A＝擲骰 DP，B＝附加成功，例 10+2）</span>
+                <!-- A+B 記法取代獨立的「防禦附加成功」欄位 -->
+                <input type="text" inputmode="numeric" id="defense-dp" value="0" placeholder="例：10+2">
             </div>
         </div>
         <div class="modal-footer">
@@ -418,15 +410,10 @@
             <div class="st-review-context" id="st-review-context"></div>
             <!-- 豁免抵擋模式：攻擊已先擲，此處輸入目標豁免與附加後由系統對擲 -->
             <div id="st-review-save-section" style="display:none;">
-                <div class="calc-grid cols-2">
-                    <div class="calc-field">
-                        <span class="calc-label" id="st-review-save-label">豁免骰數</span>
-                        <input type="number" id="st-review-save-dice" value="0" min="0">
-                    </div>
-                    <div class="calc-field">
-                        <span class="calc-label">豁免附加成功</span>
-                        <input type="number" id="st-review-save-extra" value="0" min="0">
-                    </div>
+                <div class="calc-field">
+                    <span class="calc-label" id="st-review-save-label">豁免骰數（A+B：A＝擲骰數，B＝附加成功）</span>
+                    <!-- A+B 記法取代獨立的「豁免附加成功」欄位；留空/0 時各目標用自己角色卡上的預設值 -->
+                    <input type="text" inputmode="numeric" id="st-review-save-dice" value="0" placeholder="例：6+1（0＝用各目標預設）">
                 </div>
                 <div id="st-review-save-targets" style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;"></div>
             </div>

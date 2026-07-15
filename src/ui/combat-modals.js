@@ -8,6 +8,9 @@ const DEFENSE_MODAL_MEMO_KEY = 'limbus-defense-modal-memo';
 
 let attackModalTarget = null; // { id, name }
 let threatPendingStatuses = []; // ST 威脅時，所選 BOSS 行動要施加給目標的狀態 [{id,stacks}]
+// ST 威脅時，所選行動若為【單方面攻擊】（公佈後無人對抗）：{ surpriseLevel, victimId, victimName }
+// 送出威脅時隨攻擊方資料同步，目標玩家端據此跳過防禦 QTE、自動以措手不及防禦應戰。
+let threatUnopposedInfo = null;
 
 function cmLoadMemo(key) {
     try {
@@ -75,8 +78,9 @@ function openAttackModal(unitId) {
     cmUpdateAttackDistance(u);
 
     const memo = cmLoadMemo(ATTACK_MODAL_MEMO_KEY) || {};
-    document.getElementById('attack-dp').value = memo.dp ?? 0;
-    document.getElementById('attack-auto').value = memo.auto ?? 0;
+    // A+B 記法：單一欄位同時記 DP（A）與附加成功（B），舊記憶（分開兩欄）自動合併顯示
+    document.getElementById('attack-dp').value = (typeof formatDicePlus === 'function')
+        ? formatDicePlus(memo.dp ?? 0, memo.auto ?? 0) : String(memo.dp ?? 0);
     document.getElementById('attack-ignore-def').value = memo.ignoreDef ?? 0;
     document.getElementById('attack-crit-vicious').value = memo.critVicious ?? 0;
     document.getElementById('attack-armor-pierce').value = memo.armorPierce ?? 0;
@@ -95,6 +99,7 @@ function openAttackModal(unitId) {
 
     // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
     threatPendingStatuses = [];
+    threatUnopposedInfo = null;
     cmRenderThreatActions();
 
     openModal('attack-modal');
@@ -153,6 +158,10 @@ function cmApplyThreatAction(unitId) {
     const dp = (u.actionDp || 0) + (counterMod.mod || 0);
     document.getElementById('attack-dp').value = dp;
     threatPendingStatuses = Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [];
+    // 記錄單方面攻擊資訊：送出威脅時標記到攻擊方資料，目標玩家端自動以措手不及防禦應戰
+    threatUnopposedInfo = counterMod.unopposed
+        ? { surpriseLevel: counterMod.surpriseLevel || 0, victimId: counterMod.victimId || null, victimName: counterMod.victimName || '' }
+        : null;
 
     // 行動標記「豁免抵擋」時，自動切換結算模式並帶入該行動指定的豁免類型
     const modeSel = document.getElementById('attack-resolve-mode');
@@ -165,9 +174,21 @@ function cmApplyThreatAction(unitId) {
         cmOnAttackModeChange();
     }
 
-    const modTxt = counterMod.mod ? `（含對抗${escapeHtml(counterMod.playerName)} ${counterMod.mod > 0 ? '+' : ''}${counterMod.mod}）` : '';
+    const modTxt = counterMod.unopposed
+        ? `（單方面攻擊 +${counterMod.mod}，無視先攻）`
+        : (counterMod.mod ? `（含對抗${escapeHtml(counterMod.playerName)} ${counterMod.mod > 0 ? '+' : ''}${counterMod.mod}）` : '');
     const saveTxt = u.actionSaveResist ? '｜豁免抵擋' : '';
     if (typeof showToast === 'function') showToast(`已帶入 ${u.name || '行動'}：DP ${dp}${modTxt}${saveTxt}`);
+
+    // 【單方面攻擊】提醒：強制鎖定血量最低的玩家並使其措手不及（支線等級+1 級）。
+    // 目標由 ST 右鍵發起時決定，這裡無法代為改選，若選錯目標則明確警告。
+    if (counterMod.unopposed && typeof showToast === 'function') {
+        const victimTxt = counterMod.victimName ? `「${counterMod.victimName}」` : '血量最低的玩家';
+        const mismatch = counterMod.victimId && attackModalTarget && attackModalTarget.id !== counterMod.victimId;
+        showToast(mismatch
+            ? `⚠️ 單方面攻擊須鎖定血量最低的 ${victimTxt}（目前目標不符，請改對其發起威脅）`
+            : `⚡ 單方面攻擊：強制鎖定 ${victimTxt}，其陷入措手不及（視為支線等級 +1 級，即 ${counterMod.surpriseLevel} 級）`);
+    }
 }
 
 function closeAttackModal() {
@@ -306,9 +327,12 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
  */
 function submitAttackModal() {
     if (!attackModalTarget) return;
-    // 嚴格整數轉型（parseInt 基底 10），避免字串相加（"10"+"5"→"105"）等型別污染
-    const dp = parseInt(document.getElementById('attack-dp').value, 10) || 0;
-    const auto = parseInt(document.getElementById('attack-auto').value, 10) || 0;
+    // A+B 記法：A＝擲骰 DP、B＝附加成功；解析後仍以 dp / auto 兩個數值走原本的計算契約
+    const atkParsed = (typeof parseDicePlus === 'function')
+        ? parseDicePlus(document.getElementById('attack-dp').value)
+        : { dice: parseInt(document.getElementById('attack-dp').value, 10) || 0, auto: 0 };
+    const dp = atkParsed.dice;
+    const auto = atkParsed.auto;
     const ignoreDef = Math.max(0, parseInt(document.getElementById('attack-ignore-def').value, 10) || 0);
     const critVicious = Math.max(0, parseInt(document.getElementById('attack-crit-vicious').value, 10) || 0);
     // 破甲/高速/破魔：簡化為直接等效 DP，併入黑箱計算的攻擊 DP 桶（見 black-box-engine.js）
@@ -369,7 +393,10 @@ function submitAttackModal() {
         onHitTargetStatusNotes: identityBonus.onHitTargetStatusNotes || [],
         onHitSelfStatus: identityBonus.onHitSelfStatus || {},
         onHitSelfStatusNotes: identityBonus.onHitSelfStatusNotes || [],
-        counterPhaseDpBonus
+        counterPhaseDpBonus,
+        // 【單方面攻擊】標記：目標玩家端收到後跳過防禦 QTE，自動以「措手不及防禦」應戰
+        surprise: !!(myRole === 'st' && threatUnopposedInfo),
+        surpriseLevel: (myRole === 'st' && threatUnopposedInfo) ? (threatUnopposedInfo.surpriseLevel || 0) : 0
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
@@ -408,9 +435,12 @@ function submitAttackModal() {
             });
             if (applied.length && typeof showToast === 'function') showToast('已對目標施加：' + applied.join('、'));
         }
+        const wasSurprise = !!threatUnopposedInfo;
         threatPendingStatuses = [];
+        threatUnopposedInfo = null;
         if (typeof showToast === 'function') {
-            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），攻擊骰已自動擲出，請至審核面板輸入豁免...' : '威脅已發起，等待玩家防禦...');
+            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），攻擊骰已自動擲出，請至審核面板輸入豁免...'
+                : (wasSurprise ? '⚡ 單方面攻擊已發起：目標將自動以措手不及防禦應戰' : '威脅已發起，等待玩家防禦...'));
         }
     } else {
         cqInitiateAttack(resolveMode === 'save' ? { attacker, target: targets[0], targets } : { attacker, target });
@@ -450,17 +480,35 @@ function cqOnPendingDefense(data) {
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(target.id) : null;
     if (!targetUnit || targetUnit.ownerId !== myPlayerId) return;
 
+    // 【單方面攻擊】措手不及：不開防禦 QTE，直接以角色卡上填寫的「措手不及防禦」應戰
+    // （較弱的防禦狀態，於右鍵「角色數值」預先填寫；未填視為 0）。
+    if (data.attacker && data.attacker.surprise) {
+        const dp = parseInt(targetUnit.surpriseDp) || 0;
+        const auto = parseInt(targetUnit.surpriseAuto) || 0;
+        cqSubmitDefense({ dp, auto });
+        if (typeof showToast === 'function') {
+            const lvTxt = data.attacker.surpriseLevel ? `（${data.attacker.surpriseLevel} 級）` : '';
+            showToast(`⚡ 你措手不及${lvTxt}！自動以措手不及防禦 ${dp}${auto ? '+' + auto : ''} 應戰`
+                + ((dp === 0 && auto === 0) ? '——尚未填寫，請至右鍵「角色數值」設定' : ''));
+        }
+        return;
+    }
+
     const memo = cmLoadMemo(DEFENSE_MODAL_MEMO_KEY) || {};
-    document.getElementById('defense-dp').value = memo.dp ?? 0;
-    document.getElementById('defense-auto').value = memo.auto ?? 0;
+    // A+B 記法：單一欄位同時記 DP（A）與附加成功（B），舊記憶（分開兩欄）自動合併顯示
+    document.getElementById('defense-dp').value = (typeof formatDicePlus === 'function')
+        ? formatDicePlus(memo.dp ?? 0, memo.auto ?? 0) : String(memo.dp ?? 0);
 
     openModal('defense-qte-modal');
 }
 
 function submitDefenseModal() {
-    // 嚴格整數轉型，與攻擊端一致，避免型別污染
-    const dp = parseInt(document.getElementById('defense-dp').value, 10) || 0;
-    const auto = parseInt(document.getElementById('defense-auto').value, 10) || 0;
+    // A+B 記法：A＝擲骰 DP、B＝附加成功；解析後仍以 dp / auto 走原本的防禦資料契約
+    const defParsed = (typeof parseDicePlus === 'function')
+        ? parseDicePlus(document.getElementById('defense-dp').value)
+        : { dice: parseInt(document.getElementById('defense-dp').value, 10) || 0, auto: 0 };
+    const dp = defParsed.dice;
+    const auto = defParsed.auto;
 
     cmSaveMemo(DEFENSE_MODAL_MEMO_KEY, { dp, auto });
 
@@ -503,15 +551,21 @@ function cqOnSTReview(data) {
         if (saveSection) {
             saveSection.style.display = 'block';
             const saveLabel = document.getElementById('st-review-save-label');
-            if (saveLabel) saveLabel.textContent = `${saveInfo.saveName || '豁免'}豁免骰數（套用到所有目標）`;
+            if (saveLabel) saveLabel.textContent = `${saveInfo.saveName || '豁免'}豁免骰數 A+B（A＝擲骰數、B＝附加成功，套用到所有目標）`;
+            // A+B 記法：預填第一個目標的「豁免骰數+附加成功」；ST 可整串修改
             const saveDiceInput = document.getElementById('st-review-save-dice');
-            if (saveDiceInput) saveDiceInput.value = Math.max(0, parseInt(saveInfo.saveDice, 10) || 0);
-            const saveExtraInput = document.getElementById('st-review-save-extra');
-            if (saveExtraInput) saveExtraInput.value = 0;
+            if (saveDiceInput) {
+                saveDiceInput.value = (typeof formatDicePlus === 'function')
+                    ? formatDicePlus(Math.max(0, parseInt(saveInfo.saveDice, 10) || 0), Math.max(0, parseInt(saveInfo.saveAuto, 10) || 0))
+                    : String(Math.max(0, parseInt(saveInfo.saveDice, 10) || 0));
+            }
             const targetBox = document.getElementById('st-review-save-targets');
             if (targetBox) {
                 targetBox.textContent = '目標：' + (saveInfo.targets || [])
-                    .map(t => `${t.name}（${saveInfo.saveName || '豁免'} ${t.saveDice} 顆）`)
+                    .map(t => {
+                        const auto = parseInt(t.saveAuto, 10) || 0;
+                        return `${t.name}（${saveInfo.saveName || '豁免'} ${t.saveDice}${auto ? '+' + auto : ''}）`;
+                    })
                     .join('、');
             }
         }
@@ -624,6 +678,49 @@ function cqOnSTReview(data) {
 
 const ST_AUTOROLL_KEY = 'limbus-st-autoroll';
 
+/**
+ * 攻擊確定命中後，套用人格卡「命中時施加」的狀態——
+ * 目標減益逐一套用到所有命中的目標；自身增益（迅捷／呼吸法／充能等資源）套用到攻擊者單位。
+ * 防禦扣除（自動／手動擲骰）與豁免抵擋三種結算路徑共用，讓命中狀態全自動化。
+ * @param {object} atk - 戰鬥隊列上的攻擊方資料（含 onHit* 欄位與 unitId）
+ * @param {string[]} hitTargetIds - 確定命中的目標單位 id 清單（空陣列＝未命中，不套用）
+ * @returns {boolean} 是否有任何狀態被套用
+ */
+function cmApplyOnHitIdentityStatuses(atk, hitTargetIds) {
+    if (!atk || typeof applyEngineStatusesToUnit !== 'function') return false;
+    const hitIds = (hitTargetIds || []).filter(Boolean);
+    if (!hitIds.length) return false;
+
+    let applied = false;
+    if (atk.onHitTargetStatus && Object.keys(atk.onHitTargetStatus).length) {
+        let n = 0;
+        hitIds.forEach(id => { n += applyEngineStatusesToUnit(id, atk.onHitTargetStatus); });
+        if (n > 0) {
+            applied = true;
+            if (Array.isArray(atk.onHitTargetStatusNotes) && atk.onHitTargetStatusNotes.length && typeof showToast === 'function') {
+                showToast('命中效果已對目標施加：' + atk.onHitTargetStatusNotes.join('、'));
+            }
+        }
+    }
+    if (atk.unitId && atk.onHitSelfStatus && Object.keys(atk.onHitSelfStatus).length) {
+        if (applyEngineStatusesToUnit(atk.unitId, atk.onHitSelfStatus) > 0) {
+            applied = true;
+            if (Array.isArray(atk.onHitSelfStatusNotes) && atk.onHitSelfStatusNotes.length && typeof showToast === 'function') {
+                showToast('命中增益已對自己套用：' + atk.onHitSelfStatusNotes.join('、'));
+            }
+        }
+    }
+    return applied;
+}
+
+/** 攻擊方資料是否帶有任何「命中時施加」的人格卡狀態 */
+function cmHasOnHitIdentityStatuses(atk) {
+    return !!atk && (
+        (atk.onHitTargetStatus && Object.keys(atk.onHitTargetStatus).length > 0)
+        || (atk.onHitSelfStatus && Object.keys(atk.onHitSelfStatus).length > 0)
+    );
+}
+
 function confirmSTReview() {
     // 優先從 Modal 的 data-* 屬性讀取初步骰數（cqOnSTReview 渲染時已釘上），
     // 全域 combatQueueLast 僅作為退路，避免監聽器更新時序造成骰數讀成 0。
@@ -680,21 +777,15 @@ function confirmSTReview() {
     }
 
     // 命中判定後套用「命中時施加」的人格卡狀態（成功數 > 0 視為命中）。
-    // 手動擲骰（autoroll 關閉）時無從得知命中與否，由 ST 依審核提示列自行套用。
-    if (autoroll && rollResult && rollResult.successes > 0 && combatQueueLast && combatQueueLast.attacker) {
-        const atk = combatQueueLast.attacker;
-        if (atk.onHitTargetStatus && typeof applyEngineStatusesToUnit === 'function' && targetId) {
-            const appliedTgt = applyEngineStatusesToUnit(targetId, atk.onHitTargetStatus);
-            if (appliedTgt && atk.onHitTargetStatusNotes && atk.onHitTargetStatusNotes.length && typeof showToast === 'function') {
-                showToast('命中效果已對目標施加：' + atk.onHitTargetStatusNotes.join('、'));
-            }
-        }
-        if (atk.onHitSelfStatus && typeof applyEngineStatusesToUnit === 'function' && atk.unitId) {
-            const appliedSelf = applyEngineStatusesToUnit(atk.unitId, atk.onHitSelfStatus);
-            if (appliedSelf && atk.onHitSelfStatusNotes && atk.onHitSelfStatusNotes.length && typeof showToast === 'function') {
-                showToast('命中效果已對自己套用：' + atk.onHitSelfStatusNotes.join('、'));
-            }
-        }
+    // 自動擲骰：直接依擲骰結果判定；手動擲骰／機運骰（無系統擲骰結果）：
+    // 改以確認視窗詢問 ST 是否命中——確定即自動套用，讓命中狀態（含攻擊者
+    // 自身增益）在所有結算路徑都全自動化，ST 不再需要手動補狀態。
+    const hitAtk = (combatQueueLast && combatQueueLast.attacker) || null;
+    if (cmHasOnHitIdentityStatuses(hitAtk)) {
+        const hit = rollResult
+            ? rollResult.successes > 0
+            : confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）');
+        if (hit) cmApplyOnHitIdentityStatuses(hitAtk, [targetId]);
     }
 }
 
@@ -780,23 +871,29 @@ function confirmSTReviewSaveMode(saveInfo) {
     const baseExtra = Math.max(0, parseInt(reviewModal && reviewModal.dataset.baseExtraSuccess, 10) || 0);
     const atkSuccess = Math.max(0, parseInt(saveInfo.atkRoll.successes, 10) || 0);
 
-    const saveDiceInput = Math.max(0, parseInt(document.getElementById('st-review-save-dice')?.value, 10) || 0);
-    const saveExtra = Math.max(0, parseInt(document.getElementById('st-review-save-extra')?.value, 10) || 0);
+    // A+B 記法：ST 輸入的豁免「擲骰數+附加成功」一體解析（取代舊的兩個獨立欄位）
+    const saveParsed = (typeof parseDicePlus === 'function')
+        ? parseDicePlus(document.getElementById('st-review-save-dice')?.value)
+        : { dice: parseInt(document.getElementById('st-review-save-dice')?.value, 10) || 0, auto: 0 };
+    const saveDiceInput = Math.max(0, saveParsed.dice);
+    const saveExtraInput = Math.max(0, saveParsed.auto);
     const adjust = parseInt(document.getElementById('st-review-modifier')?.value, 10) || 0;
     const saveName = saveInfo.saveName || '豁免';
 
     const targets = (Array.isArray(saveInfo.targets) && saveInfo.targets.length)
         ? saveInfo.targets
-        : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput }];
+        : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput, saveAuto: saveExtraInput }];
 
     // 攻擊命中總量（成功 + 附加），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
     const atkHitTotal = atkSuccess + baseExtra;
     const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
 
     const results = targets.map(t => {
-        // ST 輸入的豁免骰數統一套用到所有目標（面板預填第一個目標的預設值，ST 可改）；
-        // saveDiceInput 為 0 且該目標有自帶預設時，回退用目標預設，避免誤填 0 導致全額傷害
-        const pool = saveDiceInput > 0 ? saveDiceInput : Math.max(0, parseInt(t.saveDice, 10) || 0);
+        // ST 輸入的豁免 A+B 統一套用到所有目標（面板預填第一個目標的預設值，ST 可改）；
+        // 擲骰數為 0 且該目標有自帶預設時，回退用目標角色卡上的豁免 A+B，避免誤填 0 導致全額傷害
+        const useInput = saveDiceInput > 0;
+        const pool = useInput ? saveDiceInput : Math.max(0, parseInt(t.saveDice, 10) || 0);
+        const saveExtra = useInput ? saveExtraInput : Math.max(0, parseInt(t.saveAuto, 10) || 0);
         const saveRoll = (typeof bbRollAttackDice === 'function') ? bbRollAttackDice(pool, 10) : { successes: 0 };
         const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust);
 
@@ -807,10 +904,14 @@ function confirmSTReviewSaveMode(saveInfo) {
             if (aPart > 0) modifyHPInternal(u, 'a', aPart);
             if (lPart > 0) modifyHPInternal(u, 'l', lPart);
         }
-        return { name: (u && u.name) || t.name || '目標', pool, saveSuccess: saveRoll.successes, dmg };
+        return { id: t.id || '', name: (u && u.name) || t.name || '目標', pool, saveSuccess: saveRoll.successes, dmg };
     });
 
     if (typeof broadcastState === 'function') broadcastState();
+
+    // 人格卡「命中時施加」狀態（豁免抵擋路徑）：只套用到實際受到傷害的目標；
+    // 任一目標受創即視為命中，一併套用攻擊者自身增益。ST 發起的 BOSS 威脅無 onHit 欄位，自然不套用。
+    cmApplyOnHitIdentityStatuses(atk, results.filter(r => r.dmg > 0).map(r => r.id));
 
     const attackerName = String(atk.name || 'BOSS');
     const detail = results.map(r => `${r.name}(${saveName}${r.saveSuccess}→受${r.dmg})`).join('、');
@@ -947,9 +1048,16 @@ function cpRenderFloatPanel() {
     // 視圖 2 / 3：唯讀顯示每個行動目前（或最終）的對抗狀態
     const rows = actions.map(a => {
         const r = (typeof cpResolveActionMod === 'function') ? cpResolveActionMod(a.id) : { playerName: '', mod: 0 };
-        const statusHtml = r.playerId
-            ? `<span class="ca-taken">${escapeHtml(r.playerName)}（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）</span>`
-            : `<span class="ca-waiting">${finalized ? '無人對抗' : '等待對抗中……'}</span>`;
+        let statusHtml;
+        if (r.playerId) {
+            statusHtml = `<span class="ca-taken">${escapeHtml(r.playerName)}（DP ${r.mod >= 0 ? '+' : ''}${r.mod}）</span>`;
+        } else if (r.unopposed) {
+            // 【單方面攻擊】：公佈後無人對抗 → 鎖定血量最低玩家、措手不及（支線+1級）、DP 直接加值
+            const victim = r.victimName ? escapeHtml(r.victimName) : '血量最低玩家';
+            statusHtml = `<span class="ca-unopposed">⚡ 單方面攻擊 → 鎖定 ${victim}（措手不及 ${r.surpriseLevel} 級，DP +${r.mod}）</span>`;
+        } else {
+            statusHtml = `<span class="ca-waiting">${finalized ? '無人對抗' : '等待對抗中……'}</span>`;
+        }
         return `<div class="counter-float-row"><span>${escapeHtml(a.label)}</span>${statusHtml}</div>`;
     }).join('');
     const submittedCount = Object.keys(assignments).length;

@@ -627,10 +627,13 @@ function aoeExecuteSaveMode(units, atkValue, dmgType, autoRoll, applyStatus) {
         const sel = document.getElementById(`aoe-target-save-${u.id}`);
         const saveKey = validateSave(sel?.value || 'saveReflex');
         const pool = Math.max(0, parseInt(u[saveKey]) || 0);
+        // A+B 記法：角色卡三豁免的附加成功（B）直接加到豁免成功數
+        const saveAuto = Math.max(0, parseInt(u[saveKey + 'Auto']) || 0);
         const r = bbRollAttackDice(pool, 10);
-        const dmg = Math.max(0, atkSuccess - r.successes);
+        const saveTotal = r.successes + saveAuto;
+        const dmg = Math.max(0, atkSuccess - saveTotal);
         if (dmg > 0) modifyHPInternal(u, dmgType, dmg);
-        return { unit: u, name: u.name || '未命名', saveKey, pool, save: r.successes, dmg, saveName: saveNames[saveKey] };
+        return { unit: u, name: u.name || '未命名', saveKey, pool, save: saveTotal, dmg, saveName: saveNames[saveKey] };
     });
 
     // 對「實際命中（受傷 > 0）」的目標施加動作附加狀態

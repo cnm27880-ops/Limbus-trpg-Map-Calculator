@@ -45,11 +45,11 @@ function openBossUnitModal(unitId) {
                     <label class="stat-field"><span>防禦附加成功</span><input type="number" id="boss-unit-def-auto" value="${u.defAuto || 0}"></label>
                 </div>
                 <div class="stat-field">
-                    <span>三豁免（意志 / 反射 / 強韌）</span>
+                    <span>三豁免（意志 / 反射 / 強韌，A+B：擲骰數+附加成功）</span>
                     <div class="stat-grid cols-3">
-                        <input type="number" id="boss-unit-save-will" value="${u.saveWill || 0}" placeholder="意志">
-                        <input type="number" id="boss-unit-save-reflex" value="${u.saveReflex || 0}" placeholder="反射">
-                        <input type="number" id="boss-unit-save-tenacity" value="${u.saveTenacity || 0}" placeholder="強韌">
+                        <input type="text" inputmode="numeric" id="boss-unit-save-will" value="${formatDicePlus(u.saveWill, u.saveWillAuto)}" placeholder="意志">
+                        <input type="text" inputmode="numeric" id="boss-unit-save-reflex" value="${formatDicePlus(u.saveReflex, u.saveReflexAuto)}" placeholder="反射">
+                        <input type="text" inputmode="numeric" id="boss-unit-save-tenacity" value="${formatDicePlus(u.saveTenacity, u.saveTenacityAuto)}" placeholder="強韌">
                     </div>
                 </div>
                 <div class="stat-grid cols-3">
@@ -109,9 +109,16 @@ function saveBossUnitModal(unitId) {
     // 若單位曾被攻擊過（資源池已是 0 等數字），事後調高 defAuto 會完全無效——
     // 故每次在數值面板儲存時，一律以新的 defAuto 重置剩餘池。
     u.defAutoRemaining = u.defAuto;
-    u.saveWill = parseInt(document.getElementById('boss-unit-save-will')?.value) || 0;
-    u.saveReflex = parseInt(document.getElementById('boss-unit-save-reflex')?.value) || 0;
-    u.saveTenacity = parseInt(document.getElementById('boss-unit-save-tenacity')?.value) || 0;
+    // 三豁免 A+B 記法：擲骰數(A)與附加成功(B)分存兩個欄位
+    const buWill = parseDicePlus(document.getElementById('boss-unit-save-will')?.value);
+    const buReflex = parseDicePlus(document.getElementById('boss-unit-save-reflex')?.value);
+    const buTenacity = parseDicePlus(document.getElementById('boss-unit-save-tenacity')?.value);
+    u.saveWill = buWill.dice;
+    u.saveWillAuto = buWill.auto;
+    u.saveReflex = buReflex.dice;
+    u.saveReflexAuto = buReflex.auto;
+    u.saveTenacity = buTenacity.dice;
+    u.saveTenacityAuto = buTenacity.auto;
     u.allAttr = parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0;
     u.allSkill = parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0;
     u.sideLevel = Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1);
@@ -152,9 +159,12 @@ function saveBossUnitAsTemplate(unitId) {
             defDp: parseInt(document.getElementById('boss-unit-def-dp')?.value) || 0,
             defAuto: parseInt(document.getElementById('boss-unit-def-auto')?.value) || 0,
             initBonus: parseInt(document.getElementById('boss-unit-init')?.value) || 0,
-            saveWill: parseInt(document.getElementById('boss-unit-save-will')?.value) || 0,
-            saveReflex: parseInt(document.getElementById('boss-unit-save-reflex')?.value) || 0,
-            saveTenacity: parseInt(document.getElementById('boss-unit-save-tenacity')?.value) || 0,
+            saveWill: parseDicePlus(document.getElementById('boss-unit-save-will')?.value).dice,
+            saveWillAuto: parseDicePlus(document.getElementById('boss-unit-save-will')?.value).auto,
+            saveReflex: parseDicePlus(document.getElementById('boss-unit-save-reflex')?.value).dice,
+            saveReflexAuto: parseDicePlus(document.getElementById('boss-unit-save-reflex')?.value).auto,
+            saveTenacity: parseDicePlus(document.getElementById('boss-unit-save-tenacity')?.value).dice,
+            saveTenacityAuto: parseDicePlus(document.getElementById('boss-unit-save-tenacity')?.value).auto,
             allAttr: parseInt(document.getElementById('boss-unit-all-attr')?.value) || 0,
             allSkill: parseInt(document.getElementById('boss-unit-all-skill')?.value) || 0,
             sideLevel: Math.max(1, parseInt(document.getElementById('boss-unit-side-level')?.value) || 1),

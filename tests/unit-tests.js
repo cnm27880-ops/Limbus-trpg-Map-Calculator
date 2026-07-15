@@ -1049,11 +1049,12 @@ console.log('\n[單方面攻擊] 無人對抗的 BOSS 行動 → 鎖定血量最
         });
     };
 
-    test('措手不及等級＝支線等級+1；DP 加值＝等級×10（無視先攻）', () => {
+    test('措手不及等級＝支線等級+1；DP 加值＝支線等級×10（無視先攻，措手不及另計於防禦端）', () => {
         const boss = { sideLevel: 2 };
         assert.strictEqual(cpUnopposedLevel(boss), 3);
-        assert.strictEqual(cpUnopposedMod(boss), 30);
+        assert.strictEqual(cpUnopposedMod(boss), 20, 'DP 基數用支線×10，不含措手不及的 +1 級');
         assert.strictEqual(cpUnopposedLevel(null), 2, '無支線等級時以 1 級計，措手不及為 2 級');
+        assert.strictEqual(cpUnopposedMod(null), 10);
     });
 
     test('強制鎖定：血量最低（加權）的玩家單位', () => {
@@ -1062,12 +1063,12 @@ console.log('\n[單方面攻擊] 無人對抗的 BOSS 行動 → 鎖定血量最
         assert.ok(victim && victim.id === 'p_b', `應鎖定殘血者，實得 ${victim && victim.id}`);
     });
 
-    test('公佈後無人對抗 → 單方面攻擊：unopposed、DP +30、附鎖定目標', () => {
+    test('公佈後無人對抗 → 單方面攻擊：unopposed、DP +20、附鎖定目標與措手不及等級', () => {
         setup(true);
         const r = cpResolveActionMod('boss1');
         assert.strictEqual(r.unopposed, true, '應標記為單方面攻擊');
-        assert.strictEqual(r.mod, 30, '支線 2 級 → 措手不及 3 級 → DP +30');
-        assert.strictEqual(r.surpriseLevel, 3);
+        assert.strictEqual(r.mod, 20, '支線 2 級 → DP +20（措手不及另計於防禦端）');
+        assert.strictEqual(r.surpriseLevel, 3, '措手不及等級＝支線+1＝3 級');
         assert.strictEqual(r.victimName, '殘血者');
     });
 
@@ -1092,9 +1093,9 @@ console.log('\n[部位破壞/混亂] 嚴重槽填滿判定');
     };
     vm.createContext(utilSandbox);
     vm.runInContext(readSource('src/utils/utils.js')
-        + '\n;\nvar __utilExports = { countSevereSlots, isSevereGaugeFull };',
+        + '\n;\nvar __utilExports = { countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus };',
         utilSandbox, { filename: 'utils.js' });
-    const { countSevereSlots, isSevereGaugeFull } = utilSandbox.__utilExports;
+    const { countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus } = utilSandbox.__utilExports;
 
     test('嚴重槽計數：L(2)/A(3) 佔格、B(1) 不計', () => {
         assert.strictEqual(countSevereSlots({ hpArr: [3, 2, 1, 0] }), 2);
@@ -1106,6 +1107,52 @@ console.log('\n[部位破壞/混亂] 嚴重槽填滿判定');
         assert.strictEqual(isSevereGaugeFull({ maxHp: 3, hpArr: [2, 2, 3] }), true);
         assert.strictEqual(isSevereGaugeFull({ maxHp: 3, hpArr: [2, 2, 1] }), false, 'B 傷不佔嚴重槽');
         assert.strictEqual(isSevereGaugeFull({ maxHp: 0, hpArr: [] }), false, '無血格不觸發');
+    });
+
+    // ===== A+B 記法（全站攻擊／豁免／防禦欄位共用） =====
+    // vm 沙箱產生的物件與主程序不同 realm（原型不同），deepStrictEqual 會誤判，故逐欄比較
+    const eqDicePlus = (input, dice, auto, msg) => {
+        const p = parseDicePlus(input);
+        assert.strictEqual(p.dice, dice, `${msg || input}：dice 應為 ${dice}`);
+        assert.strictEqual(p.auto, auto, `${msg || input}：auto 應為 ${auto}`);
+    };
+    test('parseDicePlus：A+B、純數字、負值、空值與亂填', () => {
+        eqDicePlus('12+3', 12, 3);
+        eqDicePlus(' 12 + 3 ', 12, 3, '容許空白');
+        eqDicePlus('12', 12, 0);
+        eqDicePlus('-4+2', -4, 2, '減值也可帶附加');
+        eqDicePlus(7, 7, 0, '數字型別直接視為 A');
+        eqDicePlus('', 0, 0, '空字串');
+        eqDicePlus(null, 0, 0, 'null');
+        eqDicePlus('abc', 0, 0, '亂填回 0');
+    });
+
+    test('formatDicePlus：附加 0 只顯示 A，與 parseDicePlus 互為往返', () => {
+        assert.strictEqual(formatDicePlus(12, 3), '12+3');
+        assert.strictEqual(formatDicePlus(12, 0), '12');
+        assert.strictEqual(formatDicePlus(undefined, undefined), '0', '未填欄位顯示 0');
+        eqDicePlus(formatDicePlus(6, 1), 6, 1, '往返');
+    });
+})();
+
+// ====================================================================
+console.log('\n[A+B 記法] 黑箱豁免模式：目標豁免附帶附加成功（saveAuto）');
+// ====================================================================
+(function () {
+    test('豁免抵擋：saveInfo 逐目標帶出 saveDice 與 saveAuto（A+B 分存欄位）', () => {
+        resetCaptures();
+        sandbox.state.units = [
+            { id: 'pu1', name: '玩家一', type: 'player', saveReflex: 5, saveReflexAuto: 2, status: {} }
+        ];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 8, auto: 0, resolveMode: 'save', saveType: 'saveReflex', explodeAt: 10 },
+            target: { id: 'pu1', name: '玩家一' }
+        });
+        const saveInfo = captured.stReview && captured.stReview.extras && captured.stReview.extras.saveInfo;
+        assert.ok(saveInfo, '豁免模式應回傳 saveInfo');
+        assert.strictEqual(saveInfo.targets[0].saveDice, 5, '豁免骰數（A）');
+        assert.strictEqual(saveInfo.targets[0].saveAuto, 2, '豁免附加成功（B）');
+        assert.strictEqual(saveInfo.saveAuto, 2, '審核面板預填的附加成功取第一個目標');
     });
 })();
 

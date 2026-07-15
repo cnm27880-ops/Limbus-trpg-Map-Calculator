@@ -1300,13 +1300,19 @@ function openPlayerStatsModal(unitId) {
                     <button onclick="closePlayerStatsModal()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">
+                    <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:4px;">數值欄支援「A+B」記法：A＝擲骰數、B＝附加成功（例 6+1；無附加填 6 即可）。</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
                         <div class="calc-field"><span class="calc-label">意志豁免</span>
-                            <input type="number" id="ps-save-will" value="${u.saveWill || 0}"></div>
+                            <input type="text" inputmode="numeric" id="ps-save-will" value="${formatDicePlus(u.saveWill, u.saveWillAuto)}"></div>
                         <div class="calc-field"><span class="calc-label">反射豁免</span>
-                            <input type="number" id="ps-save-reflex" value="${u.saveReflex || 0}"></div>
+                            <input type="text" inputmode="numeric" id="ps-save-reflex" value="${formatDicePlus(u.saveReflex, u.saveReflexAuto)}"></div>
                         <div class="calc-field"><span class="calc-label">強韌豁免</span>
-                            <input type="number" id="ps-save-tenacity" value="${u.saveTenacity || 0}"></div>
+                            <input type="text" inputmode="numeric" id="ps-save-tenacity" value="${formatDicePlus(u.saveTenacity, u.saveTenacityAuto)}"></div>
+                    </div>
+                    <div class="calc-field">
+                        <span class="calc-label">措手不及防禦（單方面攻擊等突襲時的較弱防禦，A+B）</span>
+                        <input type="text" inputmode="numeric" id="ps-surprise-dp" value="${formatDicePlus(u.surpriseDp, u.surpriseAuto)}"
+                               placeholder="例：6+1" title="遭受【單方面攻擊】等措手不及狀況時，系統自動以此值代替防禦 QTE">
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <div class="calc-field">
@@ -1345,17 +1351,28 @@ function savePlayerStats(unitId) {
         return;
     }
 
-    const clampSave = v => Math.max(-999, Math.min(999, parseInt(v) || 0));
-    const saveWill = clampSave(document.getElementById('ps-save-will')?.value);
-    const saveReflex = clampSave(document.getElementById('ps-save-reflex')?.value);
-    const saveTenacity = clampSave(document.getElementById('ps-save-tenacity')?.value);
+    const clamp = v => Math.max(-999, Math.min(999, parseInt(v) || 0));
+    // A+B 記法：豁免與措手不及防禦以「擲骰數(A)＋附加成功(B)」分存兩個欄位
+    const readDicePlus = (id) => {
+        const p = parseDicePlus(document.getElementById(id)?.value);
+        return { dice: clamp(p.dice), auto: Math.max(0, Math.min(999, p.auto)) };
+    };
+    const will = readDicePlus('ps-save-will');
+    const reflex = readDicePlus('ps-save-reflex');
+    const tenacity = readDicePlus('ps-save-tenacity');
+    const surprise = readDicePlus('ps-surprise-dp');
     const msRaw = parseInt(document.getElementById('ps-move-speed')?.value);
     const moveSpeed = (Number.isFinite(msRaw) && msRaw >= 0) ? Math.min(999, msRaw) : 20;
-    const initBonus = clampSave(document.getElementById('ps-init-bonus')?.value);
+    const initBonus = clamp(document.getElementById('ps-init-bonus')?.value);
 
-    u.saveWill = saveWill;
-    u.saveReflex = saveReflex;
-    u.saveTenacity = saveTenacity;
+    u.saveWill = will.dice;
+    u.saveWillAuto = will.auto;
+    u.saveReflex = reflex.dice;
+    u.saveReflexAuto = reflex.auto;
+    u.saveTenacity = tenacity.dice;
+    u.saveTenacityAuto = tenacity.auto;
+    u.surpriseDp = surprise.dice;
+    u.surpriseAuto = surprise.auto;
     u.moveSpeed = moveSpeed;
     u.initBonus = initBonus;
 
@@ -1366,9 +1383,14 @@ function savePlayerStats(unitId) {
             type: 'updatePlayerStats',
             playerId: myPlayerId,
             unitId: unitId,
-            saveWill: saveWill,
-            saveReflex: saveReflex,
-            saveTenacity: saveTenacity,
+            saveWill: will.dice,
+            saveWillAuto: will.auto,
+            saveReflex: reflex.dice,
+            saveReflexAuto: reflex.auto,
+            saveTenacity: tenacity.dice,
+            saveTenacityAuto: tenacity.auto,
+            surpriseDp: surprise.dice,
+            surpriseAuto: surprise.auto,
             moveSpeed: moveSpeed,
             initBonus: initBonus
         });
@@ -1766,11 +1788,11 @@ function openMultiActionModal(bossId) {
                     <label class="stat-field"><span>防禦附加成功</span><input type="number" id="ma-boss-def-auto" value="${boss.defAuto || 0}"></label>
                 </div>
                 <div class="stat-field">
-                    <span>三豁免（意志 / 反射 / 強韌）</span>
+                    <span>三豁免（意志 / 反射 / 強韌，A+B：擲骰數+附加成功）</span>
                     <div class="stat-grid cols-3">
-                        <input type="number" id="ma-boss-save-will" value="${boss.saveWill || 0}" placeholder="意志">
-                        <input type="number" id="ma-boss-save-reflex" value="${boss.saveReflex || 0}" placeholder="反射">
-                        <input type="number" id="ma-boss-save-tenacity" value="${boss.saveTenacity || 0}" placeholder="強韌">
+                        <input type="text" inputmode="numeric" id="ma-boss-save-will" value="${formatDicePlus(boss.saveWill, boss.saveWillAuto)}" placeholder="意志">
+                        <input type="text" inputmode="numeric" id="ma-boss-save-reflex" value="${formatDicePlus(boss.saveReflex, boss.saveReflexAuto)}" placeholder="反射">
+                        <input type="text" inputmode="numeric" id="ma-boss-save-tenacity" value="${formatDicePlus(boss.saveTenacity, boss.saveTenacityAuto)}" placeholder="強韌">
                     </div>
                 </div>
                 <div class="stat-grid cols-3">
@@ -2121,9 +2143,16 @@ function saveMultiAction(bossId) {
     // 與 boss-battle-hud.js 的數值面板一致：儲存時以新 defAuto 重置本回合剩餘資源池，
     // 避免資源池已存在（曾被攻擊）時調整 defAuto 無效
     boss.defAutoRemaining = boss.defAuto;
-    boss.saveWill = parseInt(document.getElementById('ma-boss-save-will')?.value) || 0;
-    boss.saveReflex = parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0;
-    boss.saveTenacity = parseInt(document.getElementById('ma-boss-save-tenacity')?.value) || 0;
+    // 三豁免 A+B 記法：擲骰數(A)與附加成功(B)分存兩個欄位
+    const maWill = parseDicePlus(document.getElementById('ma-boss-save-will')?.value);
+    const maReflex = parseDicePlus(document.getElementById('ma-boss-save-reflex')?.value);
+    const maTenacity = parseDicePlus(document.getElementById('ma-boss-save-tenacity')?.value);
+    boss.saveWill = maWill.dice;
+    boss.saveWillAuto = maWill.auto;
+    boss.saveReflex = maReflex.dice;
+    boss.saveReflexAuto = maReflex.auto;
+    boss.saveTenacity = maTenacity.dice;
+    boss.saveTenacityAuto = maTenacity.auto;
     boss.allAttr = parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0;
     boss.allSkill = parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0;
     boss.sideLevel = Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1);
@@ -2209,9 +2238,12 @@ function saveMultiActionAsTemplate(bossId) {
             defAuto: parseInt(document.getElementById('ma-boss-def-auto')?.value) || 0,
             initBonus: parseInt(boss.initBonus) || 0,
             init: parseInt(action0.init) || boss.init || 0,
-            saveWill: parseInt(document.getElementById('ma-boss-save-will')?.value) || 0,
-            saveReflex: parseInt(document.getElementById('ma-boss-save-reflex')?.value) || 0,
-            saveTenacity: parseInt(document.getElementById('ma-boss-save-tenacity')?.value) || 0,
+            saveWill: parseDicePlus(document.getElementById('ma-boss-save-will')?.value).dice,
+            saveWillAuto: parseDicePlus(document.getElementById('ma-boss-save-will')?.value).auto,
+            saveReflex: parseDicePlus(document.getElementById('ma-boss-save-reflex')?.value).dice,
+            saveReflexAuto: parseDicePlus(document.getElementById('ma-boss-save-reflex')?.value).auto,
+            saveTenacity: parseDicePlus(document.getElementById('ma-boss-save-tenacity')?.value).dice,
+            saveTenacityAuto: parseDicePlus(document.getElementById('ma-boss-save-tenacity')?.value).auto,
             allAttr: parseInt(document.getElementById('ma-boss-all-attr')?.value) || 0,
             allSkill: parseInt(document.getElementById('ma-boss-all-skill')?.value) || 0,
             sideLevel: Math.max(1, parseInt(document.getElementById('ma-boss-side-level')?.value) || 1),

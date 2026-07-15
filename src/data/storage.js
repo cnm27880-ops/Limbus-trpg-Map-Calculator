@@ -290,6 +290,10 @@ function normalizeUnitTemplate(template) {
             saveWill: parseInt(combat.saveWill) || 0,
             saveReflex: parseInt(combat.saveReflex) || 0,
             saveTenacity: parseInt(combat.saveTenacity) || 0,
+            // A+B 記法的附加成功（B）：與豁免骰數（A）分存，舊模板缺漏時視為 0
+            saveWillAuto: parseInt(combat.saveWillAuto) || 0,
+            saveReflexAuto: parseInt(combat.saveReflexAuto) || 0,
+            saveTenacityAuto: parseInt(combat.saveTenacityAuto) || 0,
             allAttr: parseInt(combat.allAttr) || 0,
             allSkill: parseInt(combat.allSkill) || 0,
             sideLevel: Math.max(1, parseInt(combat.sideLevel) || 1),

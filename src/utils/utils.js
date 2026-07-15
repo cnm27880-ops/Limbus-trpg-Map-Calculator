@@ -206,6 +206,35 @@ function calculateWeightedHpPercent(unit) {
     return (remaining / maxWeight) * 100;
 }
 
+// ===== 「A+B」骰數記法 =====
+/**
+ * 解析「A+B」格式的數值輸入：A＝要進行亂數骰的骰數／DP，B＝擲骰後直接加上的附加成功。
+ * 全站攻擊／豁免／防禦欄位共用此記法，取代獨立的「附加成功」欄位。
+ * 支援：'12'（無附加）、'12+3'、'-4'（減值）、'-4+2'、數字型別；空值與亂填回 {0,0}。
+ * @param {string|number} value
+ * @returns {{ dice: number, auto: number }}
+ */
+function parseDicePlus(value) {
+    if (typeof value === 'number') return { dice: Number.isFinite(value) ? Math.trunc(value) : 0, auto: 0 };
+    const s = String(value ?? '').trim();
+    if (!s) return { dice: 0, auto: 0 };
+    const m = s.match(/^(-?\d+)(?:\s*\+\s*(\d+))?$/);
+    if (!m) return { dice: parseInt(s, 10) || 0, auto: 0 };
+    return { dice: parseInt(m[1], 10) || 0, auto: parseInt(m[2], 10) || 0 };
+}
+
+/**
+ * 將骰數與附加成功組回「A+B」顯示字串（附加為 0 時只顯示 A）。
+ * @param {number} dice
+ * @param {number} auto
+ * @returns {string}
+ */
+function formatDicePlus(dice, auto) {
+    const d = parseInt(dice) || 0;
+    const a = parseInt(auto) || 0;
+    return a > 0 ? `${d}+${a}` : String(d);
+}
+
 // ===== 嚴重槽（Severe Gauge） =====
 /**
  * 統計單位嚴重槽的填格數：每一格 L（2）或 A（3）傷害都佔用一格嚴重槽。
@@ -438,7 +467,7 @@ export {
     escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
     generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
     calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
-    countSevereSlots, isSevereGaugeFull,
+    countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus,
     calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
     calcTacticalPathCost, getTileMoveMultiplier,
 };
@@ -448,7 +477,7 @@ if (typeof window !== 'undefined') {
         escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
         generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
         calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
-        countSevereSlots, isSevereGaugeFull,
+        countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus,
         calcTacticalCost, getUnitMaxMoveGrids, getUnitMoveRemaining,
     calcTacticalPathCost, getTileMoveMultiplier,
     });

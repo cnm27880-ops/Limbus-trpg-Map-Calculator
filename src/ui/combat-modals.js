@@ -8,6 +8,9 @@ const DEFENSE_MODAL_MEMO_KEY = 'limbus-defense-modal-memo';
 
 let attackModalTarget = null; // { id, name }
 let threatPendingStatuses = []; // ST 威脅時，所選 BOSS 行動要施加給目標的狀態 [{id,stacks}]
+// ST 威脅時，所選行動若為【單方面攻擊】（公佈後無人對抗）：{ surpriseLevel, victimId, victimName }
+// 送出威脅時隨攻擊方資料同步，目標玩家端據此跳過防禦 QTE、自動以措手不及防禦應戰。
+let threatUnopposedInfo = null;
 
 function cmLoadMemo(key) {
     try {
@@ -75,8 +78,9 @@ function openAttackModal(unitId) {
     cmUpdateAttackDistance(u);
 
     const memo = cmLoadMemo(ATTACK_MODAL_MEMO_KEY) || {};
-    document.getElementById('attack-dp').value = memo.dp ?? 0;
-    document.getElementById('attack-auto').value = memo.auto ?? 0;
+    // A+B 記法：單一欄位同時記 DP（A）與附加成功（B），舊記憶（分開兩欄）自動合併顯示
+    document.getElementById('attack-dp').value = (typeof formatDicePlus === 'function')
+        ? formatDicePlus(memo.dp ?? 0, memo.auto ?? 0) : String(memo.dp ?? 0);
     document.getElementById('attack-ignore-def').value = memo.ignoreDef ?? 0;
     document.getElementById('attack-crit-vicious').value = memo.critVicious ?? 0;
     document.getElementById('attack-armor-pierce').value = memo.armorPierce ?? 0;
@@ -95,6 +99,7 @@ function openAttackModal(unitId) {
 
     // ST 威脅：列出作用中 BOSS 的各行動，供一鍵帶入 DP 與待施加狀態
     threatPendingStatuses = [];
+    threatUnopposedInfo = null;
     cmRenderThreatActions();
 
     openModal('attack-modal');
@@ -153,6 +158,10 @@ function cmApplyThreatAction(unitId) {
     const dp = (u.actionDp || 0) + (counterMod.mod || 0);
     document.getElementById('attack-dp').value = dp;
     threatPendingStatuses = Array.isArray(u.actionStatuses) ? u.actionStatuses.map(s => ({ ...s })) : [];
+    // 記錄單方面攻擊資訊：送出威脅時標記到攻擊方資料，目標玩家端自動以措手不及防禦應戰
+    threatUnopposedInfo = counterMod.unopposed
+        ? { surpriseLevel: counterMod.surpriseLevel || 0, victimId: counterMod.victimId || null, victimName: counterMod.victimName || '' }
+        : null;
 
     // 行動標記「豁免抵擋」時，自動切換結算模式並帶入該行動指定的豁免類型
     const modeSel = document.getElementById('attack-resolve-mode');
@@ -318,9 +327,12 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
  */
 function submitAttackModal() {
     if (!attackModalTarget) return;
-    // 嚴格整數轉型（parseInt 基底 10），避免字串相加（"10"+"5"→"105"）等型別污染
-    const dp = parseInt(document.getElementById('attack-dp').value, 10) || 0;
-    const auto = parseInt(document.getElementById('attack-auto').value, 10) || 0;
+    // A+B 記法：A＝擲骰 DP、B＝附加成功；解析後仍以 dp / auto 兩個數值走原本的計算契約
+    const atkParsed = (typeof parseDicePlus === 'function')
+        ? parseDicePlus(document.getElementById('attack-dp').value)
+        : { dice: parseInt(document.getElementById('attack-dp').value, 10) || 0, auto: 0 };
+    const dp = atkParsed.dice;
+    const auto = atkParsed.auto;
     const ignoreDef = Math.max(0, parseInt(document.getElementById('attack-ignore-def').value, 10) || 0);
     const critVicious = Math.max(0, parseInt(document.getElementById('attack-crit-vicious').value, 10) || 0);
     // 破甲/高速/破魔：簡化為直接等效 DP，併入黑箱計算的攻擊 DP 桶（見 black-box-engine.js）
@@ -381,7 +393,10 @@ function submitAttackModal() {
         onHitTargetStatusNotes: identityBonus.onHitTargetStatusNotes || [],
         onHitSelfStatus: identityBonus.onHitSelfStatus || {},
         onHitSelfStatusNotes: identityBonus.onHitSelfStatusNotes || [],
-        counterPhaseDpBonus
+        counterPhaseDpBonus,
+        // 【單方面攻擊】標記：目標玩家端收到後跳過防禦 QTE，自動以「措手不及防禦」應戰
+        surprise: !!(myRole === 'st' && threatUnopposedInfo),
+        surpriseLevel: (myRole === 'st' && threatUnopposedInfo) ? (threatUnopposedInfo.surpriseLevel || 0) : 0
     };
     const target = { id: attackModalTarget.id, name: attackModalTarget.name };
 
@@ -420,9 +435,12 @@ function submitAttackModal() {
             });
             if (applied.length && typeof showToast === 'function') showToast('已對目標施加：' + applied.join('、'));
         }
+        const wasSurprise = !!threatUnopposedInfo;
         threatPendingStatuses = [];
+        threatUnopposedInfo = null;
         if (typeof showToast === 'function') {
-            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），攻擊骰已自動擲出，請至審核面板輸入豁免...' : '威脅已發起，等待玩家防禦...');
+            showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），攻擊骰已自動擲出，請至審核面板輸入豁免...'
+                : (wasSurprise ? '⚡ 單方面攻擊已發起：目標將自動以措手不及防禦應戰' : '威脅已發起，等待玩家防禦...'));
         }
     } else {
         cqInitiateAttack(resolveMode === 'save' ? { attacker, target: targets[0], targets } : { attacker, target });
@@ -462,17 +480,35 @@ function cqOnPendingDefense(data) {
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(target.id) : null;
     if (!targetUnit || targetUnit.ownerId !== myPlayerId) return;
 
+    // 【單方面攻擊】措手不及：不開防禦 QTE，直接以角色卡上填寫的「措手不及防禦」應戰
+    // （較弱的防禦狀態，於右鍵「角色數值」預先填寫；未填視為 0）。
+    if (data.attacker && data.attacker.surprise) {
+        const dp = parseInt(targetUnit.surpriseDp) || 0;
+        const auto = parseInt(targetUnit.surpriseAuto) || 0;
+        cqSubmitDefense({ dp, auto });
+        if (typeof showToast === 'function') {
+            const lvTxt = data.attacker.surpriseLevel ? `（${data.attacker.surpriseLevel} 級）` : '';
+            showToast(`⚡ 你措手不及${lvTxt}！自動以措手不及防禦 ${dp}${auto ? '+' + auto : ''} 應戰`
+                + ((dp === 0 && auto === 0) ? '——尚未填寫，請至右鍵「角色數值」設定' : ''));
+        }
+        return;
+    }
+
     const memo = cmLoadMemo(DEFENSE_MODAL_MEMO_KEY) || {};
-    document.getElementById('defense-dp').value = memo.dp ?? 0;
-    document.getElementById('defense-auto').value = memo.auto ?? 0;
+    // A+B 記法：單一欄位同時記 DP（A）與附加成功（B），舊記憶（分開兩欄）自動合併顯示
+    document.getElementById('defense-dp').value = (typeof formatDicePlus === 'function')
+        ? formatDicePlus(memo.dp ?? 0, memo.auto ?? 0) : String(memo.dp ?? 0);
 
     openModal('defense-qte-modal');
 }
 
 function submitDefenseModal() {
-    // 嚴格整數轉型，與攻擊端一致，避免型別污染
-    const dp = parseInt(document.getElementById('defense-dp').value, 10) || 0;
-    const auto = parseInt(document.getElementById('defense-auto').value, 10) || 0;
+    // A+B 記法：A＝擲骰 DP、B＝附加成功；解析後仍以 dp / auto 走原本的防禦資料契約
+    const defParsed = (typeof parseDicePlus === 'function')
+        ? parseDicePlus(document.getElementById('defense-dp').value)
+        : { dice: parseInt(document.getElementById('defense-dp').value, 10) || 0, auto: 0 };
+    const dp = defParsed.dice;
+    const auto = defParsed.auto;
 
     cmSaveMemo(DEFENSE_MODAL_MEMO_KEY, { dp, auto });
 
@@ -515,15 +551,21 @@ function cqOnSTReview(data) {
         if (saveSection) {
             saveSection.style.display = 'block';
             const saveLabel = document.getElementById('st-review-save-label');
-            if (saveLabel) saveLabel.textContent = `${saveInfo.saveName || '豁免'}豁免骰數（套用到所有目標）`;
+            if (saveLabel) saveLabel.textContent = `${saveInfo.saveName || '豁免'}豁免骰數 A+B（A＝擲骰數、B＝附加成功，套用到所有目標）`;
+            // A+B 記法：預填第一個目標的「豁免骰數+附加成功」；ST 可整串修改
             const saveDiceInput = document.getElementById('st-review-save-dice');
-            if (saveDiceInput) saveDiceInput.value = Math.max(0, parseInt(saveInfo.saveDice, 10) || 0);
-            const saveExtraInput = document.getElementById('st-review-save-extra');
-            if (saveExtraInput) saveExtraInput.value = 0;
+            if (saveDiceInput) {
+                saveDiceInput.value = (typeof formatDicePlus === 'function')
+                    ? formatDicePlus(Math.max(0, parseInt(saveInfo.saveDice, 10) || 0), Math.max(0, parseInt(saveInfo.saveAuto, 10) || 0))
+                    : String(Math.max(0, parseInt(saveInfo.saveDice, 10) || 0));
+            }
             const targetBox = document.getElementById('st-review-save-targets');
             if (targetBox) {
                 targetBox.textContent = '目標：' + (saveInfo.targets || [])
-                    .map(t => `${t.name}（${saveInfo.saveName || '豁免'} ${t.saveDice} 顆）`)
+                    .map(t => {
+                        const auto = parseInt(t.saveAuto, 10) || 0;
+                        return `${t.name}（${saveInfo.saveName || '豁免'} ${t.saveDice}${auto ? '+' + auto : ''}）`;
+                    })
                     .join('、');
             }
         }
@@ -829,23 +871,29 @@ function confirmSTReviewSaveMode(saveInfo) {
     const baseExtra = Math.max(0, parseInt(reviewModal && reviewModal.dataset.baseExtraSuccess, 10) || 0);
     const atkSuccess = Math.max(0, parseInt(saveInfo.atkRoll.successes, 10) || 0);
 
-    const saveDiceInput = Math.max(0, parseInt(document.getElementById('st-review-save-dice')?.value, 10) || 0);
-    const saveExtra = Math.max(0, parseInt(document.getElementById('st-review-save-extra')?.value, 10) || 0);
+    // A+B 記法：ST 輸入的豁免「擲骰數+附加成功」一體解析（取代舊的兩個獨立欄位）
+    const saveParsed = (typeof parseDicePlus === 'function')
+        ? parseDicePlus(document.getElementById('st-review-save-dice')?.value)
+        : { dice: parseInt(document.getElementById('st-review-save-dice')?.value, 10) || 0, auto: 0 };
+    const saveDiceInput = Math.max(0, saveParsed.dice);
+    const saveExtraInput = Math.max(0, saveParsed.auto);
     const adjust = parseInt(document.getElementById('st-review-modifier')?.value, 10) || 0;
     const saveName = saveInfo.saveName || '豁免';
 
     const targets = (Array.isArray(saveInfo.targets) && saveInfo.targets.length)
         ? saveInfo.targets
-        : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput }];
+        : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput, saveAuto: saveExtraInput }];
 
     // 攻擊命中總量（成功 + 附加），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
     const atkHitTotal = atkSuccess + baseExtra;
     const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
 
     const results = targets.map(t => {
-        // ST 輸入的豁免骰數統一套用到所有目標（面板預填第一個目標的預設值，ST 可改）；
-        // saveDiceInput 為 0 且該目標有自帶預設時，回退用目標預設，避免誤填 0 導致全額傷害
-        const pool = saveDiceInput > 0 ? saveDiceInput : Math.max(0, parseInt(t.saveDice, 10) || 0);
+        // ST 輸入的豁免 A+B 統一套用到所有目標（面板預填第一個目標的預設值，ST 可改）；
+        // 擲骰數為 0 且該目標有自帶預設時，回退用目標角色卡上的豁免 A+B，避免誤填 0 導致全額傷害
+        const useInput = saveDiceInput > 0;
+        const pool = useInput ? saveDiceInput : Math.max(0, parseInt(t.saveDice, 10) || 0);
+        const saveExtra = useInput ? saveExtraInput : Math.max(0, parseInt(t.saveAuto, 10) || 0);
         const saveRoll = (typeof bbRollAttackDice === 'function') ? bbRollAttackDice(pool, 10) : { successes: 0 };
         const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust);
 

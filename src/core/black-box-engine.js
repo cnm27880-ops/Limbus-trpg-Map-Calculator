@@ -131,15 +131,18 @@ function bbRunBlackBoxCalculation(data) {
             return {
                 id: (t && t.id) || '',
                 name: (tu && tu.name) || (t && t.name) || '目標',
-                saveDice: Math.max(0, poolBase + mods.defMod)
+                saveDice: Math.max(0, poolBase + mods.defMod),
+                // 豁免附加成功（A+B 記法的 B）：角色卡三豁免以「骰數+附加」分存於 saveX / saveXAuto
+                saveAuto: tu ? Math.max(0, bbSafeNumber(tu[saveKey + 'Auto'])) : 0
             };
         });
 
         saveInfo = {
             saveType: saveKey,
             saveName: saveNames[saveKey],
-            // 預設豁免骰數（審核面板預填）：取第一個目標
+            // 預設豁免骰數／附加成功（審核面板預填）：取第一個目標
             saveDice: targets.length ? targets[0].saveDice : 0,
+            saveAuto: targets.length ? targets[0].saveAuto : 0,
             targets
         };
     }
@@ -211,7 +214,7 @@ function bbRunBlackBoxCalculation(data) {
             rolls: atkRoll.rolls.slice(0, 200)
         };
 
-        const targetLines = saveInfo.targets.map(t => `${t.name}(${saveInfo.saveName}${t.saveDice})`).join('、');
+        const targetLines = saveInfo.targets.map(t => `${t.name}(${saveInfo.saveName}${t.saveDice}${t.saveAuto ? '+' + t.saveAuto : ''})`).join('、');
         debugStr = `【攻擊判定｜豁免抵擋】攻: ${atkLabels.join('+')} = ${atkDpTotal}（不扣防禦）\n`
             + `【攻擊擲骰】擲 ${atkRoll.totalRolled} 顆 → ${atkRoll.successes} 成功${atkRoll.explodedCount ? `（加骰 ${atkRoll.explodedCount}）` : ''}\n`
             + `【目標豁免】${targetLines}（審核輸入豁免骰數後由系統對擲）\n`

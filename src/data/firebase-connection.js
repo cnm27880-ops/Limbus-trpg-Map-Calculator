@@ -1466,12 +1466,19 @@ function sendToHost(message) {
             break;
 
         case 'updatePlayerStats': {
-            // 玩家角色數值：三豁免（骰數）＋移速（米）＋先攻加值，右鍵「角色數值」Modal 儲存
+            // 玩家角色數值：三豁免（A+B 分存骰數/附加成功）＋措手不及防禦＋移速（米）＋先攻加值，
+            // 右鍵「角色數值」Modal 儲存
             const clampSaveVal = v => Math.max(-999, Math.min(999, parseInt(v) || 0));
+            const clampAutoVal = v => Math.max(0, Math.min(999, parseInt(v) || 0));
             roomRef.child(`units/${message.unitId}`).update({
                 saveWill: clampSaveVal(message.saveWill),
+                saveWillAuto: clampAutoVal(message.saveWillAuto),
                 saveReflex: clampSaveVal(message.saveReflex),
+                saveReflexAuto: clampAutoVal(message.saveReflexAuto),
                 saveTenacity: clampSaveVal(message.saveTenacity),
+                saveTenacityAuto: clampAutoVal(message.saveTenacityAuto),
+                surpriseDp: clampSaveVal(message.surpriseDp),
+                surpriseAuto: clampAutoVal(message.surpriseAuto),
                 moveSpeed: Math.max(0, Math.min(999, parseInt(message.moveSpeed) || 0)),
                 initBonus: clampSaveVal(message.initBonus)
             });

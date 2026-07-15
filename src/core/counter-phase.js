@@ -10,10 +10,11 @@
  *
  * 【單方面攻擊】（ST 公佈結果後生效）：
  * - 沒有任何玩家宣告對抗的行動 → 轉化為單方面攻擊：
- *   1. 強制鎖定場上血量最低的玩家，並使其陷入「措手不及」——此次措手不及視為
- *      主線給予之支線等級 +1 級。
- *   2. 該次攻擊 BOSS 無視先攻快慢，直接獲得 DP 加值：修正基數以措手不及等級計算，
- *      即 (支線等級 + 1) × 10。
+ *   1. 強制鎖定場上血量最低的玩家，並使其陷入「措手不及」——措手不及是玩家的
+ *      一種較弱防禦狀態（於角色數值預填 surpriseDp/surpriseAuto，受襲時系統自動代入，
+ *      跳過防禦 QTE），此次措手不及視為主線給予之支線等級 +1 級。
+ *   2. 該次攻擊 BOSS 無視先攻快慢，直接獲得 DP 加值：修正基數＝支線等級 × 10
+ *      （措手不及本身另計於防禦端，不疊進 BOSS 的 DP 加值）。
  */
 
 let counterPhaseState = { started: false, roundId: 0, bossId: null, actions: [], assignments: {}, finalized: false };
@@ -249,6 +250,7 @@ function cpResolvePlayerMods(playerId, playerInit) {
 
 /**
  * 措手不及等級：主線給予之支線等級 +1 級。
+ * 措手不及是玩家端的較弱防禦狀態（角色數值預填、受襲時自動代入），此等級供結算參考。
  * @param {object|null} boss
  * @returns {number}
  */
@@ -257,12 +259,13 @@ function cpUnopposedLevel(boss) {
 }
 
 /**
- * 單方面攻擊的 DP 加值（無視先攻快慢直接獲得）：措手不及等級 × 10。
+ * 單方面攻擊的 DP 加值（無視先攻快慢直接獲得）：支線等級 × 10。
+ * 措手不及另計於防禦端（目標以 surpriseDp/surpriseAuto 應戰），不疊進此加值。
  * @param {object|null} boss
  * @returns {number}
  */
 function cpUnopposedMod(boss) {
-    return cpUnopposedLevel(boss) * 10;
+    return ((boss && boss.sideLevel) || 1) * 10;
 }
 
 /**
@@ -283,9 +286,9 @@ function cpFindLowestHpPlayer() {
 /**
  * 取得某行動目前被哪位玩家對抗，以及其 DP 修正（供威脅快選按鈕自動帶入）。
  * ST 公佈結果後仍無人對抗的行動 → 依【單方面攻擊】規則回傳：
- *   unopposed: true、mod = (支線等級+1)×10（無視先攻）、
- *   victimId / victimName = 場上血量最低的玩家（強制鎖定，陷入措手不及）、
- *   surpriseLevel = 措手不及等級（支線等級+1）。
+ *   unopposed: true、mod = 支線等級×10（無視先攻直接獲得）、
+ *   victimId / victimName = 場上血量最低的玩家（強制鎖定，陷入措手不及，
+ *   防禦端自動代入其角色卡的措手不及防禦）、surpriseLevel = 措手不及等級（支線等級+1）。
  * @returns {{ playerId: string|null, playerName: string, mod: number,
  *             unopposed?: boolean, surpriseLevel?: number, victimId?: string|null, victimName?: string }}
  */

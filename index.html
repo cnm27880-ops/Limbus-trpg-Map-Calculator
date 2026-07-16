@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Limbus Command</title>
 
-    <!-- 安全標頭 -->
+    <!-- 安全標頭（X-Frame-Options 無法以 meta 設定，改由主機 HTTP 標頭提供） -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="X-Frame-Options" content="DENY">
     <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="theme-color" content="#141418">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
 
     <!-- Firebase SDK (使用 Compat 版本以支援舊版語法) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" crossorigin="anonymous"></script>
@@ -30,33 +31,33 @@
 <div id="login-layer">
     <div class="login-box" id="login-main">
         <div class="login-title">LIMBUS</div>
-        <div style="color:var(--text-dim);margin-bottom:20px;">戰術指揮系統</div>
+        <div class="login-subtitle">戰術指揮系統</div>
         <button class="login-btn btn-host" onclick="showSTStep()">我是 ST（建房）</button>
         <button class="login-btn btn-join" onclick="showJoinStep()">我是玩家（加入）</button>
     </div>
     <div class="login-box hidden" id="login-st">
         <div class="login-title">建立房間</div>
-        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
-        <input type="text" id="input-st-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
+        <div class="login-hint">如有舊識別碼可輸入以恢復身份</div>
+        <input type="text" id="input-st-code" class="login-code-input" placeholder="4 位數識別碼（選填）" maxlength="4">
         <button class="login-btn btn-host" onclick="initSystem('st')">建立房間</button>
-        <button class="login-btn" style="background:var(--accent-blue);" onclick="showRoomManager()">📋 房間管理</button>
+        <button class="login-btn btn-manage" onclick="showRoomManager()">📋 房間管理</button>
         <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
     </div>
     <div class="login-box hidden" id="login-join">
         <div class="login-title">加入房間</div>
-        <input type="text" id="input-host-id" placeholder="貼上 ST 的房間 ID" style="width:100%;text-align:center;margin-bottom:10px;">
-        <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">如有舊識別碼可輸入以恢復身份</div>
-        <input type="text" id="input-player-code" placeholder="4 位數識別碼（選填）" maxlength="4" style="width:100%;text-align:center;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:4px;">
+        <input type="text" id="input-host-id" class="login-input" placeholder="貼上 ST 的房間 ID">
+        <div class="login-hint">如有舊識別碼可輸入以恢復身份</div>
+        <input type="text" id="input-player-code" class="login-code-input" placeholder="4 位數識別碼（選填）" maxlength="4">
         <button class="login-btn btn-join" onclick="initSystem('player')">連線</button>
         <button class="login-btn btn-back" onclick="showMainStep()">返回</button>
     </div>
     <div class="login-box hidden" id="login-loading">
-        <div style="color:var(--accent-green);margin-bottom:10px;">連線中...</div>
-        <div id="loading-status" style="font-size:0.8rem;color:var(--text-dim);"></div>
+        <div class="login-loading-text">連線中...</div>
+        <div id="loading-status" class="login-loading-status"></div>
     </div>
-    <div class="login-box hidden" id="login-room-manager" style="max-width:600px;max-height:80vh;overflow-y:auto;">
+    <div class="login-box login-box--wide hidden" id="login-room-manager">
         <div class="login-title">房間管理</div>
-        <div id="room-list-container" style="margin:15px 0;"></div>
+        <div id="room-list-container" class="room-list-container"></div>
         <button class="login-btn btn-back" onclick="showSTStep()">返回</button>
     </div>
 </div>
@@ -68,13 +69,13 @@
         <button class="nav-tab" data-page="units" onclick="switchPage('units')">⚔️ 單位</button>
         <button class="nav-tab" data-page="log" onclick="switchPage('log')">📜 戰鬥日誌 / 構築室</button>
     </div>
-    <div style="display:flex;align-items:center;gap:6px;">
+    <div class="nav-right">
         <div class="conn-status" id="conn-status" title="連線狀態">
             <div class="conn-dot connecting" id="conn-dot"></div>
             <span id="conn-text">連線中</span>
         </div>
         <span class="player-name-chip" id="my-name" onclick="renameMyCodename()" title="點擊修改代號（其他人看到的名稱）" style="display:none;"></span>
-        <span class="player-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼（登入用）" style="font-size:0.9rem;padding:4px 8px;display:none;">----</span>
+        <span class="player-code nav-code" id="my-code" onclick="copyMyCode()" title="點擊複製識別碼（登入用）" style="display:none;">----</span>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()">📋</button>
         <span class="id-badge" id="my-id" onclick="copyId()" title="點擊複製ID">---</span>
         <button class="logout-btn" id="logout-btn" onclick="logoutAndReset()" title="登出/切換帳號" style="display:none;">🚪</button>
@@ -95,18 +96,18 @@
     <div id="page-map" class="page active">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <span style="font-weight:bold;color:var(--accent-yellow);">戰鬥序列</span>
-                <button style="background:none;color:var(--text-dim);font-size:1.2rem;" onclick="toggleSidebar()">×</button>
+                <span class="sidebar-title">戰鬥序列</span>
+                <button class="sidebar-close-btn" onclick="toggleSidebar()">×</button>
             </div>
             <div class="sidebar-content">
                 <div id="tile-info-panel">
-                    <div style="color:var(--accent-yellow);font-weight:bold;margin-bottom:4px;">地形效果</div>
+                    <div class="tile-info-title">地形效果</div>
                     <div id="tile-effect-desc"></div>
                 </div>
                 <div id="sidebar-units"></div>
             </div>
         </aside>
-        <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;">
+        <div class="map-main-col">
             <div class="map-toolbar">
                 <div class="map-tools-scroll" id="dynamic-tools">
                     <button class="tool-btn active" data-tool="cursor" onclick="setTool('cursor')" title="選取／移動"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3l14 8-6.3 1.8L10.5 20z"/></svg></button>
@@ -136,7 +137,7 @@
                         <option value="11">肉斬骨斷</option>
                     </select>
                     <input type="number" id="map-w" class="size-input" value="15" min="5" max="50">
-                    <span style="font-size:0.8rem;color:#555;">x</span>
+                    <span class="size-sep">x</span>
                     <input type="number" id="map-h" class="size-input" value="15" min="5" max="50">
                     <button class="apply-btn" onclick="resizeMap()">套用</button>
                 </div>
@@ -165,8 +166,8 @@
         <div id="view-log-encounter" class="view-section">
             <!-- 戰鬥日誌區（所有人可見） -->
             <div class="log-panel">
-                <div class="log-panel-header" style="display:flex;justify-content:space-between;align-items:center;">
-                    <div style="display:flex;align-items:center;gap:10px;">
+                <div class="log-panel-header">
+                    <div class="log-panel-title">
                         <span>📜 戰鬥日誌</span>
                         <div id="limbus-clock-display" title="時鐘刻度"></div>
                     </div>
@@ -199,7 +200,6 @@
                     <div class="encounter-field">
                         <label>怪物 JSON 預覽（可手動修改）</label>
                         <textarea id="encounter-preview" class="encounter-preview" rows="10" spellcheck="false"
-                                  style="font-family: monospace; white-space: pre;"
                                   placeholder="AI 產生的怪物 JSON 會出現在這裡，你也可以直接貼上／修改後存入怪物庫。"></textarea>
                     </div>
                     <button class="lv-btn lv-btn-main" id="btn-save-encounter" onclick="saveEncounterToLibrary()">💾 一鍵儲存至怪物庫</button>
@@ -246,7 +246,7 @@
         <span>🧭 AI 地圖畫布</span>
         <span class="float-modal-btns">
             <button class="float-modal-icon-btn" onclick="maiClearChat()" title="清空對話">🗑</button>
-            <button onclick="maiClosePanel()" style="background:none;font-size:1.2rem;">×</button>
+            <button onclick="maiClosePanel()">×</button>
         </span>
     </div>
     <div class="mai-body">
@@ -309,7 +309,7 @@
             <!-- 攻擊動作：基礎判定數值＋穿透（破甲/高速/破魔，直接併入攻擊 DP 桶） -->
             <div class="identity-card">
                 <div class="identity-card-title">⚔️ 攻擊判定</div>
-                <div class="calc-grid cols-2" style="margin-bottom:8px;">
+                <div class="calc-grid cols-2 mb-8">
                     <div class="calc-field">
                         <span class="calc-label">結算模式</span>
                         <select id="attack-resolve-mode" class="wheel-cycle" onchange="cmOnAttackModeChange()"
@@ -342,7 +342,7 @@
                         <input type="number" id="attack-crit-vicious" value="0" min="0">
                     </div>
                 </div>
-                <div class="calc-grid cols-3" style="margin-top:8px;">
+                <div class="calc-grid cols-3 mt-8">
                     <div class="calc-field">
                         <span class="calc-label">破甲</span>
                         <input type="number" id="attack-armor-pierce" value="0" min="0">
@@ -356,7 +356,7 @@
                         <input type="number" id="attack-magic-pierce" value="0" min="0">
                     </div>
                 </div>
-                <div class="calc-grid cols-2" style="margin-top:8px;">
+                <div class="calc-grid cols-2 mt-8">
                     <div class="calc-field">
                         <span class="calc-label">攻擊上限（0=無上限）</span>
                         <input type="number" id="attack-damage-cap" value="0" min="0" title="一次攻擊最多造成的傷害；BOSS 不受上限影響">
@@ -373,8 +373,8 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="modal-btn" onclick="closeAttackModal()" style="background:var(--bg-card);">取消</button>
-            <button class="modal-btn" onclick="submitAttackModal()" style="background:var(--accent-red);">發送攻擊</button>
+            <button class="modal-btn modal-btn--muted" onclick="closeAttackModal()">取消</button>
+            <button class="modal-btn modal-btn--danger" onclick="submitAttackModal()">發送攻擊</button>
         </div>
     </div>
 </div>
@@ -394,7 +394,7 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button class="modal-btn" onclick="submitDefenseModal()" style="background:var(--accent-red);width:100%;">全力防禦</button>
+            <button class="modal-btn modal-btn--danger modal-btn--full" onclick="submitDefenseModal()">全力防禦</button>
         </div>
     </div>
 </div>
@@ -415,7 +415,7 @@
                     <!-- A+B 記法取代獨立的「豁免附加成功」欄位；留空/0 時各目標用自己角色卡上的預設值 -->
                     <input type="text" inputmode="numeric" id="st-review-save-dice" value="0" placeholder="例：6+1（0＝用各目標預設）">
                 </div>
-                <div id="st-review-save-targets" style="font-size:0.74rem;color:var(--text-dim);line-height:1.6;"></div>
+                <div id="st-review-save-targets" class="st-review-save-targets"></div>
             </div>
             <div class="calc-field">
                 <span class="calc-label" id="st-review-modifier-label">最終微調增減</span>
@@ -427,7 +427,7 @@
             </label>
         </div>
         <div class="modal-footer">
-            <button class="modal-btn" onclick="confirmSTReview()" style="background:var(--accent-green);width:100%;">確認並廣播</button>
+            <button class="modal-btn modal-btn--success modal-btn--full" onclick="confirmSTReview()">確認並廣播</button>
         </div>
     </div>
 </div>
@@ -667,37 +667,6 @@
         <!-- 內容由 JS 動態生成 -->
     </div>
 
-    <!-- 動態歌詞控制面板 -->
-    <div id="lyrics-control-panel" class="qab-panel lyrics-panel">
-        <div class="lyrics-panel-header">
-            <span class="lyrics-panel-title">動態歌詞</span>
-            <button class="lyrics-close-btn" onclick="toggleLyricsPanel()">×</button>
-        </div>
-        <div class="lyrics-panel-body">
-            <!-- 歌詞輸入 -->
-            <div class="lyrics-input-section">
-                <textarea id="lyrics-text" class="lyrics-textarea" placeholder="在此輸入歌詞..."></textarea>
-            </div>
-            <!-- 速度控制 -->
-            <div class="lyrics-speed-section">
-                <label class="lyrics-label">打字速度</label>
-                <input type="range" id="lyrics-speed-range" min="20" max="300" value="80" class="lyrics-speed-slider">
-                <span id="lyrics-speed-value" class="lyrics-speed-val">80ms</span>
-            </div>
-            <!-- Tap Tempo 測速區塊 -->
-            <div class="tap-tempo-section">
-                <button id="tap-btn" class="tap-tempo-btn" onclick="handleTap()">跟著節奏按此 (或按 'T')</button>
-                <div id="tap-bpm-display" class="tap-bpm-display">BPM: --</div>
-            </div>
-            <!-- 播放控制 -->
-            <div class="lyrics-play-section">
-                <button class="lyrics-btn lyrics-btn-play" onclick="playLyrics()">▶ 播放</button>
-                <button class="lyrics-btn lyrics-btn-stop" onclick="stopLyrics()">⏹ 停止</button>
-            </div>
-            <!-- 歌詞顯示區 -->
-            <div id="lyrics-display" class="lyrics-display"></div>
-        </div>
-    </div>
 </div>
 
 <!-- JS 檔案 - 分層載入，順序很重要！ -->

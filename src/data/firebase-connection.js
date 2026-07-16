@@ -232,6 +232,16 @@ function deleteRoomFromManager(code) {
  * @param {string} role - 角色 ('st' 或 'player')
  */
 function initSystem(role) {
+    // Firebase SDK 由 CDN 載入；載入失敗（斷網、被防火牆擋）時 database 不存在，
+    // 若不先檢查會直接丟例外，畫面卡在「連線中...」沒有任何提示。
+    // 注意：database 是 firebase-config.js 的頂層 const，初始化失敗時直接引用會踩 TDZ，
+    // 必須改查 window.database。
+    if (typeof firebase === 'undefined' || !window.database) {
+        showToast('無法載入 Firebase SDK，請檢查網路連線後重新整理頁面', 4000);
+        setConnectionStatus('disconnected', 'SDK 載入失敗');
+        return;
+    }
+
     // 代號不再於登入時輸入：改由登入後自行修改。實際代號在 joinRoom / createRoom 決定
     // （返回玩家沿用既有代號，新玩家給預設）。身分與棋子權限只綁 4 碼識別碼。
     myRole = role;

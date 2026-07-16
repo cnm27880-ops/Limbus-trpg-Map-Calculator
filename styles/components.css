@@ -648,14 +648,26 @@ body.aoe-select-active .token {
     border: 1px solid transparent;
 }
 
-/* 操作列格子統一：黑灰方塊＋有色圖標，等寬平均分配（左側 BLA 步進器不受影響） */
+/* 操作列格子統一：黑灰方塊＋有色圖標。
+   設 max-width 避免按鈕被拉成過寬的空棒（圖示小、按鈕大的失衡感），
+   高度對齊左側 BLA 步進器（28px），hover 時以圖標色描邊回饋。 */
 .unit-actions .action-btn {
     flex: 1 1 0;
-    min-width: 52px;
-    padding: 5px 4px;
+    min-width: 44px;
+    max-width: 110px;
+    height: 28px;
+    padding: 0 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
     white-space: nowrap;
     background: var(--bg-input);
-    border: 1px solid transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    line-height: 1;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
 /* 護盾按鈕：黑灰方塊＋藍色圖標文字 */
@@ -667,7 +679,8 @@ body.aoe-select-active .token {
 
 .action-btn:hover {
     color: var(--text-main);
-    border-color: var(--border);
+    background: var(--bg-card);
+    border-color: currentColor; /* 有色圖標按鈕（後方規則覆寫 color）hover 時會以自身色描邊 */
 }
 
 .action-btn.dmg-b {
@@ -728,6 +741,26 @@ body.aoe-select-active .token {
 .modal-header--dice { background: linear-gradient(90deg, rgba(253, 216, 53, .2), transparent 75%); border-bottom-color: rgba(253, 216, 53, .45); }
 .modal-header--ai { background: linear-gradient(90deg, rgba(142, 36, 170, .2), transparent 75%); border-bottom-color: rgba(142, 36, 170, .45); }
 
+/* 標題列關閉鈕（無 class 的 × 按鈕）：不設定會落回瀏覽器預設淺灰底，變成看不見字的白色方塊 */
+.modal-header button:not([class]) {
+    background: none;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    line-height: 1;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.modal-header button:not([class]):hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.08);
+}
+
 .modal-body {
     padding: 16px;
     display: flex;
@@ -752,6 +785,16 @@ body.aoe-select-active .token {
 .modal-btn:hover {
     filter: brightness(1.2);
 }
+
+/* Modal 按鈕變體：取代散落各處的 inline background */
+.modal-btn--muted { background: var(--bg-card); }
+.modal-btn--danger { background: var(--accent-red); }
+.modal-btn--success { background: var(--accent-green); }
+.modal-btn--full { width: 100%; }
+
+/* 間距工具類（取代 modal 內重複的 inline margin） */
+.mt-8 { margin-top: 8px; }
+.mb-8 { margin-bottom: 8px; }
 
 /* ===== Unit Init Input（優化版）===== */
 .unit-init {
@@ -2175,22 +2218,6 @@ body.aoe-select-active .token {
 }
 
 /* ===== Music Player ===== */
-.music-panel {
-    width: 300px;
-    max-height: calc(100vh - 80px);
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.music-panel.expanded {
-    display: flex;
-}
-
 /* ===== 媒體中心（音樂 / 歌詞 分頁融合） ===== */
 .media-panel {
     width: 320px;
@@ -3522,239 +3549,9 @@ body.combat-mode .boss-hud-container {
         right: -5px;
     }
 
-    .music-panel {
-        width: 280px;
-    }
-
     .hotkey-help-panel {
         width: 260px;
     }
-
-    .lyrics-panel {
-        width: 280px;
-    }
-}
-
-/* ===== Lyrics Panel ===== */
-.lyrics-panel {
-    width: 320px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.lyrics-panel.expanded {
-    display: flex;
-}
-
-.lyrics-panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 14px;
-    background: linear-gradient(135deg, var(--bg-card), rgba(142, 36, 170, 0.15));
-    border-bottom: 1px solid var(--border);
-}
-
-.lyrics-panel-title {
-    font-weight: bold;
-    color: var(--accent-purple);
-    font-size: 0.95rem;
-}
-
-.lyrics-close-btn {
-    width: 24px;
-    height: 24px;
-    background: transparent;
-    color: var(--text-dim);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.lyrics-close-btn:hover {
-    color: var(--accent-red);
-    background: rgba(229, 57, 53, 0.1);
-}
-
-.lyrics-panel-body {
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.lyrics-textarea {
-    width: 100%;
-    min-height: 80px;
-    padding: 8px 10px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-main);
-    font-size: 0.85rem;
-    font-family: 'Noto Sans TC', sans-serif;
-    resize: vertical;
-}
-
-.lyrics-textarea:focus {
-    border-color: var(--accent-purple);
-    outline: none;
-}
-
-.lyrics-speed-section {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.lyrics-label {
-    font-size: 0.8rem;
-    color: var(--text-dim);
-    white-space: nowrap;
-}
-
-.lyrics-speed-slider {
-    flex: 1;
-    height: 6px;
-    -webkit-appearance: none;
-    background: var(--bg-input);
-    border-radius: 3px;
-    outline: none;
-    cursor: pointer;
-}
-
-.lyrics-speed-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    background: var(--accent-purple);
-    border-radius: 50%;
-    cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-}
-
-.lyrics-speed-slider::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    background: var(--accent-purple);
-    border-radius: 50%;
-    cursor: pointer;
-    border: none;
-}
-
-.lyrics-speed-val {
-    font-size: 0.8rem;
-    color: var(--accent-purple);
-    font-family: 'JetBrains Mono', monospace;
-    min-width: 45px;
-    text-align: right;
-}
-
-/* Tap Tempo Section */
-.tap-tempo-section {
-    border: 2px dashed var(--border);
-    border-radius: 8px;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
-
-.tap-tempo-btn {
-    width: 100%;
-    padding: 14px 12px;
-    background: var(--bg-card);
-    border: 2px solid var(--accent-purple);
-    border-radius: 8px;
-    color: var(--accent-purple);
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-    font-family: 'Noto Sans TC', sans-serif;
-}
-
-.tap-tempo-btn:hover {
-    background: rgba(142, 36, 170, 0.15);
-}
-
-.tap-tempo-btn:active,
-.tap-tempo-btn.tap-flash {
-    background: var(--accent-purple);
-    color: #fff;
-    transform: scale(0.97);
-}
-
-.tap-bpm-display {
-    font-size: 0.85rem;
-    color: var(--text-dim);
-    font-family: 'JetBrains Mono', monospace;
-}
-
-/* Lyrics Play Controls */
-.lyrics-play-section {
-    display: flex;
-    gap: 8px;
-}
-
-.lyrics-btn {
-    flex: 1;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.15s;
-}
-
-.lyrics-btn-play {
-    background: var(--accent-green);
-    color: #000;
-}
-
-.lyrics-btn-play:hover {
-    filter: brightness(1.1);
-}
-
-.lyrics-btn-stop {
-    background: var(--bg-input);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-}
-
-.lyrics-btn-stop:hover {
-    background: var(--accent-red);
-    color: #fff;
-    border-color: var(--accent-red);
-}
-
-/* Lyrics Display */
-.lyrics-display {
-    min-height: 60px;
-    max-height: 120px;
-    overflow-y: auto;
-    padding: 10px;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--accent-yellow);
-    font-size: 1rem;
-    font-weight: 500;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-break: break-all;
-    display: none;
 }
 
 /* Token Number Badge - 小怪尾數編號 */
@@ -5595,6 +5392,14 @@ body.combat-mode .boss-hud-container {
     font-weight: 700;
     color: var(--accent-yellow, #fdd835);
     border-bottom: 1px solid var(--border, #2a2a30);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.log-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 .log-dps-stat {
     padding: 8px 14px;
@@ -5711,7 +5516,7 @@ body.combat-mode .boss-hud-container {
     padding: 8px;
     font-size: .85rem;
 }
-.encounter-preview { resize: vertical; line-height: 1.5; color: #8bd17c; }
+.encounter-preview { resize: vertical; line-height: 1.5; color: #8bd17c; font-family: monospace; white-space: pre; }
 .lv-btn {
     border: 1px solid var(--border, #2a2a30);
     border-radius: 6px;

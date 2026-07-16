@@ -165,6 +165,51 @@ input[type="number"] {
         0 0 60px rgba(229, 57, 53, 0.08);
 }
 
+.login-subtitle {
+    color: var(--text-dim);
+    margin-bottom: 20px;
+}
+
+.login-hint {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+}
+
+.login-input {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.login-code-input {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 4px;
+}
+
+.login-loading-text {
+    color: var(--accent-green);
+    margin-bottom: 10px;
+}
+
+.login-loading-status {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.login-box--wide {
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.room-list-container {
+    margin: 15px 0;
+}
+
 .login-title {
     font-size: 1.8rem;
     font-weight: 700;
@@ -212,6 +257,10 @@ input[type="number"] {
     background: linear-gradient(160deg, #5fb1f5, var(--accent-blue) 55%, #0f4f8c);
 }
 
+.btn-manage {
+    background: var(--accent-blue);
+}
+
 .btn-back {
     background: linear-gradient(160deg, var(--bg-card), #101013);
     color: var(--text-dim);
@@ -254,6 +303,20 @@ input[type="number"] {
 .nav-tab.active {
     background: var(--bg-card);
     color: var(--text-main);
+}
+
+.nav-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 導覽列上的識別碼晶片（比登入畫面的 .player-code 更緊湊）
+   用複合選擇器壓過檔案後方的 .player-code 基礎樣式 */
+.player-code.nav-code {
+    font-size: 0.9rem;
+    padding: 4px 8px;
+    margin: 0;
 }
 
 .id-badge {
@@ -327,6 +390,38 @@ input[type="number"] {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.sidebar-title {
+    font-weight: bold;
+    color: var(--accent-yellow);
+}
+
+.sidebar-close-btn {
+    background: none;
+    color: var(--text-dim);
+    font-size: 1.2rem;
+}
+
+.tile-info-title {
+    color: var(--accent-yellow);
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+/* 地圖頁右側主欄（工具列＋視口） */
+.map-main-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* 地圖尺寸輸入之間的 x 分隔字 */
+.size-sep {
+    font-size: 0.8rem;
+    color: #555;
 }
 
 .sidebar-content {

@@ -34,14 +34,23 @@ function initModals() {
                         <button onclick="clearTemplateAvatar()" style="margin-top:6px;font-size:0.75rem;background:none;border:none;color:var(--accent-red);cursor:pointer;">清除頭像</button>
                     </div>
 
-                    <input type="text" id="add-name" placeholder="名稱">
+                    <div class="calc-field">
+                        <span class="calc-label">名稱</span>
+                        <input type="text" id="add-name" placeholder="例：清掃者A">
+                    </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                        <input type="number" id="add-hp" value="10" placeholder="HP">
-                        <select id="add-type">
-                            <option value="enemy">敵方</option>
-                            <option value="player">我方</option>
-                            <option value="boss">BOSS (首領)</option>
-                        </select>
+                        <div class="calc-field">
+                            <span class="calc-label">生命上限（HP）</span>
+                            <input type="number" id="add-hp" value="10" min="1">
+                        </div>
+                        <div class="calc-field">
+                            <span class="calc-label">陣營</span>
+                            <select id="add-type">
+                                <option value="enemy">敵方</option>
+                                <option value="player">我方</option>
+                                <option value="boss">BOSS (首領)</option>
+                            </select>
+                        </div>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
                         <div class="calc-field">
@@ -53,7 +62,7 @@ function initModals() {
                             </select>
                         </div>
                         <div class="calc-field" style="display:flex;align-items:flex-end;">
-                            <label><input type="checkbox" id="add-avatar"> 上傳頭像</label>
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="add-avatar"> 上傳頭像</label>
                         </div>
                     </div>
 

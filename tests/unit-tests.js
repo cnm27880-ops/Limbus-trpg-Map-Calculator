@@ -800,6 +800,69 @@ console.log('\n[骰先攻面板] irSetAll 快速勾選（全選／僅敵方/BOSS
     });
 })();
 
+// ====================================================================
+console.log('\n[骰先攻自動化] rollInitiative 自動疊加迅捷／束縛');
+// ====================================================================
+(() => {
+    let cells;
+    const rollSandbox = {
+        console,
+        myRole: 'st',
+        state: { units: [] },
+        findUnitById: (id) => rollSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        broadcastState: () => {},
+        document: {
+            querySelectorAll: (sel) => sel === '#init-roll-modal .ir-check:checked' ? rollSandbox.__checked : [],
+            getElementById: (id) => cells[id] || null,
+            addEventListener: () => {},
+            readyState: 'complete',
+        },
+        // 讓 1D10 固定擲出 1（0.05*10 取整 +1 = 1），只驗證迅捷/束縛的疊加，不涉隨機性
+        Math: { random: () => 0.05, floor: Math.floor, max: Math.max, min: Math.min },
+        window: undefined,
+    };
+    vm.createContext(rollSandbox);
+    const rollSrc = readSource('src/config/status-config.js') + '\n;\n' + readSource('src/ui/units.js')
+        + '\n;\nvar __roll = { rollInitiative, irGetStatusLayers };';
+    vm.runInContext(rollSrc, rollSandbox, { filename: 'roll-init.js' });
+    const { rollInitiative } = rollSandbox.__roll;
+
+    function setup(unit) {
+        cells = { ['ir-result-' + unit.id]: { textContent: '' } };
+        rollSandbox.state.units = [unit];
+        rollSandbox.__checked = [{ value: unit.id }];
+    }
+
+    test('迅捷 3 層 → 先攻值 = D10(1) + 加值 + 3', () => {
+        setup({ id: 'u1', initBonus: 2, status: { '迅捷': '3' } });
+        rollInitiative();
+        const u = rollSandbox.state.units[0];
+        assert.strictEqual(u.init, 1 + 2 + 3, '應自動加上迅捷層數');
+    });
+
+    test('束縛 2 層 → 先攻值 = D10(1) + 加值 - 2', () => {
+        setup({ id: 'u2', initBonus: 0, status: { '束縛': '2' } });
+        rollInitiative();
+        const u = rollSandbox.state.units[0];
+        assert.strictEqual(u.init, 1 + 0 - 2, '應自動扣除束縛層數');
+    });
+
+    test('迅捷與束縛同時存在 → 一併疊加（不互相抵銷判斷，直接加減）', () => {
+        setup({ id: 'u3', initBonus: 1, status: { '迅捷': '4', '束縛': '1' } });
+        rollInitiative();
+        const u = rollSandbox.state.units[0];
+        assert.strictEqual(u.init, 1 + 1 + 4 - 1);
+    });
+
+    test('無迅捷/束縛時行為不變：先攻值 = D10 + 加值', () => {
+        setup({ id: 'u4', initBonus: 5, status: {} });
+        rollInitiative();
+        const u = rollSandbox.state.units[0];
+        assert.strictEqual(u.init, 1 + 5);
+    });
+})();
+
 // ===== AOE 多重行動支援 =====
 // 驗證 BOSS 第 7 個行動也能被 AOE 模式辨識
 (function () {

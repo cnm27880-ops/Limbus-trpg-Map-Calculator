@@ -841,11 +841,17 @@ function openInitRollModal() {
             ? `${(findUnitById(u.actionSlotOf)?.name) || ''}・行動${u.slotIndex || ''}`
             : (u.name || '未命名');
         const typeTxt = u.type === 'boss' ? 'BOSS' : u.type === 'enemy' ? '敵方' : '我方';
+        const swift = irGetStatusLayers(u, 'swiftness');
+        const bind = irGetStatusLayers(u, 'bind');
+        const statusParts = [];
+        if (swift) statusParts.push(`迅捷+${swift}`);
+        if (bind) statusParts.push(`束縛-${bind}`);
+        const statusTxt = statusParts.length ? `｜${statusParts.join('、')}` : '';
         return `
             <label class="init-roll-row">
                 <input type="checkbox" class="ir-check" value="${u.id}" data-type="${u.type}" checked>
                 <span class="irr-name">${escapeHtml(label)}</span>
-                <span class="irr-bonus">${typeTxt}｜加值 ${u.initBonus || 0}</span>
+                <span class="irr-bonus">${typeTxt}｜加值 ${u.initBonus || 0}${statusTxt}</span>
                 <span class="irr-result" id="ir-result-${u.id}">目前 ${u.init || 0}</span>
             </label>`;
     }).join('');
@@ -892,7 +898,19 @@ function irSetAll(mode) {
     });
 }
 
-/** 對勾選單位各擲 1D10 + 先攻加值，寫入先攻序列並廣播 */
+/** 取得單位某狀態（依狀態庫 id 對應的中文名稱）目前的層數，找不到定義或無此狀態時回傳 0。 */
+function irGetStatusLayers(unit, statusId) {
+    if (!unit || !unit.status) return 0;
+    const def = (typeof getStatusById === 'function') ? getStatusById(statusId) : null;
+    const name = def ? def.name : null;
+    if (!name) return 0;
+    return parseInt(unit.status[name]) || 0;
+}
+
+/**
+ * 對勾選單位各擲 1D10 + 先攻加值，並自動疊加【迅捷】（+層數）／【束縛】（-層數）對先攻值的影響，
+ * 寫入先攻序列並廣播——不再需要 ST 手動把這兩個狀態的層數算進先攻加值。
+ */
 function rollInitiative() {
     if (myRole !== 'st') return;
     const checks = document.querySelectorAll('#init-roll-modal .ir-check:checked');
@@ -906,13 +924,21 @@ function rollInitiative() {
         if (!u) return;
         const d10 = Math.floor(Math.random() * 10) + 1;
         const bonus = parseInt(u.initBonus) || 0;
-        u.init = d10 + bonus;
+        const swift = irGetStatusLayers(u, 'swiftness');
+        const bind = irGetStatusLayers(u, 'bind');
+        u.init = d10 + bonus + swift - bind;
         rolled++;
         const cell = document.getElementById('ir-result-' + u.id);
-        if (cell) cell.textContent = `${d10}+${bonus} = ${u.init}`;
+        if (cell) {
+            const statusParts = [];
+            if (swift) statusParts.push(`迅捷+${swift}`);
+            if (bind) statusParts.push(`束縛-${bind}`);
+            const statusTxt = statusParts.length ? `（${statusParts.join('、')}）` : '';
+            cell.textContent = `${d10}+${bonus}${statusTxt} = ${u.init}`;
+        }
     });
     broadcastState();
-    showToast(`🎲 已為 ${rolled} 個單位擲先攻並填入`);
+    showToast(`🎲 已為 ${rolled} 個單位擲先攻並填入（自動計入迅捷／束縛）`);
 }
 
 /**

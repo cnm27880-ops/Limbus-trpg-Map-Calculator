@@ -801,14 +801,14 @@ console.log('\n[骰先攻面板] irSetAll 快速勾選（全選／僅敵方/BOSS
 })();
 
 // ====================================================================
-console.log('\n[骰先攻自動化] rollInitiative 自動疊加迅捷／束縛');
+console.log('\n[先攻] rollInitiative 為無狀態基準；sortByInit 依「有效先攻」即時排序');
 // ====================================================================
 (() => {
     let cells;
     const rollSandbox = {
         console,
         myRole: 'st',
-        state: { units: [] },
+        state: { units: [], turnIdx: 0 },
         findUnitById: (id) => rollSandbox.state.units.find(u => u && u.id === id) || null,
         showToast: () => {},
         broadcastState: () => {},
@@ -818,48 +818,45 @@ console.log('\n[骰先攻自動化] rollInitiative 自動疊加迅捷／束縛')
             addEventListener: () => {},
             readyState: 'complete',
         },
-        // 讓 1D10 固定擲出 1（0.05*10 取整 +1 = 1），只驗證迅捷/束縛的疊加，不涉隨機性
+        // 讓 1D10 固定擲出 1（0.05*10 取整 +1 = 1），排除隨機性
         Math: { random: () => 0.05, floor: Math.floor, max: Math.max, min: Math.min },
         window: undefined,
     };
     vm.createContext(rollSandbox);
     const rollSrc = readSource('src/config/status-config.js') + '\n;\n' + readSource('src/ui/units.js')
-        + '\n;\nvar __roll = { rollInitiative, irGetStatusLayers };';
+        + '\n;\nvar __roll = { rollInitiative, sortByInit, getEffectiveInit };';
     vm.runInContext(rollSrc, rollSandbox, { filename: 'roll-init.js' });
-    const { rollInitiative } = rollSandbox.__roll;
+    const { rollInitiative, sortByInit, getEffectiveInit } = rollSandbox.__roll;
 
-    function setup(unit) {
-        cells = { ['ir-result-' + unit.id]: { textContent: '' } };
-        rollSandbox.state.units = [unit];
-        rollSandbox.__checked = [{ value: unit.id }];
-    }
-
-    test('迅捷 3 層 → 先攻值 = D10(1) + 加值 + 3', () => {
-        setup({ id: 'u1', initBonus: 2, status: { '迅捷': '3' } });
+    test('rollInitiative：擲骰結果不讀取迅捷／束縛，只有 D10 + 先攻加值（無狀態基準）', () => {
+        cells = { 'ir-result-u1': { textContent: '' } };
+        rollSandbox.state.units = [{ id: 'u1', initBonus: 2, status: { '迅捷': '3', '束縛': '9' } }];
+        rollSandbox.__checked = [{ value: 'u1' }];
         rollInitiative();
-        const u = rollSandbox.state.units[0];
-        assert.strictEqual(u.init, 1 + 2 + 3, '應自動加上迅捷層數');
+        assert.strictEqual(rollSandbox.state.units[0].init, 1 + 2, '先攻基準不應被狀態污染');
     });
 
-    test('束縛 2 層 → 先攻值 = D10(1) + 加值 - 2', () => {
-        setup({ id: 'u2', initBonus: 0, status: { '束縛': '2' } });
-        rollInitiative();
-        const u = rollSandbox.state.units[0];
-        assert.strictEqual(u.init, 1 + 0 - 2, '應自動扣除束縛層數');
+    test('getEffectiveInit：先攻基準 + 迅捷層數 - 束縛層數', () => {
+        const u = { init: 10, status: { '迅捷': '3', '束縛': '1' } };
+        assert.strictEqual(getEffectiveInit(u), 10 + 3 - 1);
     });
 
-    test('迅捷與束縛同時存在 → 一併疊加（不互相抵銷判斷，直接加減）', () => {
-        setup({ id: 'u3', initBonus: 1, status: { '迅捷': '4', '束縛': '1' } });
-        rollInitiative();
-        const u = rollSandbox.state.units[0];
-        assert.strictEqual(u.init, 1 + 1 + 4 - 1);
+    test('getEffectiveInit：無狀態時等於先攻基準本身', () => {
+        assert.strictEqual(getEffectiveInit({ init: 7, status: {} }), 7);
     });
 
-    test('無迅捷/束縛時行為不變：先攻值 = D10 + 加值', () => {
-        setup({ id: 'u4', initBonus: 5, status: {} });
-        rollInitiative();
-        const u = rollSandbox.state.units[0];
-        assert.strictEqual(u.init, 1 + 5);
+    test('sortByInit：依「有效先攻」排序，不需手動把迅捷/束縛換算進先攻數值', () => {
+        // a 基準較低但迅捷 5 層，實質應排在基準較高、束縛 3 層的 b 之前
+        const a = { id: 'a', init: 5, status: { '迅捷': '5' } };   // 有效 10
+        const b = { id: 'b', init: 11, status: { '束縛': '3' } };  // 有效 8
+        const c = { id: 'c', init: 9, status: {} };                // 有效 9
+        rollSandbox.state.units = [b, a, c];
+        rollSandbox.state.turnIdx = 0;
+        sortByInit();
+        assert.deepStrictEqual(rollSandbox.state.units.map(u => u.id), ['a', 'c', 'b']);
+        // 排序不應改動先攻基準本身（狀態隨時會變化，基準要保持乾淨可重算）
+        assert.strictEqual(a.init, 5);
+        assert.strictEqual(b.init, 11);
     });
 })();
 

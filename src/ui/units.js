@@ -892,7 +892,7 @@ function irSetAll(mode) {
     });
 }
 
-/** 對勾選單位各擲 1D10 + 先攻加值，寫入先攻序列並廣播 */
+/** 對勾選單位各擲 1D10 + 先攻加值，寫入先攻序列並廣播。 */
 function rollInitiative() {
     if (myRole !== 'st') return;
     const checks = document.querySelectorAll('#init-roll-modal .ir-check:checked');
@@ -915,8 +915,29 @@ function rollInitiative() {
     showToast(`🎲 已為 ${rolled} 個單位擲先攻並填入`);
 }
 
+/** 取得單位某狀態（依狀態庫 id 對應的中文名稱）目前的層數，找不到定義或無此狀態時回傳 0。 */
+function irGetStatusLayers(unit, statusId) {
+    if (!unit || !unit.status) return 0;
+    const def = (typeof getStatusById === 'function') ? getStatusById(statusId) : null;
+    const name = def ? def.name : null;
+    if (!name) return 0;
+    return parseInt(unit.status[name]) || 0;
+}
+
 /**
- * 依先攻排序
+ * 「有效先攻」＝先攻序列（1D10＋先攻加值的無狀態基準，戰鬥中不會被狀態動去改動）
+ * 再疊加【迅捷】（+層數）／【束縛】（-層數）目前的即時層數。
+ * 先攻基準本身刻意不寫入狀態，因為狀態在戰鬥中隨時可能變化——擲骰當下算進去的層數，
+ * 下一秒可能就過期；只在「依先攻排序」當下才即時讀取現況，排序永遠反映最新狀態。
+ */
+function getEffectiveInit(unit) {
+    const base = parseInt(unit && unit.init) || 0;
+    return base + irGetStatusLayers(unit, 'swiftness') - irGetStatusLayers(unit, 'bind');
+}
+
+/**
+ * 依先攻排序：以「有效先攻」（先攻序列 + 當下迅捷／束縛層數）排序，
+ * 不需要 ST 手動把這兩個狀態換算進先攻數值——每次排序都即時反映目前狀態。
  */
 function sortByInit() {
     if (myRole !== 'st') {
@@ -927,7 +948,7 @@ function sortByInit() {
     const currentUnit = state.units[state.turnIdx];
     const currentUnitId = currentUnit ? currentUnit.id : null;
 
-    state.units.sort((a, b) => b.init - a.init);
+    state.units.sort((a, b) => getEffectiveInit(b) - getEffectiveInit(a));
 
     // 找回該單位的新索引
     if (currentUnitId) {

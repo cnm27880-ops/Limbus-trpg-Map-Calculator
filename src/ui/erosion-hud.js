@@ -198,20 +198,6 @@ function eroGetSelectedValues(containerId) {
 function eroIsEnemy(u) { return u && (u.type === 'enemy' || u.type === 'boss'); }
 function eroIsPlayer(u) { return u && u.type === 'player'; }
 
-/**
- * 「主線給予之支線等級」：侵蝕層數單次消耗上限（補充規則 1）。
- * 優先取作用中 BOSS 的支線等級，否則取場上第一隻本體 BOSS；無 BOSS 時回退 1。
- * @returns {{ level: number, bossName: string }}
- */
-function eroSideLevelCap() {
-    let boss = null;
-    if (typeof state !== 'undefined' && Array.isArray(state.units)) {
-        if (state.activeBossId && typeof findUnitById === 'function') boss = findUnitById(state.activeBossId);
-        if (!boss) boss = state.units.find(u => u && (u.type === 'boss' || u.isBoss) && !u.actionSlotOf) || null;
-    }
-    return { level: Math.max(1, (boss && parseInt(boss.sideLevel)) || 1), bossName: (boss && boss.name) || '' };
-}
-
 function eroGetErosionLayers(unit) {
     if (!unit || !unit.status) return 0;
     return parseInt(unit.status[ERO_STATUS_NAME]) || 0;
@@ -222,21 +208,18 @@ function renderErosionConsole() {
     if (!body) return;
 
     // 保留目前選取，避免重繪時清空
+    // 「吸收者」與「復活目標」共用同一份勾選清單：在侵蝕台復活的玩家本來就是吸收罪業的人，不再分開選取。
     const prevSource = document.getElementById('ero-source')?.value || '';
-    const prevAbsorbers = eroGetSelectedValues('ero-absorber');
+    const prevTargets = eroGetSelectedValues('ero-revive-target');
     const prevThreshold = document.getElementById('ero-threshold')?.value || ERO_DEFAULT_THRESHOLD;
-    const prevReviveTargets = eroGetSelectedValues('ero-revive-target');
     const prevGain = document.getElementById('ero-gain-amount')?.value || 1;
-    const prevConsume = document.getElementById('ero-consume-amount')?.value || 1;
 
-    // 暴走閾值狀態列：多選吸收者時，僅以第一位作為顯示／判定基準（與單選邏輯相容）
-    const firstAbsorberId = prevAbsorbers[0] || '';
-    const absorber = (typeof findUnitById === 'function' && firstAbsorberId) ? findUnitById(firstAbsorberId) : null;
+    // 暴走閾值狀態列：多選目標玩家時，僅以第一位作為顯示／判定基準（與單選邏輯相容）
+    const firstTargetId = prevTargets[0] || '';
+    const absorber = (typeof findUnitById === 'function' && firstTargetId) ? findUnitById(firstTargetId) : null;
     const absorberErosion = eroGetErosionLayers(absorber);
     const threshold = parseInt(prevThreshold, 10) || ERO_DEFAULT_THRESHOLD;
     const overloadReady = absorber && absorberErosion >= threshold;
-    // 補充規則 1：單次攻擊可消耗的侵蝕層數上限＝主線給予之支線等級
-    const sideCap = eroSideLevelCap();
 
     body.innerHTML = `
         <div class="ero-section">
@@ -251,18 +234,16 @@ function renderErosionConsole() {
                 <button class="ero-btn ero-plus" onclick="eroSetClock(4)">+4 主線完成</button>
                 <button class="ero-btn ero-reset" onclick="eroResetClock()">↺ 滿血 (24)</button>
             </div>
-            <div class="ero-field" style="margin-top:6px;"><label>獲取刻度：章節首開基因鎖（1階+1、2階+2…）／轉盤獎品向主神兌換</label>
-                <div class="ero-gain-row">
-                    <input id="ero-gain-amount" class="ero-input" type="number" min="0.5" step="0.5" value="${prevGain}">
-                    <button class="ero-btn ero-plus" onclick="eroGainTicks('🧬 基因鎖首開')">🧬 基因鎖首開</button>
-                    <button class="ero-btn ero-plus" onclick="eroGainTicks('🎡 轉盤兌換')">🎡 轉盤兌換</button>
-                </div>
+            <div class="ero-gain-row" style="margin-top:6px;" title="獲取刻度：章節首開基因鎖（1階+1、2階+2…）／轉盤獎品向主神兌換">
+                <input id="ero-gain-amount" class="ero-input" type="number" min="0.5" step="0.5" value="${prevGain}">
+                <button class="ero-btn ero-plus" onclick="eroGainTicks('🧬 基因鎖首開')">🧬 基因鎖首開</button>
+                <button class="ero-btn ero-plus" onclick="eroGainTicks('🎡 轉盤兌換')">🎡 轉盤兌換</button>
             </div>
         </div>
 
         <div class="ero-section">
-            <div class="ero-section-title">⛑️ 復活與刻度連動</div>
-            <div class="ero-field"><label>目標玩家（可點多個，同回合多人復活時請一起選取）</label>
+            <div class="ero-section-title">⛑️🩸 復活／吸收者與刻度連動</div>
+            <div class="ero-field"><label>目標玩家（可點多個；同回合多人復活時請一起選取——在此復活的玩家即是抽取罪業時的吸收者，均攤侵蝕層數）</label>
                 <div id="ero-revive-target" class="ero-chip-list"></div></div>
             <button class="ero-btn ero-revive" onclick="eroReviveTarget()">⛑️ 復活並重置血量</button>
             <div id="ero-revive-tick-prompt" class="ero-btn-row hidden">
@@ -276,23 +257,14 @@ function renderErosionConsole() {
             <div class="ero-section-title">🩸 罪業抽取與侵蝕暴走</div>
             <div class="ero-field"><label>來源（敵方）</label>
                 <select id="ero-source" class="ero-select"></select></div>
-            <div class="ero-field"><label>吸收者（玩家，可點多個；多人復活時將均攤抽取到的侵蝕層數）</label>
-                <div id="ero-absorber" class="ero-chip-list"></div></div>
             <div class="ero-field"><label>暴走閾值</label>
                 <input id="ero-threshold" class="ero-input" type="number" min="1" value="${threshold}" onchange="renderErosionConsole()"></div>
 
             <div class="ero-status-line">
-                吸收者目前侵蝕增幅（第一位）：<b class="${overloadReady ? 'ero-over' : ''}">${absorberErosion}</b> / ${threshold}
+                目標玩家目前侵蝕增幅（第一位）：<b class="${overloadReady ? 'ero-over' : ''}">${absorberErosion}</b> / ${threshold}
             </div>
 
-            <button class="ero-btn ero-drain" onclick="eroDrainSin()">🩸 抽取罪業（均攤給所有已選吸收者）</button>
-
-            <div class="ero-subrule">
-                <div class="ero-subrule-title">⚔️ 補充規則：攻擊消耗侵蝕層數（尚未進入侵蝕狀態時）</div>
-                <div class="ero-field"><label>本次攻擊消耗層數（上限＝主線給予之支線等級 ${sideCap.level}${sideCap.bossName ? `，取自「${sideCap.bossName}」` : ''}；作用於第一位已選吸收者）</label>
-                    <input id="ero-consume-amount" class="ero-input" type="number" min="1" max="${sideCap.level}" value="${prevConsume}"></div>
-                <button class="ero-btn ero-consume" onclick="eroConsumeErosion()">⚔️ 消耗層數（該次攻擊受等同層數的減值）</button>
-            </div>
+            <button class="ero-btn ero-drain" onclick="eroDrainSin()">🩸 抽取罪業（均攤給上方所有已選目標玩家）</button>
 
             <div class="ero-overload-area">
                 <button class="ero-btn ero-roll" onclick="eroRollTarget()" ${overloadReady ? '' : 'disabled'}>
@@ -304,8 +276,8 @@ function renderErosionConsole() {
 
     // 單位下拉以 DOM 填充（名稱用 textContent，避免 innerHTML 注入）
     eroPopulateSelect('ero-source', eroIsEnemy, prevSource);
-    eroPopulateChips('ero-absorber', eroIsPlayer, prevAbsorbers, 'ero-chip-absorber', renderErosionConsole);
-    eroPopulateChips('ero-revive-target', eroIsPlayer, prevReviveTargets, 'ero-chip-revive');
+    // 吸收者與復活目標共用同一份清單：勾選變動時需重繪以更新暴走閾值顯示
+    eroPopulateChips('ero-revive-target', eroIsPlayer, prevTargets, 'ero-chip-revive ero-chip-absorber', renderErosionConsole);
 }
 
 // ===== 復活並重置血量（與刻度連動） =====
@@ -345,37 +317,6 @@ function eroGainTicks(label) {
     if (typeof showToast === 'function') showToast(`${label}：刻度 +${v}`);
 }
 
-// ===== 補充規則 1：攻擊消耗侵蝕層數（尚未進入侵蝕狀態時） =====
-/**
- * 玩家具有侵蝕層數、但尚未進入侵蝕（暴走）狀態時，一次攻擊可消耗最多
- * 「主線給予之支線等級」的層數，該次攻擊受到等同消耗層數的減值。
- * 由 ST 在此代為扣除層數；攻擊減值以 toast 提醒 ST 於審核時套用。
- */
-function eroConsumeErosion() {
-    if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const absorberId = eroGetSelectedValues('ero-absorber')[0] || '';
-    const absorber = (typeof findUnitById === 'function') ? findUnitById(absorberId) : null;
-    if (!absorber) { if (typeof showToast === 'function') showToast('請先在上方選擇吸收者（玩家）'); return; }
-
-    const layers = eroGetErosionLayers(absorber);
-    if (layers <= 0) { if (typeof showToast === 'function') showToast('該玩家沒有侵蝕增幅層數'); return; }
-
-    const cap = eroSideLevelCap().level;
-    const raw = parseInt(document.getElementById('ero-consume-amount')?.value, 10) || 0;
-    const amount = Math.min(raw, cap, layers);
-    if (amount <= 0) { if (typeof showToast === 'function') showToast('請輸入要消耗的層數（至少 1）'); return; }
-
-    const remaining = layers - amount;
-    if (remaining > 0) absorber.status[ERO_STATUS_NAME] = String(remaining);
-    else delete absorber.status[ERO_STATUS_NAME];
-    if (typeof syncUnitStatus === 'function') syncUnitStatus(absorberId);
-
-    if (typeof showToast === 'function') {
-        showToast(`⚔️ ${absorber.name || '玩家'} 消耗 ${amount} 層侵蝕增幅（剩 ${remaining}）：本次攻擊受 −${amount} 減值`);
-    }
-    renderErosionConsole();
-}
-
 // ===== 刻度操作 =====
 function eroWriteClock(next) {
     const clamped = Math.max(0, Math.min(ERO_CLOCK_MAX, Math.round(next * 10) / 10));
@@ -401,46 +342,61 @@ function eroIsDebuffStatusName(name) {
 function eroDrainSin() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
     const sourceId = document.getElementById('ero-source')?.value || '';
-    const absorberIds = eroGetSelectedValues('ero-absorber');
-    if (!sourceId || !absorberIds.length) { if (typeof showToast === 'function') showToast('請先選擇來源與吸收者'); return; }
+    const targetIds = eroGetSelectedValues('ero-revive-target');
+    if (!sourceId || !targetIds.length) { if (typeof showToast === 'function') showToast('請先選擇來源與目標玩家'); return; }
 
     const source = (typeof findUnitById === 'function') ? findUnitById(sourceId) : null;
     if (!source || !source.status) { if (typeof showToast === 'function') showToast('來源沒有任何狀態'); return; }
 
-    // 只抽取每個負面狀態層數的一半（向下取整），保留另一半在來源身上；
-    // gained 以實際被扣除的層數總和為準，避免與「扣除量」不一致。
+    // 規則：抽取「當下」所有負面狀態層數總和的一半（先加總，只取一次整）。
+    const negativeEntries = [];
     let total = 0;
-    let gained = 0;
     for (const [name, val] of Object.entries(source.status)) {
         if (!eroIsDebuffStatusName(name)) continue;
         const layers = parseInt(val) || 0;
         if (layers <= 0) continue;
         total += layers;
-        const removeAmt = Math.floor(layers / 2);
-        if (removeAmt <= 0) continue;
-        gained += removeAmt;
-        const remaining = layers - removeAmt;
-        if (remaining > 0) source.status[name] = String(remaining);
-        else delete source.status[name];
+        negativeEntries.push({ name, layers, removeAmt: 0 });
     }
-
     if (total <= 0) { if (typeof showToast === 'function') showToast('來源沒有可抽取的負面狀態'); return; }
+
+    const gained = Math.floor(total / 2);
     if (gained <= 0) { if (typeof showToast === 'function') showToast('負面狀態層數不足以抽取（至少需 2 層）'); return; }
+
+    // 先在每個狀態上各自扣「向下取整的一半」，再把因取整流失的尾數依序補回，
+    // 使實際扣除總和精確等於 floor(總和 / 2)，不多不少。
+    let remainingToRemove = gained;
+    for (const entry of negativeEntries) {
+        entry.removeAmt = Math.min(entry.layers, Math.floor(entry.layers / 2));
+        remainingToRemove -= entry.removeAmt;
+    }
+    for (const entry of negativeEntries) {
+        if (remainingToRemove <= 0) break;
+        const extra = Math.min(remainingToRemove, entry.layers - entry.removeAmt);
+        entry.removeAmt += extra;
+        remainingToRemove -= extra;
+    }
+    for (const entry of negativeEntries) {
+        if (entry.removeAmt <= 0) continue;
+        const remaining = entry.layers - entry.removeAmt;
+        if (remaining > 0) source.status[entry.name] = String(remaining);
+        else delete source.status[entry.name];
+    }
 
     if (typeof syncUnitStatus === 'function') syncUnitStatus(sourceId);
 
-    // 轉化為吸收者的侵蝕增幅層數：同回合多人復活時，由所有已選吸收者均攤（無法整除的餘數依序分給前幾位，避免層數憑空消失）
-    const perHead = Math.floor(gained / absorberIds.length);
-    const remainder = gained - perHead * absorberIds.length;
+    // 轉化為目標玩家的侵蝕增幅層數：同回合多人復活時，由所有已選目標玩家均攤（無法整除的餘數依序分給前幾位，避免層數憑空消失）
+    const perHead = Math.floor(gained / targetIds.length);
+    const remainder = gained - perHead * targetIds.length;
     if (gained > 0 && typeof addStatusToUnit === 'function') {
-        absorberIds.forEach((id, idx) => {
+        targetIds.forEach((id, idx) => {
             const amount = perHead + (idx < remainder ? 1 : 0);
             if (amount > 0) addStatusToUnit(id, ERO_STATUS_ID, amount);
         });
     }
 
     if (typeof showToast === 'function') {
-        const splitNote = absorberIds.length > 1 ? `（${absorberIds.length} 人均攤）` : '';
+        const splitNote = targetIds.length > 1 ? `（${targetIds.length} 人均攤）` : '';
         showToast(`抽取罪業：來源 ${total} 層負面 → 共 +${gained} 侵蝕增幅${splitNote}`);
     }
     renderErosionConsole();
@@ -449,10 +405,10 @@ function eroDrainSin() {
 // ===== 暴走 1D2 判定與全場廣播 =====
 function eroRollTarget() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const absorberId = eroGetSelectedValues('ero-absorber')[0] || '';
+    const absorberId = eroGetSelectedValues('ero-revive-target')[0] || '';
     const threshold = parseInt(document.getElementById('ero-threshold')?.value, 10) || ERO_DEFAULT_THRESHOLD;
     const absorber = (typeof findUnitById === 'function') ? findUnitById(absorberId) : null;
-    if (!absorber) { if (typeof showToast === 'function') showToast('請先選擇吸收者'); return; }
+    if (!absorber) { if (typeof showToast === 'function') showToast('請先選擇目標玩家'); return; }
     if (eroGetErosionLayers(absorber) < threshold) { if (typeof showToast === 'function') showToast('尚未達到暴走閾值'); return; }
 
     const roll = Math.random() < 0.5 ? 1 : 2;
@@ -472,9 +428,9 @@ function eroRollTarget() {
 
 function eroBurnOut() {
     if (typeof myRole === 'undefined' || myRole !== 'st') return;
-    const absorberId = eroGetSelectedValues('ero-absorber')[0] || '';
+    const absorberId = eroGetSelectedValues('ero-revive-target')[0] || '';
     const absorber = (typeof findUnitById === 'function') ? findUnitById(absorberId) : null;
-    if (!absorber || !absorber.status) { if (typeof showToast === 'function') showToast('請先選擇吸收者'); return; }
+    if (!absorber || !absorber.status) { if (typeof showToast === 'function') showToast('請先選擇目標玩家'); return; }
     if (!absorber.status[ERO_STATUS_NAME]) { if (typeof showToast === 'function') showToast('該吸收者沒有侵蝕增幅'); return; }
     delete absorber.status[ERO_STATUS_NAME];
     if (typeof syncUnitStatus === 'function') syncUnitStatus(absorberId);
@@ -511,7 +467,6 @@ if (typeof window !== 'undefined') {
     window.eroResetClock = eroResetClock;
     window.eroDrainSin = eroDrainSin;
     window.eroGainTicks = eroGainTicks;
-    window.eroConsumeErosion = eroConsumeErosion;
     window.eroRollTarget = eroRollTarget;
     window.eroBurnOut = eroBurnOut;
     window.eroReviveTarget = eroReviveTarget;

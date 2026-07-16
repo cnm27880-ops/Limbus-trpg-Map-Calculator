@@ -5458,10 +5458,6 @@ body.combat-mode .boss-hud-container {
 .ero-btn.ero-roll { flex: 1; background: #2a1530; border-color: var(--accent-purple, #8e24aa); color: #d9a8ff; }
 .ero-btn.ero-burn { flex: 1; background: #2a1a0a; border-color: var(--accent-orange, #fb8c00); color: #ffba73; }
 .ero-overload-area { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-/* 補充規則：攻擊消耗侵蝕層數（未進入侵蝕狀態時） */
-.ero-subrule { border: 1px dashed var(--border, #33333a); border-radius: 6px; padding: 8px; margin-top: 8px; }
-.ero-subrule-title { font-size: .78rem; font-weight: 700; color: #ffba73; margin-bottom: 6px; }
-.ero-btn.ero-consume { width: 100%; background: #26150a; border-color: var(--accent-orange, #fb8c00); color: #ffba73; font-weight: 700; }
 .ero-subrule-note { font-size: .72rem; color: var(--text-dim, #aaa); line-height: 1.5; margin-top: 8px; border-top: 1px dashed var(--border, #33333a); padding-top: 6px; }
 /* 獲取刻度：基因鎖首開 / 轉盤兌換（輸入 + 兩顆快捷鈕同列） */
 .ero-gain-row { display: flex; gap: 6px; align-items: center; }

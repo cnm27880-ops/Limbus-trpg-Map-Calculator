@@ -179,17 +179,18 @@ function setupDrain(sourceStatus) {
         { id: 'hero', type: 'player', status: {} }
     ];
     domTable['ero-source'] = { value: 'boss' };
-    // ero-absorber 現在是「複選 chip」容器（見 erosion-hud.js eroGetSelectedValues），
-    // 以 querySelectorAll('input:checked') 讀取，故 stub 也改為同一介面。
-    domTable['ero-absorber'] = { querySelectorAll: () => [{ value: 'hero' }] };
+    // ero-revive-target 是「復活目標」與「吸收者」共用的複選 chip 容器
+    // （見 erosion-hud.js eroGetSelectedValues），以 querySelectorAll('input:checked') 讀取。
+    domTable['ero-revive-target'] = { querySelectorAll: () => [{ value: 'hero' }] };
 }
 
-test('只移除每個負面狀態的一半，保留另一半', () => {
+test('抽取「總和」的一半（先加總、只取一次整），不是逐項各自取一半再加總', () => {
     setupDrain({ 燃燒: '5', 流血: '3' });
     eroDrainSin();
     const boss = sandbox.findUnitById('boss');
-    // 燃燒 5 → 移除 floor(5/2)=2 → 剩 3；流血 3 → 移除 1 → 剩 2
-    assert.strictEqual(boss.status['燃燒'], '3', '燃燒應剩 3');
+    // 總和 8 → floor(8/2)=4；先各自 floor(5/2)=2、floor(3/2)=1（共 3），
+    // 尾數 1 依序補回第一項 → 燃燒多扣 1 層：燃燒剩 2、流血剩 2
+    assert.strictEqual(boss.status['燃燒'], '2', '燃燒應剩 2');
     assert.strictEqual(boss.status['流血'], '2', '流血應剩 2');
 });
 
@@ -202,13 +203,13 @@ test('增益/侵蝕增幅不被抽取', () => {
     assert.strictEqual(boss.status['燃燒'], '2', '燃燒 4 → 剩 2');
 });
 
-test('吸收者獲得的侵蝕增幅 = 實際抽取量總和', () => {
-    setupDrain({ 燃燒: '5', 流血: '3' }); // 抽 2 + 1 = 3
+test('吸收者獲得的侵蝕增幅 = floor(負面層數總和 / 2)', () => {
+    setupDrain({ 燃燒: '5', 流血: '3' }); // 總和 8 → floor(8/2)=4
     eroDrainSin();
     const grant = captured.addStatus.find(a => a.statusId === 'erosion_amplify');
     assert.ok(grant, '應有侵蝕增幅授予');
     assert.strictEqual(grant.unitId, 'hero');
-    assert.strictEqual(grant.amount, 3, '應 +3 侵蝕增幅');
+    assert.strictEqual(grant.amount, 4, '應 +4 侵蝕增幅');
 });
 
 test('僅 1 層的負面狀態 floor(1/2)=0：不被移除', () => {
@@ -796,6 +797,66 @@ console.log('\n[骰先攻面板] irSetAll 快速勾選（全選／僅敵方/BOSS
         checks = [makeCheck('player', false), makeCheck('enemy', true), makeCheck('boss', true)];
         irSetAll('player');
         assert.deepStrictEqual(checks.map(c => c.checked), [true, false, false]);
+    });
+})();
+
+// ====================================================================
+console.log('\n[先攻] rollInitiative 為無狀態基準；sortByInit 依「有效先攻」即時排序');
+// ====================================================================
+(() => {
+    let cells;
+    const rollSandbox = {
+        console,
+        myRole: 'st',
+        state: { units: [], turnIdx: 0 },
+        findUnitById: (id) => rollSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        broadcastState: () => {},
+        document: {
+            querySelectorAll: (sel) => sel === '#init-roll-modal .ir-check:checked' ? rollSandbox.__checked : [],
+            getElementById: (id) => cells[id] || null,
+            addEventListener: () => {},
+            readyState: 'complete',
+        },
+        // 讓 1D10 固定擲出 1（0.05*10 取整 +1 = 1），排除隨機性
+        Math: { random: () => 0.05, floor: Math.floor, max: Math.max, min: Math.min },
+        window: undefined,
+    };
+    vm.createContext(rollSandbox);
+    const rollSrc = readSource('src/config/status-config.js') + '\n;\n' + readSource('src/ui/units.js')
+        + '\n;\nvar __roll = { rollInitiative, sortByInit, getEffectiveInit };';
+    vm.runInContext(rollSrc, rollSandbox, { filename: 'roll-init.js' });
+    const { rollInitiative, sortByInit, getEffectiveInit } = rollSandbox.__roll;
+
+    test('rollInitiative：擲骰結果不讀取迅捷／束縛，只有 D10 + 先攻加值（無狀態基準）', () => {
+        cells = { 'ir-result-u1': { textContent: '' } };
+        rollSandbox.state.units = [{ id: 'u1', initBonus: 2, status: { '迅捷': '3', '束縛': '9' } }];
+        rollSandbox.__checked = [{ value: 'u1' }];
+        rollInitiative();
+        assert.strictEqual(rollSandbox.state.units[0].init, 1 + 2, '先攻基準不應被狀態污染');
+    });
+
+    test('getEffectiveInit：先攻基準 + 迅捷層數 - 束縛層數', () => {
+        const u = { init: 10, status: { '迅捷': '3', '束縛': '1' } };
+        assert.strictEqual(getEffectiveInit(u), 10 + 3 - 1);
+    });
+
+    test('getEffectiveInit：無狀態時等於先攻基準本身', () => {
+        assert.strictEqual(getEffectiveInit({ init: 7, status: {} }), 7);
+    });
+
+    test('sortByInit：依「有效先攻」排序，不需手動把迅捷/束縛換算進先攻數值', () => {
+        // a 基準較低但迅捷 5 層，實質應排在基準較高、束縛 3 層的 b 之前
+        const a = { id: 'a', init: 5, status: { '迅捷': '5' } };   // 有效 10
+        const b = { id: 'b', init: 11, status: { '束縛': '3' } };  // 有效 8
+        const c = { id: 'c', init: 9, status: {} };                // 有效 9
+        rollSandbox.state.units = [b, a, c];
+        rollSandbox.state.turnIdx = 0;
+        sortByInit();
+        assert.deepStrictEqual(rollSandbox.state.units.map(u => u.id), ['a', 'c', 'b']);
+        // 排序不應改動先攻基準本身（狀態隨時會變化，基準要保持乾淨可重算）
+        assert.strictEqual(a.init, 5);
+        assert.strictEqual(b.init, 11);
     });
 })();
 

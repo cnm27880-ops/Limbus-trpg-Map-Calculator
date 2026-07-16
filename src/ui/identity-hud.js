@@ -4,9 +4,9 @@
  * 職責：
  *  1. 轉接層（adapter）：在「引擎英文狀態鍵」與「網站中文狀態庫」之間互轉，
  *     讓 evaluatePlayerAttack 能讀取實際單位狀態，並把結算結果套用回單位。
- *  2. 人格卡面板（modal）：玩家挑選持有的人格卡、勾選重複抽取解鎖、
- *     指定我方/目標單位，計算疊加後的 DP・武器傷害・附加成功・狀態，
- *     並可一鍵載入到 DP 計算器，或把狀態實際套用到單位上。
+ *  2. 人格卡面板（modal）：玩家挑選持有的人格卡、勾選重複抽取解鎖；我方單位恆鎖定為玩家
+ *     自己控制的單位、目標自動偵測玩家上次發起攻擊的對象，全自動即時算出疊加後的
+ *     DP・武器傷害・附加成功・狀態，無需手動按鈕。
  *
  * 依賴（皆以 typeof 防呆，缺少時不致拋錯）：
  *   IDENTITY_LIBRARY / IDENTITY_STATUS_KEYMAP / getIdentityOwners / getIdentitiesByOwner /
@@ -103,12 +103,8 @@ let identityHudState = {
     owner: null,
     cards: {},          // cardId -> { owned: bool, unlocked: bool }
     cardInputs: {},     // cardId -> { key: value }（人格卡的特殊手動資源，如意志力/魔法阿卡納）
-    attackerId: null,
-    targetId: null,
-    atkRank: '',        // 先攻序位（空＝自動依先攻值推算）
-    atkSevere: false,   // 我方嚴重槽已滿
-    tgtSevere: false,   // 目標嚴重槽已滿
-    notActed: false,    // 目標本回合未行動
+    attackerId: null,   // 恆為玩家自己的單位（每次渲染自動鎖定，不可手動更改）
+    targetId: null,     // 自動偵測玩家上次發起攻擊的目標；仍可由下拉選單手動覆寫
     cardFilter: '',     // 卡片清單篩選字串（不持久化）
     lastResult: null
 };
@@ -557,12 +553,7 @@ function openIdentityModal() {
             if (owners.length) selectIdentityOwner(owners[0], true);
         }
     }
-    // 預設我方攻擊者＝自己控制的單位（方便玩家直接開算）
-    if (!identityHudState.attackerId && typeof state !== 'undefined' && Array.isArray(state.units)) {
-        const mine = (typeof myPlayerId !== 'undefined' && myPlayerId)
-            ? state.units.find(u => u.ownerId === myPlayerId) : null;
-        if (mine) identityHudState.attackerId = mine.id;
-    }
+    // 我方攻擊者的鎖定與同步交給 renderIdentityModal 每次渲染時處理
     renderIdentityModal();
     el.style.display = 'block';
     if (typeof WindowManager !== 'undefined') WindowManager.bringToFront(el);
@@ -672,16 +663,16 @@ function autoInitiativeRank(unitId) {
 // ===== 計算 =====
 
 /**
- * 實際計算疊加結果並寫入 lastResult。
- * @param {boolean} silent - true 時不顯示提示（供輸入變動時的即時重算使用）
+ * 實際計算疊加結果並寫入 lastResult。與 combat-modals.js 的 cmResolveIdentityBonus（實際攻擊時
+ * 的自動套用邏輯）採同一套規則：先攻序位自動推算、不假設嚴重槽／未行動等人工覆寫的條件，
+ * 讓這裡看到的預覽與發起攻擊時實際套用的結果一致。
  * @returns {boolean} 是否成功算出結果
  */
-function computeIdentityResult(silent) {
+function computeIdentityResult() {
     if (typeof evaluatePlayerAttack !== 'function') return false;
     const owned = collectOwnedIdentities();
     if (owned.length === 0) {
         identityHudState.lastResult = null;
-        if (!silent && typeof showToast === 'function') showToast('請先勾選至少一張持有的人格卡');
         return false;
     }
 
@@ -690,17 +681,12 @@ function computeIdentityResult(silent) {
     const targetUnit = (typeof findUnitById === 'function' && identityHudState.targetId)
         ? findUnitById(identityHudState.targetId) : null;
 
-    const rank = identityHudState.atkRank !== '' ? (parseInt(identityHudState.atkRank) || 0)
-        : (identityHudState.attackerId ? autoInitiativeRank(identityHudState.attackerId) : 0);
-
-    const attacker = buildEngineUnitState(attackerUnit, {
-        initiativeRank: rank,
-        severeFull: !!identityHudState.atkSevere
-    });
-    const target = buildEngineUnitState(targetUnit, {
-        severeFull: !!identityHudState.tgtSevere,
-        notActedThisTurn: !!identityHudState.notActed
-    });
+    const attackerExtra = {};
+    if (identityHudState.attackerId && typeof autoInitiativeRank === 'function') {
+        attackerExtra.initiativeRank = autoInitiativeRank(identityHudState.attackerId);
+    }
+    const attacker = buildEngineUnitState(attackerUnit, attackerExtra);
+    const target = buildEngineUnitState(targetUnit);
 
     // 疊加人格卡的「手動資源輸入」到攻擊者狀態，讓條件/動態數值（如魔法阿卡納層數、
     // 意志力正負判定型態）能據此計算。
@@ -829,18 +815,12 @@ function collectIdentityReminders(owned, attacker, target) {
     return out;
 }
 
-/** 「⚡ 計算」按鈕：計算並重繪（無卡片時提示）。 */
-function runIdentityCalc() {
-    computeIdentityResult(false);
-    renderIdentityModal();
-}
-
 /**
- * 即時重算：若已有結算結果，於任何輸入變動後同步更新，
- * 避免面板顯示與目前選擇不符的舊資料。
+ * 全自動即時重算：不再需要手動按「計算」——卡片勾選、目標變動時直接同步更新，
+ * renderIdentityModal 每次渲染前也會呼叫一次，確保結果恆與目前選擇一致。
  */
 function refreshIdentityResult() {
-    if (identityHudState.lastResult) computeIdentityResult(true);
+    computeIdentityResult();
 }
 
 // ===== 回合開始資源 =====
@@ -942,17 +922,25 @@ function autoTriggerIdentityTurnStart(unit) {
 
 // ===== 渲染 =====
 
+/** 目標下拉只列敵方／BOSS 單位（我方攻擊者已鎖定為玩家自己，不再需要選單位）。 */
 function renderIdentityUnitOptions(selectedId) {
     let opts = '<option value="">（未指定）</option>';
     if (typeof state !== 'undefined' && Array.isArray(state.units)) {
         for (const u of state.units) {
+            if (u.type !== 'enemy' && u.type !== 'boss') continue;
             const sel = (u.id === selectedId) ? ' selected' : '';
-            const tag = (u.type === 'enemy') ? '🔴' : '🔵';
             const safe = (typeof escapeHtml === 'function') ? escapeHtml(u.name || '') : (u.name || '');
-            opts += `<option value="${u.id}"${sel}>${tag} ${safe}（先攻 ${u.init || 0}）</option>`;
+            opts += `<option value="${u.id}"${sel}>🔴 ${safe}（先攻 ${u.init || 0}）</option>`;
         }
     }
     return opts;
+}
+
+/** 顯示鎖定為攻擊者的自身單位名稱（找不到時提示尚未偵測到自己的單位）。 */
+function idtSelfUnitLabel() {
+    const u = (typeof findUnitById === 'function' && identityHudState.attackerId)
+        ? findUnitById(identityHudState.attackerId) : null;
+    return u ? (u.name || '（未命名單位）') : '（尚未偵測到你的單位）';
 }
 
 /** 取得某卡關鍵狀態的中文名稱清單（引擎英文鍵 → 狀態庫中文名） */
@@ -1092,7 +1080,7 @@ function renderIdentityActiveSkills() {
 
 function renderIdentityResult() {
     const r = identityHudState.lastResult;
-    if (!r) return '<div class="idt-result-empty">設定完成後按「⚡ 計算疊加效果」</div>';
+    if (!r) return '<div class="idt-result-empty">請先在 ① 勾選至少一張持有的人格卡，結果會自動算出</div>';
 
     const bonusRows = [
         ['DP 加值', r.totalDpBonus],
@@ -1204,6 +1192,14 @@ function renderIdentityModal() {
     const oldBody = el.querySelector('.idt-body');
     const currentScroll = oldBody ? oldBody.scrollTop : 0;
 
+    // 我方（攻擊者）恆鎖定為玩家自己控制的單位，每次渲染都重新同步（無下拉可手動更改）
+    if (typeof myPlayerId !== 'undefined' && myPlayerId && typeof state !== 'undefined' && Array.isArray(state.units)) {
+        const mine = state.units.find(u => u.ownerId === myPlayerId);
+        if (mine) identityHudState.attackerId = mine.id;
+    }
+    // 全自動：每次渲染前先重算，結果面板永遠反映目前的卡片／目標選擇，不需手動按鈕
+    computeIdentityResult();
+
     const owners = (typeof getIdentityOwners === 'function') ? getIdentityOwners() : [];
     const ownerOpts = owners.map(o => {
         const sel = o === identityHudState.owner ? ' selected' : '';
@@ -1232,24 +1228,14 @@ function renderIdentityModal() {
                 </div>
 
                 <div class="idt-section">
-                    <div class="idt-section-title">② 指定單位與條件</div>
-                    <div class="idt-field"><label>我方（攻擊者）</label>
-                        <select class="idt-select" onchange="updateIdentityField('attackerId', this.value)">${renderIdentityUnitOptions(identityHudState.attackerId)}</select>
+                    <div class="idt-section-title">② 指定單位（全自動，結果即時更新）</div>
+                    <div class="idt-field"><label>我方（攻擊者，恆為你自己的單位）</label>
+                        <div class="idt-self-unit">${(typeof escapeHtml === 'function') ? escapeHtml(idtSelfUnitLabel()) : idtSelfUnitLabel()}</div>
                     </div>
-                    <div class="idt-field"><label>目標（敵方）</label>
+                    <div class="idt-field"><label>目標（敵方，自動偵測你上次發起攻擊的對象，也可手動改選）</label>
                         <select class="idt-select" onchange="updateIdentityField('targetId', this.value)">${renderIdentityUnitOptions(identityHudState.targetId)}</select>
                     </div>
-                    <div class="idt-field"><label>先攻序位（空＝自動）</label>
-                        <input class="idt-input" type="number" min="1" placeholder="自動" value="${identityHudState.atkRank}"
-                               onchange="updateIdentityField('atkRank', this.value)">
-                    </div>
-                    <div class="idt-checks">
-                        <label><input type="checkbox" ${identityHudState.atkSevere ? 'checked' : ''} onchange="updateIdentityField('atkSevere', this.checked)"> 我方嚴重槽已滿</label>
-                        <label><input type="checkbox" ${identityHudState.tgtSevere ? 'checked' : ''} onchange="updateIdentityField('tgtSevere', this.checked)"> 目標嚴重槽已滿</label>
-                        <label><input type="checkbox" ${identityHudState.notActed ? 'checked' : ''} onchange="updateIdentityField('notActed', this.checked)"> 目標本回合未行動</label>
-                    </div>
                     <div class="idt-action-row">
-                        <button class="idt-btn idt-btn-main" onclick="runIdentityCalc()">⚡ 計算疊加效果</button>
                         <button class="idt-btn" onclick="runIdentityTurnStart()" title="套用回合開始的資源獲取（呼吸法／充能／人民之盾等）">🔄 回合開始資源</button>
                     </div>
                 </div>
@@ -1286,6 +1272,7 @@ function injectIdentityStyles() {
         .idt-section{margin-bottom:14px;}
         .idt-section-title{font-size:.9rem;color:var(--accent-purple,#9b59b6);margin-bottom:8px;font-weight:bold;}
         .idt-select,.idt-input{width:100%;background:var(--bg-input,#111);border:1px solid var(--border,#33333a);color:var(--text,#eee);border-radius:6px;padding:7px 8px;font-size:.9rem;}
+        .idt-self-unit{width:100%;background:var(--bg-input,#111);border:1px solid var(--border,#33333a);color:var(--text,#eee);border-radius:6px;padding:7px 8px;font-size:.9rem;box-sizing:border-box;}
         .idt-card-filter{margin-top:8px;}
         .idt-card-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;}
         .idt-key-chips{display:flex;flex-wrap:wrap;gap:4px;padding-left:24px;}
@@ -1299,8 +1286,6 @@ function injectIdentityStyles() {
         .idt-no-unlock{font-size:.78rem;color:var(--text-dim,#777);padding-left:24px;}
         .idt-field{margin-bottom:8px;}
         .idt-field label{display:block;font-size:.8rem;color:var(--text-dim,#aaa);margin-bottom:3px;}
-        .idt-checks{display:flex;flex-direction:column;gap:5px;margin:8px 0;font-size:.85rem;}
-        .idt-checks label{display:flex;align-items:center;gap:7px;cursor:pointer;}
         .idt-action-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
         .idt-btn{flex:1;min-width:120px;background:var(--bg-input,#222);border:1px solid var(--border,#33333a);color:var(--text,#eee);border-radius:6px;padding:8px;cursor:pointer;font-size:.85rem;}
         .idt-btn-main{background:var(--accent-purple,#7e57c2);border-color:var(--accent-purple,#7e57c2);font-weight:bold;}
@@ -1384,7 +1369,6 @@ if (typeof window !== 'undefined') {
     window.toggleIdentityUnlock = toggleIdentityUnlock;
     window.setIdentityField = setIdentityField;
     window.updateIdentityField = updateIdentityField;
-    window.runIdentityCalc = runIdentityCalc;
     window.runIdentityTurnStart = runIdentityTurnStart;
     window.autoTriggerIdentityTurnStart = autoTriggerIdentityTurnStart;
     window.renderIdentityModal = renderIdentityModal;

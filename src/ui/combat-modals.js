@@ -445,6 +445,14 @@ function submitAttackModal() {
     } else {
         cqInitiateAttack(resolveMode === 'save' ? { attacker, target: targets[0], targets } : { attacker, target });
 
+        // 人格卡引擎面板「② 指定單位」的目標欄位改為自動偵測：記錄玩家本次實際攻擊的對象，
+        // 下次開啟面板時免手動指定（仍可在面板下拉手動覆寫）。
+        if (typeof identityHudState !== 'undefined') {
+            identityHudState.targetId = (resolveMode === 'save' && targets.length) ? targets[0].id : target.id;
+            if (typeof saveIdentityState === 'function') saveIdentityState();
+            if (typeof renderIdentityModal === 'function') renderIdentityModal();
+        }
+
         // 人格引擎判定本次攻擊會對目標施加的負面狀態，於發起攻擊時自動套用到目標單位，
         // 讓 ST 不需在審核時手動補上玩家人格給予的減益。
         if (identityBonus.onAttackTargetStatus && typeof applyEngineStatusesToUnit === 'function') {

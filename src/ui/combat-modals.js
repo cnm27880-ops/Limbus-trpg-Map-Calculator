@@ -957,11 +957,21 @@ function confirmSTReview() {
     }
 }
 
+/** 取得單位身上某狀態（依狀態庫 id 對應的中文名稱）目前的層數，找不到定義或無此狀態時回傳 0。 */
+function cmGetStatusLayers(unit, statusId) {
+    if (!unit || !unit.status || typeof getStatusById !== 'function') return 0;
+    const def = getStatusById(statusId);
+    const name = def ? def.name : null;
+    if (!name) return 0;
+    return parseInt(unit.status[name]) || 0;
+}
+
 /**
  * ST 端：自動擲骰並把最終傷害套用到防禦方（防禦扣除模式）。
  * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻追加骰子）＋ 附加成功
- * ＋ 目標身上的破裂（受擊消耗）與易損層數 → 合計後玩家攻擊受「攻擊上限」封頂
- * （破裂/易損計入上限內；BOSS 攻擊不受限）
+ * ＋ 目標身上的破裂（受擊消耗）與易損層數 ＋ 攻擊者身上的強壯層數
+ * → 合計後玩家攻擊受「攻擊上限」封頂（破裂/易損/強壯皆計入上限內；BOSS 攻擊不受限）
+ * → 再扣除目標身上的不屈層數（不受攻擊上限限制，最低 0）
  * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。
  * 擲骰明細（各骰點數、10 的數量）隨廣播同步，供「骰到兩個 10 觸發」類人格卡判定。
  * 注意：豁免抵擋模式走 confirmSTReviewSaveMode，不經此函式。
@@ -993,13 +1003,19 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         }
     }
 
-    // 主動宣告技折算的傷害加值（法術威力／武器傷害／最終傷害）
-    const declaredDamage = Math.max(0, Number(atk.declaredDamageBonus) || 0);
-    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 宣告技傷害 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
-    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + declaredDamage;
+    // 攻擊者身上的強壯：提升物理攻擊傷害（計入攻擊上限）
+    const attackerUnit = (typeof findUnitById === 'function' && atk.unitId) ? findUnitById(atk.unitId) : null;
+    const strengthBonus = cmGetStatusLayers(attackerUnit, 'strength');
+
+    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 強壯加傷 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
+    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + strengthBonus;
     const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
     const capApplied = (cap > 0 && totalBeforeCap > cap);
-    const damage = capApplied ? cap : totalBeforeCap;
+    const cappedDamage = capApplied ? cap : totalBeforeCap;
+
+    // 目標身上的不屈：受到的傷害降低（不受攻擊上限限制，套用在封頂之後，最低 0）
+    const enduranceReduction = Math.min(cappedDamage, cmGetStatusLayers(targetUnit, 'endurance'));
+    const damage = cappedDamage - enduranceReduction;
 
     // 套用傷害：L 傷為主，「嚴重轉惡性」宣告的點數轉為 A 傷；走護盾吸收
     if (targetUnit && Array.isArray(targetUnit.hpArr) && typeof modifyHPInternal === 'function' && damage > 0) {
@@ -1023,6 +1039,8 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         capApplied: capApplied,
         statusBonus: statusBonus,
         statusBonusText: statusBonusParts.join('、'),
+        strengthBonus: strengthBonus,
+        enduranceReduction: enduranceReduction,
         damage: damage
     };
 }
@@ -1031,7 +1049,7 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
  * ST 端：豁免抵擋模式的確認結算。
  * 攻擊已於黑箱端擲出（saveInfo.atkRoll.successes）；此處讀取 ST 輸入的
  * 豁免骰數／豁免附加成功／最終調整，替每個目標各擲一次豁免骰對銷：
- *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 − 豁免成功 − 豁免附加 + 最終調整)
+ *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 + 攻擊者強壯 − 豁免成功 − 豁免附加 + 最終調整 − 該目標不屈)
  * 逐目標套用（護盾優先消耗），結算後廣播逐目標結果並寫入戰鬥日誌。
  * @param {object} saveInfo - 黑箱釘上的豁免資訊（含 atkRoll 與 targets）
  */
@@ -1054,8 +1072,10 @@ function confirmSTReviewSaveMode(saveInfo) {
         ? saveInfo.targets
         : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput, saveAuto: saveExtraInput }];
 
-    // 攻擊命中總量（成功 + 附加 + 宣告技傷害加值），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
-    const atkHitTotal = atkSuccess + baseExtra + Math.max(0, Number(atk.declaredDamageBonus) || 0);
+    // 攻擊命中總量（成功 + 附加 + 攻擊者強壯），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
+    const attackerUnit = (typeof findUnitById === 'function' && atk.unitId) ? findUnitById(atk.unitId) : null;
+    const strengthBonus = cmGetStatusLayers(attackerUnit, 'strength');
+    const atkHitTotal = atkSuccess + baseExtra + strengthBonus;
     const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
 
     const results = targets.map(t => {
@@ -1065,9 +1085,10 @@ function confirmSTReviewSaveMode(saveInfo) {
         const pool = useInput ? saveDiceInput : Math.max(0, parseInt(t.saveDice, 10) || 0);
         const saveExtra = useInput ? saveExtraInput : Math.max(0, parseInt(t.saveAuto, 10) || 0);
         const saveRoll = (typeof bbRollAttackDice === 'function') ? bbRollAttackDice(pool, 10) : { successes: 0 };
-        const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust);
-
         const u = (typeof findUnitById === 'function' && t.id) ? findUnitById(t.id) : null;
+        // 目標身上的不屈：受到的傷害降低
+        const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust - cmGetStatusLayers(u, 'endurance'));
+
         if (u && Array.isArray(u.hpArr) && typeof modifyHPInternal === 'function' && dmg > 0) {
             const aPart = Math.min(critVicious, dmg);
             const lPart = dmg - aPart;
@@ -1094,7 +1115,7 @@ function confirmSTReviewSaveMode(saveInfo) {
 
     const attackerName = String(atk.name || 'BOSS');
     const detail = results.map(r => `${r.name}(${saveName}${r.saveSuccess}→受${r.dmg})`).join('、');
-    const summary = `【${attackerName}】豁免抵擋：攻擊 ${atkSuccess}${baseExtra ? `+附${baseExtra}` : ''} 成功｜${detail}`;
+    const summary = `【${attackerName}】豁免抵擋：攻擊 ${atkSuccess}${baseExtra ? `+附${baseExtra}` : ''}${strengthBonus ? `+強壯${strengthBonus}` : ''} 成功｜${detail}`;
 
     // 戰鬥日誌
     if (typeof bbPushCombatLog === 'function') {
@@ -1136,7 +1157,7 @@ function confirmSTReviewSaveMode(saveInfo) {
                     <button onclick="document.getElementById('save-mode-results').remove()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">
-                    <div style="font-size:0.85rem;color:var(--accent-orange);margin-bottom:4px;">⚔ 攻擊 ${atkSuccess} 成功${baseExtra ? ` ＋ 附加 ${baseExtra}` : ''}${adjust ? `，調整 ${adjust > 0 ? '+' : ''}${adjust}` : ''}</div>
+                    <div style="font-size:0.85rem;color:var(--accent-orange);margin-bottom:4px;">⚔ 攻擊 ${atkSuccess} 成功${baseExtra ? ` ＋ 附加 ${baseExtra}` : ''}${strengthBonus ? ` ＋ 強壯 ${strengthBonus}` : ''}${adjust ? `，調整 ${adjust > 0 ? '+' : ''}${adjust}` : ''}</div>
                     ${rows}
                     <div style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;">傷害已套用（護盾優先消耗）。</div>
                 </div>

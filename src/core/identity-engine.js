@@ -133,9 +133,44 @@ function evalCondition(hook, target, attacker) {
 }
 
 /**
- * 處理一組 hook（onAttack 或 onHit），把符合條件者的效果累加進 result。
+ * 依 phase 與（onKill 時的）scope 取得該把 targetStatus 累加進哪一個桶。
+ * 缺對應桶（呼叫端未初始化）時回傳 null，交由呼叫端以 if(bucket) 略過。
+ * @param {object} result
+ * @param {string} phase - 'attack' | 'hit' | 'kill' | 'turnEnd' | 'turnStart'
+ * @param {object} hook
+ * @returns {object|null}
+ */
+function pickTargetStatusBucket(result, phase, hook) {
+    if (phase === 'attack') return result.onAttackTargetStatus || null;
+    if (phase === 'hit') return result.onHitTargetStatus || null;
+    if (phase === 'kill') {
+        // scope:'others' → 場上其他敵方；否則視為施加給被擊殺目標本身（少見）
+        return (hook.scope === 'others') ? (result.onKillOthersStatus || null) : (result.onKillTargetStatus || null);
+    }
+    // turnStart / turnEnd 對象皆為自己，無 targetStatus 語意，落到 onHit 桶（呼叫端多半未初始化 → null）
+    return result.onHitTargetStatus || null;
+}
+
+/**
+ * 依 phase 取得該把 selfStatus 累加進哪一個桶。缺桶時回傳 null。
+ * @param {object} result
+ * @param {string} phase
+ * @returns {object|null}
+ */
+function pickSelfStatusBucket(result, phase) {
+    if (phase === 'attack') return result.onAttackSelfStatus || null;
+    if (phase === 'hit') return result.onHitSelfStatus || null;
+    if (phase === 'kill') return result.onKillSelfStatus || null;
+    if (phase === 'turnEnd') return result.onTurnEndSelfStatus || null;
+    // turnStart 沿用 onAttackSelfStatus（既有 evaluatePlayerTurnStart 的桶）
+    return result.onAttackSelfStatus || null;
+}
+
+/**
+ * 處理一組 hook（onAttack / onHit / onKill / onTurnStart / onTurnEnd 共用），
+ * 把符合條件者的效果累加進 result。狀態的落桶依 phase（與 onKill 的 scope）決定。
  * @param {Array<object>} hooks
- * @param {string} phase - 'attack' | 'hit'
+ * @param {string} phase - 'attack' | 'hit' | 'kill' | 'turnStart' | 'turnEnd'
  * @param {object} card
  * @param {boolean} unlocked
  * @param {object} target
@@ -182,15 +217,16 @@ function processHooks(hooks, phase, card, unlocked, target, attacker, result) {
                 log[key] = amount;
             }
 
-            // 累加狀態
+            // 累加狀態（落桶依 phase 與 onKill 的 scope 決定；缺桶時安全略過）
             if (hook.targetStatus) {
-                if (phase === 'attack') accumulateStatus(result.onAttackTargetStatus, hook.targetStatus, target, attacker);
-                else accumulateStatus(result.onHitTargetStatus, hook.targetStatus, target, attacker);
+                const bucket = pickTargetStatusBucket(result, phase, hook);
+                if (bucket) accumulateStatus(bucket, hook.targetStatus, target, attacker);
                 log.targetStatus = hook.targetStatus;
+                if (hook.scope) log.scope = hook.scope;
             }
             if (hook.selfStatus) {
-                if (phase === 'attack') accumulateStatus(result.onAttackSelfStatus, hook.selfStatus, target, attacker);
-                else accumulateStatus(result.onHitSelfStatus, hook.selfStatus, target, attacker);
+                const bucket = pickSelfStatusBucket(result, phase);
+                if (bucket) accumulateStatus(bucket, hook.selfStatus, target, attacker);
                 log.selfStatus = hook.selfStatus;
             }
 
@@ -219,6 +255,17 @@ function processHooks(hooks, phase, card, unlocked, target, attacker, result) {
  *   expectedSelfStatus: object
  * }}
  */
+/**
+ * 依 id 取得人格卡定義（優先 getIdentityById，其次 IDENTITY_LIBRARY）。
+ * @param {string} id
+ * @returns {object|null}
+ */
+function resolveIdentityCard(id) {
+    if (typeof getIdentityById === 'function') return getIdentityById(id);
+    if (typeof IDENTITY_LIBRARY !== 'undefined') return IDENTITY_LIBRARY[id] || null;
+    return null;
+}
+
 function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
     const attacker = ensureStatefulUnit(attackerState);
     const target = ensureStatefulUnit(targetState);
@@ -235,9 +282,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
             const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = (typeof getIdentityById === 'function')
-                ? getIdentityById(id)
-                : (typeof IDENTITY_LIBRARY !== 'undefined' ? IDENTITY_LIBRARY[id] : null);
+            const card = resolveIdentityCard(id);
 
             if (!card || !card.hooks) continue;
 
@@ -276,9 +321,7 @@ function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
             const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = (typeof getIdentityById === 'function')
-                ? getIdentityById(id)
-                : (typeof IDENTITY_LIBRARY !== 'undefined' ? IDENTITY_LIBRARY[id] : null);
+            const card = resolveIdentityCard(id);
             if (!card || !card.hooks || !Array.isArray(card.hooks.onTurnStart)) continue;
             // 回合開始的對象只有自己，故 target 以 attacker 代入
             processHooks(card.hooks.onTurnStart, 'turnStart', card, unlocked, attacker, attacker, result);
@@ -286,6 +329,77 @@ function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     }
     result.expectedSelfStatus = mergeStatuses(result.onAttackSelfStatus, result.onHitSelfStatus);
     result.expectedTargetStatus = mergeStatuses(result.onAttackTargetStatus, result.onHitTargetStatus);
+    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
+}
+
+/**
+ * 評估「擊殺／使目標昏迷」時觸發的效果（onKill）。
+ * 玩家端於發起攻擊時預先計算並隨攻擊資料送出，由 ST 端在結算判定目標倒下時實際套用
+ * （與 onHit 狀態相同的「玩家端算、ST 端套」流程，因人格卡資料只存在各玩家自己的瀏覽器）。
+ *
+ * onKill hook 的 targetStatus 依 scope 落桶：
+ *   - scope:'others' → othersTargetStatus：施加給「場上其他敵方單位」（不含被擊殺者）。
+ *   - 省略 scope    → killedTargetStatus：施加給被擊殺目標本身（少見）。
+ * selfStatus → selfStatus：施加給攻擊者自己。manual 效果僅記入 triggerLogs。
+ *
+ * @param {Array<string|object>} playerIdentities
+ * @param {object} attackerState - 攻擊者狀態
+ * @param {object} killedTargetState - 被擊殺目標狀態（供條件函式判斷，如「受決鬥標記者」）
+ * @returns {{ killedTargetStatus: object, othersTargetStatus: object, selfStatus: object,
+ *            totals: object, triggerLogs: Array<object> }}
+ */
+function evaluatePlayerKill(playerIdentities, attackerState, killedTargetState) {
+    const attacker = ensureStatefulUnit(attackerState);
+    const target = ensureStatefulUnit(killedTargetState);
+    const result = {
+        totals: makeZeroTotals(),
+        triggerLogs: [],
+        onKillTargetStatus: {},
+        onKillOthersStatus: {},
+        onKillSelfStatus: {}
+    };
+
+    if (Array.isArray(playerIdentities)) {
+        for (const rawEntry of playerIdentities) {
+            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
+            const card = resolveIdentityCard(id);
+            if (!card || !card.hooks || !Array.isArray(card.hooks.onKill)) continue;
+            processHooks(card.hooks.onKill, 'kill', card, unlocked, target, attacker, result);
+        }
+    }
+
+    result.killedTargetStatus = result.onKillTargetStatus;
+    result.othersTargetStatus = result.onKillOthersStatus;
+    result.selfStatus = result.onKillSelfStatus;
+    return result;
+}
+
+/**
+ * 評估「回合結束」時觸發的效果（onTurnEnd）。與 onTurnStart 對稱：對象只有自己。
+ * 供玩家端在自己單位回合結束時呼叫（見 identity-hud 的 autoTriggerIdentityTurnEnd）。
+ * onTurnEnd hook 結構：{ condition?, selfStatus, source, skill, locked, manual, desc }
+ *
+ * 註：充能「回合結束 −1 層」屬於【充能狀態本身】的池規則（多張充能卡不應各扣一次），
+ *     故由狀態層級的回合結束結算（status-config turnEndDecay）處理，不放在此逐卡疊加的路徑。
+ *
+ * @param {Array<string|object>} playerIdentities
+ * @param {object} attackerState - 玩家自身狀態
+ * @returns {{ expectedSelfStatus: object, triggerLogs: Array<object>, totals: object }}
+ */
+function evaluatePlayerTurnEnd(playerIdentities, attackerState) {
+    const attacker = ensureStatefulUnit(attackerState);
+    const result = { totals: makeZeroTotals(), triggerLogs: [], onTurnEndSelfStatus: {} };
+
+    if (Array.isArray(playerIdentities)) {
+        for (const rawEntry of playerIdentities) {
+            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
+            const card = resolveIdentityCard(id);
+            if (!card || !card.hooks || !Array.isArray(card.hooks.onTurnEnd)) continue;
+            processHooks(card.hooks.onTurnEnd, 'turnEnd', card, unlocked, attacker, attacker, result);
+        }
+    }
+
+    result.expectedSelfStatus = mergeStatuses(result.onTurnEndSelfStatus);
     return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
 }
 
@@ -312,7 +426,9 @@ if (typeof module !== 'undefined' && module.exports) {
         normalizeIdentityEntry,
         isHookActive,
         evaluatePlayerAttack,
-        evaluatePlayerTurnStart
+        evaluatePlayerTurnStart,
+        evaluatePlayerKill,
+        evaluatePlayerTurnEnd
     };
 }
 

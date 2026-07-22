@@ -162,7 +162,9 @@ function bbRunBlackBoxCalculation(data) {
     // ===== 附加成功桶（與 DP 完全分開計算）=====
     const atkAutoDeclared = bbSafeNumber(attacker.auto);
     const atkIdentityExtra = bbSafeNumber(attacker.identityExtraSuccess);
-    const atkExtraTotal = atkAutoDeclared + atkIdentityExtra;
+    // 侵蝕攻擊：每層侵蝕增幅 = 1 附加成功（玩家對隊友的 E.G.O 失控攻擊）
+    const atkErosionExtra = bbSafeNumber(attacker.erosionExtraSuccess);
+    const atkExtraTotal = atkAutoDeclared + atkIdentityExtra + atkErosionExtra;
 
     // BOSS 防禦附加成功（無防禦 QTE 時）是回合刷新資源，非每次攻擊都全額重新提供：
     // defAutoRemaining 由 nextTurn() 在輪到 BOSS 主體行動時重置為 defAuto，
@@ -194,8 +196,11 @@ function bbRunBlackBoxCalculation(data) {
     const atkLabels = [atkDpBaseLabel, ...attackerMods.atkLabels].filter(Boolean);
     const defLabels = [defDpBaseLabel, ...targetMods.defLabels].filter(Boolean);
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
-    // 附加成功同樣分項列出人格引擎貢獻
-    const atkExtraLabel = atkIdentityExtra ? `宣告${atkAutoDeclared}+人格+${atkIdentityExtra}` : `${atkAutoDeclared}`;
+    // 附加成功同樣分項列出人格引擎與侵蝕攻擊的貢獻
+    const atkExtraParts = [`宣告${atkAutoDeclared}`];
+    if (atkIdentityExtra) atkExtraParts.push(`人格+${atkIdentityExtra}`);
+    if (atkErosionExtra) atkExtraParts.push(`侵蝕+${atkErosionExtra}`);
+    const atkExtraLabel = atkExtraParts.length > 1 ? atkExtraParts.join('+') : `${atkAutoDeclared}`;
     let diceStr = `骰數: ${baseDice}`;
     if (baseDice <= 0) diceStr = saveMode ? `骰數: 0 (攻擊 DP 為 0，請投擲機運骰)` : `骰數: 0 (防禦大於攻擊，請投擲機運骰)`;
 

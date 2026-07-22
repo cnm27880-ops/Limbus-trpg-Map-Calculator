@@ -1007,6 +1007,20 @@ function nextTurn() {
         const settleUnit = (endingUnit && !endingUnit.actionSlotOf) ? endingUnit : null;
         if (settleUnit) showTurnEndSettlement(settleUnit);
 
+        // 回合開始地形提醒：輪到的單位若站在帶「回合開始」效果的地形上，提示 ST（可套用的數值另由結算面板處理）
+        if (activeUnit && !activeUnit.actionSlotOf) {
+            const ts = getUnitTerrainTurnEffects(activeUnit).turnStart;
+            ts.forEach(t => {
+                if (t.kind === 'heal' && t.amount > 0 && typeof modifyHPInternal === 'function') {
+                    modifyHPInternal(activeUnit, 'heal', t.amount);
+                    broadcastState();
+                    showToast(`${activeUnit.name || '單位'}：${t.label}`);
+                } else {
+                    showToast(`回合開始 ${t.label}`);
+                }
+            });
+        }
+
         setTimeout(() => {
             const el = document.querySelector('.unit-card.active-turn');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1432,40 +1446,133 @@ const TURN_END_RULES = {
     '尖釘': { kind: 'remind', desc: () => '回合結束受到流血，並增加麻痺點數（請手動處理）' }
 };
 
+// 本回合結算面板目前顯示的項目（供 onclick 依索引套用；避免把 closure 塞進 inline onclick）
+let _turnEndItems = [];
+
+/**
+ * 讀取單位腳下地形的「回合開始／結束」效果，保守解析為可套用項目或純提醒。
+ * 僅對少數明確的數值樣式（毒素／B‧L‧A 傷／回 HP）自動套用；其餘一律列為提醒，交由 ST 判斷，
+ * 避免對自由文字做武斷解讀。未部署（x<0）或該格無地形時回傳空集合。
+ * @param {Object} unit
+ * @returns {{turnStart: Array, turnEnd: Array}}
+ */
+function getUnitTerrainTurnEffects(unit) {
+    const out = { turnStart: [], turnEnd: [] };
+    if (!unit || typeof unit.x !== 'number' || unit.x < 0 || unit.y < 0) return out;
+    const row = (typeof state !== 'undefined' && state.mapData) ? state.mapData[unit.y] : null;
+    const tileId = row ? (parseInt(row[unit.x]) || 0) : 0;
+    if (!tileId) return out;
+    const tile = (typeof getTileFromPalette === 'function') ? getTileFromPalette(tileId) : null;
+    if (!tile || !tile.effect) return out;
+    return parseTerrainTurnEffects(tile.effect, tile.name || '地形');
+}
+
+/**
+ * 保守解析地形效果文字，抽出回合開始／結束的數值效果。
+ * @param {string} effect - 地形效果描述
+ * @param {string} tileName - 地形名稱（顯示用）
+ * @returns {{turnStart: Array, turnEnd: Array}}
+ */
+function parseTerrainTurnEffects(effect, tileName) {
+    const out = { turnStart: [], turnEnd: [] };
+    const label = (txt) => `🗺 ${tileName}：${txt}`;
+    let m;
+    if (/回合結束/.test(effect)) {
+        // 只對「明確且無條件」的樣式自動套用；帶「若／則」等條件敘述的一律退回純提醒，避免誤判。
+        // 毒素／B‧L‧A 傷都要求出現「受」字（排除「扣N意志，若空則NA傷」這類條件式扣血）。
+        if ((m = effect.match(/回合結束[^。]*?受(?:到)?\s*(\d+)\s*點?\s*毒素/))) {
+            const n = parseInt(m[1]) || 0;
+            out.turnEnd.push({ icon: '☠️', kind: 'damage', dmgType: 'l', amount: n, label: label(`受 ${n} 點毒素（L 傷）`) });
+        } else if (!/[若則]/.test(effect) && (m = effect.match(/回合結束[^。]*?受(?:到)?\s*(\d+)\s*點?\s*([BLAbla])\s*傷/))) {
+            const n = parseInt(m[1]) || 0;
+            const dt = m[2].toLowerCase();
+            out.turnEnd.push({ icon: '💥', kind: 'damage', dmgType: dt, amount: n, label: label(`受 ${n} 點 ${m[2].toUpperCase()} 傷`) });
+        } else if ((m = effect.match(/回合結束[^。]*?流血\s*(\d+)\s*層/))) {
+            const n = parseInt(m[1]) || 0;
+            out.turnEnd.push({ icon: '🩸', kind: 'status', statusName: '流血', amount: n, label: label(`流血 +${n} 層`) });
+        } else {
+            out.turnEnd.push({ icon: '🗺', kind: 'remind', label: label(effect) });
+        }
+    }
+    if (/回合開始/.test(effect)) {
+        if ((m = effect.match(/回合開始[^。]*?回\s*(\d+)\s*HP/i))) {
+            const n = parseInt(m[1]) || 0;
+            out.turnStart.push({ icon: '💚', kind: 'heal', amount: n, label: label(`回復 ${n} 點傷害`) });
+        } else {
+            out.turnStart.push({ icon: '🗺', kind: 'remind', label: label(effect) });
+        }
+    }
+    return out;
+}
+
+/**
+ * 彙整某單位「回合結束」時所有可結算／提醒的項目：
+ *   1) 明確 DOT/治療狀態（燃燒／流血／再生／尖釘）
+ *   2) 資料驅動的層數衰減（狀態定義帶 turnEndDecay，如充能／混亂 −1）
+ *   3) 腳下地形的回合結束效果（保守解析）
+ * @param {Object} unit
+ * @returns {Array<{icon,label,kind,statusName?,dmgType?,amount?}>}
+ */
+function buildTurnEndItems(unit) {
+    const items = [];
+    if (!unit) return items;
+    const status = unit.status || {};
+
+    for (const [name, rule] of Object.entries(TURN_END_RULES)) {
+        if (status[name] === undefined) continue;
+        const pts = parseInt(status[name]) || 0;
+        if (rule.kind !== 'remind' && pts <= 0) continue;
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(name) : null;
+        items.push({
+            icon: def?.icon || '📌', kind: rule.kind, statusName: name, dmgType: rule.dmgType, amount: pts,
+            label: `${name} ${rule.kind === 'remind' ? '' : pts}：${rule.desc(pts)}`
+        });
+    }
+
+    for (const [name, raw] of Object.entries(status)) {
+        if (TURN_END_RULES[name]) continue; // 已於上一輪處理
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(name) : null;
+        const decay = def ? (parseInt(def.turnEndDecay) || 0) : 0;
+        if (decay <= 0) continue;
+        const cur = parseInt(raw) || 0;
+        if (cur <= 0) continue;
+        items.push({
+            icon: def?.icon || '📌', kind: 'decay', statusName: name, amount: decay,
+            label: `${name} ${cur} → ${Math.max(0, cur - decay)}：回合結束 −${decay} 層`
+        });
+    }
+
+    getUnitTerrainTurnEffects(unit).turnEnd.forEach(t => items.push(t));
+    return items;
+}
+
 /**
  * 顯示回合結束狀態結算提醒（僅 ST，nextTurn 時觸發）
  * @param {Object} unit - 剛結束回合的單位
  */
 function showTurnEndSettlement(unit) {
-    if (myRole !== 'st' || !unit || !unit.status) return;
+    if (myRole !== 'st' || !unit) return;
 
-    const items = [];
-    for (const [name, rule] of Object.entries(TURN_END_RULES)) {
-        if (unit.status[name] === undefined) continue;
-        const pts = parseInt(unit.status[name]) || 0;
-        if (rule.kind !== 'remind' && pts <= 0) continue;
-        items.push({ name, rule, pts });
-    }
+    const items = buildTurnEndItems(unit);
     if (items.length === 0) return;
 
     closeTurnSettlement();
+    _turnEndItems = items;
 
-    const itemsHtml = items.map(item => {
-        const statusDef = (typeof getStatusByName === 'function') ? getStatusByName(item.name) : null;
-        const icon = statusDef?.icon || '📌';
-        const actionBtn = item.rule.kind === 'remind'
+    const itemsHtml = items.map((item, i) => {
+        const actionBtn = item.kind === 'remind'
             ? ''
-            : `<button class="settlement-apply-btn" id="settle-btn-${encodeURIComponent(item.name)}"
-                   onclick="applyTurnEndItem('${unit.id}', '${encodeURIComponent(item.name)}')">套用</button>`;
+            : `<button class="settlement-apply-btn" id="settle-btn-${i}"
+                   onclick="applyTurnEndItem('${unit.id}', ${i})">套用</button>`;
         return `
             <div class="settlement-item">
-                <span class="settlement-label">${icon} ${escapeHtml(item.name)} ${item.pts || ''}：${escapeHtml(item.rule.desc(item.pts))}</span>
+                <span class="settlement-label">${item.icon || '📌'} ${escapeHtml(item.label)}</span>
                 ${actionBtn}
             </div>
         `;
     }).join('');
 
-    const hasApplicable = items.some(i => i.rule.kind !== 'remind');
+    const hasApplicable = items.some(i => i.kind !== 'remind');
 
     const panel = document.createElement('div');
     panel.id = 'turn-settlement-panel';
@@ -1487,34 +1594,42 @@ function showTurnEndSettlement(unit) {
 function closeTurnSettlement() {
     const panel = document.getElementById('turn-settlement-panel');
     if (panel) panel.remove();
+    _turnEndItems = [];
 }
 
 /**
- * 套用單一回合結算項目
+ * 套用單一回合結算項目（依 showTurnEndSettlement 建立的 _turnEndItems 索引）。
  * @param {string} unitId - 單位 ID
- * @param {string} encodedName - 編碼後的狀態名稱
+ * @param {number} index - 項目索引
  */
-function applyTurnEndItem(unitId, encodedName) {
-    const name = decodeURIComponent(encodedName);
+function applyTurnEndItem(unitId, index) {
     const u = findUnitById(unitId);
-    const rule = TURN_END_RULES[name];
-    if (!u || !rule || !u.status || u.status[name] === undefined) return;
+    const item = _turnEndItems[index];
+    if (!u || !item) return;
 
-    const pts = parseInt(u.status[name]) || 0;
-    if (pts <= 0) return;
-
-    if (rule.kind === 'damage') {
-        modifyHPInternal(u, rule.dmgType, pts);
-        showToast(`${u.name || '單位'} 因 ${name} 受到 ${pts} 點 L 傷`);
-    } else if (rule.kind === 'heal') {
-        modifyHPInternal(u, 'heal', pts);
-        showToast(`${u.name || '單位'} 因 ${name} 回復 ${pts} 點傷害`);
+    if (item.kind === 'damage') {
+        if (item.amount > 0 && typeof modifyHPInternal === 'function') modifyHPInternal(u, item.dmgType || 'l', item.amount);
+        showToast(`${u.name || '單位'}：${item.label}`);
+    } else if (item.kind === 'heal') {
+        if (item.amount > 0 && typeof modifyHPInternal === 'function') modifyHPInternal(u, 'heal', item.amount);
+        showToast(`${u.name || '單位'}：${item.label}`);
+    } else if (item.kind === 'decay') {
+        if (!u.status || u.status[item.statusName] === undefined) return;
+        const cur = parseInt(u.status[item.statusName]) || 0;
+        updateStatusStacks(unitId, item.statusName, cur - (item.amount || 1));
+        showToast(`${u.name || '單位'}：${item.label}`);
+    } else if (item.kind === 'status') {
+        // 地形施加的狀態（如流血 +N）：以名稱解析後累加
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(item.statusName) : null;
+        if (def && typeof addStatusToUnit === 'function') addStatusToUnit(unitId, def.id, item.amount || 1);
+        showToast(`${u.name || '單位'}：${item.label}`);
+    } else {
+        return; // remind：無動作
     }
 
     broadcastState();
 
-    // 標記按鈕為已套用
-    const btn = document.getElementById('settle-btn-' + encodedName);
+    const btn = document.getElementById('settle-btn-' + index);
     if (btn) {
         btn.disabled = true;
         btn.innerText = '✓ 已套用';
@@ -1572,8 +1687,16 @@ function openUnitContextMenu(event, unitId, mode) {
     // 玩家即使無控制權，仍可對敵方/BOSS 發起攻擊
     const canAttack = !isSt && (u.type === 'enemy' || isBoss);
 
+    // 侵蝕攻擊：玩家自身侵蝕增幅達門檻時，可對「其他玩家」發起威脅（E.G.O 失控打隊友）。
+    let canErosionAttack = false;
+    if (!isSt && u.type === 'player' && u.ownerId !== myPlayerId && typeof eroCanAttackAllies === 'function') {
+        const myUnit = (typeof state !== 'undefined' && Array.isArray(state.units))
+            ? state.units.find(x => x.ownerId === myPlayerId) : null;
+        canErosionAttack = !!(myUnit && eroCanAttackAllies(myUnit));
+    }
+
     // 既不能控制、也不能攻擊 → 不顯示任何選單
-    if (!canControl && !canAttack) return;
+    if (!canControl && !canAttack && !canErosionAttack) return;
 
     const I = UCM_ICON;
     let items;
@@ -1613,6 +1736,10 @@ function openUnitContextMenu(event, unitId, mode) {
             items.push({ icon: I.sword, label: '發起攻擊', fn: `openAttackModal('${u.id}')` });
         } else if (isSt && u.type === 'player') {
             items.push({ icon: I.sword, label: '發起威脅', fn: `openThreatModal('${u.id}')` });
+        }
+        // 侵蝕攻擊：玩家對其他玩家（達侵蝕門檻時才出現）
+        if (canErosionAttack) {
+            items.push({ icon: I.sword, label: '🩸 侵蝕攻擊', cls: 'danger', fn: `openErosionAttackModal('${u.id}')` });
         }
 
         if (canControl) {

@@ -203,6 +203,20 @@ function eroGetErosionLayers(unit) {
     return parseInt(unit.status[ERO_STATUS_NAME]) || 0;
 }
 
+// 對隊友發動侵蝕攻擊的門檻：與暴走閾值一致（侵蝕增幅達此層數才可能鎖定友軍）。
+const ERO_ATTACK_THRESHOLD = ERO_DEFAULT_THRESHOLD;
+function eroGetAttackThreshold() { return ERO_ATTACK_THRESHOLD; }
+
+/**
+ * 某玩家單位目前侵蝕增幅是否已達「可對隊友發動侵蝕攻擊」的門檻。
+ * 供右鍵選單判斷是否對其他玩家顯示「侵蝕攻擊」項目。
+ * @param {object} unit
+ * @returns {boolean}
+ */
+function eroCanAttackAllies(unit) {
+    return eroIsPlayer(unit) && eroGetErosionLayers(unit) >= eroGetAttackThreshold();
+}
+
 function renderErosionConsole() {
     const body = document.getElementById('erosion-hud-body');
     if (!body) return;
@@ -460,6 +474,9 @@ function handleErosionBroadcast(val) {
 // ===== Window bindings =====
 if (typeof window !== 'undefined') {
     window.erosionSetupListener = erosionSetupListener;
+    window.eroGetErosionLayers = eroGetErosionLayers;
+    window.eroGetAttackThreshold = eroGetAttackThreshold;
+    window.eroCanAttackAllies = eroCanAttackAllies;
     window.toggleErosionHud = toggleErosionHud;
     window.closeErosionHud = closeErosionHud;
     window.renderErosionConsole = renderErosionConsole;

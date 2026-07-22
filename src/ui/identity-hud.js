@@ -97,6 +97,35 @@ function applyEngineStatusesToUnit(unitId, statusMap) {
     return n;
 }
 
+/**
+ * 套用引擎輸出的狀態「增減量」（可為負）：正值走 addStatusToUnit 累加，
+ * 負值改以 updateStatusStacks 扣減並在歸零時移除（addStatusToUnit 不夾限會留下「0 層」殘留）。
+ * 供 onTurnEnd 等含資源衰減的結算使用。
+ * @param {string} unitId
+ * @param {object} statusMap - 例如 { charge: -1, breathing: 2 }
+ * @returns {number} 實際變動的狀態種類數
+ */
+function applyEngineStatusDeltasToUnit(unitId, statusMap) {
+    if (!statusMap) return 0;
+    const unit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    let n = 0;
+    for (const [engKey, layers] of Object.entries(statusMap)) {
+        const delta = parseInt(layers) || 0;
+        if (delta === 0) continue;
+        if (delta > 0) {
+            if (typeof addStatusToUnit === 'function') { addStatusToUnit(unitId, identityLibIdForKey(engKey), delta); n++; }
+        } else {
+            // 扣減：需先知道目前層數。以中文狀態名讀取單位狀態。
+            const def = (typeof getStatusById === 'function') ? getStatusById(identityLibIdForKey(engKey)) : null;
+            const name = def ? def.name : null;
+            if (!name || !unit || !unit.status || unit.status[name] === undefined) continue;
+            const cur = parseInt(unit.status[name]) || 0;
+            if (typeof updateStatusStacks === 'function') { updateStatusStacks(unitId, name, cur + delta); n++; }
+        }
+    }
+    return n;
+}
+
 // ===== 面板狀態 =====
 
 let identityHudState = {
@@ -917,6 +946,36 @@ function autoTriggerIdentityTurnStart(unit) {
     const n = performIdentityTurnStart(unit.id);
     if (n > 0 && typeof showToast === 'function') {
         showToast(`🔄 回合開始：已自動對「${unit.name || '你的單位'}」套用 ${n} 種資源`);
+    }
+}
+
+/**
+ * 執行「回合結束」人格卡結算（onTurnEnd）：對自身套用回合結束的資源變化。
+ * 與回合開始對稱；沿用人格卡面板選中角色已勾選持有的卡片。
+ * @param {string} unitId
+ * @returns {number} 實際套用的狀態種類數
+ */
+function performIdentityTurnEnd(unitId) {
+    if (typeof evaluatePlayerTurnEnd !== 'function') return 0;
+    const owned = collectOwnedIdentities();
+    const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    const res = evaluatePlayerTurnEnd(owned, buildEngineUnitState(attackerUnit));
+    // onTurnEnd 的 selfStatus 可能含負值（資源衰減）：正值累加、負值扣減並於歸零時移除
+    return applyEngineStatusDeltasToUnit(unitId, res.expectedSelfStatus);
+}
+
+/**
+ * 各玩家客戶端偵測到「自己的單位剛結束行動」時自動呼叫（見 firebase-connection.js
+ * 對 state.turnIdx 的監聽）。與 autoTriggerIdentityTurnStart 對稱。
+ * @param {object} unit - 剛結束行動、且 ownerId 為自己的單位
+ */
+function autoTriggerIdentityTurnEnd(unit) {
+    if (!unit || typeof myRole === 'undefined' || myRole === 'st') return;
+    if (typeof evaluatePlayerTurnEnd !== 'function') return;
+    if (!identityHudState.owner) return;
+    const n = performIdentityTurnEnd(unit.id);
+    if (n > 0 && typeof showToast === 'function') {
+        showToast(`🔚 回合結束：已自動對「${unit.name || '你的單位'}」結算 ${n} 種人格卡資源`);
     }
 }
 

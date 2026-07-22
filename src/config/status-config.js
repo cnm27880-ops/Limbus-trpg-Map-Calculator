@@ -803,6 +803,7 @@ const STATUS_LIBRARY = {
             name: '混亂',
             icon: '🌀',
             type: 'stack',
+            turnEndDecay: 1,   // 回合結束自動 −1 層（BOSS 嚴重槽填滿的一回合混亂於其行動結束後自動解除）
             desc: '思緒混亂',
             fullDesc: '心智檢定 -1DP/點。重度：隨機行動。',
             keyResist: ['決心','沉著'],
@@ -896,6 +897,7 @@ const STATUS_LIBRARY = {
             icon: '🔋',
             type: 'stack',
             battleEndReset: true,
+            turnEndDecay: 1,   // 該單位回合結束時自動 −1 層（充能池規則，回合結束結算面板一鍵套用）
             desc: '特殊能量池-充能',
             fullDesc: '特殊能量池，上限為 20 層。回合結束時 -1 層，戰鬥結束後歸零。可消耗以發動【超載】。',
             keyResist: null,

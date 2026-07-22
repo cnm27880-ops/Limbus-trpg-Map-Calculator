@@ -1263,13 +1263,31 @@ console.log('\n[侵蝕攻擊] 每層侵蝕增幅 = 1 附加成功（黑箱附加
 // 人格引擎 onKill / onTurnEnd 路徑：另載入 identity-config + identity-engine
 // （getIdentityById 需與 IDENTITY_LIBRARY 同一 script 才能經閉包互通）
 // ====================================================================
+// identity-hud（主動宣告技）需要的額外 stub：狀態層數調整與依 id 查狀態定義
+sandbox.updateStatusStacks = (uid, name, val) => {
+    const u = sandbox.findUnitById(uid);
+    if (!u) return;
+    if (!u.status) u.status = {};
+    if (val <= 0) delete u.status[name];
+    else u.status[name] = String(val);
+};
+sandbox.getStatusById = (id) => {
+    const map = { charge: '充能', loveHate: '愛/憎', bind: '束縛', paralyze: '麻痺', swiftness: '迅捷', poise: '呼吸法' };
+    return { id, name: map[id] || id };
+};
+sandbox.renderIdentityModal = () => {};
+sandbox.escapeHtml = (s) => s;
+
 const identityCombined = [
     readSource('src/config/identity-config.js'),
-    readSource('src/core/identity-engine.js')
+    readSource('src/core/identity-engine.js'),
+    readSource('src/ui/identity-hud.js')
 ].join('\n;\n')
-    + '\n;\nvar __identityExports = { getIdentityById, IDENTITY_LIBRARY, evaluatePlayerKill, evaluatePlayerTurnEnd, evaluatePlayerAttack };';
+    + '\n;\nvar __identityExports = { getIdentityById, IDENTITY_LIBRARY, evaluatePlayerKill, evaluatePlayerTurnEnd,'
+    + ' evaluatePlayerAttack, idtDeclareActiveSkill, idtConsumePendingActiveBonus, identityHudState };';
 vm.runInContext(identityCombined, sandbox, { filename: 'identity-combined.js' });
-const { IDENTITY_LIBRARY: ID_LIB, evaluatePlayerKill, evaluatePlayerTurnEnd } = sandbox.__identityExports;
+const { IDENTITY_LIBRARY: ID_LIB, evaluatePlayerKill, evaluatePlayerTurnEnd,
+    idtDeclareActiveSkill, idtConsumePendingActiveBonus, identityHudState } = sandbox.__identityExports;
 
 console.log('\n[人格引擎] evaluatePlayerKill（onKill：擊殺／昏迷觸發）');
 
@@ -1310,6 +1328,56 @@ test('無 onTurnEnd hook 的卡 → 回傳空結算（不炸）', () => {
 });
 
 console.log('\n[狀態設定] turnEndDecay 資料驅動衰減欄位');
+
+console.log('\n[人格引擎] 主動宣告技（onActive：宣告扣成本、加值併入下次攻擊）');
+
+// 依 effect 結構在資料庫中找一張範例卡（不寫死 id，避免資料調整後測試失聯）
+function findActiveCard(pred) {
+    for (const [id, c] of Object.entries(ID_LIB)) {
+        if (!c.hooks || !Array.isArray(c.hooks.onActive)) continue;
+        const i = c.hooks.onActive.findIndex(h => h && h.effect && pred(h.effect));
+        if (i >= 0) return { id, index: i, effect: c.hooks.onActive[i].effect };
+    }
+    return null;
+}
+
+test('宣告消耗充能→DP 加值暫存到下次攻擊，成本從自身扣除', () => {
+    resetCaptures();
+    const found = findActiveCard(e => e.cost && e.cost.charge && e.dpBonus);
+    assert.ok(found, '應能在資料庫找到「消耗充能 +DP」的主動技');
+    sandbox.state.units = [{ id: 'me', name: '角色', status: { 充能: '5' } }, { id: 'foe', name: '敵', status: {} }];
+    identityHudState.attackerId = 'me';
+    identityHudState.targetId = 'foe';
+    idtConsumePendingActiveBonus('me'); // 清掉前一測試殘留
+    idtDeclareActiveSkill(found.id, found.index);
+    const need = found.effect.cost.charge;
+    assert.strictEqual(sandbox.findUnitById('me').status['充能'], String(5 - need), `充能應扣 ${need}`);
+    const pend = idtConsumePendingActiveBonus('me');
+    assert.ok(pend && pend.dp === found.effect.dpBonus, 'DP 加值應暫存待下次攻擊');
+    assert.strictEqual(idtConsumePendingActiveBonus('me'), null, '取用後清除，不重複套用');
+});
+
+test('宣告消耗充能→對目標施加狀態；資源不足時不扣也不套用', () => {
+    resetCaptures();
+    const found = findActiveCard(e => e.cost && e.cost.charge && e.targetStatus);
+    assert.ok(found, '應能找到「消耗充能→施加狀態」的主動技');
+    // 足夠：施加狀態、扣成本
+    sandbox.state.units = [{ id: 'me', status: { 充能: '10' } }, { id: 'foe', status: {} }];
+    identityHudState.attackerId = 'me';
+    identityHudState.targetId = 'foe';
+    idtDeclareActiveSkill(found.id, found.index);
+    assert.strictEqual(sandbox.findUnitById('me').status['充能'], String(10 - found.effect.cost.charge), '成本已扣');
+    assert.ok(captured.addStatus.some(a => a.unitId === 'foe'), '對目標施加了狀態');
+    // 不足：不扣、不套用、給提示
+    resetCaptures();
+    sandbox.state.units = [{ id: 'me', status: { 充能: '1' } }, { id: 'foe', status: {} }];
+    identityHudState.attackerId = 'me';
+    identityHudState.targetId = 'foe';
+    idtDeclareActiveSkill(found.id, found.index);
+    assert.strictEqual(sandbox.findUnitById('me').status['充能'], '1', '資源不足 → 充能不變');
+    assert.strictEqual(captured.addStatus.length, 0, '資源不足 → 不施加狀態');
+    assert.strictEqual(idtConsumePendingActiveBonus('me'), null, '資源不足 → 無暫存加值');
+});
 
 test('充能與混亂皆標記 turnEndDecay:1（供回合結束自動 −1）', () => {
     const findDef = (id) => {

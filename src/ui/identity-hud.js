@@ -867,6 +867,8 @@ function refreshIdentityResult() {
  */
 function performIdentityTurnStart(unitId) {
     if (typeof evaluatePlayerTurnStart !== 'function') return 0;
+    // 上回合宣告卻沒打出的主動技加值不應延續到本回合，回合開始時清除
+    idtClearPendingActiveBonus(unitId);
     const owned = collectOwnedIdentities();
     const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
     const res = evaluatePlayerTurnStart(owned, buildEngineUnitState(attackerUnit));
@@ -1105,34 +1107,184 @@ function renderIdentityManualInputs() {
         </div>`;
 }
 
+// ===== 主動宣告技（onActive）=====
+// 已宣告、待併入「下一次攻擊」的主動技加值（依攻擊者單位 id 暫存，發起攻擊時取用並清除）。
+// { [unitId]: { dp, extraSuccess, damage, notes: [] } }
+let idtPendingActiveBonus = {};
+
+/** 某 onActive 是否可由本面板自動宣告：帶結構化 effect 且有可消耗成本（cost）。 */
+function idtIsDeclarable(hook) {
+    return !!(hook && hook.effect && hook.effect.cost && typeof hook.effect.cost === 'object');
+}
+
+/** 計算某 effect 的數值加值（spellPower／weaponDamage／finalDamage 皆折算為傷害）。 */
+function idtEffectBonuses(eff) {
+    return {
+        dp: parseInt(eff.dpBonus) || 0,
+        extraSuccess: parseInt(eff.extraSuccess) || 0,
+        damage: (parseInt(eff.spellPower) || 0) + (parseInt(eff.weaponDamage) || 0) + (parseInt(eff.finalDamage) || 0)
+    };
+}
+
 /**
- * 渲染「主動宣告技」區：列出持有卡的 onActive 技能（超載、震顫引爆、消耗愛憎等），
- * 玩家自行宣告才生效，引擎不自動計入數值；重複抽取解鎖技未勾選解鎖時以半透明＋標籤顯示。
- * 沒有任何持有卡帶主動宣告技時，整段不顯示。
+ * 玩家宣告一項主動技（onActive 且帶 effect.cost）：
+ *   1) 檢查自身資源足夠（充能／愛憎等）→ 不足則中止
+ *   2) 扣除成本
+ *   3) 套用 targetStatus（對目標）／selfStatus（對自己）
+ *   4) 數值加值（DP／附加成功／傷害）暫存到「下一次攻擊」，發起攻擊時自動併入黑箱計算
+ * @param {string} cardId
+ * @param {number} index - onActive 陣列索引
+ */
+function idtDeclareActiveSkill(cardId, index) {
+    const card = (typeof getIdentityById === 'function') ? getIdentityById(cardId) : null;
+    if (!card || !card.hooks || !Array.isArray(card.hooks.onActive)) return;
+    const hook = card.hooks.onActive[index];
+    if (!idtIsDeclarable(hook)) return;
+    const eff = hook.effect;
+
+    const unitId = identityHudState.attackerId;
+    const unit = (typeof findUnitById === 'function' && unitId) ? findUnitById(unitId) : null;
+    if (!unit) { if (typeof showToast === 'function') showToast('請先指定我方單位'); return; }
+
+    // 1) 檢查成本
+    const cost = eff.cost || {};
+    for (const [engKey, amt] of Object.entries(cost)) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const name = identityStatusName(engKey);
+        const cur = (unit.status && parseInt(unit.status[name])) || 0;
+        if (cur < need) {
+            if (typeof showToast === 'function') showToast(`${hook.name || '宣告技'}：${name} 不足（需 ${need}、現有 ${cur}）`);
+            return;
+        }
+    }
+    // 2) 扣除成本
+    const costNotes = [];
+    for (const [engKey, amt] of Object.entries(cost)) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const name = identityStatusName(engKey);
+        const cur = (unit.status && parseInt(unit.status[name])) || 0;
+        if (typeof updateStatusStacks === 'function') updateStatusStacks(unitId, name, cur - need);
+        costNotes.push(`${name}-${need}`);
+    }
+
+    // 3) 套用狀態
+    const statusNote = (m) => Object.entries(m || {}).map(([k, v]) => `${identityStatusName(k)}+${v}`).join('、');
+    const applyNotes = [];
+    if (eff.targetStatus) {
+        if (identityHudState.targetId) {
+            applyEngineStatusesToUnit(identityHudState.targetId, eff.targetStatus);
+            applyNotes.push('對目標：' + statusNote(eff.targetStatus));
+        } else {
+            applyNotes.push('⚠ 未指定目標，未套用：' + statusNote(eff.targetStatus));
+        }
+    }
+    if (eff.selfStatus) {
+        applyEngineStatusesToUnit(unitId, eff.selfStatus);
+        applyNotes.push('對自己：' + statusNote(eff.selfStatus));
+    }
+
+    // 4) 數值加值暫存到下一次攻擊
+    const b = idtEffectBonuses(eff);
+    if (b.dp || b.extraSuccess || b.damage) {
+        const p = idtPendingActiveBonus[unitId] || { dp: 0, extraSuccess: 0, damage: 0, notes: [] };
+        p.dp += b.dp; p.extraSuccess += b.extraSuccess; p.damage += b.damage;
+        p.notes.push(hook.name || hook.source || '主動技');
+        idtPendingActiveBonus[unitId] = p;
+    }
+
+    const bonusTxt = [b.dp ? `DP+${b.dp}` : '', b.extraSuccess ? `附加+${b.extraSuccess}` : '', b.damage ? `傷害+${b.damage}` : '']
+        .filter(Boolean).join('、');
+    if (typeof showToast === 'function') {
+        showToast(`✅ 宣告「${hook.name || hook.source}」`
+            + (costNotes.length ? `（消耗 ${costNotes.join('、')}）` : '')
+            + (bonusTxt ? `，${bonusTxt} 併入下次攻擊` : '')
+            + (applyNotes.length ? `；${applyNotes.join('；')}` : ''));
+    }
+    renderIdentityModal();
+}
+
+/**
+ * 取出並清除某單位「待併入攻擊」的主動技加值（combat-modals 於發起攻擊時呼叫）。
+ * @param {string} unitId
+ * @returns {{dp:number,extraSuccess:number,damage:number,notes:string[]}|null}
+ */
+function idtConsumePendingActiveBonus(unitId) {
+    const p = idtPendingActiveBonus[unitId];
+    if (!p) return null;
+    delete idtPendingActiveBonus[unitId];
+    return p;
+}
+
+/** 清除某單位待併入的主動技加值（回合開始時呼叫，避免上回合宣告卻沒打出的加值殘留）。 */
+function idtClearPendingActiveBonus(unitId) {
+    if (unitId && idtPendingActiveBonus[unitId]) delete idtPendingActiveBonus[unitId];
+}
+
+/**
+ * 渲染「主動宣告技」區：列出持有卡的 onActive 技能（超載、消耗充能／愛憎等）。
+ * 帶結構化 effect.cost 的技能提供「宣告」按鈕：一鍵扣成本、套狀態、加值併入下次攻擊；
+ * 資源不足時按鈕禁用並標示。純敘述型（無 effect）維持說明顯示，由玩家／ST 依描述判定。
+ * 重複抽取解鎖技未勾選解鎖時以半透明＋標籤顯示、不可宣告。
  */
 function renderIdentityActiveSkills() {
     const owned = collectOwnedIdentities();
     const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+    const unit = (typeof findUnitById === 'function' && identityHudState.attackerId) ? findUnitById(identityHudState.attackerId) : null;
+    const pending = unit ? idtPendingActiveBonus[unit.id] : null;
+
     let rows = '';
     for (const { id, unlocked } of owned) {
         const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
         if (!card || !card.hooks || !Array.isArray(card.hooks.onActive) || !card.hooks.onActive.length) continue;
-        const items = card.hooks.onActive.map(h => {
+        const items = card.hooks.onActive.map((h, i) => {
             if (!h) return '';
             const lockedOut = !!h.locked && !unlocked;
             const tag = lockedOut ? '<span class="idt-active-locked-tag">未解鎖</span>' : '';
+
+            let btn = '';
+            if (idtIsDeclarable(h) && !lockedOut) {
+                // 成本標示與可負擔判定
+                const costParts = [];
+                let affordable = !!unit;
+                for (const [engKey, amt] of Object.entries(h.effect.cost)) {
+                    const need = parseInt(amt) || 0;
+                    if (need <= 0) continue;
+                    const name = identityStatusName(engKey);
+                    const cur = (unit && unit.status && parseInt(unit.status[name])) || 0;
+                    if (cur < need) affordable = false;
+                    costParts.push(`${esc(name)} ${cur}/${need}`);
+                }
+                const costTxt = costParts.length ? `<span class="idt-active-cost">消耗：${costParts.join('、')}</span>` : '';
+                btn = `${costTxt}<button class="idt-btn idt-active-declare" ${affordable ? '' : 'disabled'}
+                            onclick="idtDeclareActiveSkill('${id}',${i})"
+                            title="${affordable ? '扣除成本並宣告' : '資源不足'}">宣告</button>`;
+            }
             return `<div class="idt-active-item${lockedOut ? ' idt-active-locked' : ''}">
                         <span class="idt-active-name">${esc(h.name || h.source || '')}${tag}</span>
                         <span class="idt-active-desc">${esc(h.desc || '')}</span>
+                        ${btn}
                     </div>`;
         }).join('');
         rows += `<div class="idt-mi-card"><div class="idt-mi-card-name">${esc(card.name)}</div>${items}</div>`;
     }
     if (!rows) return '';
+
+    const pendingBanner = (pending && (pending.dp || pending.extraSuccess || pending.damage))
+        ? `<div class="idt-active-pending">🎯 已宣告待併入下次攻擊：${[
+                pending.dp ? `DP+${pending.dp}` : '',
+                pending.extraSuccess ? `附加成功+${pending.extraSuccess}` : '',
+                pending.damage ? `傷害+${pending.damage}` : ''
+            ].filter(Boolean).join('、')}
+            <button class="idt-btn idt-active-clear" onclick="idtClearPendingActiveBonus('${unit.id}');renderIdentityModal();" title="取消已宣告的加值">清除</button></div>`
+        : '';
+
     return `
         <div class="idt-section">
-            <div class="idt-section-title">②‧6 主動宣告技（宣告才生效，引擎不自動計入）</div>
-            <div class="idt-mi-hint-top">超載、引爆、消耗資源類技能需在攻擊前／命中時自行宣告；消耗與加值請依描述由 ST 結算。</div>
+            <div class="idt-section-title">②‧6 主動宣告技（宣告扣成本、加值自動併入下次攻擊）</div>
+            <div class="idt-mi-hint-top">超載／消耗資源類技能按「宣告」即自動扣除成本並套用效果；數值加值會併入你下一次發起的攻擊。純敘述型技能仍由描述判定。</div>
+            ${pendingBanner}
             ${rows}
         </div>`;
 }
@@ -1405,6 +1557,12 @@ function injectIdentityStyles() {
         .idt-active-desc{font-size:.76rem;color:var(--text-dim,#aaa);line-height:1.5;}
         .idt-active-locked{opacity:.5;}
         .idt-active-locked-tag{font-size:.66rem;background:var(--bg-input,#222);border:1px solid var(--border,#33333a);color:var(--text-dim,#999);border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
+        .idt-active-cost{font-size:.7rem;color:var(--accent-blue,#4aa3ff);margin-right:8px;}
+        .idt-active-declare{background:var(--accent-orange,#e67e22);border:none;color:#fff;border-radius:5px;padding:3px 12px;font-size:.76rem;cursor:pointer;align-self:flex-start;margin-top:2px;}
+        .idt-active-declare:hover:not([disabled]){filter:brightness(1.12);}
+        .idt-active-declare[disabled]{opacity:.45;cursor:not-allowed;}
+        .idt-active-pending{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.78rem;color:var(--accent-green,#8bd17c);background:rgba(39,174,96,.1);border:1px solid var(--accent-green,#27ae60);border-radius:6px;padding:5px 8px;margin-bottom:8px;}
+        .idt-active-clear{background:none;border:1px solid var(--border,#33333a);color:var(--text-dim,#aaa);border-radius:5px;padding:2px 8px;font-size:.72rem;cursor:pointer;}
         .idt-remind-title{color:var(--accent-blue,#4aa3ff);}
         .idt-untrig-title{color:var(--text-dim,#999);}
         .idt-log.idt-untrig{opacity:.62;}
@@ -1431,6 +1589,10 @@ if (typeof window !== 'undefined') {
     window.runIdentityTurnStart = runIdentityTurnStart;
     window.autoTriggerIdentityTurnStart = autoTriggerIdentityTurnStart;
     window.renderIdentityModal = renderIdentityModal;
+    // 主動宣告技
+    window.idtDeclareActiveSkill = idtDeclareActiveSkill;
+    window.idtConsumePendingActiveBonus = idtConsumePendingActiveBonus;
+    window.idtClearPendingActiveBonus = idtClearPendingActiveBonus;
     // 自訂人格卡（AI 人格鍛造爐）
     window.openAddIdentityForm = openAddIdentityForm;
     window.cancelAddIdentity = cancelAddIdentity;

@@ -402,6 +402,21 @@ function submitAttackModal() {
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
     const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
 
+    // 主動宣告技（onActive）：併入玩家先前於人格卡面板「宣告」、待套用到本次攻擊的加值。
+    // 成本已於宣告當下扣除，此處只把 DP／附加成功／傷害加值併入攻擊並清除暫存。
+    let declaredDamageBonus = 0;
+    if (myRole !== 'st' && attackerUnit && typeof idtConsumePendingActiveBonus === 'function') {
+        const pend = idtConsumePendingActiveBonus(attackerUnit.id);
+        if (pend) {
+            identityBonus.dpBonus = (identityBonus.dpBonus || 0) + (pend.dp || 0);
+            identityBonus.extraSuccess = (identityBonus.extraSuccess || 0) + (pend.extraSuccess || 0);
+            declaredDamageBonus = pend.damage || 0;
+            if (Array.isArray(pend.notes) && pend.notes.length) {
+                identityBonus.names = [...(identityBonus.names || []), ...pend.notes.map(n => '宣告:' + n)];
+            }
+        }
+    }
+
     // 玩家發起攻擊：若本回合未對抗任何 BOSS 行動，自動套用對抗分配的自身 DP 加成。
     // 「未對抗加成」是 BOSS 多重行動（對抗分配）專屬規則——只有攻擊「該 BOSS 本體或其行動條目」
     // 時才生效；攻擊一般小怪／其他敵方單位不觸發。
@@ -447,6 +462,8 @@ function submitAttackModal() {
         onKillSelfStatus: identityBonus.onKillSelfStatus || {},
         onKillSelfStatusNotes: identityBonus.onKillSelfStatusNotes || [],
         counterPhaseDpBonus,
+        // 主動宣告技折算的傷害加值（spellPower／weaponDamage／finalDamage），於擲骰套傷時併入
+        declaredDamageBonus,
         // 侵蝕攻擊：每層侵蝕增幅換算的附加成功（黑箱計算併入附加成功桶）
         erosionExtraSuccess,
         erosionAttack: !!attackModalErosion,
@@ -688,6 +705,8 @@ function cqOnSTReview(data) {
         if (identityExtraSuccess > 0) rows.push({ label: '人格卡額外成功', value: `+${identityExtraSuccess}`, cls: 'is-bonus' });
         const erosionExtra = Number(atk.erosionExtraSuccess) || 0;
         if (atk.erosionAttack) rows.push({ label: '🩸 侵蝕攻擊附加成功', value: `+${erosionExtra}（每層侵蝕增幅 +1，已計入附加成功）`, cls: 'is-bonus' });
+        const declaredDmg = Number(atk.declaredDamageBonus) || 0;
+        if (declaredDmg > 0) rows.push({ label: '主動宣告技傷害', value: `+${declaredDmg}（法術威力／武器傷害，擲骰套傷時併入）`, cls: 'is-bonus' });
         if (counterPhaseDpBonus > 0)  rows.push({ label: '未對抗加成 DP', value: `+${counterPhaseDpBonus}`, cls: 'is-bonus' });
         if (Array.isArray(atk.identityNotes) && atk.identityNotes.length)
             rows.push({ label: '套用人格卡', value: atk.identityNotes.join('、'), cls: 'is-bonus' });
@@ -974,8 +993,10 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         }
     }
 
-    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
-    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus;
+    // 主動宣告技折算的傷害加值（法術威力／武器傷害／最終傷害）
+    const declaredDamage = Math.max(0, Number(atk.declaredDamageBonus) || 0);
+    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 宣告技傷害 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
+    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + declaredDamage;
     const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
     const capApplied = (cap > 0 && totalBeforeCap > cap);
     const damage = capApplied ? cap : totalBeforeCap;
@@ -1033,8 +1054,8 @@ function confirmSTReviewSaveMode(saveInfo) {
         ? saveInfo.targets
         : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput, saveAuto: saveExtraInput }];
 
-    // 攻擊命中總量（成功 + 附加），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
-    const atkHitTotal = atkSuccess + baseExtra;
+    // 攻擊命中總量（成功 + 附加 + 宣告技傷害加值），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
+    const atkHitTotal = atkSuccess + baseExtra + Math.max(0, Number(atk.declaredDamageBonus) || 0);
     const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
 
     const results = targets.map(t => {

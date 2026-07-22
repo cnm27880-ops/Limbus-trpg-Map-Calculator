@@ -37,7 +37,9 @@ function cqOnBroadcasting(data) {
         let text = `【${attackerName}】攻擊【${targetName}】！🎲 擲 ${roll.totalRolled || finalDice} 顆${explodeNote}${tensNote} → 成功 ${roll.successes}`;
         if (roll.extraSuccess > 0) text += ` ＋ 附加 ${roll.extraSuccess}`;
         if (roll.statusBonus > 0) text += ` ＋ ${roll.statusBonusText}`;
+        if (roll.strengthBonus > 0) text += ` ＋ 強壯${roll.strengthBonus}`;
         if (roll.capApplied) text += ` ＝ ${roll.totalBeforeCap}，上限 ${roll.cap}`;
+        if (roll.enduranceReduction > 0) text += ` － 不屈${roll.enduranceReduction}`;
         banner.appendChild(document.createTextNode(text + ' ➡️ 總傷害 '));
         const dmgSpan = document.createElement('span');
         dmgSpan.className = 'combat-broadcast-dice';

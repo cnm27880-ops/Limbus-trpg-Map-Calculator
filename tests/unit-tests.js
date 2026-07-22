@@ -102,10 +102,12 @@ const files = [
     'src/ui/erosion-hud.js'
 ];
 const combined = files.map(f => readSource(f)).join('\n;\n')
-    + '\n;\nvar __exports = { STATUS_LIBRARY, isDebuffStatus, eroDrainSin, bbRunBlackBoxCalculation };';
+    + '\n;\nvar __exports = { STATUS_LIBRARY, isDebuffStatus, eroDrainSin, bbRunBlackBoxCalculation,'
+    + ' eroGetAttackThreshold, eroSetAttackThreshold, eroCanAttackAllies };';
 vm.runInContext(combined, sandbox, { filename: 'combined-sources.js' });
 
-const { isDebuffStatus, STATUS_LIBRARY, eroDrainSin, bbRunBlackBoxCalculation } = sandbox.__exports;
+const { isDebuffStatus, STATUS_LIBRARY, eroDrainSin, bbRunBlackBoxCalculation,
+    eroGetAttackThreshold, eroSetAttackThreshold, eroCanAttackAllies } = sandbox.__exports;
 // getStatusByName stub 需用到 STATUS_LIBRARY（const 不會自動掛到 context）
 sandbox.STATUS_LIBRARY = STATUS_LIBRARY;
 
@@ -1243,6 +1245,17 @@ console.log('\n[侵蝕攻擊] 每層侵蝕增幅 = 1 附加成功（黑箱附加
             defense: { dp: 0, auto: 0 }
         });
         assert.strictEqual(captured.stReview.baseExtraSuccess, 3, '無侵蝕欄位 → 維持宣告 3');
+    });
+
+    test('侵蝕攻擊門檻可調整：eroCanAttackAllies 依當前門檻判定', () => {
+        resetCaptures();
+        const unit = { type: 'player', status: { 侵蝕增幅: '15' } };
+        eroSetAttackThreshold(20);
+        assert.strictEqual(eroGetAttackThreshold(), 20, '門檻應更新為 20');
+        assert.strictEqual(eroCanAttackAllies(unit), false, '15 < 20 → 不可攻擊隊友');
+        eroSetAttackThreshold(10);
+        assert.strictEqual(eroCanAttackAllies(unit), true, '15 ≥ 10 → 可攻擊隊友');
+        assert.strictEqual(eroCanAttackAllies({ type: 'enemy', status: { 侵蝕增幅: '99' } }), false, '非玩家單位不適用');
     });
 })();
 

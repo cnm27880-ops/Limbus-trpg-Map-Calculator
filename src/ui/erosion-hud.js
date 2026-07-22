@@ -49,6 +49,24 @@ function erosionSetupListener() {
     if (typeof unsubscribeListeners !== 'undefined') {
         unsubscribeListeners.push(() => roomRef.child('events/erosion').off('value', eroEventListener));
     }
+
+    // 侵蝕攻擊門檻（房間共享）：所有客戶端同步，玩家端右鍵選單依此判斷是否顯示「侵蝕攻擊」
+    const eroThresholdListener = roomRef.child('erosionAttackThreshold').on('value', snapshot => {
+        if (snapshot.exists()) {
+            const v = parseInt(snapshot.val(), 10);
+            eroAttackThreshold = Number.isFinite(v) && v >= 1 ? v : ERO_DEFAULT_THRESHOLD;
+        } else {
+            eroAttackThreshold = ERO_DEFAULT_THRESHOLD;
+            if (typeof myRole !== 'undefined' && myRole === 'st') {
+                roomRef.child('erosionAttackThreshold').set(ERO_DEFAULT_THRESHOLD); // ST 初始化節點
+            }
+        }
+        const hud = document.getElementById('erosion-hud');
+        if (hud && !hud.classList.contains('hidden')) renderErosionConsole();
+    });
+    if (typeof unsubscribeListeners !== 'undefined') {
+        unsubscribeListeners.push(() => roomRef.child('erosionAttackThreshold').off('value', eroThresholdListener));
+    }
 }
 
 /** 僅 ST 可見侵蝕控制台的 QAB 開關。 */
@@ -203,9 +221,22 @@ function eroGetErosionLayers(unit) {
     return parseInt(unit.status[ERO_STATUS_NAME]) || 0;
 }
 
-// 對隊友發動侵蝕攻擊的門檻：與暴走閾值一致（侵蝕增幅達此層數才可能鎖定友軍）。
-const ERO_ATTACK_THRESHOLD = ERO_DEFAULT_THRESHOLD;
-function eroGetAttackThreshold() { return ERO_ATTACK_THRESHOLD; }
+// 對隊友發動侵蝕攻擊的門檻：房間共享（存 Firebase /rooms/{id}/erosionAttackThreshold），
+// 由 ST 於控制台調整；玩家端右鍵選單依此判斷是否顯示「侵蝕攻擊」。預設＝暴走閾值 20。
+let eroAttackThreshold = ERO_DEFAULT_THRESHOLD;
+function eroGetAttackThreshold() { return eroAttackThreshold; }
+
+/** ST：設定侵蝕攻擊門檻並同步到房間（夾限為 ≥1 的整數）。 */
+function eroSetAttackThreshold(v) {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const n = Math.max(1, Math.round(Number(v) || 0));
+    eroAttackThreshold = n;
+    if (typeof roomRef !== 'undefined' && roomRef) {
+        roomRef.child('erosionAttackThreshold').set(n);
+    }
+    if (typeof showToast === 'function') showToast(`已設定侵蝕攻擊門檻為 ${n} 層（全場同步）`);
+    renderErosionConsole();
+}
 
 /**
  * 某玩家單位目前侵蝕增幅是否已達「可對隊友發動侵蝕攻擊」的門檻。
@@ -227,6 +258,8 @@ function renderErosionConsole() {
     const prevTargets = eroGetSelectedValues('ero-revive-target');
     const prevThreshold = document.getElementById('ero-threshold')?.value || ERO_DEFAULT_THRESHOLD;
     const prevGain = document.getElementById('ero-gain-amount')?.value || 1;
+    // 侵蝕攻擊門檻：保留 ST 尚未套用的輸入值（避免時鐘刷新等重繪把輸入到一半的值清掉）
+    const prevAttackThreshold = document.getElementById('ero-attack-threshold')?.value || eroGetAttackThreshold();
 
     // 暴走閾值狀態列：多選目標玩家時，僅以第一位作為顯示／判定基準（與單選邏輯相容）
     const firstTargetId = prevTargets[0] || '';
@@ -286,6 +319,16 @@ function renderErosionConsole() {
                 <button class="ero-btn ero-burn" onclick="eroBurnOut()">✨ 燃盡（清空侵蝕）</button>
             </div>
             <div class="ero-subrule-note">🛡 補充規則：即將對隊友發動侵蝕攻擊時，該隊友可進行一次「純粹的意志／強韌豁免」（不可燒意志加檢定、不得獲得其他加值），此次傷害減免＝成功數（嚴重傷害）。</div>
+        </div>
+
+        <div class="ero-section">
+            <div class="ero-section-title">🩸 侵蝕攻擊門檻（對隊友）</div>
+            <div class="ero-field"><label>玩家侵蝕增幅達此層數時，才可右鍵其他玩家發動「侵蝕攻擊」（全場同步）</label>
+                <div class="ero-gain-row">
+                    <input id="ero-attack-threshold" class="ero-input" type="number" min="1" step="1" value="${prevAttackThreshold}">
+                    <button class="ero-btn ero-plus" onclick="eroSetAttackThreshold(document.getElementById('ero-attack-threshold').value)">✔ 套用門檻</button>
+                </div>
+            </div>
         </div>`;
 
     // 單位下拉以 DOM 填充（名稱用 textContent，避免 innerHTML 注入）
@@ -476,6 +519,7 @@ if (typeof window !== 'undefined') {
     window.erosionSetupListener = erosionSetupListener;
     window.eroGetErosionLayers = eroGetErosionLayers;
     window.eroGetAttackThreshold = eroGetAttackThreshold;
+    window.eroSetAttackThreshold = eroSetAttackThreshold;
     window.eroCanAttackAllies = eroCanAttackAllies;
     window.toggleErosionHud = toggleErosionHud;
     window.closeErosionHud = closeErosionHud;

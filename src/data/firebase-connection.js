@@ -786,10 +786,15 @@ function setupRoomListeners() {
             // prevTurnIdx 剛加入房間時已由 loadRoomData 設成與本次相同的值，故不會在剛連線/
             // 重新整理時誤觸發（此時兩者相等，不算「改變」）。
             if (state.turnIdx !== prevTurnIdx && state.isCombatActive && Array.isArray(state.units) &&
-                typeof myPlayerId !== 'undefined' && myPlayerId &&
-                typeof autoTriggerIdentityTurnStart === 'function') {
+                typeof myPlayerId !== 'undefined' && myPlayerId) {
+                // 回合結束：先前輪到的若是自己的單位、現在換人 → 觸發回合結束人格卡結算
+                const prevUnit = state.units[prevTurnIdx];
+                if (prevUnit && prevUnit.ownerId === myPlayerId && typeof autoTriggerIdentityTurnEnd === 'function') {
+                    autoTriggerIdentityTurnEnd(prevUnit);
+                }
+                // 回合開始：現在輪到的是自己的單位 → 觸發回合開始資源結算
                 const activeUnit = state.units[state.turnIdx];
-                if (activeUnit && activeUnit.ownerId === myPlayerId) {
+                if (activeUnit && activeUnit.ownerId === myPlayerId && typeof autoTriggerIdentityTurnStart === 'function') {
                     autoTriggerIdentityTurnStart(activeUnit);
                 }
             }

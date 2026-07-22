@@ -7,6 +7,9 @@ const ATTACK_MODAL_MEMO_KEY = 'limbus-attack-modal-memo';
 const DEFENSE_MODAL_MEMO_KEY = 'limbus-defense-modal-memo';
 
 let attackModalTarget = null; // { id, name }
+// 侵蝕攻擊模式：玩家對其他玩家發動（E.G.O 失控）。true 時 submitAttackModal 走威脅流程
+// 並自動加入「每層侵蝕增幅 = 1 附加成功」。openAttackModal 每次開啟一律重置為 false。
+let attackModalErosion = false;
 let threatPendingStatuses = []; // ST 威脅時，所選 BOSS 行動要施加給目標的狀態 [{id,stacks}]
 // ST 威脅時，所選行動若為【單方面攻擊】（公佈後無人對抗）：{ surpriseLevel, victimId, victimName }
 // 送出威脅時隨攻擊方資料同步，目標玩家端據此跳過防禦 QTE、自動以措手不及防禦應戰。
@@ -73,6 +76,7 @@ function openAttackModal(unitId) {
     const u = typeof findUnitById === 'function' ? findUnitById(unitId) : null;
     if (!u) return;
     attackModalTarget = { id: u.id, name: u.name || '目標' };
+    attackModalErosion = false;  // 一般攻擊／威脅；侵蝕攻擊由 openErosionAttackModal 另行設定
 
     document.getElementById('attack-target-name').innerText = `目標：${u.name || '---'}`;
     cmUpdateAttackDistance(u);
@@ -252,6 +256,33 @@ function openThreatModal(unitId) {
 }
 
 /**
+ * 玩家對「其他玩家」右鍵點擊「🩸 侵蝕攻擊」：E.G.O 侵蝕失控攻擊隊友。
+ * 沿用攻擊 Modal，但送出時走威脅流程（目標玩家填防禦 QTE），
+ * 並自動加入「每層侵蝕增幅 = 1 附加成功」（見 submitAttackModal 的 attackModalErosion 分支）。
+ */
+function openErosionAttackModal(unitId) {
+    openAttackModal(unitId);
+    attackModalErosion = true;
+
+    // 侵蝕攻擊固定走「防禦扣除」流程（目標玩家填 QTE 防禦），避免落入豁免抵擋的多目標挑選
+    const modeSel = document.getElementById('attack-resolve-mode');
+    if (modeSel) { modeSel.value = 'def'; cmOnAttackModeChange(); }
+
+    // 讀取攻擊者（自己的單位）目前侵蝕層數，於 Modal 頂部提示將自動加入的附加成功
+    const attacker = cmResolveAttackerUnit();
+    const layers = (attacker && typeof eroGetErosionLayers === 'function') ? eroGetErosionLayers(attacker) : 0;
+    const nameEl = document.getElementById('attack-target-name');
+    if (nameEl && attackModalTarget) {
+        nameEl.innerText = `🩸 侵蝕攻擊 → ${attackModalTarget.name || '隊友'}（自動附加成功 +${layers}｜每層侵蝕 +1）`;
+    }
+    if (typeof showToast === 'function') {
+        showToast(layers > 0
+            ? `🩸 侵蝕攻擊：將自動加入 ${layers} 點附加成功（每層侵蝕增幅 +1）`
+            : '🩸 侵蝕攻擊：目前無侵蝕增幅層數，附加成功 +0');
+    }
+}
+
+/**
  * 自動套用攻擊方目前在人格卡面板（identity-hud）勾選持有/解鎖的人格卡，
  * 疊加其 onAttack/onHit 數值加值，回傳可併入黑箱計算的 DP/額外成功加總與觸發紀錄。
  * 僅在玩家發起攻擊時套用（ST 發起威脅走的是另一套敵方資料，不涉及玩家人格卡）。
@@ -293,6 +324,12 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     }
     const result = evaluatePlayerAttack(ownedCards, attackerState, targetState);
 
+    // onKill：擊殺／使目標昏迷時的效果同樣於此預算（玩家端算、隨攻擊資料送出，ST 端判定倒下時套用）
+    let killResult = { othersTargetStatus: {}, selfStatus: {}, killedTargetStatus: {}, triggerLogs: [] };
+    if (typeof evaluatePlayerKill === 'function') {
+        killResult = evaluatePlayerKill(ownedCards, attackerState, targetState);
+    }
+
     // 人格引擎在攻擊／命中時會對目標（減益）與攻擊者自身（如迅捷/呼吸法等資源）施加的狀態。
     // 整理成「中文狀態名＋層數」清單，供發起攻擊時自動施加並在 ST 明細中列出。
     const buildStatusNotes = (statusMap) => Object.entries(statusMap).map(([engKey, layers]) => {
@@ -318,7 +355,13 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         onHitTargetStatus,
         onHitTargetStatusNotes: buildStatusNotes(onHitTargetStatus),
         onHitSelfStatus,
-        onHitSelfStatusNotes: buildStatusNotes(onHitSelfStatus)
+        onHitSelfStatusNotes: buildStatusNotes(onHitSelfStatus),
+        // onKill：擊殺／昏迷時施加給「場上其他敵方」「被擊殺目標」「攻擊者自身」的狀態
+        onKillOthersStatus: killResult.othersTargetStatus || {},
+        onKillOthersStatusNotes: buildStatusNotes(killResult.othersTargetStatus || {}),
+        onKillKilledStatus: killResult.killedTargetStatus || {},
+        onKillSelfStatus: killResult.selfStatus || {},
+        onKillSelfStatusNotes: buildStatusNotes(killResult.selfStatus || {})
     };
 }
 
@@ -359,6 +402,21 @@ function submitAttackModal() {
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(attackModalTarget.id) : null;
     const identityBonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
 
+    // 主動宣告技（onActive）：併入玩家先前於人格卡面板「宣告」、待套用到本次攻擊的加值。
+    // 成本已於宣告當下扣除，此處只把 DP／附加成功／傷害加值併入攻擊並清除暫存。
+    let declaredDamageBonus = 0;
+    if (myRole !== 'st' && attackerUnit && typeof idtConsumePendingActiveBonus === 'function') {
+        const pend = idtConsumePendingActiveBonus(attackerUnit.id);
+        if (pend) {
+            identityBonus.dpBonus = (identityBonus.dpBonus || 0) + (pend.dp || 0);
+            identityBonus.extraSuccess = (identityBonus.extraSuccess || 0) + (pend.extraSuccess || 0);
+            declaredDamageBonus = pend.damage || 0;
+            if (Array.isArray(pend.notes) && pend.notes.length) {
+                identityBonus.names = [...(identityBonus.names || []), ...pend.notes.map(n => '宣告:' + n)];
+            }
+        }
+    }
+
     // 玩家發起攻擊：若本回合未對抗任何 BOSS 行動，自動套用對抗分配的自身 DP 加成。
     // 「未對抗加成」是 BOSS 多重行動（對抗分配）專屬規則——只有攻擊「該 BOSS 本體或其行動條目」
     // 時才生效；攻擊一般小怪／其他敵方單位不觸發。
@@ -372,6 +430,10 @@ function submitAttackModal() {
             counterPhaseDpBonus = cpResolvePlayerMods(myPlayerId, attackerUnit.init || 0).selfBonus;
         }
     }
+
+    // 侵蝕攻擊：每層侵蝕增幅 = 1 附加成功（讀取攻擊者自己單位當下的侵蝕層數）
+    const erosionExtraSuccess = (attackModalErosion && attackerUnit && typeof eroGetErosionLayers === 'function')
+        ? Math.max(0, eroGetErosionLayers(attackerUnit)) : 0;
 
     const attacker = {
         // 廣播顯示名以「攻擊單位的名稱」為準（而非玩家代號 myName）；無單位時才退回代號
@@ -393,7 +455,18 @@ function submitAttackModal() {
         onHitTargetStatusNotes: identityBonus.onHitTargetStatusNotes || [],
         onHitSelfStatus: identityBonus.onHitSelfStatus || {},
         onHitSelfStatusNotes: identityBonus.onHitSelfStatusNotes || [],
+        // 擊殺／昏迷時的人格卡效果（ST 端結算判定目標倒下時套用）
+        onKillOthersStatus: identityBonus.onKillOthersStatus || {},
+        onKillOthersStatusNotes: identityBonus.onKillOthersStatusNotes || [],
+        onKillKilledStatus: identityBonus.onKillKilledStatus || {},
+        onKillSelfStatus: identityBonus.onKillSelfStatus || {},
+        onKillSelfStatusNotes: identityBonus.onKillSelfStatusNotes || [],
         counterPhaseDpBonus,
+        // 主動宣告技折算的傷害加值（spellPower／weaponDamage／finalDamage），於擲骰套傷時併入
+        declaredDamageBonus,
+        // 侵蝕攻擊：每層侵蝕增幅換算的附加成功（黑箱計算併入附加成功桶）
+        erosionExtraSuccess,
+        erosionAttack: !!attackModalErosion,
         // 【單方面攻擊】標記：目標玩家端收到後跳過防禦 QTE，自動以「措手不及防禦」應戰
         surprise: !!(myRole === 'st' && threatUnopposedInfo),
         surpriseLevel: (myRole === 'st' && threatUnopposedInfo) ? (threatUnopposedInfo.surpriseLevel || 0) : 0
@@ -441,6 +514,23 @@ function submitAttackModal() {
         if (typeof showToast === 'function') {
             showToast(resolveMode === 'save' ? '威脅已發起（豁免抵擋），攻擊骰已自動擲出，請至審核面板輸入豁免...'
                 : (wasSurprise ? '⚡ 單方面攻擊已發起：目標將自動以措手不及防禦應戰' : '威脅已發起，等待玩家防禦...'));
+        }
+    } else if (attackModalErosion && resolveMode !== 'save') {
+        // 侵蝕攻擊：對其他玩家發起威脅（目標玩家填防禦 QTE），附加成功已含侵蝕層數
+        cqInitiateThreat({ attacker, target });
+        if (typeof identityHudState !== 'undefined') {
+            identityHudState.targetId = target.id;
+            if (typeof saveIdentityState === 'function') saveIdentityState();
+        }
+        // 攻擊宣告對目標施加的人格卡減益（若有）一樣先套用
+        if (identityBonus.onAttackTargetStatus && typeof applyEngineStatusesToUnit === 'function') {
+            applyEngineStatusesToUnit(target.id, identityBonus.onAttackTargetStatus);
+        }
+        if (identityBonus.onAttackSelfStatus && attackerUnit && typeof applyEngineStatusesToUnit === 'function') {
+            applyEngineStatusesToUnit(attackerUnit.id, identityBonus.onAttackSelfStatus);
+        }
+        if (typeof showToast === 'function') {
+            showToast(`🩸 侵蝕攻擊已對「${target.name}」發起，等待其防禦…（附加成功 +${erosionExtraSuccess}）`);
         }
     } else {
         cqInitiateAttack(resolveMode === 'save' ? { attacker, target: targets[0], targets } : { attacker, target });
@@ -613,6 +703,10 @@ function cqOnSTReview(data) {
         if (critVicious > 0)          rows.push({ label: '嚴重轉惡性', value: `${critVicious} 點`, cls: 'is-resource' });
         if (identityDpBonus > 0)      rows.push({ label: '人格卡 DP', value: `+${identityDpBonus}`, cls: 'is-bonus' });
         if (identityExtraSuccess > 0) rows.push({ label: '人格卡額外成功', value: `+${identityExtraSuccess}`, cls: 'is-bonus' });
+        const erosionExtra = Number(atk.erosionExtraSuccess) || 0;
+        if (atk.erosionAttack) rows.push({ label: '🩸 侵蝕攻擊附加成功', value: `+${erosionExtra}（每層侵蝕增幅 +1，已計入附加成功）`, cls: 'is-bonus' });
+        const declaredDmg = Number(atk.declaredDamageBonus) || 0;
+        if (declaredDmg > 0) rows.push({ label: '主動宣告技傷害', value: `+${declaredDmg}（法術威力／武器傷害，擲骰套傷時併入）`, cls: 'is-bonus' });
         if (counterPhaseDpBonus > 0)  rows.push({ label: '未對抗加成 DP', value: `+${counterPhaseDpBonus}`, cls: 'is-bonus' });
         if (Array.isArray(atk.identityNotes) && atk.identityNotes.length)
             rows.push({ label: '套用人格卡', value: atk.identityNotes.join('、'), cls: 'is-bonus' });
@@ -624,6 +718,10 @@ function cqOnSTReview(data) {
             rows.push({ label: '命中對目標施加', value: atk.onHitTargetStatusNotes.join('、'), cls: 'is-penalty' });
         if (Array.isArray(atk.onHitSelfStatusNotes) && atk.onHitSelfStatusNotes.length)
             rows.push({ label: '命中對自己施加', value: atk.onHitSelfStatusNotes.join('、'), cls: 'is-bonus' });
+        if (Array.isArray(atk.onKillOthersStatusNotes) && atk.onKillOthersStatusNotes.length)
+            rows.push({ label: '擊殺→其他敵方', value: atk.onKillOthersStatusNotes.join('、') + '（目標倒下時自動套用）', cls: 'is-penalty' });
+        if (Array.isArray(atk.onKillSelfStatusNotes) && atk.onKillSelfStatusNotes.length)
+            rows.push({ label: '擊殺→自己', value: atk.onKillSelfStatusNotes.join('、') + '（目標倒下時自動套用）', cls: 'is-bonus' });
 
         // 防禦方身上的「受擊消耗」狀態（破裂/震顫）：提示 ST 本次結算需計入其效果，
         // 確認廣播後會自動清除層數
@@ -729,6 +827,59 @@ function cmHasOnHitIdentityStatuses(atk) {
     );
 }
 
+/** 攻擊方資料是否帶有任何「擊殺／昏迷時施加」的人格卡狀態 */
+function cmHasOnKillIdentityStatuses(atk) {
+    return !!atk && (
+        (atk.onKillOthersStatus && Object.keys(atk.onKillOthersStatus).length > 0)
+        || (atk.onKillKilledStatus && Object.keys(atk.onKillKilledStatus).length > 0)
+        || (atk.onKillSelfStatus && Object.keys(atk.onKillSelfStatus).length > 0)
+    );
+}
+
+/**
+ * 擊倒判定：沿用「嚴重槽填滿＝喪失行動能力」作為目標倒下的認定，避免自行發明死亡規則。
+ * @param {object} unit
+ * @returns {boolean}
+ */
+function cmIsDefeated(unit) {
+    return !!unit && typeof isSevereGaugeFull === 'function' && isSevereGaugeFull(unit);
+}
+
+/**
+ * 目標於本次攻擊倒下時，套用人格卡 onKill 效果：
+ *   - onKillOthersStatus → 場上其他敵方單位（排除被擊殺者與多重行動條目）
+ *   - onKillKilledStatus → 被擊殺目標本身
+ *   - onKillSelfStatus   → 攻擊者自身單位
+ * @param {object} atk - 戰鬥隊列上的攻擊方資料
+ * @param {string} killedTargetId - 被擊殺的目標單位 id
+ * @returns {boolean} 是否有任何狀態被套用
+ */
+function cmApplyOnKillIdentityStatuses(atk, killedTargetId) {
+    if (!atk || typeof applyEngineStatusesToUnit !== 'function') return false;
+    let applied = false;
+
+    if (atk.onKillOthersStatus && Object.keys(atk.onKillOthersStatus).length
+        && typeof state !== 'undefined' && Array.isArray(state.units)) {
+        state.units.forEach(u => {
+            if (!u || u.id === killedTargetId || u.actionSlotOf) return;
+            if (!(u.type === 'enemy' || u.type === 'boss' || u.isBoss === true)) return;
+            if (applyEngineStatusesToUnit(u.id, atk.onKillOthersStatus) > 0) applied = true;
+        });
+    }
+    if (killedTargetId && atk.onKillKilledStatus && Object.keys(atk.onKillKilledStatus).length) {
+        if (applyEngineStatusesToUnit(killedTargetId, atk.onKillKilledStatus) > 0) applied = true;
+    }
+    if (atk.unitId && atk.onKillSelfStatus && Object.keys(atk.onKillSelfStatus).length) {
+        if (applyEngineStatusesToUnit(atk.unitId, atk.onKillSelfStatus) > 0) applied = true;
+    }
+
+    if (applied && typeof showToast === 'function') {
+        const notes = [].concat(atk.onKillOthersStatusNotes || [], atk.onKillSelfStatusNotes || []);
+        showToast('☠️ 擊殺／昏迷效果已套用' + (notes.length ? '：' + notes.join('、') : ''));
+    }
+    return applied;
+}
+
 function confirmSTReview() {
     // 優先從 Modal 的 data-* 屬性讀取初步骰數（cqOnSTReview 渲染時已釘上），
     // 全域 combatQueueLast 僅作為退路，避免監聽器更新時序造成骰數讀成 0。
@@ -794,6 +945,15 @@ function confirmSTReview() {
             ? rollResult.successes > 0
             : confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）');
         if (hit) cmApplyOnHitIdentityStatuses(hitAtk, [targetId]);
+    }
+
+    // 擊殺／昏迷判定：自動擲骰造成傷害後，目標若陷入喪失行動（嚴重槽填滿）→ 套用 onKill 效果。
+    // 手動擲骰（無 rollResult）時系統無從得知實際傷害，改詢問 ST 是否已擊倒目標。
+    if (targetId && cmHasOnKillIdentityStatuses(hitAtk)) {
+        const killed = rollResult
+            ? (rollResult.damage > 0 && cmIsDefeated(findUnitById(targetId)))
+            : confirm('此次攻擊是否擊殺／使目標昏迷？\n（確定＝自動套用人格卡的「擊殺時」效果）');
+        if (killed) cmApplyOnKillIdentityStatuses(hitAtk, targetId);
     }
 }
 
@@ -943,6 +1103,15 @@ function confirmSTReviewSaveMode(saveInfo) {
     // 人格卡「命中時施加」狀態（豁免抵擋路徑）：只套用到實際受到傷害的目標；
     // 任一目標受創即視為命中，一併套用攻擊者自身增益。ST 發起的 BOSS 威脅無 onHit 欄位，自然不套用。
     cmApplyOnHitIdentityStatuses(atk, results.filter(r => r.dmg > 0).map(r => r.id));
+
+    // 擊殺／昏迷：逐目標若受創後陷入喪失行動 → 套用 onKill 效果（各被擊殺目標分別觸發）
+    if (cmHasOnKillIdentityStatuses(atk)) {
+        results.forEach(r => {
+            if (r.dmg > 0 && r.id && cmIsDefeated(findUnitById(r.id))) {
+                cmApplyOnKillIdentityStatuses(atk, r.id);
+            }
+        });
+    }
 
     const attackerName = String(atk.name || 'BOSS');
     const detail = results.map(r => `${r.name}(${saveName}${r.saveSuccess}→受${r.dmg})`).join('、');

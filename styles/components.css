@@ -934,7 +934,9 @@ body.aoe-select-active .token {
     min-width: 38px;
     height: auto;
     min-height: 0;
-    align-self: center;
+    /* 對齊到 .uc-row1 底部，跟操作按鈕列同一條水平線；先前用 center 會讓
+       先攻框在名稱列與按鈕列之間置中，兩邊都對不齊、看起來忽高忽低 */
+    align-self: flex-end;
     justify-content: center;
     padding: 3px 9px;
     border: 1px solid rgba(245, 158, 11, 0.3);
@@ -5994,11 +5996,16 @@ body.combat-mode .boss-hud-container {
     border: 1px solid var(--border, #2a2a30);
     border-radius: 10px;
     overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
+/* 標頭改用與其他面板一致的漸層底（bg-card ＋ 主題色淡淡暈染），
+   不再是單調的實色底＋純文字，跟整體介面語言一致 */
 .encounter-header {
     padding: 10px 14px;
     font-weight: 700;
-    color: var(--accent-purple, #b06bd9);
+    font-size: 0.92rem;
+    color: #d9b3ff;
+    background: linear-gradient(135deg, var(--bg-card), rgba(142, 36, 170, 0.16));
     border-bottom: 1px solid var(--border, #2a2a30);
 }
 .encounter-body { padding: 12px 14px; overflow-y: auto; }
@@ -6006,27 +6013,59 @@ body.combat-mode .boss-hud-container {
 .encounter-field label { display: block; font-size: .78rem; color: var(--text-dim, #aaa); margin-bottom: 4px; }
 .encounter-input, .encounter-preview {
     width: 100%;
-    background: #0e0e11;
+    background: var(--bg-input, #0d0d0f);
     border: 1px solid var(--border, #2a2a30);
     color: var(--text-main, #e8e8ec);
     border-radius: 6px;
     padding: 8px;
     font-size: .85rem;
+    transition: border-color 0.15s;
 }
-.encounter-preview { resize: vertical; line-height: 1.5; color: #8bd17c; font-family: monospace; white-space: pre; }
+.encounter-preview {
+    resize: vertical;
+    line-height: 1.5;
+    color: #8bd17c;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: pre;
+}
+/* 美化 textarea 的縮放把手（WebKit），取代瀏覽器預設的灰色三角把手 */
+.encounter-preview::-webkit-resizer {
+    background: linear-gradient(135deg, transparent 50%, var(--border-focus, #404048) 50%);
+    background-size: 8px 8px;
+    background-repeat: no-repeat;
+    background-position: bottom right;
+}
+
+/* 按鈕：一律改為深底＋主題色淡色調＋細框，不再是搶眼的實心色塊，
+   跟地圖工具列的「背景」按鈕維持同一套精緻化語言 */
 .lv-btn {
     border: 1px solid var(--border, #2a2a30);
     border-radius: 6px;
-    background: var(--bg-card, #1a1a1f);
-    color: var(--text-main, #e8e8ec);
+    background: linear-gradient(180deg, var(--bg-card, #1a1a1f), var(--bg-input, #0d0d0f));
+    color: var(--text-dim, #999);
     padding: 8px;
     font-size: .82rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: filter .15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
 }
-.lv-btn:hover { filter: brightness(1.18); }
-.lv-btn:disabled { opacity: .55; cursor: progress; }
-.lv-btn-main { width: 100%; background: var(--accent-purple, #7e57c2); border-color: var(--accent-purple, #7e57c2); font-weight: 700; margin-bottom: 10px; }
+.lv-btn:hover { color: var(--text-main); border-color: var(--border-focus); transform: translateY(-1px); }
+.lv-btn:active { transform: translateY(0); }
+.lv-btn:disabled { opacity: .55; cursor: progress; transform: none; }
+.lv-btn-main {
+    width: 100%;
+    background: linear-gradient(180deg, rgba(142, 36, 170, 0.3), rgba(142, 36, 170, 0.14));
+    border-color: rgba(142, 36, 170, 0.55);
+    color: #e9d5ff;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+.lv-btn-main:hover {
+    background: linear-gradient(180deg, rgba(142, 36, 170, 0.45), rgba(142, 36, 170, 0.22));
+    border-color: var(--accent-purple);
+    color: #fff;
+}
+
 .monster-library-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .monster-lib-card {
     display: flex;
@@ -6037,6 +6076,11 @@ body.combat-mode .boss-hud-container {
     border-radius: 8px;
     padding: 8px 10px;
     background: var(--bg-card, #1a1a1f);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.monster-lib-card:hover {
+    border-color: var(--border-focus, #404048);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 .monster-lib-name { font-weight: 700; font-size: .85rem; color: var(--text-main, #e8e8ec); }
 .monster-lib-stats { font-size: .75rem; color: var(--accent-orange, #fb8c00); margin-top: 2px; }
@@ -6045,9 +6089,12 @@ body.combat-mode .boss-hud-container {
 /* 操作鈕豎向堆疊＋縮小尺寸，避免橫向擠壓左側的怪物資料文字 */
 .monster-lib-actions { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; align-items: stretch; }
 .monster-lib-actions .lv-btn { padding: 2px 8px; font-size: .68rem; line-height: 1.4; border-radius: 5px; }
-.lv-btn-deploy { background: #14301a; border-color: var(--accent-green, #43a047); color: #8fe08f; white-space: nowrap; }
-.lv-btn-tpl { background: #241a33; border-color: var(--accent-purple, #7e57c2); color: #c9aaff; white-space: nowrap; }
-.lv-btn-del { background: #2a1414; border-color: var(--accent-red, #e53935); color: #ff8080; }
+.lv-btn-deploy { background: linear-gradient(180deg, rgba(67, 160, 71, 0.28), rgba(67, 160, 71, 0.12)); border-color: rgba(67, 160, 71, 0.55); color: #8fe08f; white-space: nowrap; }
+.lv-btn-deploy:hover { background: linear-gradient(180deg, rgba(67, 160, 71, 0.42), rgba(67, 160, 71, 0.2)); border-color: var(--accent-green); color: #fff; }
+.lv-btn-tpl { background: linear-gradient(180deg, rgba(142, 36, 170, 0.28), rgba(142, 36, 170, 0.12)); border-color: rgba(142, 36, 170, 0.55); color: #c9aaff; white-space: nowrap; }
+.lv-btn-tpl:hover { background: linear-gradient(180deg, rgba(142, 36, 170, 0.42), rgba(142, 36, 170, 0.2)); border-color: var(--accent-purple); color: #fff; }
+.lv-btn-del { background: linear-gradient(180deg, rgba(229, 57, 53, 0.28), rgba(229, 57, 53, 0.12)); border-color: rgba(229, 57, 53, 0.55); color: #ff8080; }
+.lv-btn-del:hover { background: linear-gradient(180deg, rgba(229, 57, 53, 0.42), rgba(229, 57, 53, 0.2)); border-color: var(--accent-red); color: #fff; }
 
 /* 手機版：日誌與構築室改為上下排列 */
 @media (max-width: 820px) {

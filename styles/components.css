@@ -2070,15 +2070,17 @@ body.aoe-select-active .token {
     width: var(--rail-width);
     z-index: 9700; /* 與 PanelDock 同層：高於浮動面板 tier */
     /* 與地圖/單位/日誌頁頂部工具列同一底色（--bg-panel），不再用半透明疊色，
-       避免頂部工具列與右側側邊條交界處顏色不連貫、產生接縫感 */
+       避免頂部工具列與右側側邊條交界處顏色不連貫、產生接縫感。
+       不設 border-left／陰影：讓頂部工具列與側邊條完全同色相接、
+       視覺上連成同一塊區域，不再有分隔線。 */
     background: var(--bg-panel);
-    border-left: 1px solid var(--border);
-    box-shadow: -6px 0 24px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
 }
+/* 拖曳面板到側邊條上方時的提示：僅在拖曳中才短暫出現邊框/光暈，
+   平時（.side-rail 本身）不設邊框，才能與頂部工具列完全無縫相接 */
 .side-rail.sr-drop-hint {
-    border-left-color: var(--accent-yellow);
+    border-left: 2px solid var(--accent-yellow);
     box-shadow: -6px 0 26px rgba(253, 216, 53, 0.3);
 }
 

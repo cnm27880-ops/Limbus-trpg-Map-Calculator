@@ -298,10 +298,10 @@ body.aoe-select-active .token {
 .units-list {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
 }
 
 /* ===== Unit Card ===== */
@@ -310,10 +310,10 @@ body.aoe-select-active .token {
     background: #16161f; /* 深灰藍質感底，取代刺眼厚邊框 */
     border: 1px solid #232330;
     border-radius: 12px;
-    padding: 10px 12px;
+    padding: 6px 12px;
     /* 陣營色改為極細的左緣提示條（3px），不再是死板的厚邊框 */
     border-left: 3px solid rgba(255, 255, 255, 0.06);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
@@ -881,8 +881,8 @@ body.aoe-select-active .token {
     justify-content: space-between;
     gap: 8px;
     flex-wrap: wrap;
-    margin-top: 7px;
-    padding-top: 7px;
+    margin-top: 4px;
+    padding-top: 4px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 .uc-statuses {
@@ -929,6 +929,7 @@ body.aoe-select-active .token {
 
 /* ===== 先攻面板：基準 +（狀態調整） = 最終 ===== */
 /* 先攻面板：精簡小方框，只顯示最終先攻大數字；懸停彈出工業風明細方框 */
+/* ===== 先攻欄位：自動適應卡片高度並縮窄 ===== */
 .unit-init-seq.uinit {
     position: relative;
     overflow: visible;
@@ -936,22 +937,20 @@ body.aoe-select-active .token {
     min-width: 38px;
     height: auto;
     min-height: 0;
-    /* 貼齊 .uc-row1 底部（跟操作按鈕列同一條水平線），並用 stretch 撐滿整列高度，
-       讓框體上緣也貼齊頭像／名稱列頂端，框內上下留白才會對稱、不再頭重腳輕 */
-    align-self: stretch;
+    align-self: center; /* 原 stretch 改為 center，不強制硬撐高卡片 */
     justify-content: center;
-    padding: 3px 9px;
+    padding: 4px 8px;   /* 原 3px 9px -> 縮減 Padding */
     border: 1px solid rgba(245, 158, 11, 0.3);
     border-radius: 8px;
     background: rgba(0, 0, 0, 0.4);
     box-shadow: none;
     cursor: ns-resize;
 }
-.unit-init-seq.uinit.readonly { cursor: help; }
+
 .uinit .uinit-final {
-    font-size: 1.2rem;
+    font-size: 1.1rem; /* 原 1.2rem -> 略縮小以符合變矮的欄位 */
     font-weight: 800;
-    line-height: 1.15;
+    line-height: 1;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
     color: var(--accent-yellow);
     text-shadow: 0 0 6px rgba(253, 216, 53, 0.35);

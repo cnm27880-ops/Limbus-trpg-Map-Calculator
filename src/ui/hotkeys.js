@@ -267,25 +267,75 @@ function isRouletteOverlayOpen() {
     });
 }
 
-// ===== 快捷鍵說明面板 =====
+// ===== 快捷鍵懸浮說明（滑鼠移到連線狀態圖示上即顯示，移開即收起；不再是點擊跳出的面板）=====
+let hotkeyHelpRendered = false;   // 內容為靜態設定，只需建立一次
+let hotkeyHelpHideTimer = null;
 
 /**
- * 切換快捷鍵說明面板
+ * 顯示快捷鍵懸浮說明，定位在觸發圖示旁邊（與其他懸停浮窗一致的即時定位邏輯）。
+ * @param {HTMLElement} [anchor] - 定位錨點；未提供時使用 #conn-status。
+ */
+function showHotkeyHelp(anchor) {
+    clearTimeout(hotkeyHelpHideTimer);
+    const panel = document.getElementById('hotkey-help');
+    if (!panel) return;
+    if (!hotkeyHelpRendered) { renderHotkeyHelp(); hotkeyHelpRendered = true; }
+
+    panel.classList.remove('hidden');
+    hotkeyHelpVisible = true;
+
+    // 與媒體中心互斥，避免兩個懸浮面板疊在一起
+    const mediaPanel = document.getElementById('media-panel');
+    if (mediaPanel) mediaPanel.classList.remove('expanded');
+
+    const trigger = anchor || document.getElementById('conn-status');
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const W = panel.offsetWidth || 280;
+    const H = panel.offsetHeight || 300;
+    // 貼在圖示左側、垂直置中對齊；夾限在視窗內避免超出畫面
+    let x = rect.left - W - 10;
+    let y = rect.top + rect.height / 2 - H / 2;
+    if (x < 8) x = rect.right + 10; // 左側放不下就改放右側
+    x = Math.max(8, Math.min(window.innerWidth - W - 8, x));
+    y = Math.max(8, Math.min(window.innerHeight - H - 8, y));
+    panel.style.left = x + 'px';
+    panel.style.top = y + 'px';
+}
+
+/** 立即收起快捷鍵懸浮說明。 */
+function hideHotkeyHelp() {
+    clearTimeout(hotkeyHelpHideTimer);
+    const panel = document.getElementById('hotkey-help');
+    if (panel) panel.classList.add('hidden');
+    hotkeyHelpVisible = false;
+}
+
+/** 延遲收起：滑鼠從圖示移到面板之間有個小縫隙，延遲一小段時間避免移動時誤觸收起。 */
+function scheduleHideHotkeyHelp() {
+    clearTimeout(hotkeyHelpHideTimer);
+    hotkeyHelpHideTimer = setTimeout(hideHotkeyHelp, 220);
+}
+
+/**
+ * 切換快捷鍵懸浮說明（供「?」快捷鍵使用；滑鼠懸停已改用 show/hide，平常不需要點擊）。
  */
 function toggleHotkeyHelp() {
-    hotkeyHelpVisible = !hotkeyHelpVisible;
+    if (hotkeyHelpVisible) hideHotkeyHelp();
+    else showHotkeyHelp();
+}
+
+/** 綁定連線狀態圖示的滑鼠懸停事件（取代原本的點擊跳出面板）。 */
+function initHotkeyHelpHover() {
+    const trigger = document.getElementById('conn-status');
     const panel = document.getElementById('hotkey-help');
-
+    if (trigger) {
+        trigger.addEventListener('pointerenter', () => showHotkeyHelp(trigger));
+        trigger.addEventListener('pointerleave', scheduleHideHotkeyHelp);
+    }
     if (panel) {
-        panel.classList.toggle('hidden', !hotkeyHelpVisible);
-
-        if (hotkeyHelpVisible) {
-            renderHotkeyHelp();
-
-            // 關閉其他面板（媒體中心：音樂 / 歌詞）
-            const mediaPanel = document.getElementById('media-panel');
-            if (mediaPanel) mediaPanel.classList.remove('expanded');
-        }
+        panel.addEventListener('pointerenter', () => clearTimeout(hotkeyHelpHideTimer));
+        panel.addEventListener('pointerleave', scheduleHideHotkeyHelp);
     }
 }
 
@@ -308,11 +358,10 @@ function renderHotkeyHelp() {
         grouped[category].push({ key, ...config });
     });
 
-    // 建立 HTML (包含標題列和關閉按鈕)
+    // 建立 HTML（純說明用途，懸停移開即消失，不需要關閉按鈕）
     let html = `
         <div class="hotkey-help-header">
             <span class="hotkey-help-title">快捷鍵說明</span>
-            <button class="hotkey-help-close" onclick="toggleHotkeyHelp()" title="關閉">×</button>
         </div>
     `;
     html += '<div class="hotkey-help-content">';
@@ -383,6 +432,8 @@ function disableHotkeys() {
 function initHotkeys() {
     // 綁定鍵盤事件
     document.addEventListener('keydown', handleKeydown);
+    // 綁定連線狀態圖示的快捷鍵懸浮說明（滑鼠懸停顯示）
+    initHotkeyHelpHover();
 
     console.log('⌨️ 快捷鍵系統已初始化');
 }

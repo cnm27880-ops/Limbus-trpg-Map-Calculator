@@ -73,7 +73,7 @@
         <button class="nav-tab" data-page="log" onclick="switchPage('log')">📜 戰鬥日誌 / 構築室</button>
     </div>
     <div class="nav-right">
-        <div class="conn-status" id="conn-status" title="連線狀態（點擊查看快捷鍵說明）" onclick="toggleHotkeyHelp()">
+        <div class="conn-status" id="conn-status">
             <div class="conn-dot connecting" id="conn-dot"></div>
             <span id="conn-text">連線中</span>
         </div>
@@ -666,8 +666,9 @@
         </div><!-- /media-body -->
     </div><!-- /media-panel -->
 
-    <!-- 快捷鍵說明面板 -->
-    <div class="qab-panel hotkey-help-panel hidden" id="hotkey-help">
+    <!-- 快捷鍵懸浮說明：滑鼠移到連線狀態圖示上即顯示，移開即收起（不再是點擊跳出的面板）。
+         獨立於 .qab-panel/.qab-container 定位鏈之外，改由 JS 依圖示位置動態擺放（position:fixed）。 -->
+    <div class="hotkey-help-panel hidden" id="hotkey-help">
         <!-- 內容由 JS 動態生成 -->
     </div>
 

@@ -73,7 +73,7 @@
         <button class="nav-tab" data-page="log" onclick="switchPage('log')">📜 戰鬥日誌 / 構築室</button>
     </div>
     <div class="nav-right">
-        <div class="conn-status" id="conn-status" title="連線狀態">
+        <div class="conn-status" id="conn-status" title="連線狀態（點擊查看快捷鍵說明）" onclick="toggleHotkeyHelp()">
             <div class="conn-dot connecting" id="conn-dot"></div>
             <span id="conn-text">連線中</span>
         </div>
@@ -497,8 +497,6 @@
 </div>
 
 <!-- 快速操作球 (Quick Action Ball) -->
-<!-- 右緣抽屜的遮罩（點擊關閉）-->
-<div id="drawer-overlay" class="drawer-overlay" onclick="closeMediaPanel()"></div>
 
 <div id="quick-action-ball" class="qab-container">
     <!-- 彈出選單 -->

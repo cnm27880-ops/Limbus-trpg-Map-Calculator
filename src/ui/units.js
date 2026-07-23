@@ -212,7 +212,7 @@ function renderUnitsList() {
 
         const canEdit = canControlUnit(u);
         const maxHpLabel = canEdit
-            ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限"><i class="fa-solid fa-pen-to-square"></i>HP ${maxHp}</span>`
+            ? `<span class="max-hp-edit" onclick="openMaxHpPopover(event, '${u.id}')" title="點擊修改生命上限"><i class="fa-solid fa-pen-to-square"></i>HP ${maxHp}</span>`
             : `<span class="max-hp-edit max-hp-ro">HP ${maxHp}</span>`;
 
         const hpPercent = (typeof calculateWeightedHpPercent === 'function')
@@ -636,14 +636,15 @@ function commitHpPending(unitId, type) {
     modifyHP(unitId, dmgType, amount);
 }
 
-// ===== 中央數字：單擊輸入 / 雙擊套用 =====
-// 一次要扣（或治療）大量血時，用 +/- 逐格太慢；改為單擊中央數字直接輸入待套用量，
-// 雙擊才真正套用（扣血／治療）。以計時器區分單擊與雙擊：單擊延遲 250ms 後才開輸入框，
-// 若期間偵測到第二下（雙擊）則取消輸入框、直接套用。
+// ===== 中央數字：單擊就地輸入 / 雙擊套用 =====
+// 一次要扣（或治療）大量血時，用 +/- 逐格太慢；改為單擊中央數字直接把它換成
+// 一個小輸入框就地輸入待套用量（不彈出全螢幕的瀏覽器 prompt() 白框），
+// 雙擊才真正套用（扣血／治療）。以計時器區分單擊與雙擊：單擊延遲 250ms 後才開始編輯，
+// 若期間偵測到第二下（雙擊）則取消編輯、直接套用。
 let blaValClickTimer = null;
 
 /**
- * 單擊中央數字：延遲後開啟輸入框，直接設定待套用量（不立即套用血量）。
+ * 單擊中央數字：延遲後開始就地輸入（不立即套用血量）。
  * @param {string} unitId
  * @param {string} type - 'b' | 'l' | 'a'
  */
@@ -651,7 +652,7 @@ function onStepperValClick(unitId, type) {
     if (blaValClickTimer) { clearTimeout(blaValClickTimer); }
     blaValClickTimer = setTimeout(() => {
         blaValClickTimer = null;
-        promptStepperValue(unitId, type);
+        startStepperInlineEdit(unitId, type);
     }, 250);
 }
 
@@ -666,22 +667,60 @@ function onStepperValDblClick(unitId, type) {
 }
 
 /**
- * 直接輸入某傷害類型的待套用量（單擊觸發）。只更新待套用量與顯示，不套用血量。
+ * 開始就地輸入：把中央數字的 <button> 換成一個小 <input>，focus 並全選，
+ * 直接在原位輸入數字（取代原本彈出瀏覽器 prompt() 全螢幕白框的做法）。
+ * Enter／失焦即提交，Esc 取消。
  * @param {string} unitId
  * @param {string} type - 'b' | 'l' | 'a'
  */
-function promptStepperValue(unitId, type) {
+function startStepperInlineEdit(unitId, type) {
     const u = findUnitById(unitId);
     if (u && !canControlUnit(u)) { showToast('你無法修改其他人的單位'); return; }
+
+    const holder = document.getElementById(`hp-pending-${unitId}-${type}`);
+    if (!holder || holder.tagName !== 'BUTTON') return; // 已在編輯中，忽略重複觸發
+
+    const cur = (hpPending[unitId] && hpPending[unitId][type]) || 0;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.className = 'stepper-val-input';
+    input.id = holder.id;
+    input.min = '0';
+    input.max = '999';
+    input.value = cur;
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') input.blur();
+        else if (e.key === 'Escape') { input.dataset.cancelled = '1'; input.blur(); }
+    });
+    input.addEventListener('blur', () => finishStepperInlineEdit(unitId, type, input));
+    holder.replaceWith(input);
+    input.focus();
+    input.select();
+}
+
+/**
+ * 就地輸入結束（失焦／Enter／Esc）：寫回待套用量，並還原成可點擊的數字按鈕。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a'
+ * @param {HTMLInputElement} input
+ */
+function finishStepperInlineEdit(unitId, type, input) {
     if (!hpPending[unitId]) hpPending[unitId] = { b: 0, l: 0, a: 0 };
-    const cur = hpPending[unitId][type] || 0;
+    if (input.dataset.cancelled !== '1') {
+        const parsed = parseInt(input.value, 10);
+        hpPending[unitId][type] = Math.max(0, Math.min(999, isNaN(parsed) ? 0 : parsed));
+    }
+    const n = hpPending[unitId][type] || 0;
     const mode = hpAdjustMode[unitId] || 'damage';
-    const input = prompt(`輸入 ${type.toUpperCase()} 待套用量（雙擊數字才會實際${mode === 'heal' ? '治療' : '扣血'}）`, cur);
-    if (input === null) return;                                  // 取消
-    const n = Math.max(0, Math.min(999, parseInt(input, 10) || 0));
-    hpPending[unitId][type] = n;
-    const el = document.getElementById(`hp-pending-${unitId}-${type}`);
-    if (el) el.textContent = n + type.toUpperCase();
+
+    const btn = document.createElement('button');
+    btn.className = 'stepper-val';
+    btn.id = input.id;
+    btn.textContent = n + type.toUpperCase();
+    btn.title = `單擊輸入數字、雙擊${mode === 'heal' ? '治療' : '扣血'}套用`;
+    btn.addEventListener('click', () => onStepperValClick(unitId, type));
+    btn.addEventListener('dblclick', () => onStepperValDblClick(unitId, type));
+    input.replaceWith(btn);
 }
 
 /** 雙擊 ♻ 重置血量：一併清空該單位尚未提交的待套用量，避免顯示與實際血量脫鉤。 */
@@ -692,6 +731,100 @@ function hpResetAll(unitId) {
         if (el) el.textContent = '0' + t.toUpperCase();
     });
     resetUnitHp(unitId);
+}
+
+// ===== 生命上限快速調整浮窗（比照狀態層數快速調整浮窗，取代原本置中的 Modal）=====
+let maxHpPopoverTarget = null; // unitId
+
+/**
+ * 開啟生命上限快速調整浮窗（點擊「HP N」膠囊觸發，定位在點擊處附近）。
+ * @param {Event} event
+ * @param {string} unitId
+ */
+function openMaxHpPopover(event, unitId) {
+    const u = findUnitById(unitId);
+    if (!u) return;
+    if (!canControlUnit(u)) { showToast('你無法修改其他人的單位'); return; }
+    closeMaxHpPopover();
+
+    maxHpPopoverTarget = unitId;
+    const cur = u.maxHp || (u.hpArr || []).length || 10;
+
+    const pop = document.createElement('div');
+    pop.id = 'maxhp-quick-popover';
+    pop.className = 'status-quick-popover';
+    pop.innerHTML = `
+        <div class="popover-header">
+            <span class="popover-title"><i class="fa-solid fa-heart-circle-check" style="color:var(--accent-yellow);"></i> 生命上限</span>
+            <button class="popover-close" onclick="closeMaxHpPopover()">×</button>
+        </div>
+        <div class="popover-stack-row">
+            <button class="popover-stack-btn" onclick="maxHpPopoverAdjust(-5)">−5</button>
+            <button class="popover-stack-btn" onclick="maxHpPopoverAdjust(-1)">−</button>
+            <input type="number" id="maxhp-popover-input" value="${cur}" min="1" onchange="maxHpPopoverSet(this.value)">
+            <button class="popover-stack-btn" onclick="maxHpPopoverAdjust(1)">+</button>
+            <button class="popover-stack-btn" onclick="maxHpPopoverAdjust(5)">+5</button>
+        </div>
+    `;
+    document.body.appendChild(pop);
+
+    // 定位在點擊位置附近，並夾限在視窗內（與狀態快速調整浮窗共用同一套邏輯）
+    const W = pop.offsetWidth || 220;
+    const H = pop.offsetHeight || 90;
+    let x = event.clientX - W / 2;
+    let y = event.clientY + 12;
+    x = Math.max(8, Math.min(window.innerWidth - W - 8, x));
+    if (y + H > window.innerHeight - 8) y = event.clientY - H - 12;
+    pop.style.left = x + 'px';
+    pop.style.top = Math.max(8, y) + 'px';
+
+    setTimeout(armMaxHpPopoverOutsideDismiss, 0);
+}
+
+let maxHpPopoverDetach = null;
+function armMaxHpPopoverOutsideDismiss() {
+    if (maxHpPopoverDetach) { maxHpPopoverDetach(); maxHpPopoverDetach = null; }
+    if (typeof attachOutsideDismiss !== 'function') {
+        document.addEventListener('pointerdown', handleMaxHpPopoverOutsideClick, true);
+        return;
+    }
+    maxHpPopoverDetach = attachOutsideDismiss(
+        (t) => { const pop = document.getElementById('maxhp-quick-popover'); return !pop || !pop.contains(t); },
+        () => closeMaxHpPopover()
+    );
+}
+
+function handleMaxHpPopoverOutsideClick(e) {
+    const pop = document.getElementById('maxhp-quick-popover');
+    if (pop && !pop.contains(e.target)) closeMaxHpPopover();
+}
+
+function closeMaxHpPopover() {
+    const pop = document.getElementById('maxhp-quick-popover');
+    if (pop) pop.remove();
+    maxHpPopoverTarget = null;
+    if (maxHpPopoverDetach) { maxHpPopoverDetach(); maxHpPopoverDetach = null; }
+    document.removeEventListener('pointerdown', handleMaxHpPopoverOutsideClick, true);
+}
+
+/** 浮窗內 −5/−1/+1/+5：即時套用生命上限變更。 */
+function maxHpPopoverAdjust(delta) {
+    if (!maxHpPopoverTarget) return;
+    const u = findUnitById(maxHpPopoverTarget);
+    if (!u) { closeMaxHpPopover(); return; }
+    const cur = u.maxHp || (u.hpArr || []).length || 10;
+    applyMaxHpChange(maxHpPopoverTarget, Math.max(1, cur + delta));
+    const input = document.getElementById('maxhp-popover-input');
+    const applied = findUnitById(maxHpPopoverTarget);
+    if (input && applied) input.value = applied.maxHp;
+}
+
+/** 浮窗內直接輸入生命上限數字：即時套用。 */
+function maxHpPopoverSet(value) {
+    if (!maxHpPopoverTarget) return;
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed < 1) { showToast('HP 上限必須至少為 1'); return; }
+    applyMaxHpChange(maxHpPopoverTarget, parsed);
 }
 
 // ===== 單位操作 =====

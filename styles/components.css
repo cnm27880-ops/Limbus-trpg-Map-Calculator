@@ -591,6 +591,29 @@ body.aoe-select-active .token {
 .stepper-l .stepper-val { color: var(--accent-orange); }
 .stepper-a .stepper-val { color: var(--accent-red); }
 
+/* 就地輸入框：單擊中央數字後原地換成的小輸入框，不再彈出瀏覽器 prompt() 白框 */
+.stepper-val-input {
+    min-width: 22px;
+    width: 30px;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent-yellow);
+    border-radius: 3px;
+    text-align: center;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700;
+    font-size: 0.68rem;
+    color: var(--text-main);
+    -moz-appearance: textfield;
+}
+.stepper-val-input::-webkit-outer-spin-button,
+.stepper-val-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 /* ===== 戰術切換開關 (Tactical Toggle) ===== */
 .tactical-toggle {
     position: relative;
@@ -780,24 +803,27 @@ body.aoe-select-active .token {
 .uc-hptext .dmg-b { color: var(--dmg-b); font-weight: 700; }
 .uc-hptext .dmg-l { color: var(--dmg-l); font-weight: 700; }
 .uc-hptext .dmg-a { color: var(--dmg-a); font-weight: 700; }
-/* 可改生命上限的膠囊（稍微美化）*/
+/* 可改生命上限的小標籤：扁平、與 完好/BLA 文字上下齊平，只稍微凸出一點點 */
 .uc-hptext .max-hp-edit {
     display: inline-flex;
     align-items: center;
     gap: 3px;
     margin-left: 6px;
-    padding: 1px 7px;
-    border-radius: 999px;
+    padding: 0 6px;
+    height: 14px;
+    line-height: 14px;
+    vertical-align: middle; /* 與同行的完好/BLA 文字對齊基準線，避免上下錯位 */
+    border-radius: 4px;     /* 扁平的小圓角矩形，不再是明顯凸起的膠囊 */
     text-decoration: none !important;
     color: var(--accent-yellow) !important;
     background: rgba(253, 216, 53, 0.10);
     border: 1px solid rgba(253, 216, 53, 0.3);
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 700;
     transition: background 0.15s, border-color 0.15s;
 }
 .uc-hptext .max-hp-edit { cursor: pointer; }
-.uc-hptext .max-hp-edit i { font-size: 0.6rem; }
+.uc-hptext .max-hp-edit i { font-size: 0.54rem; }
 .uc-hptext .max-hp-edit:hover { background: rgba(253, 216, 53, 0.2); border-color: rgba(253, 216, 53, 0.6); }
 .uc-hptext .max-hp-edit.max-hp-ro {
     cursor: default;
@@ -1590,7 +1616,9 @@ body.aoe-select-active .token {
     transform: scale(0.94);
 }
 
-.status-quick-popover #popover-stack-input {
+/* 用 type=number 選取而非特定 id，讓其他浮窗（如生命上限快速調整）的數字輸入框
+   共用同一套樣式，避免因 id 不同而退回瀏覽器預設樣式導致版面被撐開。 */
+.status-quick-popover .popover-stack-row input[type="number"] {
     flex: 1;
     min-width: 0;
     height: 30px;
@@ -2025,12 +2053,14 @@ body.aoe-select-active .token {
 /* ===================================================================== */
 /* ===== 功能側邊條 SideRail（右緣、恆顯示的細長工具列）============== */
 /* ===================================================================== */
+/* 整條側邊條與內部圖標統一依 --rail-width（38px，約為舊版 56px 的 2/3）等比縮小，
+   形狀（長寬比）與舊版一致，只是整體再精緻一號。 */
 .side-rail {
     position: fixed;
     top: 0;
     right: 0;
     height: 100vh;
-    width: 56px;
+    width: var(--rail-width);
     z-index: 9700; /* 與 PanelDock 同層：高於浮動面板 tier */
     background: rgba(22, 22, 31, 0.95); /* 深灰藍半透明 */
     -webkit-backdrop-filter: blur(18px);
@@ -2050,8 +2080,8 @@ body.aoe-select-active .token {
     flex-direction: column;
     height: 100%;
     width: 100%;
-    padding: 12px 0;
-    gap: 6px;
+    padding: 8px 0;
+    gap: 4px;
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -2064,24 +2094,24 @@ body.aoe-select-active .token {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 .sr-actions { flex: 0 0 auto; }
-.sr-dock { flex: 1 1 auto; justify-content: flex-start; min-height: 20px; width: 100%; }
-.sr-dock .panel-dock-items { flex-direction: column; align-items: center; gap: 6px; width: 100%; }
+.sr-dock { flex: 1 1 auto; justify-content: flex-start; min-height: 14px; width: 100%; }
+.sr-dock .panel-dock-items { flex-direction: column; align-items: center; gap: 4px; width: 100%; }
 .sr-footer {
     flex: 0 0 auto;
     margin-top: auto;
-    padding-top: 10px;
-    gap: 8px;
+    padding-top: 7px;
+    gap: 5px;
     border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 /* 功能圖標：純 icon、無外框方塊；低飽和灰，hover / active 亮起專屬主題色 */
 .sr-item {
     position: relative;
-    width: 44px;
-    height: 40px;
+    width: 30px;
+    height: 27px;
     flex: 0 0 auto;
     padding: 0;
     display: flex;
@@ -2094,7 +2124,7 @@ body.aoe-select-active .token {
     cursor: pointer;
     transition: color 0.15s, transform 0.12s, filter 0.15s;
 }
-.sr-item i { font-size: 1.15rem; line-height: 1; }
+.sr-item i { font-size: 0.78rem; line-height: 1; }
 .sr-item:hover {
     color: var(--rail-color, #fff);
     transform: scale(1.16);
@@ -2110,20 +2140,20 @@ body.aoe-select-active .token {
     content: '';
     position: absolute;
     left: 0; top: 50%;
-    width: 3px; height: 22px;
+    width: 2px; height: 15px;
     transform: translateY(-50%);
-    border-radius: 0 3px 3px 0;
+    border-radius: 0 2px 2px 0;
     background: var(--rail-color, var(--accent-yellow));
 }
 
 /* 收納的面板圖標同樣無外框、可沿整條側邊條分佈 */
 .sr-dock .panel-dock-icon {
-    width: 44px;
-    height: 40px;
+    width: 30px;
+    height: 27px;
     background: none;
     border: none;
     border-radius: 0;
-    font-size: 1.2rem;
+    font-size: 0.82rem;
     line-height: 1;
     transition: transform 0.12s;
 }
@@ -2134,27 +2164,54 @@ body.aoe-select-active .token {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
-    cursor: default;
+    padding: 3px;
+    cursor: pointer; /* 現在兼作「快捷鍵說明」入口，可點擊 */
 }
-.side-rail #conn-text { display: none; } /* 窄欄只留連線燈號，文字用 title */
+.side-rail #conn-status:hover .conn-dot { transform: scale(1.15); }
+.side-rail #conn-text { display: none; } /* 窄欄只留圖示，文字用 title */
+/* 連線狀態圖示改為「被圈起來的小驚嘆號」：保留原本 online/offline/connecting
+   的色彩語意（改用文字色而非底色填滿），點擊可開啟快捷鍵說明 */
+.side-rail #conn-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none !important;
+    border: 1.5px solid currentColor;
+    color: var(--accent-yellow);
+    animation: none !important;
+    transition: transform 0.12s;
+}
+.side-rail #conn-dot.online { color: var(--accent-green); }
+.side-rail #conn-dot.offline { color: var(--accent-red); }
+.side-rail #conn-dot.connecting { color: var(--accent-yellow); }
+.side-rail #conn-dot::after {
+    content: '!';
+    font-size: 9px;
+    font-weight: 900;
+    line-height: 1;
+    color: currentColor;
+}
+/* id-badge / 代號 / 玩家名稱標籤：寬度依比例縮窄；文字保留可辨識的最小字級 */
 .side-rail .id-badge,
 .side-rail .player-code,
 .side-rail .player-name-chip {
-    max-width: 48px;
+    max-width: 33px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: center;
-    font-size: 0.62rem;
+    font-size: 0.56rem;
     border: none;
     background: none;
     padding: 0 2px;
 }
 .side-rail #sidebar-toggle,
 .side-rail #logout-btn {
-    width: 44px;
-    height: 36px;
+    width: 30px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2162,7 +2219,7 @@ body.aoe-select-active .token {
     border: none;
     border-radius: 0;
     color: #8b8b96;
-    font-size: 1.05rem;
+    font-size: 0.72rem;
     transition: color 0.15s, transform 0.12s;
 }
 .side-rail #sidebar-toggle:hover,
@@ -2255,11 +2312,11 @@ body.aoe-select-active .token {
     }
 }
 
-/* ===== Quick Action Ball ===== */
+/* ===== Quick Action Ball（主按鈕已移除；容器仍作為媒體中心／快捷鍵說明浮動面板的錨點）===== */
 .qab-container {
     position: fixed;
     bottom: 20px;
-    right: 15px;
+    right: calc(var(--rail-width) + 12px); /* 讓浮動面板停在側邊條左側，不被蓋住 */
     z-index: 150;
 }
 
@@ -3968,7 +4025,7 @@ body.combat-mode .boss-hud-container {
 @media (max-width: 768px) {
     .qab-container {
         bottom: 15px;
-        right: 10px;
+        right: calc(var(--rail-width) + 6px);
     }
 
     .qab-main-btn {
@@ -6691,66 +6748,5 @@ select.wheel-cycle { cursor: ns-resize; }
     font-weight: 700;
 }
 
-/* ===================================================================== */
-/* ===== 右緣抽屜：媒體中心（320px，緊貼側邊條左側，慣性滑動）========= */
-/* ===================================================================== */
-.drawer-overlay {
-    position: fixed;
-    inset: 0;
-    right: 56px; /* 讓側邊條露在遮罩之外 */
-    background: rgba(0, 0, 0, 0.5);
-    -webkit-backdrop-filter: blur(2px);
-    backdrop-filter: blur(2px);
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-    z-index: 9600; /* 低於側邊條(9700)、高於一般內容 */
-}
-.drawer-overlay.show { opacity: 1; visibility: visible; }
-
-/* 媒體中心改為右緣全高抽屜（覆蓋 .qab-panel 的絕對定位）*/
-.media-panel {
-    position: fixed;
-    top: 0;
-    right: 56px;             /* 緊貼側邊條左側 */
-    bottom: 0;
-    height: 100vh;
-    max-height: none;
-    width: 320px;
-    border-radius: 0;
-    border-right: none;
-    display: flex;           /* 恆為 flex，用位移收合以便動畫 */
-    transform: translateX(calc(100% + 56px));
-    /* 高級慣性曲線：快出、慢停 */
-    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    z-index: 9650;
-    will-change: transform;
-}
-.media-panel.expanded {
-    display: flex;
-    transform: translateX(0);
-}
-/* 內容微幅淡入 */
-.media-panel .media-body {
-    opacity: 0;
-    transition: opacity 0.2s ease 0.12s;
-}
-.media-panel.expanded .media-body { opacity: 1; }
-
-.music-close-btn {
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    font-size: 1.05rem;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-}
-.music-close-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
-
-/* 行動裝置：抽屜改為幾乎滿寬 */
-@media (max-width: 520px) {
-    .media-panel { width: calc(100vw - 56px); }
-}
+/* 媒體中心恢復為「類似控制台的懸浮面板」（見前方 .media-panel / .qab-panel 定義）：
+   不再是右緣全高抽屜，不使用背景遮罩／模糊。詳見 .media-panel 基礎樣式。 */

@@ -80,8 +80,6 @@ function openMediaPanel(tab) {
     const panel = document.getElementById('media-panel');
     if (!panel) return;
     panel.classList.add('expanded');
-    const ov = document.getElementById('drawer-overlay');
-    if (ov) ov.classList.add('show');
     switchMediaTab(tab || 'music');
 }
 
@@ -91,8 +89,6 @@ function openMediaPanel(tab) {
 function closeMediaPanel() {
     const panel = document.getElementById('media-panel');
     if (panel) panel.classList.remove('expanded');
-    const ov = document.getElementById('drawer-overlay');
-    if (ov) ov.classList.remove('show');
 }
 
 /**

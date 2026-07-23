@@ -30,8 +30,8 @@ const SideRail = (function () {
         { key: 'act-erosion',  fa: 'fa-fire-flame-curved', color: '#f43f5e', label: '侵蝕控制台',        id: 'qab-erosion-item',       hidden: true, fn: 'toggleErosionHud' },
         { key: 'act-fog',      fa: 'fa-smog',              color: '#22d3ee', label: '戰爭迷霧',          id: 'qab-fog-item',           hidden: true, fn: 'toggleFogHud' },
         { key: 'act-mapai',    fa: 'fa-robot',             color: '#c084fc', label: 'AI 地圖助手',       id: 'qab-map-ai-item',        hidden: true, fn: 'maiTogglePanel' },
-        { key: 'act-counter',  fa: 'fa-scale-balanced',    color: '#2dd4bf', label: '本回合對抗分配',    id: 'qab-counter-panel-item', hidden: true, fn: 'cpToggleFloatPanel' },
-        { key: 'act-hotkey',   fa: 'fa-keyboard',          color: '#9ca3af', label: '快捷鍵說明',        fn: 'toggleHotkeyHelp' }
+        { key: 'act-counter',  fa: 'fa-scale-balanced',    color: '#2dd4bf', label: '本回合對抗分配',    id: 'qab-counter-panel-item', hidden: true, fn: 'cpToggleFloatPanel' }
+        // 快捷鍵說明已移出側邊條：改由底部連線狀態圖示（被圈起來的驚嘆號）觸發，見 index.html #conn-status。
     ];
 
     let rail = null;

@@ -19,6 +19,7 @@
     --grid-size: 50px;
     --sidebar-width: 320px;
     --nav-height: 56px;
+    --rail-width: 38px; /* 右緣功能側邊條寬度，供頁面內容留白與浮動面板定位共用 */
 
     /* ===== 字體堆疊（Typography）=====
        名稱／標題使用古典襯線體；數值／狀態使用等寬體以提升對齊度與科技感 */
@@ -351,6 +352,10 @@ input[type="number"] {
     display: flex;
     overflow: hidden;
     position: relative;
+    /* 右緣恆顯示的功能側邊條會蓋住頁面最右緣的內容，故在此預留等寬留白：
+       .page 是 position:absolute; inset:0，其包含區塊為本元素的 padding box，
+       所以 padding-right 會讓地圖/單位/日誌頁的內容正確止於側邊條左緣，不再被蓋住。 */
+    padding-right: var(--rail-width);
 }
 
 .page {

@@ -8,6 +8,39 @@
 const AVATAR_SIZE = 256;  // 從 64 提升到 256，確保 3x3 token 在高解析度螢幕也清晰
 const AVATAR_QUALITY = 0.85;  // 較高品質，但仍保持合理檔案大小
 
+// ===== 狀態 → FontAwesome 6 向量圖標對照（全面取代原生 Emoji）=====
+// 以狀態庫 id 對應；未列出者退回中性的 fa-circle-dot（仍為向量、不使用 Emoji）。
+const STATUS_FA_ICONS = {
+    burn: 'fa-fire', bleed: 'fa-droplet', fragile: 'fa-gem', stun: 'fa-star',
+    paralyze: 'fa-bolt', freeze: 'fa-snowflake', entangle: 'fa-spider', invisible: 'fa-ghost',
+    haste: 'fa-gauge-high', regenerate: 'fa-heart-pulse', shield: 'fa-shield-halved', marked: 'fa-crosshairs',
+    strength: 'fa-dumbbell', endurance: 'fa-shield', command_target: 'fa-wand-magic-sparkles', karma: 'fa-scale-balanced',
+    command_protect: 'fa-hands-holding', tremor: 'fa-bell', poise: 'fa-wind', flaw: 'fa-bullseye',
+    weakness: 'fa-eye', nails: 'fa-thumbtack', gale: 'fa-tornado', erosion_amplify: 'fa-fire-flame-curved',
+    helpless: 'fa-handcuffs', unconscious: 'fa-bed', paralyzed: 'fa-icicles', stunned: 'fa-face-dizzy',
+    sleep: 'fa-moon', exhausted: 'fa-face-tired', blind: 'fa-eye-slash', deaf: 'fa-ear-deaf',
+    dazzled: 'fa-star', tinnitus: 'fa-bell', airborne: 'fa-wind', prone: 'fa-person-falling',
+    immobilized: 'fa-lock', slow: 'fa-hourglass-half', sinking: 'fa-water', silence: 'fa-volume-xmark',
+    seal: 'fa-ban', charge: 'fa-bolt-lightning', swiftness: 'fa-person-running', bind: 'fa-link',
+    provoke: 'fa-hand-fist', vulnerable: 'fa-heart-crack', weak: 'fa-angles-down', defense: 'fa-shield',
+    duel: 'fa-hand-fist', echo: 'fa-wave-square', arcana: 'fa-wand-sparkles', banish: 'fa-ban',
+    charmed: 'fa-heart', confusion: 'fa-arrows-spin', depression: 'fa-cloud-rain', dominate: 'fa-brain',
+    excitement: 'fa-face-grin-stars', fascinated: 'fa-heart', fatigue: 'fa-battery-quarter', fear: 'fa-ghost',
+    love: 'fa-heart', mental_bind: 'fa-brain', pain: 'fa-bolt', addiction: 'fa-pills',
+    knowledge: 'fa-book', true: 'fa-certificate', limb_disabled: 'fa-crutch', limb_impair: 'fa-bandage',
+    frozen_solid: 'fa-icicles'
+};
+
+/**
+ * 取得某狀態的 FontAwesome 圖標 class（向量、非 Emoji）。
+ * @param {object|null} statusDef - 狀態庫定義
+ * @param {string} statusName - 狀態名稱（自訂狀態的回退）
+ */
+function getStatusFa(statusDef, statusName) {
+    const id = statusDef ? statusDef.id : statusName;
+    return 'fa-solid ' + (STATUS_FA_ICONS[id] || 'fa-circle-dot');
+}
+
 // ===== 戰鬥流程控制 =====
 /**
  * 切換戰鬥狀態
@@ -186,8 +219,17 @@ function renderUnitsList() {
             ? Math.round(calculateWeightedHpPercent(u))
             : 100;
 
-        let statusText = `${empty}完好 / ${b}B / ${l}L / ${a}A`;
-        if (hideDetails) statusText = `剩餘 ${hpPercent}%`;
+        // 加權 HP：每格 3 點（B 扣 1、L 扣 2、A 扣 3），滿血＝maxHp×3，與血條/百分比一致。
+        const maxHpW = maxHp * 3;
+        const damageWeight = hpArr.reduce((s, x) => s + (Number(x) || 0), 0);
+        const curHpW = Math.max(0, maxHpW - damageWeight);
+        // HP 文字只顯示「現值 / 滿值 HP」；玩家看敵方單位僅給百分比。
+        // （修正：不再把 0B / 0L / 0A 拼接在 HP 文字後面。）
+        const hpText = hideDetails ? `剩餘 ${hpPercent}%` : `${curHpW} / ${maxHpW} <span class="hp-unit">HP</span>`;
+        const hpBreakdownTitle = `完好 ${empty}｜B ${b}｜L ${l}｜A ${a}`;
+        const hpTextEl = (canEdit && !hideDetails)
+            ? `<span class="uc-hptext hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限（${hpBreakdownTitle}）">${hpText}</span>`
+            : `<span class="uc-hptext"${hideDetails ? '' : ` title="${hpBreakdownTitle}"`}>${hpText}</span>`;
 
         // 擁有者代號標籤：ST 可點擊修改（辨識這是哪位玩家的單位）；其他人唯讀顯示
         let ownerTag = '';
@@ -200,20 +242,10 @@ function renderUnitsList() {
             ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
         }
 
-        // HP 條：玩家看敵方單位時改用單色百分比條（不洩漏 B/L/A 明細）
-        let bar;
-        if (hideDetails) {
-            const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
-            bar = `<div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div>`;
-        } else {
-            bar = hpArr.map(h => {
-                let cls = 'hp-empty';
-                if (h === 1) cls = 'hp-b';
-                if (h === 2) cls = 'hp-l';
-                if (h === 3) cls = 'hp-a';
-                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
-            }).join('');
-        }
+        // HP 條：統一為單一漸層進度條（依剩餘百分比著色：綠→琥珀→玫瑰），
+        // 不再逐格顯示 B/L/A（明細改由 HP 數字的 hover 提示與 BLA 步進器呈現）。
+        const barCls = hpPercent >= 60 ? 'hpg-high' : hpPercent >= 30 ? 'hpg-mid' : 'hpg-low';
+        const bar = `<div class="hp-grad-fill ${barCls}" style="width:${hpPercent}%"></div>`;
 
         // 護盾徽章（所有人可見）
         let shieldBadges = '';
@@ -226,8 +258,8 @@ function renderUnitsList() {
 
         // 部署按鈕
         const deployBtn = u.x >= 0
-            ? `<button class="action-btn" onclick="recallUnit('${u.id}')">📍收回</button>`
-            : `<button class="action-btn" onclick="startDeploy('${u.id}')">📍部署</button>`;
+            ? `<button class="action-btn" onclick="recallUnit('${u.id}')" title="收回單位"><i class="fa-solid fa-box-archive text-purple-400"></i><span class="ab-t">收回</span></button>`
+            : `<button class="action-btn" onclick="startDeploy('${u.id}')" title="部署到地圖"><i class="fa-solid fa-map-location-dot text-purple-400"></i><span class="ab-t">部署</span></button>`;
 
         // 狀態標籤
         let statusBadges = '';
@@ -256,11 +288,12 @@ function renderUnitsList() {
                 // 色彩編碼：負面狀態淡紅底、其餘（增益）淡綠底，讓 ST 用顏色快速判讀
                 const statusKey = statusDef ? statusDef.id : statusName;
                 const catCls = (typeof isDebuffStatus === 'function' && isDebuffStatus(statusKey)) ? 'cat-negative' : 'cat-positive';
+                const fa = getStatusFa(statusDef, statusName);
                 return `<span class="status-badge ${catCls}"
                              data-tooltip="${escapedName}"
                              style="--badge-color: ${color}"
                              onclick="event.stopPropagation();onStatusTagClick(event, '${u.id}', '${encodedName}')">
-                    ${icon}${displayValue}
+                    <i class="${fa}" style="color:${color}"></i>${displayValue}
                 </span>`;
             }).join('');
 
@@ -282,46 +315,49 @@ function renderUnitsList() {
         let blaControls = '';  // 第二列右側：扣血/治療切換 + B/L/A 步進器
         if (canControlUnit(u)) {
             // ST 專屬的分配權限按鈕
-            const assignBtn = isSt ? `<button class="action-btn" onclick="openAssignOwnerModal('${u.id}')" title="分配給其他玩家">👮</button>` : '';
+            const assignBtn = isSt ? `<button class="action-btn" onclick="openAssignOwnerModal('${u.id}')" title="分配給其他玩家"><i class="fa-solid fa-user-gear text-gray-400"></i></button>` : '';
 
             // BOSS 血條切換按鈕
             const bossToggleBtn = isBoss
-                ? `<button class="action-btn boss-toggle${state.activeBossId === u.id ? ' active' : ''}" onclick="toggleActiveBoss('${u.id}')" title="顯示/隱藏 BOSS 血條">👑</button>`
+                ? `<button class="action-btn boss-toggle${state.activeBossId === u.id ? ' active' : ''}" onclick="toggleActiveBoss('${u.id}')" title="顯示/隱藏 BOSS 血條"><i class="fa-solid fa-crown text-amber-400"></i></button>`
                 : '';
 
             // ST 專屬的隱藏/現身切換按鈕
             const visibilityBtn = isSt
-                ? `<button class="action-btn" onclick="toggleUnitVisibility('${u.id}')" title="切換隱藏/現身">👁️ ${isHidden ? '現身' : '隱藏'}</button>`
+                ? `<button class="action-btn" onclick="toggleUnitVisibility('${u.id}')" title="${isHidden ? '現身' : '隱藏'}"><i class="fa-solid ${isHidden ? 'fa-eye' : 'fa-eye-slash'} text-gray-400"></i></button>`
                 : '';
 
             // ST 專屬的 BOSS 設定（戰鬥數值＋一回合多次行動，合併於同一 Modal）
             const multiActionBtn = (isSt && u.type === 'boss')
-                ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="BOSS 設定（戰鬥數值＋多重行動）">⚔×</button>`
+                ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="BOSS 設定（戰鬥數值＋多重行動）"><i class="fa-solid fa-gears text-amber-400"></i></button>`
                 : '';
 
-            // 第一列血條右側的操作按鈕（緊湊、等高：全部 26px）
+            // 第一列血條右側的操作按鈕（純向量圖標、等高、微深灰漸層底）
             hpActions = `
                 <div class="uc-actions">
-                    <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
-                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡️</button>
+                    <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）"><i class="fa-solid fa-heart-circle-check text-emerald-400"></i></button>
+                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾 / 防禦"><i class="fa-solid fa-shield-halved text-cyan-400"></i></button>
                     ${deployBtn}
                     ${bossToggleBtn}
                     ${multiActionBtn}
                     ${assignBtn}
                     ${visibilityBtn}
-                    <button class="action-btn del" onclick="deleteUnit('${u.id}')" title="刪除單位">✕</button>
+                    <button class="action-btn del" onclick="deleteUnit('${u.id}')" title="刪除單位"><i class="fa-solid fa-trash-can text-rose-400"></i></button>
                 </div>`;
 
             // B/L/A 快速傷害/治療步進器：+/- 只調整「待套用量」（暫存於 hpPending，不碰血量）。
             // 最左邊的開關切換「扣血／治療」模式，決定套用時是造成傷害還是治療（預設扣血）。
             const mode = hpAdjustMode[u.id] || 'damage';
             const pending = hpPending[u.id] || { b: 0, l: 0, a: 0 };
-            // 戰術切換開關（暗黑工業風方塊切換器）：未勾選＝傷害（紅光）、勾選＝治療（綠光）
-            const modeSwitch = `
-                <label class="tactical-toggle wheel-toggle" title="切換扣血／治療模式（目前：${mode === 'heal' ? '治療' : '扣血'}）">
-                    <input type="checkbox" ${mode === 'heal' ? 'checked' : ''} onchange="toggleHpAdjustMode('${u.id}')">
-                    <span class="toggle-track"></span>
-                </label>`;
+            // 傷害／治療模式切換鈕：點擊切換，滑鼠移上滾動滾輪也可切換（onwheel）。
+            const modeBtn = `
+                <button class="bla-mode ${mode === 'heal' ? 'heal' : 'dmg'}"
+                        onclick="toggleHpAdjustMode('${u.id}')"
+                        onwheel="wheelHpAdjustMode(event, '${u.id}')"
+                        title="點擊或滾輪切換：扣血／治療（目前：${mode === 'heal' ? '治療' : '扣血'}）">
+                    <i class="fa-solid ${mode === 'heal' ? 'fa-heart-pulse' : 'fa-burst'}"></i>
+                    <span>${mode === 'heal' ? '治療' : '傷害'}</span>
+                </button>`;
 
             // 戰術步進器：－/＋ 只調整待套用量（可長按快速輸入）。
             // 中央數字：單擊＝直接輸入待套用數字、雙擊＝真正套用（依 mode 扣血或治療）。
@@ -335,7 +371,7 @@ function renderUnitsList() {
 
             blaControls = `
                 <div class="uc-bla">
-                    ${modeSwitch}
+                    ${modeBtn}
                     ${hpStepper('b', 'B')}
                     ${hpStepper('l', 'L')}
                     ${hpStepper('a', 'A')}
@@ -401,7 +437,7 @@ function renderUnitsList() {
                         </div>
                         <div class="uc-hprow">
                             <div class="hp-bar-wrap">${bar}</div>
-                            <span class="uc-hptext">${statusText}${hideDetails ? '' : maxHpLabel}</span>
+                            ${hpTextEl}
                             ${hpActions}
                         </div>
                     </div>
@@ -546,6 +582,16 @@ let hpHoldInterval = null;
 function toggleHpAdjustMode(unitId) {
     hpAdjustMode[unitId] = (hpAdjustMode[unitId] === 'heal') ? 'damage' : 'heal';
     renderUnitsList();
+}
+
+/**
+ * 滑鼠滾輪切換扣血／治療模式（滑鼠移到模式鈕上滾動即可切換）。
+ * @param {WheelEvent} e
+ * @param {string} unitId
+ */
+function wheelHpAdjustMode(e, unitId) {
+    e.preventDefault();
+    toggleHpAdjustMode(unitId);
 }
 
 /**

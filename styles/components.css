@@ -538,7 +538,7 @@ body.aoe-select-active .token {
     background: var(--bg-input, #0d0d0f);
     border: 1px solid var(--border, #2a2a30);
     border-radius: 6px;
-    height: 28px;
+    height: 22px;
     overflow: hidden;
     transition: border-color 0.2s;
 }
@@ -552,9 +552,9 @@ body.aoe-select-active .token {
     background: transparent;
     border: none;
     color: var(--text-dim);
-    width: 28px;
+    width: 20px;
     height: 100%;
-    font-size: 1.1rem;
+    font-size: 0.85rem;
     line-height: 1;
     cursor: pointer;
     display: flex;
@@ -571,15 +571,15 @@ body.aoe-select-active .token {
 
 /* 中央數字同時是「提交」按鈕：保留為 <button> 可點擊，故不使用範本的 pointer-events:none */
 .stepper-val {
-    min-width: 32px;
+    min-width: 24px;
     height: 100%;
-    padding: 0 4px;
+    padding: 0 2px;
     background: transparent;
     border: none;
     text-align: center;
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     cursor: pointer;
     transition: background 0.15s;
 }
@@ -728,7 +728,7 @@ body.aoe-select-active .token {
     gap: 4px;
 }
 
-/* 第一列：名稱＋狀況＋擁有者（左）｜ 操作按鈕（右，同一條線）*/
+/* 第一列：名稱＋狀況＋擁有者 */
 .uc-nameline {
     display: flex;
     align-items: center;
@@ -764,7 +764,7 @@ body.aoe-select-active .token {
 .uc-cond.cond-crit  { color: #f87171; background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.40); }
 .uc-cond.cond-down  { color: var(--text-dim); background: rgba(255, 255, 255, 0.05); border-color: var(--border); }
 
-/* 第二列：完好 / B / L / A 明細文字（往左靠，已移除血條色塊）*/
+/* 第二列：完好 / B / L / A 明細文字（左，已移除血條色塊）｜ 操作按鈕（右，同一條線）*/
 .uc-hprow {
     display: flex;
     align-items: center;
@@ -865,7 +865,7 @@ body.aoe-select-active .token {
 .uc-bla {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     flex: 0 0 auto;
     margin-left: auto;
 }
@@ -874,18 +874,18 @@ body.aoe-select-active .token {
 .bla-mode {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 8px;
-    font-size: 0.78rem;
+    gap: 4px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 7px;
+    font-size: 0.68rem;
     font-weight: 700;
     line-height: 1;
     cursor: pointer;
     user-select: none;
     transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
 }
-.bla-mode i { font-size: 0.85rem; }
+.bla-mode i { font-size: 0.72rem; }
 .bla-mode.dmg {
     background: rgba(159, 18, 57, 0.28);
     border: 1px solid rgba(244, 63, 94, 0.55);

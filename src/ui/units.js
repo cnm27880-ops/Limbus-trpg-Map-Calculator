@@ -424,10 +424,10 @@ function renderUnitsList() {
                                 : `<span class="unit-name" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>`}
                             <span class="uc-cond ${condCls}">${condLabel}</span>
                             ${hiddenBadge}${ownerTag}${shieldBadges}
-                            ${hpActions}
                         </div>
                         <div class="uc-hprow">
                             <span class="uc-hptext">${statusText}${hideDetails ? '' : maxHpLabel}</span>
+                            ${hpActions}
                         </div>
                     </div>
                     ${initInput}

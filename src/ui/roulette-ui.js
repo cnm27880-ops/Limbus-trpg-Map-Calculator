@@ -129,6 +129,17 @@ function closeRouletteModal() {
     if (modal) modal.classList.add('hidden');
 }
 
+/**
+ * 切換轉盤浮動視窗（供側邊條圖示使用）：已開啟時點擊即收回，
+ * 跟其他功能圖示（媒體中心／人格卡等）的開關行為一致。
+ */
+function toggleRouletteModal() {
+    const modal = document.getElementById('roulette-modal');
+    if (!modal) return;
+    if (modal.classList.contains('hidden')) openRouletteModal();
+    else closeRouletteModal();
+}
+
 // ===== 渲染 =====
 
 /**

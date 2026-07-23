@@ -195,44 +195,47 @@ function updateToolbar() {
     cursorBtn.onclick = () => setTool('cursor');
     container.appendChild(cursorBtn);
 
-    // 固定工具：橡皮擦
-    const floorBtn = document.createElement('button');
-    floorBtn.className = 'tool-btn' + (currentTool === 'floor' ? ' active' : '');
-    floorBtn.dataset.tool = 'floor';
-    floorBtn.title = '清除地形（回復地板）';
-    floorBtn.innerHTML = TOOL_ICON_ERASER;
-    floorBtn.onclick = () => setTool('floor');
-    container.appendChild(floorBtn);
+    // 地形繪製工具（清除地形＋調色盤）僅 ST 可用：玩家點擊這些按鈕在
+    // handleMapInput() 內本來就會被 myRole !== 'st' 擋下、形同虛設按鈕，
+    // 乾脆不顯示，避免玩家頂列出現一排點了沒反應的地形按鈕。
+    if (myRole === 'st') {
+        // 固定工具：橡皮擦
+        const floorBtn = document.createElement('button');
+        floorBtn.className = 'tool-btn' + (currentTool === 'floor' ? ' active' : '');
+        floorBtn.dataset.tool = 'floor';
+        floorBtn.title = '清除地形（回復地板）';
+        floorBtn.innerHTML = TOOL_ICON_ERASER;
+        floorBtn.onclick = () => setTool('floor');
+        container.appendChild(floorBtn);
 
-    // 從調色盤渲染地形按鈕
-    const palette = state.mapPalette || [];
-    palette.forEach(tile => {
-        if (tile.name === '地板') return;
+        // 從調色盤渲染地形按鈕
+        const palette = state.mapPalette || [];
+        palette.forEach(tile => {
+            if (tile.name === '地板') return;
 
-        const btn = document.createElement('button');
-        btn.className = 'tool-btn' + (currentTool == tile.id ? ' active' : '');
-        btn.dataset.tool = tile.id;
-        const moveCostNote = (tile.moveCostMultiplier && tile.moveCostMultiplier !== 1)
-            ? `\n移動消耗 ×${tile.moveCostMultiplier}` : '';
-        btn.title = `${tile.name}\n${tile.effect}${moveCostNote}\n(右鍵編輯)`;
-        btn.onclick = () => setTool(tile.id);
+            const btn = document.createElement('button');
+            btn.className = 'tool-btn' + (currentTool == tile.id ? ' active' : '');
+            btn.dataset.tool = tile.id;
+            const moveCostNote = (tile.moveCostMultiplier && tile.moveCostMultiplier !== 1)
+                ? `\n移動消耗 ×${tile.moveCostMultiplier}` : '';
+            btn.title = `${tile.name}\n${tile.effect}${moveCostNote}\n(右鍵編輯)`;
+            btn.onclick = () => setTool(tile.id);
 
-        // 右鍵編輯地形
-        btn.oncontextmenu = (e) => {
-            e.preventDefault();
-            if (myRole === 'st' && typeof openTileEditorModal === 'function') {
-                openTileEditorModal(tile.id);
-            }
-        };
+            // 右鍵編輯地形
+            btn.oncontextmenu = (e) => {
+                e.preventDefault();
+                if (typeof openTileEditorModal === 'function') openTileEditorModal(tile.id);
+            };
 
-        const dot = document.createElement('div');
-        dot.className = 'color-indicator';
-        dot.style.backgroundColor = tile.color;
+            const dot = document.createElement('div');
+            dot.className = 'color-indicator';
+            dot.style.backgroundColor = tile.color;
 
-        btn.innerText = tile.name.substring(0, 1);
-        btn.appendChild(dot);
-        container.appendChild(btn);
-    });
+            btn.innerText = tile.name.substring(0, 1);
+            btn.appendChild(dot);
+            container.appendChild(btn);
+        });
+    }
 
     // ST 才顯示「+」新增地形按鈕
     if (myRole === 'st') {

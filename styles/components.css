@@ -2069,10 +2069,10 @@ body.aoe-select-active .token {
     height: 100vh;
     width: var(--rail-width);
     z-index: 9700; /* 與 PanelDock 同層：高於浮動面板 tier */
-    background: rgba(22, 22, 31, 0.95); /* 深灰藍半透明 */
-    -webkit-backdrop-filter: blur(18px);
-    backdrop-filter: blur(18px);
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    /* 與地圖/單位/日誌頁頂部工具列同一底色（--bg-panel），不再用半透明疊色，
+       避免頂部工具列與右側側邊條交界處顏色不連貫、產生接縫感 */
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
     box-shadow: -6px 0 24px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
@@ -2690,22 +2690,27 @@ body.aoe-select-active .token {
 
 /* Hotkey panel responsive - handled by QAB responsive rules */
 
-/* 地圖工具列按鈕（背景圖上傳／清除共用樣式） */
+/* 地圖工具列按鈕（背景圖上傳／清除共用樣式）：改為淡紫色調＋細框，
+   與工具列底色做出區隔，同時不再是刺眼的實心色塊 */
 .map-manager-btn {
     padding: 6px 12px;
-    background: var(--accent-purple);
-    color: #fff;
-    border: none;
-    border-radius: 4px;
+    background: linear-gradient(180deg, rgba(142, 36, 170, 0.28), rgba(142, 36, 170, 0.14));
+    color: #e9d5ff;
+    border: 1px solid rgba(142, 36, 170, 0.55);
+    border-radius: 6px;
     cursor: pointer;
     font-size: 0.8rem;
-    font-weight: 500;
-    transition: all 0.15s;
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
 }
 
 .map-manager-btn:hover {
-    filter: brightness(1.15);
+    background: linear-gradient(180deg, rgba(142, 36, 170, 0.45), rgba(142, 36, 170, 0.24));
+    border-color: var(--accent-purple);
+    color: #fff;
+    transform: translateY(-1px);
 }
+.map-manager-btn:active { transform: translateY(0); }
 
 /* ===== Music Player ===== */
 /* ===== 媒體中心（音樂 / 歌詞 分頁融合） ===== */

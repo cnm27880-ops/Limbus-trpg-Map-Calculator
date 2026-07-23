@@ -716,8 +716,8 @@ body.aoe-select-active .token {
 /* 第一列：頭像 ｜ 名稱＋狀況＋血條＋操作按鈕 ｜ 先攻面板 */
 .uc-row1 {
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: center; /* 頭像 / 內容 / 先攻上下置中對齊 */
+    gap: 10px;
 }
 
 .uc-main {
@@ -725,9 +725,10 @@ body.aoe-select-active .token {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 4px;
 }
 
+/* 第一列：名稱＋狀況＋擁有者（左）｜ 操作按鈕（右，同一條線）*/
 .uc-nameline {
     display: flex;
     align-items: center;
@@ -763,17 +764,11 @@ body.aoe-select-active .token {
 .uc-cond.cond-crit  { color: #f87171; background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.40); }
 .uc-cond.cond-down  { color: var(--text-dim); background: rgba(255, 255, 255, 0.05); border-color: var(--border); }
 
-/* 血條 + 明細文字 + 操作按鈕同列 */
+/* 第二列：完好 / B / L / A 明細文字（往左靠，已移除血條色塊）*/
 .uc-hprow {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-}
-.uc-hprow .hp-bar-wrap {
-    flex: 1 1 140px;
-    min-width: 110px;
-    max-width: 220px;
 }
 .uc-hptext {
     font-size: 0.72rem;
@@ -905,30 +900,31 @@ body.aoe-select-active .token {
 .bla-mode.heal:hover { border-color: #10b981; color: #fff; transform: translateY(-1px); }
 
 /* ===== 先攻面板：基準 +（狀態調整） = 最終 ===== */
-/* 先攻面板：只顯示最終先攻大數字；懸停彈出工業風明細方框 */
+/* 先攻面板：精簡小方框，只顯示最終先攻大數字；懸停彈出工業風明細方框 */
 .unit-init-seq.uinit {
     position: relative;
     overflow: visible;
     width: auto;
-    min-width: 52px;
+    min-width: 38px;
     height: auto;
-    min-height: 44px;
+    min-height: 0;
+    align-self: center;
     justify-content: center;
-    padding: 6px 12px;
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    border-radius: 10px;
-    background: rgba(0, 0, 0, 0.45);
+    padding: 3px 9px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.4);
     box-shadow: none;
     cursor: ns-resize;
 }
 .unit-init-seq.uinit.readonly { cursor: help; }
 .uinit .uinit-final {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     font-weight: 800;
-    line-height: 1;
+    line-height: 1.15;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
     color: var(--accent-yellow);
-    text-shadow: 0 0 6px rgba(253, 216, 53, 0.4);
+    text-shadow: 0 0 6px rgba(253, 216, 53, 0.35);
 }
 
 /* 懸停明細：工業風小方框（往左彈出，不遮到先攻大數字）*/

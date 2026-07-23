@@ -234,20 +234,7 @@ function renderUnitsList() {
             ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
         }
 
-        // HP 條：沿用原本逐格 B/L/A 色塊（玩家看敵方單位時改單色百分比條，不洩漏明細）。
-        let bar;
-        if (hideDetails) {
-            const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
-            bar = `<div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div>`;
-        } else {
-            bar = hpArr.map(h => {
-                let cls = 'hp-empty';
-                if (h === 1) cls = 'hp-b';
-                if (h === 2) cls = 'hp-l';
-                if (h === 3) cls = 'hp-a';
-                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
-            }).join('');
-        }
+        // （血條已移除：HP 以第二列「N完好 / bB / lL / aA」明細文字呈現，玩家看敵方則顯示「剩餘 X%」。）
 
         // 護盾徽章（所有人可見）
         let shieldBadges = '';
@@ -437,11 +424,10 @@ function renderUnitsList() {
                                 : `<span class="unit-name" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>`}
                             <span class="uc-cond ${condCls}">${condLabel}</span>
                             ${hiddenBadge}${ownerTag}${shieldBadges}
+                            ${hpActions}
                         </div>
                         <div class="uc-hprow">
-                            <div class="hp-bar-wrap">${bar}</div>
                             <span class="uc-hptext">${statusText}${hideDetails ? '' : maxHpLabel}</span>
-                            ${hpActions}
                         </div>
                     </div>
                     ${initInput}

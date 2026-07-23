@@ -24,6 +24,7 @@ const SideRail = (function () {
         { key: 'nav-map',      fa: 'fa-map',               color: NAV_COLOR, label: '地圖',              nav: 'map' },
         { key: 'nav-units',    fa: 'fa-users',             color: NAV_COLOR, label: '單位',              nav: 'units' },
         { key: 'nav-log',      fa: 'fa-scroll',            color: NAV_COLOR, label: '戰鬥日誌 / 構築室', nav: 'log' },
+        { key: 'act-sidebar',  fa: 'fa-table-columns',     color: '#818cf8', label: '單位側欄',          id: 'sidebar-toggle', fn: 'toggleSidebar' },
         { key: 'act-media',    fa: 'fa-music',             color: '#38bdf8', label: '媒體中心',          fn: 'toggleMediaPanel' },
         { key: 'act-identity', fa: 'fa-id-card',           color: '#fbbf24', label: '人格卡引擎',        fn: 'toggleIdentityModal' },
         { key: 'act-roulette', fa: 'fa-dharmachakra',      color: '#f472b6', label: '幸運大轉盤',        fn: 'toggleRouletteModal' },
@@ -95,13 +96,14 @@ const SideRail = (function () {
         if (mapBtn && !actionsEl.querySelector('.nav-tab.active')) mapBtn.classList.add('active');
 
         // 搬移導覽列的狀態/帳號節點進底部（保留原 id 與事件）
+        // 注意：舊版「單位側欄」按鈕（原 id="sidebar-toggle"）已改由上方 ITEMS
+        // 以 makeItem() 重新建立、與其他功能圖標同組同樣式，故不再從導覽列搬移，
+        // 讓原始節點隨下方 .navbar 一併移除即可。
         relocate('conn-status', footerEl);
         relocate('my-name', footerEl);
         relocate('my-code', footerEl);
-        const sidebarBtn = relocate('sidebar-toggle', footerEl);
         relocate('my-id', footerEl);
         const logoutBtn = relocate('logout-btn', footerEl);
-        if (sidebarBtn) { sidebarBtn.title = sidebarBtn.title || '單位側欄'; sidebarBtn.innerHTML = '<i class="fa-solid fa-table-columns" aria-hidden="true"></i>'; }
         if (logoutBtn) { logoutBtn.title = logoutBtn.title || '登出 / 切換帳號'; logoutBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>'; }
 
         // 移除已清空的頂部導覽列、戰鬥暫開鈕，以及舊快速操作球主鈕與彈出選單

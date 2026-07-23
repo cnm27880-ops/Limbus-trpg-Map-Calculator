@@ -748,7 +748,9 @@ body.aoe-select-active .token {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    /* 縮小雙行間距，讓資訊列整體高度貼近頭像（48px），
+       頭像與先攻框才能在 .uc-row1 置中對齊下與名稱列／按鈕列底部齊平，不再有高低差 */
+    gap: 1px;
 }
 
 /* 第一列：名稱＋狀況＋擁有者 */
@@ -934,9 +936,9 @@ body.aoe-select-active .token {
     min-width: 38px;
     height: auto;
     min-height: 0;
-    /* 對齊到 .uc-row1 底部，跟操作按鈕列同一條水平線；先前用 center 會讓
-       先攻框在名稱列與按鈕列之間置中，兩邊都對不齊、看起來忽高忽低 */
-    align-self: flex-end;
+    /* 貼齊 .uc-row1 底部（跟操作按鈕列同一條水平線），並用 stretch 撐滿整列高度，
+       讓框體上緣也貼齊頭像／名稱列頂端，框內上下留白才會對稱、不再頭重腳輕 */
+    align-self: stretch;
     justify-content: center;
     padding: 3px 9px;
     border: 1px solid rgba(245, 158, 11, 0.3);
@@ -2220,7 +2222,6 @@ body.aoe-select-active .token {
     background: none;
     padding: 0 2px;
 }
-.side-rail #sidebar-toggle,
 .side-rail #logout-btn {
     width: 30px;
     height: 24px;
@@ -2234,9 +2235,13 @@ body.aoe-select-active .token {
     font-size: 0.72rem;
     transition: color 0.15s, transform 0.12s;
 }
-.side-rail #sidebar-toggle:hover,
 .side-rail #logout-btn:hover { color: #fff; transform: scale(1.16); }
-.side-rail #sidebar-toggle.active { color: var(--accent-yellow); }
+/* 單位側欄圖標（#sidebar-toggle）現已併入 .sr-item 主圖標群組，沿用其懸停主題色樣式；
+   開啟時的啟用態沿用 .sr-item 既有的 --rail-color 亮色語意，不需在此另外指定顏色 */
+.sr-item#sidebar-toggle.active {
+    color: var(--rail-color, var(--accent-yellow));
+    filter: drop-shadow(0 0 6px var(--rail-color, rgba(253, 216, 53, 0.5)));
+}
 
 .passive-entry-add { display: flex; gap: 5px; margin-top: 4px; }
 .passive-entry-add input {

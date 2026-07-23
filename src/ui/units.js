@@ -384,7 +384,9 @@ function renderUnitsList() {
         const initSw = irGetStatusLayers(u, 'swiftness');
         const initBd = irGetStatusLayers(u, 'bind');
         const initAdj = initSw - initBd;
-        const initInput = `<div class="unit-init-seq uinit${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" data-base="${initBase}" data-adj="${initAdj}" data-sw="${initSw}" data-bd="${initBd}" title="先攻（滑鼠懸停看明細；滾輪調整基準值）">${renderInitPanelInner(initBase, initAdj, initSw, initBd)}</div>`;
+        // 不再加 title：原生瀏覽器提示框會跟懸停彈出的 .uinit-pop 明細方框同時出現互相打架，
+        // 明細本身已經足夠說明，滾輪調整方式改標示在 .uinit-pop 內。
+        const initInput = `<div class="unit-init-seq uinit${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" data-base="${initBase}" data-adj="${initAdj}" data-sw="${initSw}" data-bd="${initBd}">${renderInitPanelInner(initBase, initAdj, initSw, initBd)}</div>`;
         const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
         // 使用者自己的單位有特殊邊框；ST 看到隱藏單位時降低透明度
@@ -1068,7 +1070,7 @@ function renderInitPanelInner(base, adj, sw, bd) {
     if (bd) rows.push(`<div class="uip-row"><span class="uip-k">束縛</span><span class="uip-v neg">-${bd}</span></div>`);
     rows.push(`<div class="uip-row uip-total"><span class="uip-k">最終先攻</span><span class="uip-v uip-final">${final}</span></div>`);
     return `<div class="uinit-final">${final}</div>`
-        + `<div class="uinit-pop"><div class="uip-title">先攻明細</div>${rows.join('')}</div>`;
+        + `<div class="uinit-pop"><div class="uip-title">先攻明細 <span class="uip-hint">滾輪調整基準</span></div>${rows.join('')}</div>`;
 }
 
 function handleInitSeqWheel(e) {

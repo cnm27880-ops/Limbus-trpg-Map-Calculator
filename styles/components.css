@@ -997,6 +997,13 @@ body.aoe-select-active .token {
     padding-bottom: 4px;
     border-bottom: 1px dashed #2c2c38;
 }
+/* 取代原生 title 提示的操作說明（滾輪調整基準），避免與 .uinit-pop 本身的懸停顯示互相打架 */
+.uip-title .uip-hint {
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 500;
+    opacity: 0.7;
+}
 .uip-row {
     display: flex;
     align-items: baseline;
@@ -2165,12 +2172,13 @@ body.aoe-select-active .token {
     align-items: center;
     justify-content: center;
     padding: 3px;
-    cursor: pointer; /* 現在兼作「快捷鍵說明」入口，可點擊 */
+    cursor: help; /* 懸停會顯示快捷鍵說明，不是可點擊按鈕 */
 }
 .side-rail #conn-status:hover .conn-dot { transform: scale(1.15); }
-.side-rail #conn-text { display: none; } /* 窄欄只留圖示，文字用 title */
+.side-rail #conn-text { display: none; } /* 窄欄只留圖示 */
 /* 連線狀態圖示改為「被圈起來的小驚嘆號」：保留原本 online/offline/connecting
-   的色彩語意（改用文字色而非底色填滿），點擊可開啟快捷鍵說明 */
+   的色彩語意（改用文字色而非底色填滿）；不加 title，避免與滑鼠懸停彈出的
+   快捷鍵說明浮窗同時出現互相打架，滑鼠懸停即可看到說明浮窗 */
 .side-rail #conn-dot {
     width: 16px;
     height: 16px;
@@ -2600,15 +2608,18 @@ body.aoe-select-active .token {
     line-height: 1.4;
 }
 
-/* ===== Hotkey Help ===== */
+/* ===== Hotkey Help（懸浮說明，滑鼠懸停顯示；不再是點擊跳出的獨立面板）===== */
 .hotkey-help-panel {
+    position: fixed; /* 獨立於 .qab-panel/.qab-container 之外，由 JS 依圖示位置動態擺放 */
     width: 280px;
     max-height: 400px;
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 10px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
     overflow: hidden;
+    z-index: 9680; /* 高於一般浮動面板、低於恆顯示的側邊條 */
+    pointer-events: auto;
 }
 
 .hotkey-help-panel.hidden {
@@ -2617,9 +2628,8 @@ body.aoe-select-active .token {
 
 .hotkey-help-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 12px 14px;
+    padding: 10px 14px;
     background: linear-gradient(135deg, var(--bg-card), rgba(253, 216, 53, 0.1));
     border-bottom: 1px solid var(--border);
 }
@@ -2628,26 +2638,6 @@ body.aoe-select-active .token {
     font-weight: bold;
     color: var(--accent-yellow);
     font-size: 0.95rem;
-}
-
-.hotkey-help-close {
-    width: 24px;
-    height: 24px;
-    background: transparent;
-    color: var(--text-dim);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-}
-
-.hotkey-help-close:hover {
-    color: var(--accent-red);
-    background: rgba(229, 57, 53, 0.1);
 }
 
 .hotkey-help-content {

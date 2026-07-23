@@ -352,15 +352,18 @@ input[type="number"] {
     display: flex;
     overflow: hidden;
     position: relative;
-    /* 右緣恆顯示的功能側邊條會蓋住頁面最右緣的內容，故在此預留等寬留白：
-       .page 是 position:absolute; inset:0，其包含區塊為本元素的 padding box，
-       所以 padding-right 會讓地圖/單位/日誌頁的內容正確止於側邊條左緣，不再被蓋住。 */
-    padding-right: var(--rail-width);
 }
 
 .page {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    /* 右緣恆顯示的功能側邊條會蓋住頁面最右緣的內容：絕對定位子元素的包含區塊
+       是父層的 padding edge，padding-right 對它完全無效（inset:0/right:0 仍會
+       貼齊到父層邊框內緣，不會被 padding 往內推），所以必須直接在這裡設定
+       right，而不是對 .main-wrapper 加 padding-right。 */
+    right: var(--rail-width);
     display: none;
     overflow: hidden;
 }

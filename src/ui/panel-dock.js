@@ -18,7 +18,14 @@ const PanelDock = (function () {
     let collapseTimer = null;
     const items = new Map(); // panelId -> { btn, onRestore }
 
+    // 若已載入功能側邊條（SideRail），收納圖標改放進側邊條的收納區，
+    // 展開/收合/磁鐵提示一律交給側邊條處理，兩者合而為一。
+    function rail() {
+        return (typeof window !== 'undefined' && window.SideRail) ? window.SideRail : null;
+    }
+
     function ensureBar() {
+        if (rail()) return null; // 側邊條接手，不建立獨立邊條
         if (bar) return bar;
         bar = document.createElement('div');
         bar.id = 'panel-dock';
@@ -41,18 +48,33 @@ const PanelDock = (function () {
         return bar;
     }
 
+    /** 收納圖標的容器：優先用側邊條的收納區，否則用獨立邊條。 */
+    function itemsContainer() {
+        const r = rail();
+        if (r) return r.dockItemsEl();
+        return ensureBar().querySelector('.panel-dock-items');
+    }
+
     function expand() {
+        const r = rail();
+        if (r) { r.expand(); return; }
         clearTimeout(collapseTimer);
         ensureBar().classList.add('expanded');
     }
     function collapse() {
+        const r = rail();
+        if (r) { r.collapse(); return; }
         if (bar) bar.classList.remove('expanded');
     }
     function scheduleCollapse() {
+        const r = rail();
+        if (r) { r.scheduleCollapse(); return; }
         clearTimeout(collapseTimer);
         collapseTimer = setTimeout(collapse, 350);
     }
     function refresh() {
+        const r = rail();
+        if (r) { r.refreshDock(); return; }
         if (bar) bar.classList.toggle('empty', items.size === 0);
     }
 
@@ -79,7 +101,7 @@ const PanelDock = (function () {
         btn.title = `${o.title || panelId}（按住拖出以取出面板）`;
         btn.textContent = o.icon || '📋';
         btn.addEventListener('pointerdown', (e) => startIconDrag(e, panelId));
-        bar.querySelector('.panel-dock-items').appendChild(btn);
+        itemsContainer().appendChild(btn);
         items.set(panelId, { btn, onRestore: o.onRestore, onDragOut: o.onDragOut, onDragOutEnd: o.onDragOutEnd });
         refresh();
 
@@ -170,6 +192,8 @@ const PanelDock = (function () {
 
     /** 拖曳中進出磁鐵區的即時提示（邊條外滑並加高亮） */
     function setHint(on) {
+        const r = rail();
+        if (r) { r.setDropHint(!!on); return; }
         const b = ensureBar();
         b.classList.toggle('drop-hint', !!on);
         if (on) expand();

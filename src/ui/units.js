@@ -276,7 +276,10 @@ function renderUnitsList() {
         }
 
         // 操作按鈕（只顯示給可控制的使用者）
-        let actions = '';
+        // v2 佈局：把「血條右側的操作按鈕」與「第二列的 BLA 步進器」拆成兩段，
+        // 讓卡片呈現「資訊列 + 狀態/BLA 列」的雙列結構（參考新版 UI 互動模型）。
+        let hpActions = '';    // 第一列血條右側：重置/護盾/部署/… 等緊湊等高按鈕
+        let blaControls = '';  // 第二列右側：扣血/治療切換 + B/L/A 步進器
         if (canControlUnit(u)) {
             // ST 專屬的分配權限按鈕
             const assignBtn = isSt ? `<button class="action-btn" onclick="openAssignOwnerModal('${u.id}')" title="分配給其他玩家">👮</button>` : '';
@@ -296,8 +299,20 @@ function renderUnitsList() {
                 ? `<button class="action-btn" onclick="openMultiActionModal('${u.id}')" title="BOSS 設定（戰鬥數值＋多重行動）">⚔×</button>`
                 : '';
 
-            // B/L/A 快速傷害/治療步進器：+/- 只調整「待套用量」（暫存於 hpPending，不碰血量），
-            // 按下中間的大按鈕才一次性套用，避免每按一次 +/- 就重算/重繪一次血條。
+            // 第一列血條右側的操作按鈕（緊湊、等高：全部 26px）
+            hpActions = `
+                <div class="uc-actions">
+                    <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
+                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡️</button>
+                    ${deployBtn}
+                    ${bossToggleBtn}
+                    ${multiActionBtn}
+                    ${assignBtn}
+                    ${visibilityBtn}
+                    <button class="action-btn del" onclick="deleteUnit('${u.id}')" title="刪除單位">✕</button>
+                </div>`;
+
+            // B/L/A 快速傷害/治療步進器：+/- 只調整「待套用量」（暫存於 hpPending，不碰血量）。
             // 最左邊的開關切換「扣血／治療」模式，決定套用時是造成傷害還是治療（預設扣血）。
             const mode = hpAdjustMode[u.id] || 'damage';
             const pending = hpPending[u.id] || { b: 0, l: 0, a: 0 };
@@ -308,37 +323,42 @@ function renderUnitsList() {
                     <span class="toggle-track"></span>
                 </label>`;
 
-            // 戰術步進器：－/＋ 只調整待套用量，中央數字（stepper-val）點擊一次性套用（依 mode 扣血或治療）。
-            // 中央保留為可點擊的 <button>，是本 App 的「提交」入口，故不套用範本 CSS 的 pointer-events:none。
+            // 戰術步進器：－/＋ 只調整待套用量（可長按快速輸入）。
+            // 中央數字：單擊＝直接輸入待套用數字、雙擊＝真正套用（依 mode 扣血或治療）。
+            // 中央保留為可點擊的 <button>，故不套用範本 CSS 的 pointer-events:none。
             const hpStepper = (type, label) => `
                 <div class="hp-stepper stepper-${type}">
                     <button class="stepper-btn minus" onpointerdown="hpHoldStart('${u.id}','${type}',-1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 －1（按住可快速輸入）">−</button>
-                    <button class="stepper-val" id="hp-pending-${u.id}-${type}" onclick="commitHpPending('${u.id}','${type}')" title="點擊套用目前待套用量（${mode === 'heal' ? '治療' : '扣血'}）">${pending[type] || 0}${label}</button>
+                    <button class="stepper-val" id="hp-pending-${u.id}-${type}" onclick="onStepperValClick('${u.id}','${type}')" ondblclick="onStepperValDblClick('${u.id}','${type}')" title="單擊輸入數字、雙擊${mode === 'heal' ? '治療' : '扣血'}套用">${pending[type] || 0}${label}</button>
                     <button class="stepper-btn plus" onpointerdown="hpHoldStart('${u.id}','${type}',1)" onpointerup="hpHoldStop()" onpointerleave="hpHoldStop()" onpointercancel="hpHoldStop()" title="待套用量 ＋1（按住可快速輸入）">+</button>
                 </div>`;
 
-            actions = `
-                <div class="unit-actions">
+            blaControls = `
+                <div class="uc-bla">
                     ${modeSwitch}
                     ${hpStepper('b', 'B')}
                     ${hpStepper('l', 'L')}
                     ${hpStepper('a', 'A')}
-                    <button class="action-btn heal" onclick="showToast('再點一次確認重置')" ondblclick="hpResetAll('${u.id}')" title="雙擊重置血量（避免誤觸）">♻</button>
-                    <button class="action-btn shield-btn" onclick="openShieldModal('${u.id}')" title="護盾設定">🛡️</button>
-                    ${deployBtn}
-                    ${bossToggleBtn}
-                    ${multiActionBtn}
-                    ${assignBtn}
-                    ${visibilityBtn}
-                    <button class="action-btn" onclick="deleteUnit('${u.id}')">✕</button>
-                </div>
-            `;
+                </div>`;
         }
+
+        // 狀況徽章：依剩餘血量百分比給一個顏色標籤，快速判讀單位狀態（參考新版 UI）
+        let condLabel, condCls;
+        if (hpPercent >= 100) { condLabel = '完好'; condCls = 'cond-full'; }
+        else if (hpPercent >= 60) { condLabel = '輕傷'; condCls = 'cond-light'; }
+        else if (hpPercent >= 30) { condLabel = '重傷'; condCls = 'cond-heavy'; }
+        else if (hpPercent > 0) { condLabel = '瀕死'; condCls = 'cond-crit'; }
+        else { condLabel = '倒下'; condCls = 'cond-down'; }
 
         const safeAvatar = (u.avatar && typeof u.avatar === 'string' && u.avatar.startsWith('data:image/')) ? u.avatar : '';
         const avaStyle = safeAvatar ? `background-image:url(${safeAvatar});color:transparent;` : '';
-        // 先攻序列：不可打字的短框，滑鼠滾輪調整（可控單位限定）
-        const initInput = `<div class="unit-init-seq${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" title="先攻序列（滑鼠滾輪調整）">${u.init || 0}</div>`;
+        // 先攻面板：顯示「基準先攻 +（狀態調整） = 最終先攻」。
+        //   基準（X）＝ u.init（1D10＋加值的無狀態基準，滑鼠滾輪調整、可控單位限定）
+        //   調整（Y）＝ 迅捷層數 − 束縛層數（由 getEffectiveInit 換算），讓 ST 一眼確認狀態是否真的影響先攻、影響多少
+        //   最終＝ X + Y（右側大數字）
+        const initBase = parseInt(u.init) || 0;
+        const initAdj = getEffectiveInit(u) - initBase;
+        const initInput = `<div class="unit-init-seq uinit${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" data-base="${initBase}" data-adj="${initAdj}" title="先攻：基準 + 狀態調整 = 最終（滑鼠滾輪調整基準值）">${renderInitPanelInner(initBase, initAdj)}</div>`;
         const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
         // 使用者自己的單位有特殊邊框；ST 看到隱藏單位時降低透明度
@@ -359,21 +379,35 @@ function renderUnitsList() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
+        // 第二列（狀態徽章 + BLA 步進器）只有在其中一邊有內容時才渲染，避免留下空白列。
+        const row2 = (statusBadges || blaControls)
+            ? `<div class="uc-row2">
+                    <div class="uc-statuses">${statusBadges}</div>
+                    ${blaControls}
+                </div>`
+            : '';
+
         return `
             <div class="${cardClasses}" style="${myUnitStyle}" oncontextmenu="openUnitContextMenu(event, '${u.id}')">
-                <div class="unit-header">
+                <div class="uc-row1">
                     <div class="${avatarClasses}" style="${avaStyle}" onclick="uploadAvatar('${u.id}')">${u.avatar ? '' : unitInitial}</div>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-weight:600;">${canEdit
-                            ? `<span class="unit-name-edit" onclick="event.stopPropagation();renameUnit('${u.id}')" title="修改單位名稱（點擊）">${escapeHtml(u.name)}</span>`
-                            : `<span title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>`}${hiddenBadge}${ownerTag}${shieldBadges}</div>
-                        <div style="font-size:0.75rem;color:var(--text-dim);">${statusText}${hideDetails ? '' : maxHpLabel}</div>
+                    <div class="uc-main">
+                        <div class="uc-nameline">
+                            ${canEdit
+                                ? `<span class="unit-name unit-name-edit" onclick="event.stopPropagation();renameUnit('${u.id}')" title="修改單位名稱（點擊）">${escapeHtml(u.name)}</span>`
+                                : `<span class="unit-name" title="${escapeHtml(u.name)}">${escapeHtml(u.name)}</span>`}
+                            <span class="uc-cond ${condCls}">${condLabel}</span>
+                            ${hiddenBadge}${ownerTag}${shieldBadges}
+                        </div>
+                        <div class="uc-hprow">
+                            <div class="hp-bar-wrap">${bar}</div>
+                            <span class="uc-hptext">${statusText}${hideDetails ? '' : maxHpLabel}</span>
+                            ${hpActions}
+                        </div>
                     </div>
                     ${initInput}
                 </div>
-                <div class="hp-bar-wrap">${bar}</div>
-                ${statusBadges}
-                ${actions}
+                ${row2}
             </div>
         `;
     }).join('');
@@ -565,6 +599,54 @@ function commitHpPending(unitId, type) {
     if (el) el.textContent = '0' + type.toUpperCase();
 
     modifyHP(unitId, dmgType, amount);
+}
+
+// ===== 中央數字：單擊輸入 / 雙擊套用 =====
+// 一次要扣（或治療）大量血時，用 +/- 逐格太慢；改為單擊中央數字直接輸入待套用量，
+// 雙擊才真正套用（扣血／治療）。以計時器區分單擊與雙擊：單擊延遲 250ms 後才開輸入框，
+// 若期間偵測到第二下（雙擊）則取消輸入框、直接套用。
+let blaValClickTimer = null;
+
+/**
+ * 單擊中央數字：延遲後開啟輸入框，直接設定待套用量（不立即套用血量）。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a'
+ */
+function onStepperValClick(unitId, type) {
+    if (blaValClickTimer) { clearTimeout(blaValClickTimer); }
+    blaValClickTimer = setTimeout(() => {
+        blaValClickTimer = null;
+        promptStepperValue(unitId, type);
+    }, 250);
+}
+
+/**
+ * 雙擊中央數字：取消待處理的單擊輸入，直接套用目前待套用量（依扣血／治療模式）。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a'
+ */
+function onStepperValDblClick(unitId, type) {
+    if (blaValClickTimer) { clearTimeout(blaValClickTimer); blaValClickTimer = null; }
+    commitHpPending(unitId, type);
+}
+
+/**
+ * 直接輸入某傷害類型的待套用量（單擊觸發）。只更新待套用量與顯示，不套用血量。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a'
+ */
+function promptStepperValue(unitId, type) {
+    const u = findUnitById(unitId);
+    if (u && !canControlUnit(u)) { showToast('你無法修改其他人的單位'); return; }
+    if (!hpPending[unitId]) hpPending[unitId] = { b: 0, l: 0, a: 0 };
+    const cur = hpPending[unitId][type] || 0;
+    const mode = hpAdjustMode[unitId] || 'damage';
+    const input = prompt(`輸入 ${type.toUpperCase()} 待套用量（雙擊數字才會實際${mode === 'heal' ? '治療' : '扣血'}）`, cur);
+    if (input === null) return;                                  // 取消
+    const n = Math.max(0, Math.min(999, parseInt(input, 10) || 0));
+    hpPending[unitId][type] = n;
+    const el = document.getElementById(`hp-pending-${unitId}-${type}`);
+    if (el) el.textContent = n + type.toUpperCase();
 }
 
 /** 雙擊 ♻ 重置血量：一併清空該單位尚未提交的待套用量，避免顯示與實際血量脫鉤。 */
@@ -801,6 +883,23 @@ function updateInit(id, val) {
 // 單位頁的先攻序列框不可打字，改用滑鼠滾輪 ±1；
 // 連續滾動以 400ms 去抖後才提交（updateInit → 廣播），避免每格都觸發一次同步。
 const initSeqCommitTimers = {};
+
+/**
+ * 產生先攻面板內容：「基準 +（狀態調整） = 最終」。
+ * 調整值一律帶正負號顯示（+0／+3／-2），讓 ST 能明確判讀狀態對先攻的影響。
+ * @param {number} base - 基準先攻（u.init）
+ * @param {number} adj - 狀態調整（迅捷 − 束縛）
+ * @returns {string} 面板內部 HTML
+ */
+function renderInitPanelInner(base, adj) {
+    const final = base + adj;
+    const adjTxt = (adj >= 0 ? '+' : '') + adj;           // 負數本身已含「-」
+    const adjCls = adj > 0 ? 'pos' : adj < 0 ? 'neg' : 'zero';
+    return `<div class="uinit-label">先攻</div>`
+        + `<div class="uinit-calc"><span class="uinit-base">${base}</span><span class="uinit-adj ${adjCls}">${adjTxt}</span></div>`
+        + `<div class="uinit-final">${final}</div>`;
+}
+
 function handleInitSeqWheel(e) {
     const box = e.target && e.target.closest ? e.target.closest('.unit-init-seq') : null;
     if (!box || box.classList.contains('readonly')) return;
@@ -808,8 +907,19 @@ function handleInitSeqWheel(e) {
     const id = box.dataset.unitId;
     if (!id) return;
     const dir = e.deltaY > 0 ? -1 : 1;  // 向上滾＝增加
-    const next = Math.max(-999, Math.min(999, (parseInt(box.textContent) || 0) + dir));
-    box.textContent = next;
+    let next;
+    if (box.classList.contains('uinit')) {
+        // 新版先攻面板：滾輪只調整「基準先攻」(data-base)，狀態調整值 (data-adj) 維持不變，
+        // 即時重算「基準 +（調整） = 最終」的顯示；提交時仍只寫回基準值 (u.init)。
+        next = Math.max(-999, Math.min(999, (parseInt(box.dataset.base) || 0) + dir));
+        const adj = parseInt(box.dataset.adj) || 0;
+        box.dataset.base = next;
+        box.innerHTML = renderInitPanelInner(next, adj);
+    } else {
+        // 舊版純數字框（多重行動子條目等）：直接改文字
+        next = Math.max(-999, Math.min(999, (parseInt(box.textContent) || 0) + dir));
+        box.textContent = next;
+    }
     box.classList.remove('wheel-flash');
     void box.offsetWidth;
     box.classList.add('wheel-flash');

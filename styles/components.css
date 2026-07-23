@@ -699,6 +699,177 @@ body.aoe-select-active .token {
     color: var(--accent-green);
 }
 
+/* ===== 單位卡片 v2 佈局（雙列：資訊列 + 狀態/BLA 列）===== */
+/* 第一列：頭像 ｜ 名稱＋狀況＋血條＋操作按鈕 ｜ 先攻面板 */
+.uc-row1 {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.uc-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.uc-nameline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.uc-nameline .unit-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+}
+
+/* 狀況徽章：依剩餘血量著色的膠囊，快速判讀單位狀態 */
+.uc-cond {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.uc-cond.cond-full  { color: #34d399; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.35); }
+.uc-cond.cond-light { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.35); }
+.uc-cond.cond-heavy { color: #fb923c; background: rgba(251, 146, 60, 0.12); border-color: rgba(251, 146, 60, 0.35); }
+.uc-cond.cond-crit  { color: #f87171; background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.40); }
+.uc-cond.cond-down  { color: var(--text-dim); background: rgba(255, 255, 255, 0.05); border-color: var(--border); }
+
+/* 血條 + 明細文字 + 操作按鈕同列 */
+.uc-hprow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.uc-hprow .hp-bar-wrap {
+    flex: 1 1 140px;
+    min-width: 110px;
+    max-width: 220px;
+}
+.uc-hptext {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+/* 血條右側的操作按鈕：緊湊、全部等高（26px），前後按鈕高度一致 */
+.uc-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+.uc-actions .action-btn {
+    flex: 0 0 auto;
+    min-width: 0;
+    height: 26px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    white-space: nowrap;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    line-height: 1;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.uc-actions .action-btn:hover {
+    color: var(--text-main);
+    background: var(--bg-card);
+    border-color: var(--border-focus);
+}
+.uc-actions .action-btn.del:hover { border-color: var(--accent-red); color: #ff9e9e; }
+.uc-actions .action-btn.boss-toggle.active { border-color: var(--accent-purple); color: #d0a3e0; }
+
+/* 第二列：狀態徽章（左）＋ BLA 步進器/切換（右） */
+.uc-row2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.uc-statuses {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.uc-statuses .status-container { margin-top: 0; }
+.uc-bla {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* ===== 先攻面板：基準 +（狀態調整） = 最終 ===== */
+.unit-init-seq.uinit {
+    width: auto;
+    min-width: 76px;
+    height: auto;
+    min-height: 48px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 4px 8px;
+    border-color: var(--accent-yellow);
+    background: rgba(0, 0, 0, 0.55);
+    box-shadow: 0 0 8px rgba(253, 216, 53, 0.18);
+    cursor: ns-resize;
+}
+.unit-init-seq.uinit.readonly { cursor: default; }
+.uinit .uinit-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent-yellow);
+    line-height: 1;
+}
+.uinit .uinit-calc {
+    display: flex;
+    align-items: baseline;
+    gap: 0;
+    font-size: 0.72rem;
+    line-height: 1;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+.uinit .uinit-base { color: var(--text-main); font-weight: 700; }
+.uinit .uinit-adj.pos  { color: var(--accent-green); }
+.uinit .uinit-adj.neg  { color: var(--accent-red); }
+.uinit .uinit-adj.zero { color: var(--text-muted); }
+.uinit .uinit-final {
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.05;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--accent-yellow);
+    text-shadow: 0 0 6px rgba(253, 216, 53, 0.45);
+}
+
 /* ===== Modals ===== */
 .modal-overlay {
     position: fixed;
@@ -1725,6 +1896,323 @@ body.aoe-select-active .token {
 .panel-dock-icon:active { cursor: grabbing; }
 /* 被收納面板的隱藏狀態（覆蓋任何 inline display） */
 .dock-hidden { display: none !important; }
+
+/* ===================================================================== */
+/* ===== 功能側邊條 SideRail（右緣抽屜，取代快速操作球 + 頂部導覽列）===== */
+/* ===================================================================== */
+.side-rail {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: 56px;
+    z-index: 9700; /* 與 PanelDock 同層：高於浮動面板 tier，收納/功能永遠可及 */
+    background: #232329; /* 深灰色系 */
+    border-left: 1px solid #34343d;
+    box-shadow: -4px 0 18px rgba(0, 0, 0, 0.45);
+    transform: translateX(46px); /* 平時只露出左緣 10px 細邊 */
+    transition: transform 0.22s ease;
+    display: flex;
+    flex-direction: column;
+}
+.side-rail.expanded,
+.side-rail.sr-drop-hint {
+    transform: translateX(0);
+}
+.side-rail.sr-drop-hint {
+    border-left-color: var(--accent-yellow);
+    box-shadow: -4px 0 22px rgba(253, 216, 53, 0.35);
+}
+
+/* 收合時露出的細邊握把：左緣一條微亮條 + 三點抓握提示 */
+.side-rail::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, #3c3c47, #2a2a32);
+}
+.sr-edge {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+.sr-edge::before {
+    content: '';
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: #6a6a75;
+    box-shadow: 0 -6px 0 #6a6a75, 0 6px 0 #6a6a75;
+}
+
+.sr-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    padding: 8px 4px;
+    gap: 6px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.sr-inner::-webkit-scrollbar { width: 4px; }
+
+/* 功能圖標集中在上半部（自然高度、不撐開）；收納區佔滿其餘整條側邊條 */
+.sr-actions,
+.sr-dock,
+.sr-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+.sr-actions { flex: 0 0 auto; }
+.sr-dock {
+    flex: 1 1 auto;       /* 收納區佔滿功能列以下的整條側邊條，非侷限於小方框 */
+    justify-content: flex-start;
+    min-height: 24px;
+    width: 100%;
+}
+.sr-dock .panel-dock-items { flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.sr-footer {
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding-top: 8px;
+    gap: 6px;
+    border-top: 1px solid #34343d;
+}
+
+/* 功能圖標：只有 icon、無外框、無底色（線條較細，隨 currentColor 變色）*/
+.sr-item {
+    position: relative;
+    width: 34px;
+    height: 30px;
+    flex: 0 0 auto;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: #a9a9b6;
+    cursor: grab;
+    touch-action: none; /* 以指標拖曳排序，避免瀏覽器手勢攔截 */
+    user-select: none;
+    transition: color 0.12s, transform 0.12s;
+}
+.sr-item:hover {
+    color: #fff;
+    transform: scale(1.14);
+}
+.sr-item:active { cursor: grabbing; }
+.sr-item.nav-tab.active { color: var(--accent-yellow); background: none; } /* 蓋掉 .nav-tab.active 的底色方塊 */
+.sr-item.sr-dragging {
+    color: var(--accent-yellow);
+    opacity: 0.9;
+    transform: scale(1.18);
+    z-index: 2;
+}
+
+/* 收納的面板圖標同樣改為無外框、可分佈於整條側邊條 */
+.sr-dock .panel-dock-icon {
+    width: 34px;
+    height: 30px;
+    background: none;
+    border: none;
+    border-radius: 0;
+    font-size: 1.15rem;
+    line-height: 1;
+    transition: transform 0.12s;
+}
+.sr-dock .panel-dock-icon:hover {
+    background: none;
+    border: none;
+    transform: scale(1.14);
+}
+
+/* 圖標中文名以原生 title tooltip 呈現（窄欄不放文字，避免被捲動容器裁切） */
+
+/* 底部狀態/帳號區：搬移進來的既有節點壓縮成窄欄 */
+.side-rail #conn-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    cursor: default;
+}
+.side-rail #conn-text { display: none; } /* 窄欄只留連線燈號，文字改用 title */
+.side-rail .id-badge,
+.side-rail .player-code,
+.side-rail .player-name-chip {
+    max-width: 46px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    font-size: 0.68rem;
+    /* 統一為無外框的窄欄文字，與功能圖標一致 */
+    border: none;
+    background: none;
+    padding: 1px 2px;
+}
+.side-rail #sidebar-toggle,
+.side-rail #logout-btn {
+    width: 34px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 0;
+    color: #a9a9b6;
+    font-size: 1rem;
+    transition: color 0.12s, transform 0.12s;
+}
+.side-rail #sidebar-toggle:hover,
+.side-rail #logout-btn:hover {
+    color: #fff;
+    transform: scale(1.14);
+}
+.side-rail #sidebar-toggle.active { color: var(--accent-yellow); }
+
+/* ===== 純 CSS 繪製的功能圖標（單色，隨 currentColor 變色）===== */
+.ci {
+    position: relative;
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    color: currentColor;
+}
+.ci::before,
+.ci::after {
+    content: '';
+    position: absolute;
+    box-sizing: border-box;
+}
+
+/* 精細繪製：統一 20×20 畫布、1.5px 線寬、主體約 14px 並置中對齊。
+   框型圖標一律用 inset:3px（→14×14 置中）；點型圖標用 50%/50% translate 置中，
+   讓整組圖標視覺重量、大小、對齊一致。 */
+
+/* 地圖：方框 + 十字格線（置中）*/
+.ci-map::before { inset: 3px; border: 1.5px solid currentColor; border-radius: 3px; }
+.ci-map::after {
+    inset: 3px;
+    background:
+        linear-gradient(currentColor, currentColor) center / 1.5px 100% no-repeat,
+        linear-gradient(currentColor, currentColor) center / 100% 1.5px no-repeat;
+    opacity: 0.72;
+}
+
+/* 單位：交叉雙刃（X，過中心）*/
+.ci-units::before,
+.ci-units::after {
+    top: 50%; left: 3px; right: 3px; height: 1.6px; margin-top: -0.8px;
+    background: currentColor; border-radius: 1px; transform-origin: center;
+}
+.ci-units::before { transform: rotate(45deg); }
+.ci-units::after  { transform: rotate(-45deg); }
+
+/* 戰鬥日誌：三條清單線（整組置中）*/
+.ci-log::before {
+    inset: 3px;
+    background:
+        linear-gradient(currentColor, currentColor) 0 0    / 100% 1.6px no-repeat,
+        linear-gradient(currentColor, currentColor) 0 6px  / 100% 1.6px no-repeat,
+        linear-gradient(currentColor, currentColor) 0 12px / 62% 1.6px no-repeat;
+}
+
+/* 媒體中心：音符（實心符頭 + 符桿）*/
+.ci-media::before { width: 6px; height: 6px; background: currentColor; border-radius: 50%; left: 4px; top: 10px; }
+.ci-media::after  { width: 1.6px; height: 11px; background: currentColor; left: 8.4px; top: 4px; border-radius: 1px; }
+
+/* 人格卡引擎：卡片 + 頭像圓（水平置中）*/
+.ci-identity::before { top: 3px; bottom: 3px; left: 4.5px; right: 4.5px; border: 1.5px solid currentColor; border-radius: 2.5px; }
+.ci-identity::after  { width: 5px; height: 5px; border: 1.5px solid currentColor; border-radius: 50%; left: 50%; top: 6px; transform: translateX(-50%); }
+
+/* 幸運大轉盤：圓 + 十字輻條（置中）*/
+.ci-roulette::before { inset: 3px; border: 1.5px solid currentColor; border-radius: 50%; }
+.ci-roulette::after {
+    inset: 5.5px;
+    background:
+        linear-gradient(currentColor, currentColor) center / 1.5px 100% no-repeat,
+        linear-gradient(currentColor, currentColor) center / 100% 1.5px no-repeat;
+    opacity: 0.85;
+}
+
+/* 侵蝕控制台：火焰（旋轉水滴輪廓，置中）*/
+.ci-erosion::before {
+    width: 11px; height: 11px; left: 50%; top: 50%;
+    border: 1.5px solid currentColor;
+    border-radius: 0 60% 60% 60%;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* 戰爭迷霧：兩條錯位圓角霧線（整組置中）*/
+.ci-fog::before { left: 3px; right: 5px; top: 7.5px; height: 1.6px; background: currentColor; border-radius: 2px; }
+.ci-fog::after  { left: 5px; right: 3px; top: 11.5px; height: 1.6px; background: currentColor; border-radius: 2px; }
+
+/* AI 地圖助手：羅盤（圓 + 指針三角，置中）*/
+.ci-mapai::before { inset: 3px; border: 1.5px solid currentColor; border-radius: 50%; }
+.ci-mapai::after {
+    left: 50%; top: 50%;
+    width: 0; height: 0;
+    border: 3.5px solid transparent;
+    border-bottom-color: currentColor; border-top: 0;
+    transform: translate(-50%, -62%);
+}
+
+/* 本回合對抗分配：相對的兩個三角（▶◀，對稱置中）*/
+.ci-counter::before {
+    top: 50%; left: 3.5px; transform: translateY(-50%);
+    width: 0; height: 0;
+    border: 4px solid transparent;
+    border-left: 5px solid currentColor;
+}
+.ci-counter::after {
+    top: 50%; right: 3.5px; transform: translateY(-50%);
+    width: 0; height: 0;
+    border: 4px solid transparent;
+    border-right: 5px solid currentColor;
+}
+
+/* 快捷鍵說明：鍵盤外框 + 3×2 按鍵點（整組置中）*/
+.ci-hotkey::before { top: 5px; bottom: 5px; left: 3px; right: 3px; border: 1.5px solid currentColor; border-radius: 2.5px; }
+.ci-hotkey::after {
+    width: 1.6px; height: 1.6px; left: 6px; top: 8.4px;
+    background: currentColor; border-radius: 0.5px;
+    box-shadow:
+        3.4px 0 0 currentColor, 6.8px 0 0 currentColor,
+        0 3px 0 currentColor, 3.4px 3px 0 currentColor, 6.8px 3px 0 currentColor;
+}
+
+/* 側欄清單：面板框 + 右側分隔條（框置中）*/
+.ci-sidebar::before { inset: 3px; border: 1.5px solid currentColor; border-radius: 2.5px; }
+.ci-sidebar::after  { top: 3px; bottom: 3px; left: 11.5px; width: 1.5px; background: currentColor; }
+
+/* 登出：門 + 外指箭頭 */
+.ci-logout::before { top: 3px; bottom: 3px; left: 3px; width: 8.5px; border: 1.5px solid currentColor; border-radius: 2px; }
+.ci-logout::after {
+    top: 50%; right: 2.5px; transform: translateY(-50%);
+    width: 0; height: 0;
+    border: 3.5px solid transparent;
+    border-left: 4.5px solid currentColor;
+}
+
+/* 行動裝置：無 hover，點細邊展開；標籤改由 title 呈現即可 */
+@media (hover: none) {
+    .side-rail { width: 60px; }
+}
 
 .passive-entry-add { display: flex; gap: 5px; margin-top: 4px; }
 .passive-entry-add input {

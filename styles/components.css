@@ -699,6 +699,177 @@ body.aoe-select-active .token {
     color: var(--accent-green);
 }
 
+/* ===== 單位卡片 v2 佈局（雙列：資訊列 + 狀態/BLA 列）===== */
+/* 第一列：頭像 ｜ 名稱＋狀況＋血條＋操作按鈕 ｜ 先攻面板 */
+.uc-row1 {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.uc-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.uc-nameline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.uc-nameline .unit-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+}
+
+/* 狀況徽章：依剩餘血量著色的膠囊，快速判讀單位狀態 */
+.uc-cond {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.uc-cond.cond-full  { color: #34d399; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.35); }
+.uc-cond.cond-light { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.35); }
+.uc-cond.cond-heavy { color: #fb923c; background: rgba(251, 146, 60, 0.12); border-color: rgba(251, 146, 60, 0.35); }
+.uc-cond.cond-crit  { color: #f87171; background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.40); }
+.uc-cond.cond-down  { color: var(--text-dim); background: rgba(255, 255, 255, 0.05); border-color: var(--border); }
+
+/* 血條 + 明細文字 + 操作按鈕同列 */
+.uc-hprow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.uc-hprow .hp-bar-wrap {
+    flex: 1 1 140px;
+    min-width: 110px;
+    max-width: 220px;
+}
+.uc-hptext {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    flex: 0 0 auto;
+}
+
+/* 血條右側的操作按鈕：緊湊、全部等高（26px），前後按鈕高度一致 */
+.uc-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+.uc-actions .action-btn {
+    flex: 0 0 auto;
+    min-width: 0;
+    height: 26px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    white-space: nowrap;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    line-height: 1;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.uc-actions .action-btn:hover {
+    color: var(--text-main);
+    background: var(--bg-card);
+    border-color: var(--border-focus);
+}
+.uc-actions .action-btn.del:hover { border-color: var(--accent-red); color: #ff9e9e; }
+.uc-actions .action-btn.boss-toggle.active { border-color: var(--accent-purple); color: #d0a3e0; }
+
+/* 第二列：狀態徽章（左）＋ BLA 步進器/切換（右） */
+.uc-row2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.uc-statuses {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.uc-statuses .status-container { margin-top: 0; }
+.uc-bla {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-left: auto;
+}
+
+/* ===== 先攻面板：基準 +（狀態調整） = 最終 ===== */
+.unit-init-seq.uinit {
+    width: auto;
+    min-width: 76px;
+    height: auto;
+    min-height: 48px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: 4px 8px;
+    border-color: var(--accent-yellow);
+    background: rgba(0, 0, 0, 0.55);
+    box-shadow: 0 0 8px rgba(253, 216, 53, 0.18);
+    cursor: ns-resize;
+}
+.unit-init-seq.uinit.readonly { cursor: default; }
+.uinit .uinit-label {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent-yellow);
+    line-height: 1;
+}
+.uinit .uinit-calc {
+    display: flex;
+    align-items: baseline;
+    gap: 0;
+    font-size: 0.72rem;
+    line-height: 1;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+.uinit .uinit-base { color: var(--text-main); font-weight: 700; }
+.uinit .uinit-adj.pos  { color: var(--accent-green); }
+.uinit .uinit-adj.neg  { color: var(--accent-red); }
+.uinit .uinit-adj.zero { color: var(--text-muted); }
+.uinit .uinit-final {
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1.05;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--accent-yellow);
+    text-shadow: 0 0 6px rgba(253, 216, 53, 0.45);
+}
+
 /* ===== Modals ===== */
 .modal-overlay {
     position: fixed;

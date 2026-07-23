@@ -442,28 +442,16 @@ body.aoe-select-active .token {
     box-shadow: 0 0 8px rgba(142, 36, 170, 0.5);
 }
 
-/* ===== HP Bar（單一漸層進度條）===== */
+/* ===== HP Bar（沿用原本逐格 B/L/A 色塊）===== */
 .hp-bar-wrap {
-    height: 12px;
-    background: #0b0b10; /* bg-gray-900 質感底 */
-    border-radius: 999px;
-    display: block;
+    height: 10px;
+    background: var(--bg-input);
+    border-radius: 4px;
+    display: flex;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.06);
     width: 100%;
-    padding: 2px;
 }
-
-/* 依剩餘百分比著色的漸層填充 */
-.hp-grad-fill {
-    height: 100%;
-    border-radius: 999px;
-    transition: width 0.3s ease, background 0.3s ease;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.3) inset;
-}
-.hp-grad-fill.hpg-high { background: linear-gradient(to right, #059669, #34d399); }
-.hp-grad-fill.hpg-mid  { background: linear-gradient(to right, #d97706, #fbbf24); }
-.hp-grad-fill.hpg-low  { background: linear-gradient(to right, #e11d48, #fb7185); }
 
 .hp-chunk {
     height: 100%;
@@ -788,16 +776,40 @@ body.aoe-select-active .token {
     max-width: 220px;
 }
 .uc-hptext {
-    font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: #e2e8f0;
+    font-size: 0.72rem;
+    color: var(--text-dim);
     white-space: nowrap;
     flex: 0 0 auto;
 }
-.uc-hptext .hp-unit { font-size: 0.62rem; font-weight: 600; color: var(--text-dim); margin-left: 1px; }
-.uc-hptext.hp-edit { cursor: pointer; }
-.uc-hptext.hp-edit:hover { color: #fff; text-shadow: 0 0 6px rgba(255, 255, 255, 0.25); }
+/* B/L/A 明細以傷型色標示 */
+.uc-hptext .dmg-b { color: var(--dmg-b); font-weight: 700; }
+.uc-hptext .dmg-l { color: var(--dmg-l); font-weight: 700; }
+.uc-hptext .dmg-a { color: var(--dmg-a); font-weight: 700; }
+/* 可改生命上限的膠囊（稍微美化）*/
+.uc-hptext .max-hp-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    text-decoration: none !important;
+    color: var(--accent-yellow) !important;
+    background: rgba(253, 216, 53, 0.10);
+    border: 1px solid rgba(253, 216, 53, 0.3);
+    font-size: 0.68rem;
+    font-weight: 700;
+    transition: background 0.15s, border-color 0.15s;
+}
+.uc-hptext .max-hp-edit { cursor: pointer; }
+.uc-hptext .max-hp-edit i { font-size: 0.6rem; }
+.uc-hptext .max-hp-edit:hover { background: rgba(253, 216, 53, 0.2); border-color: rgba(253, 216, 53, 0.6); }
+.uc-hptext .max-hp-edit.max-hp-ro {
+    cursor: default;
+    color: var(--text-muted) !important;
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+}
 
 /* 血條右側的操作按鈕：微深灰漸層＋細邊框，hover 帶金黃微光 */
 .uc-actions {
@@ -893,49 +905,96 @@ body.aoe-select-active .token {
 .bla-mode.heal:hover { border-color: #10b981; color: #fff; transform: translateY(-1px); }
 
 /* ===== 先攻面板：基準 +（狀態調整） = 最終 ===== */
+/* 先攻面板：只顯示最終先攻大數字；懸停彈出工業風明細方框 */
 .unit-init-seq.uinit {
+    position: relative;
+    overflow: visible;
     width: auto;
-    min-width: 76px;
+    min-width: 52px;
     height: auto;
-    min-height: 48px;
-    flex-direction: column;
+    min-height: 44px;
     justify-content: center;
-    gap: 1px;
-    padding: 4px 10px;
-    border: 1px solid rgba(245, 158, 11, 0.35); /* 精緻深色框，不再是刺眼實黃邊 */
+    padding: 6px 12px;
+    border: 1px solid rgba(245, 158, 11, 0.35);
     border-radius: 10px;
     background: rgba(0, 0, 0, 0.45);
     box-shadow: none;
     cursor: ns-resize;
 }
-.unit-init-seq.uinit.readonly { cursor: default; }
-.uinit .uinit-label {
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: var(--accent-yellow);
+.unit-init-seq.uinit.readonly { cursor: help; }
+.uinit .uinit-final {
+    font-size: 1.5rem;
+    font-weight: 800;
     line-height: 1;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    color: var(--accent-yellow);
+    text-shadow: 0 0 6px rgba(253, 216, 53, 0.4);
 }
-.uinit .uinit-calc {
+
+/* 懸停明細：工業風小方框（往左彈出，不遮到先攻大數字）*/
+.uinit-pop {
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 10px);
+    transform: translateY(-50%) translateX(6px);
+    min-width: 132px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #14141b, #0d0d12);
+    border: 1px solid #33333f;
+    border-left: 3px solid var(--accent-yellow);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease, visibility 0.14s;
+    z-index: 50;
+}
+.unit-init-seq.uinit:hover .uinit-pop {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) translateX(0);
+}
+/* 小三角指向先攻方框 */
+.uinit-pop::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-left-color: #33333f;
+}
+.uip-title {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #2c2c38;
+}
+.uip-row {
     display: flex;
     align-items: baseline;
-    gap: 0;
-    font-size: 0.72rem;
-    line-height: 1;
+    justify-content: space-between;
+    gap: 14px;
     font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 0.74rem;
+    line-height: 1.7;
 }
-.uinit .uinit-base { color: var(--text-main); font-weight: 700; }
-.uinit .uinit-adj.pos  { color: var(--accent-green); }
-.uinit .uinit-adj.neg  { color: var(--accent-red); }
-.uinit .uinit-adj.zero { color: var(--text-muted); }
-.uinit .uinit-final {
-    font-size: 1.35rem;
-    font-weight: 800;
-    line-height: 1.05;
-    font-family: var(--font-mono, 'JetBrains Mono', monospace);
-    color: var(--accent-yellow);
-    text-shadow: 0 0 6px rgba(253, 216, 53, 0.45);
+.uip-row .uip-k { color: var(--text-dim); }
+.uip-row .uip-v { font-weight: 700; color: var(--text-main); }
+.uip-row .uip-v.pos { color: var(--accent-green); }
+.uip-row .uip-v.neg { color: var(--accent-red); }
+.uip-row.uip-total {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid #2c2c38;
 }
+.uip-row.uip-total .uip-k { color: var(--text-main); }
+.uip-row.uip-total .uip-final { color: var(--accent-yellow); font-size: 0.95rem; }
 
 /* ===== Modals ===== */
 .modal-overlay {

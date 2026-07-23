@@ -212,24 +212,16 @@ function renderUnitsList() {
 
         const canEdit = canControlUnit(u);
         const maxHpLabel = canEdit
-            ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限" style="cursor:pointer;text-decoration:underline dotted;color:var(--accent-yellow);margin-left:4px;">[HP:${maxHp}]</span>`
-            : `<span style="margin-left:4px;color:var(--text-muted);">[HP:${maxHp}]</span>`;
+            ? `<span class="max-hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限"><i class="fa-solid fa-pen-to-square"></i>HP ${maxHp}</span>`
+            : `<span class="max-hp-edit max-hp-ro">HP ${maxHp}</span>`;
 
         const hpPercent = (typeof calculateWeightedHpPercent === 'function')
             ? Math.round(calculateWeightedHpPercent(u))
             : 100;
 
-        // 加權 HP：每格 3 點（B 扣 1、L 扣 2、A 扣 3），滿血＝maxHp×3，與血條/百分比一致。
-        const maxHpW = maxHp * 3;
-        const damageWeight = hpArr.reduce((s, x) => s + (Number(x) || 0), 0);
-        const curHpW = Math.max(0, maxHpW - damageWeight);
-        // HP 文字只顯示「現值 / 滿值 HP」；玩家看敵方單位僅給百分比。
-        // （修正：不再把 0B / 0L / 0A 拼接在 HP 文字後面。）
-        const hpText = hideDetails ? `剩餘 ${hpPercent}%` : `${curHpW} / ${maxHpW} <span class="hp-unit">HP</span>`;
-        const hpBreakdownTitle = `完好 ${empty}｜B ${b}｜L ${l}｜A ${a}`;
-        const hpTextEl = (canEdit && !hideDetails)
-            ? `<span class="uc-hptext hp-edit" onclick="openMaxHpModal('${u.id}')" title="點擊修改生命上限（${hpBreakdownTitle}）">${hpText}</span>`
-            : `<span class="uc-hptext"${hideDetails ? '' : ` title="${hpBreakdownTitle}"`}>${hpText}</span>`;
+        // HP 明細文字：保留「N完好 / bB / lL / aA」（B/L/A 傷勢明細以顏色區分）。
+        let statusText = `${empty}完好 / <span class="dmg-b">${b}B</span> / <span class="dmg-l">${l}L</span> / <span class="dmg-a">${a}A</span>`;
+        if (hideDetails) statusText = `剩餘 ${hpPercent}%`;
 
         // 擁有者代號標籤：ST 可點擊修改（辨識這是哪位玩家的單位）；其他人唯讀顯示
         let ownerTag = '';
@@ -242,10 +234,20 @@ function renderUnitsList() {
             ownerTag = `<span style="font-size:0.65rem;color:${ownerColor};margin-left:6px;">[${escapeHtml(u.ownerName)}]</span>`;
         }
 
-        // HP 條：統一為單一漸層進度條（依剩餘百分比著色：綠→琥珀→玫瑰），
-        // 不再逐格顯示 B/L/A（明細改由 HP 數字的 hover 提示與 BLA 步進器呈現）。
-        const barCls = hpPercent >= 60 ? 'hpg-high' : hpPercent >= 30 ? 'hpg-mid' : 'hpg-low';
-        const bar = `<div class="hp-grad-fill ${barCls}" style="width:${hpPercent}%"></div>`;
+        // HP 條：沿用原本逐格 B/L/A 色塊（玩家看敵方單位時改單色百分比條，不洩漏明細）。
+        let bar;
+        if (hideDetails) {
+            const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
+            bar = `<div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div>`;
+        } else {
+            bar = hpArr.map(h => {
+                let cls = 'hp-empty';
+                if (h === 1) cls = 'hp-b';
+                if (h === 2) cls = 'hp-l';
+                if (h === 3) cls = 'hp-a';
+                return `<div class="hp-chunk ${cls}" style="width:${100 / maxHp}%"></div>`;
+            }).join('');
+        }
 
         // 護盾徽章（所有人可見）
         let shieldBadges = '';
@@ -388,13 +390,14 @@ function renderUnitsList() {
 
         const safeAvatar = (u.avatar && typeof u.avatar === 'string' && u.avatar.startsWith('data:image/')) ? u.avatar : '';
         const avaStyle = safeAvatar ? `background-image:url(${safeAvatar});color:transparent;` : '';
-        // 先攻面板：顯示「基準先攻 +（狀態調整） = 最終先攻」。
-        //   基準（X）＝ u.init（1D10＋加值的無狀態基準，滑鼠滾輪調整、可控單位限定）
-        //   調整（Y）＝ 迅捷層數 − 束縛層數（由 getEffectiveInit 換算），讓 ST 一眼確認狀態是否真的影響先攻、影響多少
-        //   最終＝ X + Y（右側大數字）
+        // 先攻面板：平時只顯示「最終先攻」大數字；滑鼠懸停才彈出工業風明細方框，
+        // 讓玩家知道自己的先攻由什麼組成、被什麼狀態改動（基準 / 迅捷 / 束縛 / 最終）。
+        // 基準＝u.init（滑鼠滾輪調整、可控單位限定）；迅捷 +層數、束縛 -層數。
         const initBase = parseInt(u.init) || 0;
-        const initAdj = getEffectiveInit(u) - initBase;
-        const initInput = `<div class="unit-init-seq uinit${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" data-base="${initBase}" data-adj="${initAdj}" title="先攻：基準 + 狀態調整 = 最終（滑鼠滾輪調整基準值）">${renderInitPanelInner(initBase, initAdj)}</div>`;
+        const initSw = irGetStatusLayers(u, 'swiftness');
+        const initBd = irGetStatusLayers(u, 'bind');
+        const initAdj = initSw - initBd;
+        const initInput = `<div class="unit-init-seq uinit${canControlUnit(u) ? '' : ' readonly'}" data-unit-id="${u.id}" data-base="${initBase}" data-adj="${initAdj}" data-sw="${initSw}" data-bd="${initBd}" title="先攻（滑鼠懸停看明細；滾輪調整基準值）">${renderInitPanelInner(initBase, initAdj, initSw, initBd)}</div>`;
         const unitInitial = (u.name && u.name.length > 0) ? u.name[0] : '?';
 
         // 使用者自己的單位有特殊邊框；ST 看到隱藏單位時降低透明度
@@ -437,7 +440,7 @@ function renderUnitsList() {
                         </div>
                         <div class="uc-hprow">
                             <div class="hp-bar-wrap">${bar}</div>
-                            ${hpTextEl}
+                            <span class="uc-hptext">${statusText}${hideDetails ? '' : maxHpLabel}</span>
                             ${hpActions}
                         </div>
                     </div>
@@ -931,19 +934,22 @@ function updateInit(id, val) {
 const initSeqCommitTimers = {};
 
 /**
- * 產生先攻面板內容：「基準 +（狀態調整） = 最終」。
- * 調整值一律帶正負號顯示（+0／+3／-2），讓 ST 能明確判讀狀態對先攻的影響。
+ * 產生先攻面板內容：平時只顯示「最終先攻」大數字；
+ * 另附一個懸停才顯示的工業風明細方框（基準 / 迅捷 / 束縛 / 最終）。
  * @param {number} base - 基準先攻（u.init）
  * @param {number} adj - 狀態調整（迅捷 − 束縛）
+ * @param {number} sw - 迅捷層數
+ * @param {number} bd - 束縛層數
  * @returns {string} 面板內部 HTML
  */
-function renderInitPanelInner(base, adj) {
+function renderInitPanelInner(base, adj, sw, bd) {
     const final = base + adj;
-    const adjTxt = (adj >= 0 ? '+' : '') + adj;           // 負數本身已含「-」
-    const adjCls = adj > 0 ? 'pos' : adj < 0 ? 'neg' : 'zero';
-    return `<div class="uinit-label">先攻</div>`
-        + `<div class="uinit-calc"><span class="uinit-base">${base}</span><span class="uinit-adj ${adjCls}">${adjTxt}</span></div>`
-        + `<div class="uinit-final">${final}</div>`;
+    const rows = [`<div class="uip-row"><span class="uip-k">基準</span><span class="uip-v uip-base">${base}</span></div>`];
+    if (sw) rows.push(`<div class="uip-row"><span class="uip-k">迅捷</span><span class="uip-v pos">+${sw}</span></div>`);
+    if (bd) rows.push(`<div class="uip-row"><span class="uip-k">束縛</span><span class="uip-v neg">-${bd}</span></div>`);
+    rows.push(`<div class="uip-row uip-total"><span class="uip-k">最終先攻</span><span class="uip-v uip-final">${final}</span></div>`);
+    return `<div class="uinit-final">${final}</div>`
+        + `<div class="uinit-pop"><div class="uip-title">先攻明細</div>${rows.join('')}</div>`;
 }
 
 function handleInitSeqWheel(e) {
@@ -959,8 +965,10 @@ function handleInitSeqWheel(e) {
         // 即時重算「基準 +（調整） = 最終」的顯示；提交時仍只寫回基準值 (u.init)。
         next = Math.max(-999, Math.min(999, (parseInt(box.dataset.base) || 0) + dir));
         const adj = parseInt(box.dataset.adj) || 0;
+        const sw = parseInt(box.dataset.sw) || 0;
+        const bd = parseInt(box.dataset.bd) || 0;
         box.dataset.base = next;
-        box.innerHTML = renderInitPanelInner(next, adj);
+        box.innerHTML = renderInitPanelInner(next, adj, sw, bd);
     } else {
         // 舊版純數字框（多重行動子條目等）：直接改文字
         next = Math.max(-999, Math.min(999, (parseInt(box.textContent) || 0) + dir));

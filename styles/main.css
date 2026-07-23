@@ -90,18 +90,36 @@ body {
 }
 
 /* ===== Scrollbar ===== */
+/* 全站統一的細滾動條：透明軌道＋圓角深灰把手，貼合各個深色面板；
+   取代先前 track 誤用 --bg-main（外層灰底色）造成在深色面板內顯得突兀的問題。 */
+html {
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a46 transparent;
+}
+
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--bg-main);
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 3px;
+    background-color: #3a3a46;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 0.15s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #55555f;
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 /* ===== Base Elements ===== */
@@ -540,19 +558,35 @@ input[type="number"] {
 }
 
 .apply-btn {
-    background: var(--bg-card);
-    color: var(--text-main);
-    padding: 6px 12px;
+    background: linear-gradient(180deg, var(--bg-card), var(--bg-input));
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
     border-radius: 6px;
     font-size: 0.8rem;
-    transition: all 0.2s ease;
+    font-weight: 600;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.apply-btn:hover {
+    color: var(--text-main);
+    border-color: var(--border-focus);
+}
+
+/* 有未套用的變更：改用深底＋金黃描邊/淡色調（比照 .map-manager-btn 的
+   淡色調＋細框風格），取代原本的實心黃色色塊；金黃色沿用「有變更待處理」
+   的既有色彩語意（如 HP 上限標籤），但不再是搶眼的滿版填色 */
 .apply-btn.has-changes {
-    background: #e0e0e0;  /* 亮灰色/白色背景 */
-    color: #1a1a1f;       /* 深色文字 */
-    font-weight: 500;
-    box-shadow: 0 0 0 2px var(--accent-yellow);  /* 黃色邊框提示 */
+    background: linear-gradient(180deg, rgba(253, 216, 53, 0.24), rgba(253, 216, 53, 0.10));
+    color: var(--accent-yellow);
+    border-color: rgba(253, 216, 53, 0.55);
+    font-weight: 700;
+    box-shadow: 0 0 8px rgba(253, 216, 53, 0.18);
+}
+.apply-btn.has-changes:hover {
+    background: linear-gradient(180deg, rgba(253, 216, 53, 0.38), rgba(253, 216, 53, 0.18));
+    border-color: var(--accent-yellow);
+    color: #fff6d6;
 }
 
 /* ===== Map Viewport ===== */

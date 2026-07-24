@@ -152,6 +152,7 @@ function renderUnitsToolbar() {
             <button class="units-btn" onclick="openBatchModal()">📋 批量</button>
             <button class="units-btn" onclick="openInitRollModal()" title="全體骰先攻：1D10 + 先攻加值，自動填入先攻序列">🎲 先攻</button>
             <button class="units-btn" onclick="sortByInit()">⏱ 排序</button>
+            <button class="units-btn" onclick="openStatusExclusionModal()" title="設定戰鬥結束清除全場狀態時，哪些狀態要保留">🛡️ 排除名單</button>
         `;
     } else {
         toolbar.innerHTML = `

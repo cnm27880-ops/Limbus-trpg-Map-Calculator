@@ -91,7 +91,12 @@
 .turn-axis-track::-webkit-scrollbar { height: 5px; }
 .turn-axis-track::-webkit-scrollbar-thumb {
     background: var(--border-focus, #404048);
-    border-radius: 3px;
+    border-radius: 999px;
+    transition: background-color 0.18s ease;
+}
+.turn-axis-track::-webkit-scrollbar-thumb:hover {
+    background: #6f6f7c;
+    box-shadow: 0 0 5px rgba(253, 216, 53, 0.3);
 }
 
 /* ===== 單一棋子晶片 ===== */

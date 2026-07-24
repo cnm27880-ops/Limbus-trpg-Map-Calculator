@@ -24,16 +24,16 @@ const SideRail = (function () {
         { key: 'nav-map',      fa: 'fa-map',               color: NAV_COLOR, label: '地圖',              nav: 'map' },
         { key: 'nav-units',    fa: 'fa-users',             color: NAV_COLOR, label: '單位',              nav: 'units' },
         { key: 'nav-log',      fa: 'fa-scroll',            color: NAV_COLOR, label: '戰鬥日誌 / 構築室', nav: 'log' },
-        { key: 'act-sidebar',  fa: 'fa-table-columns',     color: '#818cf8', label: '單位側欄',          id: 'sidebar-toggle', fn: 'toggleSidebar' },
         { key: 'act-media',    fa: 'fa-music',             color: '#38bdf8', label: '媒體中心',          fn: 'toggleMediaPanel' },
         { key: 'act-identity', fa: 'fa-id-card',           color: '#fbbf24', label: '人格卡引擎',        fn: 'toggleIdentityModal' },
         { key: 'act-roulette', fa: 'fa-dharmachakra',      color: '#f472b6', label: '幸運大轉盤',        fn: 'toggleRouletteModal' },
-        { key: 'act-st-status-exclusion', fa: 'fa-list-check', color: '#94a3b8', label: '戰鬥結束狀態排除名單（ST）', fn: 'openStatusExclusionModal' },
         { key: 'act-erosion',  fa: 'fa-fire-flame-curved', color: '#f43f5e', label: '侵蝕控制台',        id: 'qab-erosion-item',       hidden: true, fn: 'toggleErosionHud' },
         { key: 'act-fog',      fa: 'fa-smog',              color: '#22d3ee', label: '戰爭迷霧',          id: 'qab-fog-item',           hidden: true, fn: 'toggleFogHud' },
         { key: 'act-mapai',    fa: 'fa-robot',             color: '#c084fc', label: 'AI 地圖助手',       id: 'qab-map-ai-item',        hidden: true, fn: 'maiTogglePanel' },
-        { key: 'act-counter',  fa: 'fa-scale-balanced',    color: '#2dd4bf', label: '本回合對抗分配',    id: 'qab-counter-panel-item', hidden: true, fn: 'cpToggleFloatPanel' }
+        { key: 'act-counter',  fa: 'fa-scale-balanced',    color: '#2dd4bf', label: '本回合對抗分配',    id: 'qab-counter-panel-item', hidden: true, fn: 'cpToggleFloatPanel' },
         // 快捷鍵說明已移出側邊條：改由底部連線狀態圖示（被圈起來的驚嘆號）觸發，見 index.html #conn-status。
+        // 單位側欄固定排在圖標列最下方（其餘為分頁/浮動面板，此項只切換左側戰鬥序列側欄，使用頻率較低）。
+        { key: 'act-sidebar',  fa: 'fa-table-columns',     color: '#818cf8', label: '單位側欄',          id: 'sidebar-toggle', fn: 'toggleSidebar' }
     ];
 
     let rail = null;

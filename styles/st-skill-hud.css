@@ -88,8 +88,6 @@
     padding: 10px;
     min-height: 0;
 }
-.skill-hud-body::-webkit-scrollbar { width: 4px; }
-.skill-hud-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* Mode Tabs */
 .skill-mode-tabs {
@@ -431,8 +429,6 @@
 .calc-hud-body {
     flex: 1; overflow-y: auto; padding: 10px; min-height: 0;
 }
-.calc-hud-body::-webkit-scrollbar { width: 4px; }
-.calc-hud-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* Re-style calc sections for floating panel */
 .calc-hud-body .calc-container { max-width: 100%; overflow: hidden; }

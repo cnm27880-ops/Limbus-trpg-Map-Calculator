@@ -523,10 +523,9 @@ body.aoe-select-active .token {
 
 /* ===== Tactical HP Bar (戰術幾何血條) =====
    固定六格：不論 maxHp 多少，畫面永遠是這 6 塊（血量越高，一格代表的血量就越多）。
-   每格實際寬度很窄（約 8px），左右邊只用極小幅度往右傾斜（同 .login-btn 的平行
-   四邊形斜切手法，但縮小到符合格寬比例，避免整格被削成一條斜線）；六格頂緣再
-   沿同一條左低右高的斜線相接，讓整條血條合起來讀作一塊右傾的四邊形。
-   最低格仍保留過半高度，避免邊緣被削成接近一點、看起來像三角形。 */
+   六格等高、左右邊一律往右傾斜相同幅度（同 .login-btn 的平行四邊形斜切手法，
+   縮小到符合約 8px 的格寬比例），彼此以極窄間隙相接，合起來讀作「同一塊往右
+   傾斜的平行四邊形」被切成六格，而不是各自獨立、高低不一的形狀。 */
 .hp-tactical-container {
     flex: 1;
     display: flex;
@@ -542,27 +541,9 @@ body.aoe-select-active .token {
     transition: background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
     opacity: 0.95;
     box-shadow: 0 0 4px currentColor;
-}
-
-/* 六格各自的裁切外形（高度可以不同），但左右邊一律往右傾斜相同幅度、
-   頂緣端點彼此相接，組成一條左低右高、往右傾斜的四邊形帶。 */
-.hp-tactical-segment:nth-child(1) {
-    clip-path: polygon(1.5px 42%, 100% 35%, calc(100% - 1.5px) 100%, 0 100%);
-}
-.hp-tactical-segment:nth-child(2) {
-    clip-path: polygon(1.5px 35%, 100% 28%, calc(100% - 1.5px) 100%, 0 100%);
-}
-.hp-tactical-segment:nth-child(3) {
-    clip-path: polygon(1.5px 28%, 100% 21%, calc(100% - 1.5px) 100%, 0 100%);
-}
-.hp-tactical-segment:nth-child(4) {
-    clip-path: polygon(1.5px 21%, 100% 14%, calc(100% - 1.5px) 100%, 0 100%);
-}
-.hp-tactical-segment:nth-child(5) {
-    clip-path: polygon(1.5px 14%, 100% 7%, calc(100% - 1.5px) 100%, 0 100%);
-}
-.hp-tactical-segment:nth-child(6) {
-    clip-path: polygon(1.5px 7%, 100% 0, calc(100% - 1.5px) 100%, 0 100%);
+    /* 六格等高、同幅度右傾斜切，彼此頂/底邊在同一水平線上相接，
+       合起來組成一塊完整的右傾平行四邊形（非各自高低不一的階梯）。 */
+    clip-path: polygon(1.5px 0, 100% 0, calc(100% - 1.5px) 100%, 0 100%);
 }
 
 /* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */

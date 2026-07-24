@@ -158,53 +158,109 @@ input[type="number"] {
     display: none !important;
 }
 
-/* ===== Login Layer ===== */
 #login-layer {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.95);
     z-index: 9999;
     display: flex;
+    flex-direction: column; /* 關鍵：讓隱藏區塊垂直排，小尾巴就不會被擠到右邊 */
     justify-content: center;
     align-items: center;
     padding: 20px;
+    overflow: hidden;
+    background: 
+        radial-gradient(circle at center, rgba(168, 28, 28, 0.18) 0%, rgba(5, 5, 8, 0.98) 75%),
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    background-size: 100% 100%, 28px 24px, 28px 24px;
 }
 
 /* ===== 登入頁 LOGO 樣式 ===== */
 .login-logo {
-    width: 260px;
-    max-width: 90%;
+    width: 280px;
+    max-width: 95%;
     height: auto;
-    margin: 0 auto 10px;
+    margin: 0 auto 12px;
     display: block;
-    /* 配合紅/金紅色的戰術霓光 Drop Shadow */
-    filter: drop-shadow(0 0 12px rgba(229, 57, 53, 0.45));
+    /* 金紅相間的高質感立體發光 */
+    filter: 
+        drop-shadow(0 4px 10px rgba(0, 0, 0, 0.8))
+        drop-shadow(0 0 14px rgba(253, 216, 53, 0.45));
     transition: transform 0.3s ease, filter 0.3s ease;
     user-select: none;
 }
 
 .login-logo:hover {
-    transform: scale(1.03);
-    filter: drop-shadow(0 0 18px rgba(253, 216, 53, 0.6)) drop-shadow(0 0 30px rgba(229, 57, 53, 0.5));
+    transform: scale(1.02);
+    filter: 
+        drop-shadow(0 6px 14px rgba(0, 0, 0, 0.9))
+        drop-shadow(0 0 22px rgba(253, 216, 53, 0.75));
 }
 
+/* ===== Login Box (戰術邊獄切角框) ===== */
 .login-box {
-    background: linear-gradient(160deg, var(--bg-card), var(--bg-panel) 60%);
-    padding: 32px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
+    position: relative;
+    background: rgba(14, 14, 18, 0.92);
+    padding: 36px 32px 30px;
+    border: 1px solid rgba(253, 216, 53, 0.35);
+    /* 裝甲斜角造型 */
+    clip-path: polygon(
+        0 0, 
+        calc(100% - 18px) 0, 
+        100% 18px, 
+        100% 100%, 
+        18px 100%, 
+        0 calc(100% - 18px)
+    );
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     width: 100%;
-    max-width: 380px;
+    max-width: 400px;
     text-align: center;
-    box-shadow:
-        0 1px 0 rgba(255, 255, 255, 0.04) inset,
-        0 20px 50px rgba(0, 0, 0, 0.55),
-        0 0 60px rgba(229, 57, 53, 0.08);
+    box-shadow: 
+        0 20px 50px rgba(0, 0, 0, 0.9),
+        0 0 20px rgba(229, 57, 53, 0.25),
+        inset 0 0 15px rgba(253, 216, 53, 0.08);
+}
+
+/* 寬版對話框（房間列表用） */
+.login-box--wide {
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* 標題與副標題 */
+.login-title {
+    font-family: var(--font-serif);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent-red);
+    margin-bottom: 4px;
+    text-shadow: 0 0 18px rgba(229, 57, 53, 0.55), 0 0 2px rgba(229, 57, 53, 0.8);
+    letter-spacing: 1px;
 }
 
 .login-subtitle {
-    color: var(--text-dim);
-    margin-bottom: 20px;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    color: #a0a0aa;
+    letter-spacing: 4px;
+    margin-bottom: 24px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.login-subtitle::before,
+.login-subtitle::after {
+    content: '';
+    display: inline-block;
+    width: 24px;
+    height: 1px;
+    background: rgba(253, 216, 53, 0.4);
 }
 
 .login-hint {
@@ -213,10 +269,16 @@ input[type="number"] {
     margin-bottom: 10px;
 }
 
+/* 輸入框與列表 */
 .login-input {
     width: 100%;
     text-align: center;
     margin-bottom: 10px;
+    background: rgba(10, 10, 15, 0.8);
+    border: 1px solid rgba(253, 216, 53, 0.3);
+    color: var(--text-main);
+    padding: 10px;
+    border-radius: 4px;
 }
 
 .login-code-input {
@@ -224,9 +286,20 @@ input[type="number"] {
     text-align: center;
     margin-bottom: 10px;
     font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 4px;
+    letter-spacing: 6px;
+    font-size: 1.1rem;
+    background: rgba(10, 10, 15, 0.8);
+    border: 1px solid rgba(253, 216, 53, 0.4);
+    color: var(--accent-yellow);
+    padding: 10px;
+    border-radius: 4px;
 }
 
+.room-list-container {
+    margin: 15px 0;
+}
+
+/* 載入狀態 */
 .login-loading-text {
     color: var(--accent-green);
     margin-bottom: 10px;
@@ -237,74 +310,70 @@ input[type="number"] {
     color: var(--text-dim);
 }
 
-.login-box--wide {
-    max-width: 600px;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.room-list-container {
-    margin: 15px 0;
-}
-
-.login-title {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--accent-red);
-    margin-bottom: 4px;
-    text-shadow: 0 0 18px rgba(229, 57, 53, 0.55), 0 0 2px rgba(229, 57, 53, 0.8);
-    letter-spacing: 1px;
-}
-
+/* ===== Login Buttons (平行四邊形戰術按鈕) ===== */
 .login-btn {
+    position: relative;
     width: 100%;
-    padding: 14px;
-    font-weight: 600;
-    font-size: 1rem;
-    color: #000;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    margin-top: 8px;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-        inset 0 -3px 5px rgba(0, 0, 0, 0.2),
-        0 3px 10px rgba(0, 0, 0, 0.35);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    padding: 12px 16px;
+    font-weight: 700;
+    font-size: 0.92rem;
+    letter-spacing: 2px;
+    border: none;
+    margin-top: 10px;
+    cursor: pointer;
+    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+    transition: all 0.2s ease;
 }
 
-.login-btn:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.08);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.3),
-        inset 0 -3px 5px rgba(0, 0, 0, 0.2),
-        0 6px 16px rgba(0, 0, 0, 0.4);
+/* 我是 ST (建房)：邊獄深紅 */
+.btn-host {
+    background: linear-gradient(135deg, #8a1515 0%, #c62828 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(198, 40, 40, 0.35);
+}
+.btn-host:hover {
+    background: linear-gradient(135deg, #a81c1c 0%, #e53935 100%);
+    box-shadow: 0 0 20px rgba(229, 57, 53, 0.6);
+    transform: translateY(-2px);
+}
+
+/* 我是玩家 (加入)：黃金邊獄 */
+.btn-join {
+    background: linear-gradient(135deg, #99740b 0%, #d4af37 100%);
+    color: #121212;
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.35);
+}
+.btn-join:hover {
+    background: linear-gradient(135deg, #b8860b 0%, #fdd835 100%);
+    box-shadow: 0 0 20px rgba(253, 216, 53, 0.6);
+    transform: translateY(-2px);
+}
+
+/* 房間管理按鈕 */
+.btn-manage {
+    background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 100%);
+    color: #ffffff;
+}
+.btn-manage:hover {
+    background: linear-gradient(135deg, #6a1b9a 0%, #8e24aa 100%);
+    box-shadow: 0 0 15px rgba(142, 36, 170, 0.5);
+    transform: translateY(-2px);
+}
+
+/* 返回按鈕 */
+.btn-back {
+    background: rgba(30, 30, 40, 0.8);
+    color: #a0a0aa;
+    margin-top: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.btn-back:hover {
+    background: rgba(50, 50, 65, 0.9);
+    color: #ffffff;
 }
 
 .login-btn:active {
-    transform: translateY(0);
-    filter: brightness(0.95);
-}
-
-.btn-host {
-    background: linear-gradient(160deg, #ff6b60, var(--accent-red) 55%, #a91f1c);
-}
-
-.btn-join {
-    background: linear-gradient(160deg, #5fb1f5, var(--accent-blue) 55%, #0f4f8c);
-}
-
-.btn-manage {
-    background: var(--accent-blue);
-}
-
-.btn-back {
-    background: linear-gradient(160deg, var(--bg-card), #101013);
-    color: var(--text-dim);
-    margin-top: 16px;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 3px 10px rgba(0, 0, 0, 0.35);
+    transform: translateY(0) scale(0.98);
 }
 
 /* ===== Navbar ===== */

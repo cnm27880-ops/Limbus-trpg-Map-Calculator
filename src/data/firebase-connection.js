@@ -615,6 +615,9 @@ function loadRoomData(data) {
         ? data.statusOrder
         : {};
 
+    // 載入戰鬥結束狀態排除名單（勾選的狀態不會在戰鬥結束時被清除）
+    state.statusExclusions = Array.isArray(data.statusExclusions) ? data.statusExclusions : [];
+
     // 載入地圖背景圖（房間共享）
     if (typeof data.mapBg === 'string' && data.mapBg.startsWith('data:image/')) {
         state.mapBgImage = data.mapBg;
@@ -865,6 +868,17 @@ function setupRoomListeners() {
         }
     });
     unsubscribeListeners.push(() => roomRef.child('statusOrder').off('value', statusOrderListener));
+
+    // 監聽戰鬥結束狀態排除名單變更（房間共享）
+    const statusExclusionsListener = roomRef.child('statusExclusions').on('value', snapshot => {
+        state.statusExclusions = (snapshot.exists() && Array.isArray(snapshot.val())) ? snapshot.val() : [];
+        // 若排除名單設定面板正開啟中，刷新其網格以反映最新勾選狀態
+        const exclusionGrid = document.getElementById('se-status-grid');
+        if (exclusionGrid && typeof renderExclusionStatusGrid === 'function' && typeof statusExclusionCategory !== 'undefined') {
+            exclusionGrid.innerHTML = renderExclusionStatusGrid(statusExclusionCategory);
+        }
+    });
+    unsubscribeListeners.push(() => roomRef.child('statusExclusions').off('value', statusExclusionsListener));
 
     // 監聽使用者在線列表（用於分配權限功能）
     const usersListener = roomRef.child('users').on('value', snapshot => {
@@ -1385,6 +1399,16 @@ function setStatusOrderInRoom(category, orderIds) {
     if (!state.statusOrder) state.statusOrder = {};
     state.statusOrder[category] = orderIds;
     roomRef.child('statusOrder/' + category).set(orderIds);
+}
+
+/**
+ * 設定戰鬥結束狀態排除名單（僅 ST）：清單內的狀態 ID 在戰鬥結束清除全場狀態時會被保留。
+ * @param {string[]} statusIds - 要保留（排除清除）的狀態 ID 陣列
+ */
+function setStatusExclusionsInRoom(statusIds) {
+    if (!roomRef || myRole !== 'st') return;
+    state.statusExclusions = Array.isArray(statusIds) ? statusIds : [];
+    roomRef.child('statusExclusions').set(state.statusExclusions);
 }
 
 /**

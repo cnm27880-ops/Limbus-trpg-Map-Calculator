@@ -102,9 +102,10 @@ function renderTurnAxis() {
             const chip = document.createElement('div');
             chip.className = 'turn-chip ' + (u.type || '') +
                 (isCur ? ' active' : '') + (u.actionSlotOf ? ' slot' : '');
-            chip.title = (u.name || '單位') + '（先攻 ' + (u.init || 0) + '）';
+            const effInit = (typeof getEffectiveInit === 'function') ? getEffectiveInit(u) : (u.init || 0);
+            chip.title = (u.name || '單位') + '（先攻 ' + effInit + '）';
             chip.innerHTML = taUnitFaceHtml(u, 'tc-face') +
-                `<span class="tc-init">${u.init || 0}</span>`;
+                `<span class="tc-init">${effInit}</span>`;
             chip.addEventListener('click', () => {
                 // 點擊晶片：選取該棋子（僅對已部署且看得到的棋子）
                 if (typeof selectUnit === 'function' && u.x >= 0) selectUnit(u.id);

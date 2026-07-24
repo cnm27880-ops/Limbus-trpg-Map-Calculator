@@ -28,6 +28,7 @@ const SideRail = (function () {
         { key: 'act-media',    fa: 'fa-music',             color: '#38bdf8', label: '媒體中心',          fn: 'toggleMediaPanel' },
         { key: 'act-identity', fa: 'fa-id-card',           color: '#fbbf24', label: '人格卡引擎',        fn: 'toggleIdentityModal' },
         { key: 'act-roulette', fa: 'fa-dharmachakra',      color: '#f472b6', label: '幸運大轉盤',        fn: 'toggleRouletteModal' },
+        { key: 'act-st-status-exclusion', fa: 'fa-list-check', color: '#94a3b8', label: '戰鬥結束狀態排除名單（ST）', fn: 'openStatusExclusionModal' },
         { key: 'act-erosion',  fa: 'fa-fire-flame-curved', color: '#f43f5e', label: '侵蝕控制台',        id: 'qab-erosion-item',       hidden: true, fn: 'toggleErosionHud' },
         { key: 'act-fog',      fa: 'fa-smog',              color: '#22d3ee', label: '戰爭迷霧',          id: 'qab-fog-item',           hidden: true, fn: 'toggleFogHud' },
         { key: 'act-mapai',    fa: 'fa-robot',             color: '#c084fc', label: 'AI 地圖助手',       id: 'qab-map-ai-item',        hidden: true, fn: 'maiTogglePanel' },

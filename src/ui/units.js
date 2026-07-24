@@ -512,25 +512,18 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
-        // 生成戰術血條：玩家看敵方時改用百分比填充條，否則用固定 8 格 B/L/A 方塊
-        // （不論 maxHp 多少，畫面永遠是 8 格 —— 血量越高，一格代表的血量就越多；
-        //  每格取其對應 hpArr 區間內「最嚴重」的傷勢，避免傷害被壓縮掉而看不出來）
+        // 生成戰術血條：玩家看敵方時改用百分比填充條，否則用 10 格 B/L/A 方塊
         let tacticalBar;
         if (hideDetails) {
             const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
             tacticalBar = `<div class="hp-tactical-percent"><div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div></div>`;
         } else {
-            const segmentCount = 8;
+            const segmentCount = 10;
             let tacticalSegments = '';
             for (let i = 0; i < segmentCount; i++) {
-                // 此格對應的 hpArr 區間（區間內取最嚴重的傷勢代表這一格）
-                const startIdx = Math.floor((i / segmentCount) * maxHp);
-                const endIdx = Math.max(startIdx + 1, Math.floor(((i + 1) / segmentCount) * maxHp));
-                let hpValue = 0;
-                for (let h = startIdx; h < endIdx && h < maxHp; h++) {
-                    const v = hpArr[h] !== undefined ? hpArr[h] : 0;
-                    if (v > hpValue) hpValue = v;
-                }
+                // 計算此格對應的 hpArr 索引
+                const hpIndex = Math.floor((i / segmentCount) * maxHp);
+                const hpValue = hpArr[hpIndex] !== undefined ? hpArr[hpIndex] : 0;
 
                 let segmentClass = 'hp-tactical-segment';
                 if (hpValue === 0) {

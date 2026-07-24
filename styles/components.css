@@ -521,41 +521,40 @@ body.aoe-select-active .token {
     background: var(--accent-red);
 }
 
-/* ===== Tactical HP Bar (戰術幾何血條) =====
-   固定八格：不論 maxHp 多少，畫面永遠是這 8 塊（血量越高，一格代表的血量就越多）。
-   容器刻意拉高到與寬度相近，讓八格頂緣相接而成的斜線斜率接近 45 度、明顯左低
-   右高；每格左右邊維持垂直、無圓角，只有頂緣是斜的，銳利乾脆。 */
+/* ===== Tactical HP Bar (戰術幾何血條) ===== */
 .hp-tactical-container {
     flex: 1;
     display: flex;
-    align-items: stretch;
-    gap: 1px; /* 格子間距：夠窄才能讓八格讀作同一個整體造型 */
-    min-height: 80px;
-    padding: 3px;
+    align-items: flex-end; /* 關鍵：靠底對齊，形成左矮右高的階梯感 */
+    justify-content: flex-end;
+    gap: 3px; /* 格子間距 */
+    min-height: 28px;
+    padding: 2px;
 }
 
 .hp-tactical-segment {
-    flex: 1 1 0%; /* 八格平分寬度，永遠填滿容器 */
-    min-width: 0;
-    transition: background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+    width: 7px; /* 銳利垂直長條寬度 */
+    border-radius: 0; /* 關鍵：取消圓角，保持線條銳利 */
+    transition: all 0.2s;
     opacity: 0.95;
     box-shadow: 0 0 4px currentColor;
+    flex-shrink: 0;
 }
 
-/* 八格的頂緣端點依序相接，共同組成一條左低右高、約 45 度的斜線；
-   最低格仍保留一成高度，避免最左邊被削成接近一點、看起來像三角形。 */
-.hp-tactical-segment:nth-child(1) { clip-path: polygon(0 90%, 100% 78.75%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(2) { clip-path: polygon(0 78.75%, 100% 67.5%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(3) { clip-path: polygon(0 67.5%, 100% 56.25%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(4) { clip-path: polygon(0 56.25%, 100% 45%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(5) { clip-path: polygon(0 45%, 100% 33.75%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(6) { clip-path: polygon(0 33.75%, 100% 22.5%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(7) { clip-path: polygon(0 22.5%, 100% 11.25%, 100% 100%, 0 100%); }
-.hp-tactical-segment:nth-child(8) { clip-path: polygon(0 11.25%, 100% 0, 100% 100%, 0 100%); }
+/* 利用 :nth-child 讓 6 個格子呈現左小右大的幾何等差高度 */
+.hp-tactical-segment:nth-child(1) { height: 8px; }
+.hp-tactical-segment:nth-child(2) { height: 11px; }
+.hp-tactical-segment:nth-child(3) { height: 14px; }
+.hp-tactical-segment:nth-child(4) { height: 17px; }
+.hp-tactical-segment:nth-child(5) { height: 20px; }
+.hp-tactical-segment:nth-child(6) { height: 23px; }
+/* 若超過 6 格，後續格子維持最大高度 */
+.hp-tactical-segment:nth-child(n+7) { height: 23px; }
 
 /* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */
 .hp-tactical-segment.empty {
     background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: none;
     opacity: 0.4;
 }
@@ -6428,7 +6427,7 @@ body.combat-mode .boss-hud-container {
 }
 #sidebar-units .unit-info {
     flex: 1 1 auto;
-    max-width: 90px; /* 縮窄名稱欄，把空間讓給血條，讓斜率能接近 45 度 */
+    max-width: 120px;
 }
 /* 名稱單行截斷，避免把卡片撐高；完整名稱以 title 屬性 hover 顯示 */
 #sidebar-units .unit-name {
@@ -6451,8 +6450,10 @@ body.combat-mode .boss-hud-container {
 #sidebar-units .unit-init-value {
     font-size: 1rem;
 }
-/* 血條容器沿用 .hp-tactical-container 的基礎尺寸（已針對此側欄寬度調校），
-   不再另外覆寫成一組更矮的高度。 */
+#sidebar-units .hp-tactical-container {
+    min-height: 26px;
+    padding: 2px;
+}
 
 /* 多重行動「子項目化」：左側縮排 20px + 左邊框線，視覺上依附於本體，
    高度壓到極限，僅顯示「行動代號」與「先攻數字」。 */

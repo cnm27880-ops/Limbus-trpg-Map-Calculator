@@ -1668,7 +1668,7 @@ function renderExclusionStatusCard(status) {
     const isExcluded = (state.statusExclusions || []).includes(status.id);
 
     return `
-        <div class="status-card se-status-card${isExcluded ? ' se-excluded' : ''}" data-status-id="${status.id}"
+        <div class="status-card${isExcluded ? ' se-excluded' : ''}" data-status-id="${status.id}"
              style="border-left-color:${borderColor}"
              onclick="toggleStatusExclusion('${status.id}')">
             <div class="status-card-icon">${status.icon}</div>

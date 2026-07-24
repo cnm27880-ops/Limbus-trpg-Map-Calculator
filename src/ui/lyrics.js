@@ -12,6 +12,8 @@ const LYRICS_SLOT_END_PCT = 90;         // 結束高度百分比
 const LYRICS_FADE_DURATION_MS = 2000;   // 淡出動畫時長 (ms)
 const LYRICS_LINE_PAUSE_MS = 600;       // 每行結束後的停頓 (ms)
 const LYRICS_DEFAULT_SPEED = 80;        // 預設打字速度 (ms/字)
+const LYRICS_EDGE_PADDING = 10;         // 歌詞與螢幕邊緣／常駐側邊條的最小留白 (px)
+const LYRICS_MIN_LINE_WIDTH = 20;       // 歌詞行的最小可用寬度兜底 (px)，避免地圖填滿螢幕時寬度算成 0
 
 // ===== 歌詞系統狀態 =====
 let lyricsActive = false;               // 歌詞是否正在播放
@@ -73,9 +75,42 @@ function safeParse(jsonString) {
 
 // ===== 空間偵測 =====
 
+/** 將數值限制在 [min, max] 範圍內 */
+function clampNum(v, min, max) {
+    return Math.min(Math.max(v, min), max);
+}
+
+/**
+ * 取得左側「戰鬥序列」單位側欄目前實際佔用的寬度（隱藏時為 0）。
+ *
+ * 桌面版側欄是擠壓 layout 的 flex 子元素：它的寬度已經反映在 map-viewport／
+ * battle-map 的 rect 上，detectMargins() 不必再扣一次。
+ * 手機版側欄則改用 position:absolute 蓋在地圖上方（浮層、不擠壓 viewport 寬度），
+ * 這種情況才需要額外扣除，避免歌詞疊在側欄面板內容上。
+ * @returns {number} 側欄寬度 (px)
+ */
+function getLeftSidebarWidthPx() {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return 0;
+    if (getComputedStyle(sidebar).position !== 'absolute') return 0;
+    // display:none 時 getBoundingClientRect() 本就會回傳寬度 0，天然涵蓋「未顯示」情況
+    return sidebar.getBoundingClientRect().width || 0;
+}
+
 /**
  * 計算 battle-map 在視窗中的位置與兩側黑邊中心點
- * @returns {{ leftCenterX: number, rightCenterX: number, mapRect: DOMRect } | null}
+ *
+ * 螢幕安全邊界（hardLeft / hardRight）一律優先：無論地圖被縮放、平移到多大
+ * （甚至超出可視範圍、margin 變成 0 或負值），算出來的中心點與最大寬度
+ * 都會被夾在安全邊界內，確保歌詞不會超出螢幕、也不會被任何側欄蓋住。
+ *
+ * 以 #map-viewport 的實際 rect 為基準（而非整個視窗寬度）：桌面版左側單位側欄與
+ * 右側常駐側邊條都是會擠壓 layout 的 flex 兄弟元素，viewport 的 rect 早已自動排除
+ * 它們的寬度，不必再手動計算/扣除一次。手機版單位側欄則改用浮層（position:absolute）
+ * 蓋在地圖上方、不擠壓 viewport 寬度，所以左邊界仍要另外扣掉它。
+ * @returns {{ leftCenterX: number, rightCenterX: number, leftMaxWidth: number,
+ *             rightMaxWidth: number, leftMarginWidth: number, rightMarginWidth: number,
+ *             viewRect: DOMRect } | null}
  */
 function detectMargins() {
     const battleMap = document.getElementById('battle-map');
@@ -90,23 +125,33 @@ function detectMargins() {
         return lyricsCachedMargins;
     }
 
-    // 左側黑邊中心 X = viewport 左邊緣到 map 左邊緣的中點
-    const leftEdge = viewRect.left;
-    const mapLeftEdge = mapRect.left;
-    const leftCenterX = (leftEdge + mapLeftEdge) / 2;
+    const hardLeft = viewRect.left + LYRICS_EDGE_PADDING + getLeftSidebarWidthPx();
+    const hardRight = Math.max(hardLeft, viewRect.right - LYRICS_EDGE_PADDING);
 
-    // 右側黑邊中心 X = map 右邊緣到 viewport 右邊緣的中點
-    const mapRightEdge = mapRect.right;
-    const rightEdge = viewRect.right;
-    const rightCenterX = (mapRightEdge + rightEdge) / 2;
+    // 地圖邊緣可能因縮放/平移超出可視範圍（含負值），一律先夾進硬邊界內再算中心點，
+    // 這樣即使地圖大到填滿甚至超出螢幕，算出的中心點也絕不會落到安全範圍之外
+    const mapLeftEdge = clampNum(mapRect.left, hardLeft, hardRight);
+    const mapRightEdge = clampNum(mapRect.right, hardLeft, hardRight);
+
+    // 左側黑邊中心 X = 安全左邊界到 map 左邊緣的中點
+    const leftCenterX = (hardLeft + mapLeftEdge) / 2;
+    // 右側黑邊中心 X = map 右邊緣到安全右邊界的中點
+    const rightCenterX = (mapRightEdge + hardRight) / 2;
 
     // 計算左右邊距寬度，用於判斷是否有足夠空間
-    const leftMarginWidth = mapLeftEdge - leftEdge;
-    const rightMarginWidth = rightEdge - mapRightEdge;
+    const leftMarginWidth = mapLeftEdge - hardLeft;
+    const rightMarginWidth = hardRight - mapRightEdge;
+
+    // 每側歌詞行的安全最大寬度：以中心點為準、對稱夾在硬邊界內，
+    // 逐字增長到再長也不會超出邊界（CSS max-width + ellipsis 兜底防極端情況）
+    const leftMaxWidth = Math.max(LYRICS_MIN_LINE_WIDTH, Math.min(leftCenterX - hardLeft, hardRight - leftCenterX) * 2);
+    const rightMaxWidth = Math.max(LYRICS_MIN_LINE_WIDTH, Math.min(rightCenterX - hardLeft, hardRight - rightCenterX) * 2);
 
     const result = {
         leftCenterX,
         rightCenterX,
+        leftMaxWidth,
+        rightMaxWidth,
         leftMarginWidth,
         rightMarginWidth,
         viewRect
@@ -118,7 +163,8 @@ function detectMargins() {
 }
 
 /**
- * 重新校正畫面上所有歌詞行的位置（切回地圖頁時呼叫）
+ * 重新校正畫面上所有歌詞行的位置與安全寬度
+ * （切回地圖頁、縮放/平移地圖、視窗尺寸改變時呼叫）
  */
 function recalibrateLyricsPositions() {
     const margins = detectMargins();
@@ -128,7 +174,9 @@ function recalibrateLyricsPositions() {
         const side = el.dataset.side;
         if (!side) return;
         const centerX = side === 'left' ? margins.leftCenterX : margins.rightCenterX;
+        const maxWidth = side === 'left' ? margins.leftMaxWidth : margins.rightMaxWidth;
         el.style.left = centerX + 'px';
+        el.style.maxWidth = maxWidth + 'px';
     });
 }
 
@@ -219,15 +267,17 @@ function createLyricsLineElement(side, localSlot) {
     // 計算 Y 位置
     const yPercent = getSlotYPercent(localSlot);
 
-    // 計算 X 位置
+    // 計算 X 位置與安全最大寬度（逐字增長也不會超出螢幕邊界）
     const centerX = side === 'left' ? margins.leftCenterX : margins.rightCenterX;
+    const maxWidth = side === 'left' ? margins.leftMaxWidth : margins.rightMaxWidth;
 
-    // 定位 (使用 fixed positioning，在整個視窗上方)
+    // 定位 (使用 fixed positioning，在整個視窗上方；z-index 由 CSS .resonance-line 統一管理，
+    // 已設為全站最高，不在此處覆蓋)
     line.style.position = 'fixed';
     line.style.left = centerX + 'px';
     line.style.top = yPercent + 'vh';
+    line.style.maxWidth = maxWidth + 'px';
     line.style.transform = 'translate(-50%, -50%)';
-    line.style.zIndex = '500';
 
     document.body.appendChild(line);
     return line;
@@ -1420,6 +1470,13 @@ function initLyricsUI() {
             // 這在 async 播放迴圈恢復之前就執行，確保使用者切回時立刻看到歌詞
             backfillLyricsAtTime();
         }
+    });
+
+    // 視窗尺寸改變（例如瀏覽器縮放、旋轉螢幕）時，安全邊界跟著變動，
+    // 重新校正現有歌詞行的位置與最大寬度，避免殘留舊座標導致超出螢幕
+    window.addEventListener('resize', () => {
+        lyricsCachedMargins = null;
+        recalibrateLyricsPositions();
     });
 }
 

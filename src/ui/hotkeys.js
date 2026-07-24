@@ -63,34 +63,42 @@ const HOTKEYS = {
         description: '重置視角',
         category: 'camera'
     },
-    // 注意：方向鍵由 main.js 的 initKeyboardControls 處理
-    // 當有選取單位時用於移動單位，否則用於移動視角
+    // 注意：「選取單位時方向鍵移動該單位」已由 main.js 的 initKeyboardControls() 處理
+    // （另一個獨立的 keydown 監聽器，選取單位時會 e.preventDefault() 並自行處理移動）。
+    // 這裡的方向鍵動作只在「沒有選取單位」時才會實際有事發生，兩者互不重疊：
+    //   - 有選取單位：main.js 移動單位，這裡的 isUnitSelectedAndDeployed() 為 true → 不做任何事
+    //   - 沒有選取單位、ST 在戰鬥中按 ←/→ → 切換先攻順序（取代原本行動軸上的 ◀▶ 按鈕）
+    //   - 其餘情況 → 移動視角（原本行為）
     'ArrowUp': {
         action: () => {
             if (!isUnitSelectedAndDeployed()) moveCamera(0, 80);
         },
-        description: '移動單位/視角',
+        description: '移動單位／視角',
         category: 'camera'
     },
     'ArrowDown': {
         action: () => {
             if (!isUnitSelectedAndDeployed()) moveCamera(0, -80);
         },
-        description: '移動單位/視角',
+        description: '移動單位／視角',
         category: 'camera'
     },
     'ArrowLeft': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(80, 0);
+            if (isUnitSelectedAndDeployed()) return;
+            if (canCycleTurnByKeyboard()) prevTurn();
+            else moveCamera(80, 0);
         },
-        description: '移動單位/視角',
+        description: '移動單位／切換先攻上一個（ST）／視角',
         category: 'camera'
     },
     'ArrowRight': {
         action: () => {
-            if (!isUnitSelectedAndDeployed()) moveCamera(-80, 0);
+            if (isUnitSelectedAndDeployed()) return;
+            if (canCycleTurnByKeyboard()) nextTurn();
+            else moveCamera(-80, 0);
         },
-        description: '移動單位/視角',
+        description: '移動單位／切換先攻下一個（ST）／視角',
         category: 'camera'
     },
     '+': {
@@ -211,6 +219,15 @@ function isUnitSelectedAndDeployed() {
     if (typeof canControlUnit === 'function' && !canControlUnit(unit)) return false;
 
     return true;
+}
+
+/**
+ * 是否可以用方向鍵切換先攻順序（僅 ST、且戰鬥進行中才有意義）。
+ * @returns {boolean}
+ */
+function canCycleTurnByKeyboard() {
+    return typeof myRole !== 'undefined' && myRole === 'st' &&
+        typeof state !== 'undefined' && state.isCombatActive === true;
 }
 
 /**

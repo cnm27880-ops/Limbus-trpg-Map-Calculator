@@ -5,8 +5,9 @@
    ============================================================ */
 
 /* ===== 行動軸容器：置於地圖底部中央 =====
-   刻意不設 border、不用重色面板底板：如音樂 App 的播放列一樣，
-   僅用一層極淡的霧面模糊襯底幫助辨識度，本身沒有「外框」的視覺存在感。 */
+   完全透明、無背景無外框無陰影：不做任何「面板/長條」包裹，
+   讓晶片的發光效果直接疊在地圖上，換回合操作全部改由方向鍵觸發（見 hotkeys.js），
+   容器內只剩下置中式頭像輪播，天然完全置中。 */
 .turn-axis-overlay {
     position: absolute;
     left: 50%;
@@ -14,14 +15,8 @@
     transform: translateX(-50%) translateY(0);
     display: flex;
     align-items: center;
-    gap: 8px;
     max-width: calc(100% - 32px);
-    padding: 5px 12px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(14, 14, 18, 0.32), rgba(10, 10, 13, 0.42));
-    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: transparent;
     z-index: 70;
     opacity: 1;
     transition: opacity 0.35s ease, transform 0.35s ease;
@@ -35,64 +30,12 @@
     pointer-events: none;
 }
 
-/* ===== 控制列（ST 專屬）：上一個／下一個／結束戰鬥 =====
-   無外框的迷你圓形 ghost button，比照音樂播放器的上一曲/下一曲鍵縮小處理。 */
-.turn-axis-controls {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    padding-right: 8px;
-    margin-right: 2px;
-    border-right: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.ta-ctrl {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.06);
-    color: #c7c7cf;
-    font-size: 0.66rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease;
-}
-.ta-ctrl:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: #fff;
-    transform: scale(1.1);
-}
-.ta-ctrl:active { transform: scale(0.92); }
-
-/* 下一個行動：主要行動，用色塊區分但不再是實心鍍色方塊 */
-.ta-ctrl-next {
-    background: rgba(253, 216, 53, 0.18);
-    color: var(--accent-yellow, #fdd835);
-}
-.ta-ctrl-next:hover {
-    background: rgba(253, 216, 53, 0.3);
-    color: #ffe680;
-}
-
-.ta-ctrl-end {
-    color: #d98a83;
-}
-.ta-ctrl-end:hover {
-    color: #fff;
-    background: rgba(229, 57, 53, 0.35);
-}
-
 /* ===== 先攻軌道：置中式頭像輪播（類似音樂 App 切歌時封面居中滑動）=====
-   .turn-axis-viewport 是裁切窗口（固定可視寬度、溢出隱藏 + 邊緣淡出遮罩）；
+   .turn-axis-viewport 是裁切窗口（固定可視寬度、溢出隱藏 + 邊緣淡出遮罩，本身無背景）；
    .turn-axis-track 是實際承載所有晶片的內層，寬度隨內容延伸，靠 JS 算出的
    translateX 把「目前行動者」精準滑動到裁切窗口正中央並發光，換人時平滑過渡。 */
 .turn-axis-viewport {
     position: relative;
-    flex: 1 1 auto;
-    min-width: 0;
     width: 240px;
     max-width: 46vw;
     overflow: hidden;
@@ -290,7 +233,6 @@
     .turn-chip { width: 38px; height: 38px; }
     .turn-chip.slot { width: 30px; height: 30px; }
     .turn-chip.active { transform: scale(1); }
-    .ta-ctrl { width: 19px; height: 19px; font-size: 0.6rem; }
     .tb-name { font-size: 1.3rem; }
     .tb-face { width: 46px; height: 46px; font-size: 1.2rem; }
 }

@@ -1,11 +1,13 @@
 /**
  * Limbus Command - 地圖行動軸 / 回合控制 / 換回合精美提示
  *
- * 職責：把「先攻順序 + 換回合操作 + 換回合提示」搬到地圖上，浮於地圖底部中央。
- *   - 行動軸：依先攻順序（state.units 開戰時已按 init 排序）橫向排列每個棋子的頭像晶片，
- *     當前行動者放大並以黃框發光標示；點擊晶片即選取該棋子。玩家看不到隱藏敵人。
- *   - 換回合控制（ST 專屬）：◀ 上一個 / ▶ 下一個 / 🏁 結束戰鬥。手動切換回合的功能保留
- *     （◀▶ 與「單位」分頁的「下一回合」按鈕皆可用）。
+ * 職責：把「先攻順序 + 換回合提示」搬到地圖上，浮於地圖底部中央、完全置中，
+ * 不再有任何按鈕或面板包裹，只有棋子頭像本身可見。
+ *   - 行動軸：依先攻順序（state.units 開戰時已按 init 排序）以置中式輪播呈現每個棋子的
+ *     頭像晶片，當前行動者永遠精準置中並以黃框發光標示；點擊晶片即選取該棋子。
+ *     玩家看不到隱藏敵人。
+ *   - 換回合控制（ST 專屬）：改由方向鍵 ←→ 觸發（見 hotkeys.js 的 canCycleTurnByKeyboard()），
+ *     不再有 ◀▶🏁 按鈕。手動切換回合／結束戰鬥仍可透過「單位」分頁的按鈕操作。
  *   - 換回合精美提示：偵測到「回合真的改變」時，於畫面中央播放一次帶頭像的動畫橫幅。
  *
  * 資料來源：state.isCombatActive / state.turnIdx / state.roundNum / state.units。
@@ -30,8 +32,8 @@ function ensureTurnAxisDom() {
         overlay.className = 'turn-axis-overlay hidden';
         // turn-axis-viewport：裁切窗口（固定寬、溢出隱藏＋邊緣淡出遮罩）
         // turn-axis-track：實際承載晶片的內層，靠 transform 平移把當前行動者滑到正中央
+        // 沒有任何按鈕/控制列：overlay 只剩這一層，天然完全置中，也沒有面板包住晶片
         overlay.innerHTML =
-            '<div class="turn-axis-controls" id="turn-axis-controls"></div>' +
             '<div class="turn-axis-viewport" id="turn-axis-viewport"><div class="turn-axis-track" id="turn-axis-track"></div></div>';
         vp.appendChild(overlay);
     } else if (overlay.parentNode !== vp) {
@@ -75,23 +77,6 @@ function renderTurnAxis() {
     const isSt = (typeof myRole !== 'undefined' && myRole === 'st');
     const units = Array.isArray(state.units) ? state.units : [];
     const current = units[state.turnIdx] || null;
-
-    // ── 控制列（ST 專屬） ──
-    const controls = document.getElementById('turn-axis-controls');
-    if (controls) {
-        if (isSt) {
-            controls.style.display = '';
-            if (!controls.dataset.built) {
-                controls.innerHTML =
-                    '<button class="ta-ctrl" title="上一個行動" onclick="prevTurn()">◀</button>' +
-                    '<button class="ta-ctrl ta-ctrl-next" title="下一個行動" onclick="nextTurn()">▶</button>' +
-                    '<button class="ta-ctrl ta-ctrl-end" title="結束戰鬥" onclick="toggleCombat()">🏁</button>';
-                controls.dataset.built = '1';
-            }
-        } else {
-            controls.style.display = 'none';
-        }
-    }
 
     // ── 先攻軌道 ──
     const track = document.getElementById('turn-axis-track');
@@ -184,23 +169,14 @@ function showTurnBanner(unit) {
     }, 2000);
 }
 
-/** 上一個行動（ST 專屬，手動回退先攻順序）。不動回合數，只退指標。 */
-function prevTurn() {
-    if (typeof myRole === 'undefined' || myRole !== 'st') {
-        if (typeof showToast === 'function') showToast('只有 ST 可以控制回合');
-        return;
-    }
-    if (!state.isCombatActive || !state.units.length) return;
-    const n = state.units.length;
-    state.turnIdx = (state.turnIdx - 1 + n) % n;
-    if (typeof broadcastState === 'function') broadcastState();
-}
+// 注意：prevTurn()／nextTurn()／toggleCombat() 的唯一定義在 units.js，
+// 這裡不再重複宣告一份（先前重複宣告的 prevTurn 會覆蓋 units.js 版本，
+// 導致「上一個」按鈕實際呼叫的是少了列表捲動等收尾邏輯的簡化版）。
 
 // ===== Window bindings =====
 if (typeof window !== 'undefined') {
     window.renderTurnAxis = renderTurnAxis;
     window.showTurnBanner = showTurnBanner;
-    window.prevTurn = prevTurn;
 
     // 視窗尺寸改變時，裁切窗口寬度跟著變，重新置中目前行動者的晶片
     window.addEventListener('resize', () => {

@@ -473,48 +473,57 @@ body.aoe-select-active .token {
     background: var(--accent-red);
 }
 
-/* ===== Tactical HP Bar (中間戰術血條) ===== */
+/* ===== Tactical HP Bar (戰術幾何血條) ===== */
 .hp-tactical-container {
     flex: 1;
     display: flex;
-    align-items: center;
+    align-items: flex-end; /* 關鍵：靠底對齊，形成左矮右高的階梯感 */
     justify-content: flex-end;
-    gap: 2px;
-    transform: skewX(-10deg);
-    min-height: 36px;
-    padding: 6px 4px;
+    gap: 3px; /* 格子間距 */
+    min-height: 28px;
+    padding: 2px;
 }
 
 .hp-tactical-segment {
-    width: 6px;
-    height: 24px;
-    border-radius: 2px;
+    width: 7px; /* 銳利垂直長條寬度 */
+    border-radius: 0; /* 關鍵：取消圓角，保持線條銳利 */
     transition: all 0.2s;
     opacity: 0.95;
-    box-shadow: 0 0 6px currentColor;
+    box-shadow: 0 0 4px currentColor;
+    flex-shrink: 0;
 }
 
+/* 利用 :nth-child 讓 6 個格子呈現左小右大的幾何等差高度 */
+.hp-tactical-segment:nth-child(1) { height: 8px; }
+.hp-tactical-segment:nth-child(2) { height: 11px; }
+.hp-tactical-segment:nth-child(3) { height: 14px; }
+.hp-tactical-segment:nth-child(4) { height: 17px; }
+.hp-tactical-segment:nth-child(5) { height: 20px; }
+.hp-tactical-segment:nth-child(6) { height: 23px; }
+/* 若超過 6 格，後續格子維持最大高度 */
+.hp-tactical-segment:nth-child(n+7) { height: 23px; }
+
+/* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */
 .hp-tactical-segment.empty {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: none;
-    opacity: 0.5;
+    opacity: 0.4;
 }
 
+/* 各健康狀態顏色（保持銳利光澤） */
 .hp-tactical-segment.hp-healthy {
     background-color: var(--accent-green);
     color: var(--accent-green);
 }
-
 .hp-tactical-segment.hp-b {
     background-color: var(--dmg-b);
     color: var(--dmg-b);
 }
-
 .hp-tactical-segment.hp-l {
     background-color: var(--dmg-l);
     color: var(--dmg-l);
 }
-
 .hp-tactical-segment.hp-a {
     background-color: var(--dmg-a);
     color: var(--dmg-a);
@@ -6432,8 +6441,10 @@ body.combat-mode .boss-hud-container {
     min-height: 26px;
     padding: 2px;
 }
-#sidebar-units .hp-tactical-segment {
-    height: 18px;
+
+#sidebar-units .hp-tactical-container {
+    min-height: 26px;
+    padding: 2px;
 }
 
 /* 多重行動「子項目化」：左側縮排 20px + 左邊框線，視覺上依附於本體，

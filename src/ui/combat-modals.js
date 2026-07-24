@@ -969,8 +969,8 @@ function cmGetStatusLayers(unit, statusId) {
 /**
  * ST 端：自動擲骰並把最終傷害套用到防禦方（防禦扣除模式）。
  * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻追加骰子）＋ 附加成功
- * ＋ 目標身上的破裂（受擊消耗）與易損層數 ＋ 攻擊者身上的強壯層數
- * → 合計後玩家攻擊受「攻擊上限」封頂（破裂/易損/強壯皆計入上限內；BOSS 攻擊不受限）
+ * ＋ 目標身上的破裂（受擊消耗）與易損層數 ＋ 攻擊者身上的強壯層數 ＋ 主動宣告技傷害
+ * → 合計後玩家攻擊受「攻擊上限」封頂（破裂/易損/強壯/宣告技傷害皆計入上限內；BOSS 攻擊不受限）
  * → 再扣除目標身上的不屈層數（不受攻擊上限限制，最低 0）
  * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。
  * 擲骰明細（各骰點數、10 的數量）隨廣播同步，供「骰到兩個 10 觸發」類人格卡判定。
@@ -1006,9 +1006,11 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
     // 攻擊者身上的強壯：提升物理攻擊傷害（計入攻擊上限）
     const attackerUnit = (typeof findUnitById === 'function' && atk.unitId) ? findUnitById(atk.unitId) : null;
     const strengthBonus = cmGetStatusLayers(attackerUnit, 'strength');
+    // 主動宣告技傷害（法術威力／武器傷害）：成本已於宣告當下扣除，套傷時併入
+    const declaredDmgBonus = Number(atk.declaredDamageBonus) || 0;
 
-    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 強壯加傷 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
-    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + strengthBonus;
+    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 強壯加傷 + 主動宣告技傷害 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
+    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + strengthBonus + declaredDmgBonus;
     const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
     const capApplied = (cap > 0 && totalBeforeCap > cap);
     const cappedDamage = capApplied ? cap : totalBeforeCap;
@@ -1049,7 +1051,7 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
  * ST 端：豁免抵擋模式的確認結算。
  * 攻擊已於黑箱端擲出（saveInfo.atkRoll.successes）；此處讀取 ST 輸入的
  * 豁免骰數／豁免附加成功／最終調整，替每個目標各擲一次豁免骰對銷：
- *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 + 攻擊者強壯 − 豁免成功 − 豁免附加 + 最終調整 − 該目標不屈)
+ *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 + 攻擊者強壯 + 主動宣告技傷害 − 豁免成功 − 豁免附加 + 最終調整 − 該目標不屈)
  * 逐目標套用（護盾優先消耗），結算後廣播逐目標結果並寫入戰鬥日誌。
  * @param {object} saveInfo - 黑箱釘上的豁免資訊（含 atkRoll 與 targets）
  */
@@ -1075,7 +1077,9 @@ function confirmSTReviewSaveMode(saveInfo) {
     // 攻擊命中總量（成功 + 附加 + 攻擊者強壯），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
     const attackerUnit = (typeof findUnitById === 'function' && atk.unitId) ? findUnitById(atk.unitId) : null;
     const strengthBonus = cmGetStatusLayers(attackerUnit, 'strength');
-    const atkHitTotal = atkSuccess + baseExtra + strengthBonus;
+    // 主動宣告技傷害（法術威力／武器傷害）：成本已於宣告當下扣除，套傷時併入
+    const declaredDmgBonus = Number(atk.declaredDamageBonus) || 0;
+    const atkHitTotal = atkSuccess + baseExtra + strengthBonus + declaredDmgBonus;
     const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
 
     const results = targets.map(t => {

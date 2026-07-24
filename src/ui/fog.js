@@ -116,15 +116,25 @@ function fogComputeVisibility(playerId, persist) {
     const newlyRevealed = [];
 
     sources.forEach(u => {
-        for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
+        // u.x/u.y 是棋子佔地的左上角格（大型棋子往右／往下延伸 size 格，見 map.js 的 token 定位邏輯），
+        // 視野環必須以整個佔地範圍向外擴 1 格，而非只從左上角格取 3x3，否則大型棋子的視野／揭露
+        // 會在右／下側缺一圈（左／上側卻正常有緩衝），形成不對稱的視野破洞。
+        const unitSize = u.size || 1;
+        for (let dy = -1; dy <= unitSize; dy++) {
+            for (let dx = -1; dx <= unitSize; dx++) {
                 const x = u.x + dx, y = u.y + dy;
                 if (x < 0 || y < 0 || x >= state.mapW || y >= state.mapH) continue;
                 temp.add(fogKey(x, y));
             }
         }
-        const ownKey = fogKey(u.x, u.y);
-        if (persist && !fogRevealedMine[ownKey]) newlyRevealed.push(ownKey);
+        if (persist) {
+            for (let dy = 0; dy < unitSize; dy++) {
+                for (let dx = 0; dx < unitSize; dx++) {
+                    const ownKey = fogKey(u.x + dx, u.y + dy);
+                    if (!fogRevealedMine[ownKey]) newlyRevealed.push(ownKey);
+                }
+            }
+        }
     });
 
     if (persist && newlyRevealed.length && typeof roomRef !== 'undefined' && roomRef && myPlayerId) {

@@ -177,21 +177,28 @@ function zoomCameraAt(amount, focusX, focusY) {
     if (oldScale === newScale) return;
 
     // ===== 位置補償演算法 =====
+    // #map-container 是 left:50%/top:50% + 負 margin 置中，且 transform-origin:center center，
+    // 所以 CSS scale 實際上是繞著「視口中心」縮放，而不是視口左上角。focusX/focusY 是呼叫端
+    // 以視口左上角為原點量測的座標，若直接當成相對視口左上角的世界座標換算（未扣掉視口中心
+    // 偏移 V），只有焦點剛好落在視口中心時補償才準；其餘位置縮放（尤其雙指捏合）畫面會偏移。
+    const vp = document.getElementById('map-viewport');
+    const vpRect = vp ? vp.getBoundingClientRect() : { width: 0, height: 0 };
+    const vx = vpRect.width / 2;
+    const vy = vpRect.height / 2;
 
-    // Step 1: 計算焦點在「世界座標系」中的位置（縮放前）
-    // 世界座標 = (螢幕座標 - 相機偏移) / 舊縮放倍率
-    // 這告訴我們：焦點位置對應到地圖上的哪個點
-    const worldX = (focusX - cam.x) / oldScale;
-    const worldY = (focusY - cam.y) / oldScale;
+    // Step 1: 計算焦點在「世界座標系」中的位置（縮放前，相對視口中心 V 換算）
+    // 世界座標 = 視口中心 + (螢幕座標 − 視口中心 − 相機偏移) / 舊縮放倍率
+    const worldX = vx + (focusX - vx - cam.x) / oldScale;
+    const worldY = vy + (focusY - vy - cam.y) / oldScale;
 
     // Step 2: 更新縮放倍率
     cam.scale = newScale;
 
     // Step 3: 調整相機位置，使世界座標點在縮放後仍然對應到焦點位置
-    // 相機偏移 = 螢幕座標 - 世界座標 * 新縮放倍率
+    // 相機偏移 = 螢幕座標 − 視口中心 − (世界座標 − 視口中心) × 新縮放倍率
     // 這確保了：縮放時，焦點位置在螢幕上不會移動
-    cam.x = focusX - worldX * newScale;
-    cam.y = focusY - worldY * newScale;
+    cam.x = focusX - vx - (worldX - vx) * newScale;
+    cam.y = focusY - vy - (worldY - vy) * newScale;
 
     // Step 4: 套用相機變換到 DOM
     applyCamera();

@@ -226,6 +226,10 @@ function attachMapCanvasEvents(canvas) {
 
     canvas.addEventListener('pointerup', (e) => {
         if (e.button !== undefined && e.button !== 0) return;
+        // 防呆：長按拖曳中（見 map.js 的 dragUnitId 狀態機）一律交給 window 層級的
+        // pointerup/finishTokenDrag 結算，這裡不可再依 selectedUnitId 移動另一顆棋子——
+        // 否則放開點若剛好落在畫布而非被拖曳的棋子本身，會誤移到「舊選取」的單位。
+        if (typeof dragUnitId !== 'undefined' && dragUnitId) return;
 
         if (currentTool === 'cursor' && selectedUnitId !== null) {
             const cell = screenToGrid(e.clientX, e.clientY);

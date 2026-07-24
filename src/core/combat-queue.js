@@ -61,12 +61,40 @@ function cqHandleUpdate(data) {
 }
 
 /**
+ * 隊列忙碌中（不存在或 status 不是 idle 都算閒置以外）時，中止發起新攻擊並提示；
+ * 否則以交易寫入新隊列——用 transaction 而非 set，確保「檢查閒置」與「寫入」是同一個
+ * 對服務端原子操作，避免兩名玩家（或玩家與 ST）幾乎同時發起攻擊時，後者直接覆蓋前者
+ * 正在審核中的隊列（前者的攻擊憑空消失，防禦方若已扣資源也白扣）。
+ * @param {object} ref - cqRef()
+ * @param {object} newData - 要寫入的新隊列內容
+ */
+function cqTryStartQueue(ref, newData) {
+    if (!ref || typeof ref.transaction !== 'function') {
+        // 防呆：極舊/測試環境沒有 transaction API 時退回原本的直接寫入，避免完全無法發起攻擊。
+        if (ref) ref.set(newData);
+        return;
+    }
+    ref.transaction(
+        current => (current && current.status && current.status !== 'idle') ? undefined : newData,
+        (error, committed) => {
+            if (error) {
+                console.error('cqTryStartQueue transaction failed:', error);
+                return;
+            }
+            if (!committed && typeof showToast === 'function') {
+                showToast('目前有其他攻擊正在結算中，請稍候再試一次');
+            }
+        }
+    );
+}
+
+/**
  * 玩家對敵方/BOSS 發起攻擊：直接進入 calculating（防禦值由 ST 端黑箱引擎從單位資料取得）。
  */
 function cqInitiateAttack(payload) {
     const ref = cqRef();
     if (!ref) return;
-    ref.set({
+    cqTryStartQueue(ref, {
         status: 'calculating',
         attacker: payload.attacker,
         target: payload.target,
@@ -87,7 +115,7 @@ function cqInitiateAttack(payload) {
 function cqInitiateThreat(payload) {
     const ref = cqRef();
     if (!ref) return;
-    ref.set({
+    cqTryStartQueue(ref, {
         status: 'pending_defense',
         attacker: payload.attacker,
         target: payload.target,

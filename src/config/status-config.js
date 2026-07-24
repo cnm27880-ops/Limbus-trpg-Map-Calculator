@@ -286,7 +286,6 @@ const STATUS_LIBRARY = {
             name: '呼吸法',
             icon: '💨',
             type: 'stack',
-            battleEndReset: true,
             desc: '特殊能量池-呼吸法',
             fullDesc: '特殊能量池：由人格卡技能獲取與消耗（門檻加值、換取護盾等依各卡規則）。戰鬥結束後歸零重置。',
             keyResist: null,
@@ -896,7 +895,6 @@ const STATUS_LIBRARY = {
             name: '充能',
             icon: '🔋',
             type: 'stack',
-            battleEndReset: true,
             turnEndDecay: 1,   // 該單位回合結束時自動 −1 層（充能池規則，回合結束結算面板一鍵套用）
             desc: '特殊能量池-充能',
             fullDesc: '特殊能量池，上限為 20 層。回合結束時 -1 層，戰鬥結束後歸零。可消耗以發動【超載】。',
@@ -908,7 +906,6 @@ const STATUS_LIBRARY = {
             name: '學識',
             icon: '📚',
             type: 'stack',
-            battleEndReset: true,
             desc: '特殊能量池-學識',
             fullDesc: '特殊能量池-學識，可於回合開始捨棄技能加速獲得，戰鬥結束後重置。',
             keyResist: null,

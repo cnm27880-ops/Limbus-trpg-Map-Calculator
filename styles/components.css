@@ -1402,6 +1402,22 @@ body.aoe-select-active .token {
     border-color: var(--text-dim);
 }
 
+/* 戰鬥結束狀態排除名單：卡片勾選（保留）狀態 */
+.status-card.se-excluded {
+    border-color: rgba(67, 160, 71, 0.55);
+    background: rgba(67, 160, 71, 0.10);
+}
+
+.se-check {
+    font-size: 1rem;
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
+.status-card.se-excluded .se-check {
+    color: var(--accent-green);
+}
+
 /* 自訂狀態刪除按鈕 */
 .status-card-delete {
     position: absolute;

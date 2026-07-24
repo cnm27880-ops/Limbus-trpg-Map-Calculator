@@ -773,22 +773,23 @@ function consumeOnAttackedStatuses(unitId) {
 }
 
 /**
- * 戰鬥結束能量池歸零：移除全場所有單位身上標記 battleEndReset 的狀態
- * （呼吸法／充能／學識等「戰鬥結束後重置」的特殊能量池）。
+ * 戰鬥結束清除全場狀態：移除全場所有單位身上的狀態，但保留 ST 於
+ * 「戰鬥結束狀態排除名單」（state.statusExclusions，以狀態 ID 表示）中勾選的狀態。
  * 呼叫端（toggleCombat 結束分支）隨後會 broadcastState() 同步。
  * @returns {string[]} 被清除的狀態名稱清單（去重）
  */
 function clearBattleEndStatuses() {
     const clearedNames = new Set();
     if (typeof state === 'undefined' || !Array.isArray(state.units)) return [];
+    const excludedIds = new Set(state.statusExclusions || []);
     state.units.forEach(unit => {
         if (!unit || !unit.status) return;
         for (const statusName of Object.keys(unit.status)) {
             const def = (typeof getStatusByName === 'function') ? getStatusByName(statusName) : null;
-            if (def && def.battleEndReset) {
-                delete unit.status[statusName];
-                clearedNames.add(statusName);
-            }
+            const statusId = def ? def.id : statusName;
+            if (excludedIds.has(statusId)) continue;
+            delete unit.status[statusName];
+            clearedNames.add(statusName);
         }
     });
     return [...clearedNames];
@@ -1566,4 +1567,146 @@ function refreshStatusLibraryViews() {
     if (tabs) tabs.innerHTML = renderCategoryTabs();
     renderUnitsList();
     renderSidebarUnits();
+}
+
+// ===== 戰鬥結束狀態排除名單（ST 專用）=====
+// 勾選的狀態會在 clearBattleEndStatuses()（戰鬥結束清除全場狀態）時被保留。
+
+let statusExclusionCategory = 'common';
+
+/**
+ * 開啟「戰鬥結束狀態排除名單」設定面板（僅 ST）。
+ */
+function openStatusExclusionModal() {
+    if (myRole !== 'st') {
+        showToast('只有 ST 可以設定排除名單');
+        return;
+    }
+    statusExclusionCategory = 'common';
+
+    const modalHtml = `
+        <div class="modal-overlay show" id="status-exclusion-modal" onclick="closeStatusExclusionModalOnOverlay(event)">
+            <div class="modal status-modal" onclick="event.stopPropagation()">
+                <div class="modal-header modal-header--status">
+                    <span style="font-weight:bold;">🛡️ 戰鬥結束狀態排除名單</span>
+                    <button onclick="closeStatusExclusionModal()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body" style="padding:0;">
+                    <div class="status-grid-hint" style="padding:12px 12px 0;">💡 勾選的狀態在「結束戰鬥」時會被保留；未勾選的狀態會全部清除。</div>
+                    <div style="display:flex;gap:6px;padding:10px 12px;">
+                        <button class="modal-btn" onclick="seSetAllExclusions(true)" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">全部保留</button>
+                        <button class="modal-btn" onclick="seSetAllExclusions(false)" style="background:var(--bg-card);border:1px solid var(--border);padding:4px 10px;font-size:0.78rem;">全部清除</button>
+                    </div>
+                    <div class="status-category-tabs" id="se-category-tabs">
+                        ${renderExclusionCategoryTabs()}
+                    </div>
+                    <div class="status-grid-container">
+                        <div class="status-grid" id="se-status-grid">
+                            ${renderExclusionStatusGrid(statusExclusionCategory)}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button onclick="closeStatusExclusionModal()" class="modal-btn">關閉</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const container = document.getElementById('modals-container');
+    const existingModal = document.getElementById('status-exclusion-modal');
+    if (existingModal) existingModal.remove();
+    container.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeStatusExclusionModal() {
+    const modal = document.getElementById('status-exclusion-modal');
+    if (modal) modal.remove();
+}
+
+function closeStatusExclusionModalOnOverlay(event) {
+    if (event.target.id === 'status-exclusion-modal') closeStatusExclusionModal();
+}
+
+/** 分類標籤頁（沿用狀態庫分類，不含編輯模式的拖放）。 */
+function renderExclusionCategoryTabs() {
+    let html = '';
+    for (const [id, cat] of Object.entries(STATUS_CATEGORIES)) {
+        const isActive = id === statusExclusionCategory ? 'active' : '';
+        const count = (typeof getOrderedStatusesForCategory === 'function') ? getOrderedStatusesForCategory(id).length : 0;
+        html += `
+            <button class="category-tab ${isActive}" data-category="${id}"
+                    onclick="switchExclusionCategory('${id}')">
+                ${cat.icon} ${cat.name} <span class="count">${count}</span>
+            </button>
+        `;
+    }
+    return html;
+}
+
+function switchExclusionCategory(category) {
+    statusExclusionCategory = category;
+    document.querySelectorAll('#se-category-tabs .category-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.category === category);
+    });
+    const grid = document.getElementById('se-status-grid');
+    if (grid) grid.innerHTML = renderExclusionStatusGrid(category);
+}
+
+function renderExclusionStatusGrid(category) {
+    const statuses = (typeof getOrderedStatusesForCategory === 'function') ? getOrderedStatusesForCategory(category) : [];
+    if (statuses.length === 0) {
+        return '<div class="no-statuses">此分類沒有狀態</div>';
+    }
+    return statuses.map(status => renderExclusionStatusCard(status)).join('');
+}
+
+/** 狀態卡片：點擊整張卡片切換「排除清除」勾選狀態。 */
+function renderExclusionStatusCard(status) {
+    const categoryInfo = STATUS_CATEGORIES[getStatusCategory(status.id)] || {};
+    const borderColor = categoryInfo.color || '#666';
+    const isExcluded = (state.statusExclusions || []).includes(status.id);
+
+    return `
+        <div class="status-card se-status-card${isExcluded ? ' se-excluded' : ''}" data-status-id="${status.id}"
+             style="border-left-color:${borderColor}"
+             onclick="toggleStatusExclusion('${status.id}')">
+            <div class="status-card-icon">${status.icon}</div>
+            <div class="status-card-info">
+                <div class="status-card-name">${status.name}</div>
+                <div class="status-card-desc">${status.desc}</div>
+            </div>
+            <div class="status-card-side">
+                <div class="se-check" title="${isExcluded ? '戰鬥結束時保留' : '戰鬥結束時清除'}">
+                    <i class="fa-solid ${isExcluded ? 'fa-square-check' : 'fa-square'}"></i>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/** 切換單一狀態的排除（保留）勾選狀態，並同步至房間。 */
+function toggleStatusExclusion(statusId) {
+    if (myRole !== 'st') return;
+    const current = new Set(state.statusExclusions || []);
+    if (current.has(statusId)) current.delete(statusId);
+    else current.add(statusId);
+
+    if (typeof setStatusExclusionsInRoom === 'function') setStatusExclusionsInRoom([...current]);
+
+    const grid = document.getElementById('se-status-grid');
+    if (grid) grid.innerHTML = renderExclusionStatusGrid(statusExclusionCategory);
+}
+
+/** 快速設定：true＝全部保留（排除清除）、false＝全部清除（排除名單淨空）。 */
+function seSetAllExclusions(keepAll) {
+    if (myRole !== 'st') return;
+    const ids = keepAll && typeof getAllStatusDefs === 'function'
+        ? getAllStatusDefs().map(s => s.id)
+        : [];
+
+    if (typeof setStatusExclusionsInRoom === 'function') setStatusExclusionsInRoom(ids);
+
+    const grid = document.getElementById('se-status-grid');
+    if (grid) grid.innerHTML = renderExclusionStatusGrid(statusExclusionCategory);
 }

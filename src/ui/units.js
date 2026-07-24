@@ -60,11 +60,11 @@ function toggleCombat() {
         state.roundNum = 0;
         state.activeBossId = null;
 
-        // 戰鬥結束能量池歸零（呼吸法/充能/學識等標記 battleEndReset 的狀態）
+        // 戰鬥結束清除全場狀態（ST 於排除名單勾選的狀態除外）
         const cleared = (typeof clearBattleEndStatuses === 'function') ? clearBattleEndStatuses() : [];
 
         broadcastState();
-        showToast('戰鬥已結束，先攻已歸零' + (cleared.length ? `；能量池已重置（${cleared.join('、')}）` : ''));
+        showToast('戰鬥已結束，先攻已歸零' + (cleared.length ? `，並清除狀態：${cleared.join('、')}` : ''));
         // 戰鬥日誌：寫入結束標記（供回合分析切分戰鬥區段；附當下時鐘刻度供刻度消耗統計）
         if (typeof bbPushCombatLog === 'function') {
             bbPushCombatLog({
@@ -469,7 +469,7 @@ function renderSidebarUnits() {
                             <div class="unit-name" title="${escapeHtml(label)}">⚔ ${escapeHtml(label)}</div>
                         </div>
                         <div class="unit-init-box">
-                            <span class="unit-init-value">${u.init || 0}</span>
+                            <span class="unit-init-value">${getEffectiveInit(u)}</span>
                         </div>
                     </div>
                 </div>
@@ -550,7 +550,7 @@ function renderSidebarUnits() {
                     </div>
                     <div class="hp-tactical-container">${tacticalBar}</div>
                     <div class="unit-init-box">
-                        <span class="unit-init-value">${u.init || 0}</span>
+                        <span class="unit-init-value">${getEffectiveInit(u)}</span>
                     </div>
                 </div>
             </div>

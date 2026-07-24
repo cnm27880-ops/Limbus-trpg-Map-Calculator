@@ -521,35 +521,39 @@ body.aoe-select-active .token {
     background: var(--accent-red);
 }
 
-/* ===== Tactical HP Bar (戰術幾何血條) ===== */
+/* ===== Tactical HP Bar 重構 (戰術幾何血條) ===== */
 .hp-tactical-container {
-    flex: 1;
+    flex: 0 0 auto; /* 鎖定寬度，禁止無限拉伸 */
+    width: 110px;
+    height: 28px; /* 明確高度：讓格子的百分比高度有依據可以解析 */
     display: flex;
     align-items: flex-end; /* 關鍵：靠底對齊，形成左矮右高的階梯感 */
     justify-content: flex-end;
-    gap: 3px; /* 格子間距 */
+    gap: 3px; /* 格子間距，密集排列 */
     min-height: 28px;
-    padding: 2px;
+    padding: 2px 6px;
+    overflow: visible; /* 避免邊緣發光 (box-shadow) 被裁切 */
 }
 
 .hp-tactical-segment {
-    width: 7px; /* 銳利垂直長條寬度 */
+    flex: 1 1 0%;
+    min-width: 0;
     border-radius: 0; /* 關鍵：取消圓角，保持線條銳利 */
-    transition: all 0.2s;
+    transform: skewX(-18deg); /* 恆定戰術傾斜平行四邊形，取代 clip-path */
+    transition: background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
     opacity: 0.95;
-    box-shadow: 0 0 4px currentColor;
+    box-shadow: 0 0 3px currentColor;
     flex-shrink: 0;
+    clip-path: none !important; /* 清除舊有裁切，避免頂點誤算成三角形 */
 }
 
-/* 利用 :nth-child 讓 6 個格子呈現左小右大的幾何等差高度 */
-.hp-tactical-segment:nth-child(1) { height: 8px; }
-.hp-tactical-segment:nth-child(2) { height: 11px; }
-.hp-tactical-segment:nth-child(3) { height: 14px; }
-.hp-tactical-segment:nth-child(4) { height: 17px; }
-.hp-tactical-segment:nth-child(5) { height: 20px; }
-.hp-tactical-segment:nth-child(6) { height: 23px; }
-/* 若超過 6 格，後續格子維持最大高度 */
-.hp-tactical-segment:nth-child(n+7) { height: 23px; }
+/* 利用 :nth-child 讓 6 個格子呈現左小右大的階梯式高度 */
+.hp-tactical-segment:nth-child(1) { height: 35%; }
+.hp-tactical-segment:nth-child(2) { height: 48%; }
+.hp-tactical-segment:nth-child(3) { height: 61%; }
+.hp-tactical-segment:nth-child(4) { height: 74%; }
+.hp-tactical-segment:nth-child(5) { height: 87%; }
+.hp-tactical-segment:nth-child(6) { height: 100%; }
 
 /* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */
 .hp-tactical-segment.empty {

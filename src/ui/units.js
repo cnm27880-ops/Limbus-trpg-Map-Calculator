@@ -512,13 +512,13 @@ function renderSidebarUnits() {
             isBoss ? 'boss' : ''
         ].filter(Boolean).join(' ');
 
-        // 生成戰術血條：玩家看敵方時改用百分比填充條，否則用 10 格 B/L/A 方塊
+        // 生成戰術血條：玩家看敵方時改用百分比填充條，否則用固定 6 格 B/L/A 方塊
         let tacticalBar;
         if (hideDetails) {
             const pctCls = hpPercent >= 60 ? 'pct-high' : hpPercent >= 30 ? 'pct-mid' : 'pct-low';
             tacticalBar = `<div class="hp-tactical-percent"><div class="hp-percent-fill ${pctCls}" style="width:${hpPercent}%"></div></div>`;
         } else {
-            const segmentCount = 10;
+            const segmentCount = 6; // 固定 6 格，對應 CSS 的階梯高度與傾斜幾何
             let tacticalSegments = '';
             for (let i = 0; i < segmentCount; i++) {
                 // 計算此格對應的 hpArr 索引

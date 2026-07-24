@@ -170,6 +170,24 @@ input[type="number"] {
     padding: 20px;
 }
 
+/* ===== 登入頁 LOGO 樣式 ===== */
+.login-logo {
+    width: 260px;
+    max-width: 90%;
+    height: auto;
+    margin: 0 auto 10px;
+    display: block;
+    /* 配合紅/金紅色的戰術霓光 Drop Shadow */
+    filter: drop-shadow(0 0 12px rgba(229, 57, 53, 0.45));
+    transition: transform 0.3s ease, filter 0.3s ease;
+    user-select: none;
+}
+
+.login-logo:hover {
+    transform: scale(1.03);
+    filter: drop-shadow(0 0 18px rgba(253, 216, 53, 0.6)) drop-shadow(0 0 30px rgba(229, 57, 53, 0.5));
+}
+
 .login-box {
     background: linear-gradient(160deg, var(--bg-card), var(--bg-panel) 60%);
     padding: 32px;

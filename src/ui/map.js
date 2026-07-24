@@ -1109,6 +1109,16 @@ function _dragTokenEl(unitId) {
 /** 長按判定通過：進入拖曳模式，標尺起點設為棋子目前所在格 */
 function startTokenDrag(u) {
     if (dragUnitId || !u) return;
+    // 拖曳（dragUnitId）與「點選後點格移動」（selectedUnitId）兩套操作流程必須互斥：
+    // 若還留著先前點選、尚未點格移動的單位，此時改長按拖曳另一顆棋子，放開時
+    // map-canvas.js 的 pointerup 只認得 selectedUnitId，會把「舊選取的單位」移到放開的
+    // 格子；而真正被拖曳的棋子因為放開點常常不在自己身上（拖到空地放開很正常），
+    // 漏接自己的 pointerup，卡在「還在跟著游標跑」的殘留拖曳狀態。開始拖曳前先清掉
+    // 舊選取，兩套狀態機才不會同時活躍、互搶同一個 pointerup。
+    if (selectedUnitId !== null && selectedUnitId !== u.id) {
+        selectedUnitId = null;
+        renderMap();
+    }
     dragUnitId = u.id;
     dragOriginCell = { x: u.x, y: u.y };
     dragHoverCell = { x: u.x, y: u.y };

@@ -190,6 +190,13 @@ function cpSubmitAssignment(actionIds) {
 /**
  * ST：手動指定某行動由哪位玩家對抗（playerId 傳空字串＝改為無人對抗）。
  * 會先把該行動從所有玩家的分配中移除，再併入指定玩家的清單。
+ *
+ * 只對「真的受影響」的玩家（目前持有這個行動的人、以及新指定的目標玩家）各自以
+ * transaction 就地修改該玩家自己的 assignments/{playerId} 子節點，而非讀取本地
+ * 快取整個重建、蓋掉 assignments 整個節點——否則若玩家剛好在同一時間透過
+ * cpSubmitAssignment() 送出跟本次操作無關的分配，會被這裡用舊快照重建出的
+ * 版本整個覆蓋、玩家的選擇無聲消失。transaction 讀的是當下最新的伺服器值，
+ * 不受本地快取是否過期影響，也完全不動其他未受影響玩家的資料。
  * @param {string} actionId
  * @param {string} playerId
  */
@@ -197,17 +204,28 @@ function cpSTAssign(actionId, playerId) {
     if (myRole !== 'st') return;
     const ref = cpRef();
     if (!ref) return;
-    const next = {};
+
+    const affectedPids = new Set();
     Object.keys(counterPhaseState.assignments || {}).forEach(pid => {
-        const rest = cpAsArray(counterPhaseState.assignments[pid]).filter(id => id !== actionId);
-        next[pid] = rest.length ? rest : 'none';
+        if (cpAsArray(counterPhaseState.assignments[pid]).includes(actionId)) affectedPids.add(pid);
     });
-    if (playerId) {
-        const cur = (next[playerId] && next[playerId] !== 'none') ? next[playerId] : [];
-        cur.push(actionId);
-        next[playerId] = cur;
-    }
-    ref.child('assignments').set(next);
+    if (playerId) affectedPids.add(playerId);
+
+    affectedPids.forEach(pid => {
+        const childRef = ref.child('assignments/' + pid);
+        if (typeof childRef.transaction !== 'function') {
+            // 防呆：極舊/測試環境沒有 transaction API 時退回單鍵 update（仍比整個節點 set 安全）。
+            const rest = cpAsArray(counterPhaseState.assignments && counterPhaseState.assignments[pid]).filter(id => id !== actionId);
+            if (pid === playerId) rest.push(actionId);
+            ref.child('assignments').update({ [pid]: rest.length ? rest : 'none' });
+            return;
+        }
+        childRef.transaction(current => {
+            const list = cpAsArray(current).filter(id => id !== actionId);
+            if (pid === playerId) list.push(actionId);
+            return list.length ? list : 'none';
+        });
+    });
 }
 
 /**

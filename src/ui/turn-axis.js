@@ -28,9 +28,11 @@ function ensureTurnAxisDom() {
         overlay = document.createElement('div');
         overlay.id = 'turn-axis-overlay';
         overlay.className = 'turn-axis-overlay hidden';
+        // turn-axis-viewport：裁切窗口（固定寬、溢出隱藏＋邊緣淡出遮罩）
+        // turn-axis-track：實際承載晶片的內層，靠 transform 平移把當前行動者滑到正中央
         overlay.innerHTML =
             '<div class="turn-axis-controls" id="turn-axis-controls"></div>' +
-            '<div class="turn-axis-track" id="turn-axis-track"></div>';
+            '<div class="turn-axis-viewport" id="turn-axis-viewport"><div class="turn-axis-track" id="turn-axis-track"></div></div>';
         vp.appendChild(overlay);
     } else if (overlay.parentNode !== vp) {
         vp.appendChild(overlay);
@@ -112,11 +114,8 @@ function renderTurnAxis() {
             });
             track.appendChild(chip);
         });
-        // 讓當前行動者自動捲到可見範圍中央
-        const curEl = track.querySelector('.turn-chip.active');
-        if (curEl && typeof curEl.scrollIntoView === 'function') {
-            curEl.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-        }
+        // 讓當前行動者的晶片永遠精準滑到裁切窗口正中央並發光（換人時平滑過渡）
+        centerActiveTurnChip(track);
     }
 
     // ── 換回合提示：偵測回合是否真的改變 ──
@@ -128,6 +127,29 @@ function renderTurnAxis() {
         _taLastTurnKey = turnKey;
         if (current) showTurnBanner(current);
     }
+}
+
+/**
+ * 讓「目前行動者」的晶片永遠精準滑到 .turn-axis-viewport 裁切窗口正中央，
+ * 換人時 CSS transition 會讓整條軌道平滑滑動 —— 如音樂 App 切歌時封面置中的效果。
+ * 以 offsetLeft/offsetWidth（layout 座標，不受 transform 影響）計算，避免與
+ * 目前套用中的 translateX 互相干擾。
+ * @param {HTMLElement} track - #turn-axis-track 元素
+ */
+function centerActiveTurnChip(track) {
+    const viewportEl = track.parentElement;
+    if (!viewportEl) return;
+
+    const activeChip = track.querySelector('.turn-chip.active');
+    if (!activeChip) {
+        track.style.transform = 'translateX(0)';
+        return;
+    }
+
+    const viewportWidth = viewportEl.clientWidth;
+    const chipCenter = activeChip.offsetLeft + activeChip.offsetWidth / 2;
+    const offset = viewportWidth / 2 - chipCenter;
+    track.style.transform = `translateX(${offset}px)`;
 }
 
 /** 播放一次換回合精美提示橫幅。 */
@@ -179,6 +201,12 @@ if (typeof window !== 'undefined') {
     window.renderTurnAxis = renderTurnAxis;
     window.showTurnBanner = showTurnBanner;
     window.prevTurn = prevTurn;
+
+    // 視窗尺寸改變時，裁切窗口寬度跟著變，重新置中目前行動者的晶片
+    window.addEventListener('resize', () => {
+        const track = document.getElementById('turn-axis-track');
+        if (track) centerActiveTurnChip(track);
+    });
 }
 
 console.log('⏳ 地圖行動軸模組已載入');

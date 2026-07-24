@@ -4000,13 +4000,20 @@ body.combat-mode .boss-hud-container {
     }
 }
 
-/* 歌詞行容器 */
+/* 歌詞行容器
+   z-index 刻意設為全站最高（高於 side-rail 的 9700 與全螢幕轉盤遮罩的 99999）：
+   歌詞是純裝飾且 pointer-events:none，疊在任何 UI 之上都不會擋到互動，
+   故直接約定為「永遠最上層」，不必逐一比對其他元件的 z-index。
+   實際的水平範圍則由 lyrics.js 的 detectMargins()/createLyricsLineElement()
+   即時夾在螢幕安全邊界內（並以 max-width 兜底），避免被 side-rail 蓋住或超出畫面。 */
 .resonance-line {
     position: fixed;
     opacity: 1;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     pointer-events: none;
-    z-index: 500;
+    z-index: 999999;
     font-family: 'Noto Serif TC', 'Georgia', 'Times New Roman', serif;
     font-size: 1.1rem;
     font-weight: 700;

@@ -212,6 +212,11 @@ function applyCamera() {
     if (container) {
         container.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.scale})`;
     }
+    // 地圖在螢幕上的實際大小/位置隨平移縮放即時改變，歌詞的安全邊界（黑邊寬度）
+    // 也要跟著即時重算，確保不管地圖被縮放到多大，歌詞都夾在螢幕範圍內
+    if (typeof recalibrateLyricsPositions === 'function') {
+        recalibrateLyricsPositions();
+    }
 }
 
 /**

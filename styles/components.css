@@ -538,13 +538,14 @@ body.aoe-select-active .token {
 .hp-tactical-segment {
     flex: 1 1 0%;
     min-width: 0;
-    border-radius: 0; /* 關鍵：取消圓角，保持線條銳利 */
-    transform: skewX(-18deg); /* 恆定戰術傾斜平行四邊形，取代 clip-path */
-    transition: background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+    transform: skewX(-18deg); /* 恆定戰術傾斜，維持原本斜度 */
+    /* 上下銳角六邊形：中點為頂點，15% 處內收成側腰，取代長方形 */
+    clip-path: polygon(50% 0%, 100% 15%, 100% 85%, 50% 100%, 0% 85%, 0% 15%);
+    transition: background-color 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
     opacity: 0.95;
-    box-shadow: 0 0 3px currentColor;
+    /* clip-path 會把 box-shadow 一起裁掉（發光消失），改用不受裁切影響的 drop-shadow */
+    filter: drop-shadow(0 0 3px currentColor);
     flex-shrink: 0;
-    clip-path: none !important; /* 清除舊有裁切，避免頂點誤算成三角形 */
 }
 
 /* 利用 :nth-child 讓 6 個格子呈現左小右大的階梯式高度 */
@@ -555,11 +556,12 @@ body.aoe-select-active .token {
 .hp-tactical-segment:nth-child(5) { height: 87%; }
 .hp-tactical-segment:nth-child(6) { height: 100%; }
 
-/* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */
+/* 扣血後的空格樣式：保留銳角幾何，發光取消。
+   border 是矩形盒模型，套用在 clip-path 六邊形上只會留下破碎線段，
+   故改用 drop-shadow 模擬沿六邊形外框的淡色描邊。 */
 .hp-tactical-segment.empty {
     background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: none;
+    filter: drop-shadow(0 0 1.5px rgba(255, 255, 255, 0.6));
     opacity: 0.4;
 }
 

@@ -237,42 +237,80 @@ body.aoe-select-active .token {
     background: var(--bg-main);
 }
 
+/* 戰鬥導覽列：沿用地圖工具列（.tool-btn）同一套戰術 HUD 質感——
+   漸層深底 + 內凹高光的立體按鈕，取代原本純平面色塊，讓兩處工具列風格一致。 */
 .units-toolbar {
-    background: var(--bg-panel);
+    position: relative;
+    background: linear-gradient(180deg, var(--bg-panel), var(--bg-card));
     border-bottom: 1px solid var(--border);
-    padding: 12px;
+    padding: 10px 12px;
     display: flex;
     gap: 8px;
+    align-items: center;
     flex-wrap: wrap;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 底緣一道極細的金色輝光，呼應站內其他 HUD 面板的分隔線處理 */
+.units-toolbar::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -1px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(253, 216, 53, 0.35), transparent);
+    pointer-events: none;
 }
 
 .units-btn {
-    background: var(--bg-card);
+    background: linear-gradient(180deg, var(--bg-card), var(--bg-input));
     color: var(--text-main);
-    padding: 8px 14px;
+    padding: 9px 16px;
     border-radius: 8px;
     font-size: 0.85rem;
+    font-weight: 600;
     display: flex;
     align-items: center;
     gap: 6px;
+    border: 1px solid var(--border);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+        0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: color 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.units-btn:hover {
+    color: #fff;
+    border-color: var(--border-focus, #404048);
+    transform: translateY(-1px);
+}
+
+.units-btn:active {
+    transform: translateY(1px);
+    box-shadow:
+        inset 0 2px 3px rgba(0, 0, 0, 0.4),
+        0 1px 1px rgba(0, 0, 0, 0.2);
 }
 
 .units-btn.primary {
-    background: var(--accent-yellow);
-    color: #000;
-    font-weight: 600;
+    background: linear-gradient(180deg, #ffe680, var(--accent-yellow));
+    color: #2a1a00;
+    font-weight: 700;
+    border-color: rgba(255, 224, 130, 0.7);
 }
 
 /* ===== Turn Controls (回合控制按鈕組) ===== */
 .turn-controls {
     display: flex;
-    gap: 2px;
+    gap: 3px;
 }
 
 .turn-btn {
-    background: var(--accent-yellow);
-    color: #000;
-    border: none;
+    background: radial-gradient(circle at 32% 28%, #ffe680, var(--accent-yellow) 70%, #b8860b 100%);
+    color: #2a1a00;
+    border: 1px solid rgba(255, 224, 130, 0.7);
     border-radius: 6px;
     width: 36px;
     height: 36px;
@@ -283,16 +321,26 @@ body.aoe-select-active .token {
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.5),
+        inset 0 -2px 3px rgba(0, 0, 0, 0.2),
+        0 2px 8px rgba(253, 216, 53, 0.35);
 }
 
 .turn-btn:hover {
-    background: #ffe066;
-    transform: scale(1.05);
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.5),
+        inset 0 -2px 3px rgba(0, 0, 0, 0.2),
+        0 2px 12px rgba(253, 216, 53, 0.55);
 }
 
 .turn-btn:active {
-    transform: scale(0.95);
-    background: #e6b800;
+    transform: translateY(1px) scale(0.96);
+    box-shadow:
+        inset 0 2px 4px rgba(0, 0, 0, 0.3),
+        0 1px 2px rgba(253, 216, 53, 0.3);
 }
 
 .units-list {
@@ -473,40 +521,51 @@ body.aoe-select-active .token {
     background: var(--accent-red);
 }
 
-/* ===== Tactical HP Bar (戰術幾何血條) ===== */
+/* ===== Tactical HP Bar (戰術幾何血條) =====
+   固定六格：不論 maxHp 多少，畫面永遠是這 6 塊（血量越高，一格代表的血量就越多）。
+   每格用 clip-path 裁出銳利無圓角的四邊形，六格頂緣沿同一條左低右高的斜線相接，
+   首尾兩格另外削去外角，讓整條血條合起來讀作同一塊「左低右高」的斜切幾何造型。 */
 .hp-tactical-container {
     flex: 1;
     display: flex;
-    align-items: flex-end; /* 關鍵：靠底對齊，形成左矮右高的階梯感 */
-    justify-content: flex-end;
-    gap: 3px; /* 格子間距 */
+    align-items: stretch;
+    gap: 2px; /* 格子間距：夠窄才能讓六格讀作同一個整體造型 */
     min-height: 28px;
     padding: 2px;
 }
 
 .hp-tactical-segment {
-    width: 7px; /* 銳利垂直長條寬度 */
-    border-radius: 0; /* 關鍵：取消圓角，保持線條銳利 */
-    transition: all 0.2s;
+    flex: 1 1 0%; /* 六格平分寬度，永遠填滿容器 */
+    min-width: 0;
+    transition: background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
     opacity: 0.95;
     box-shadow: 0 0 4px currentColor;
-    flex-shrink: 0;
 }
 
-/* 利用 :nth-child 讓 6 個格子呈現左小右大的幾何等差高度 */
-.hp-tactical-segment:nth-child(1) { height: 8px; }
-.hp-tactical-segment:nth-child(2) { height: 11px; }
-.hp-tactical-segment:nth-child(3) { height: 14px; }
-.hp-tactical-segment:nth-child(4) { height: 17px; }
-.hp-tactical-segment:nth-child(5) { height: 20px; }
-.hp-tactical-segment:nth-child(6) { height: 23px; }
-/* 若超過 6 格，後續格子維持最大高度 */
-.hp-tactical-segment:nth-child(n+7) { height: 23px; }
+/* 六格各自的裁切外形（可以不同），但頂緣端點彼此相接，組成一條左低右高的斜線；
+   第 1 格左下角、第 6 格右上角另外削角，呼應站內其他戰術 UI 的斜切造型。 */
+.hp-tactical-segment:nth-child(1) {
+    clip-path: polygon(0 75%, 100% 62.5%, 100% 100%, 4px 100%, 0 calc(100% - 4px));
+}
+.hp-tactical-segment:nth-child(2) {
+    clip-path: polygon(0 62.5%, 100% 50%, 100% 100%, 0 100%);
+}
+.hp-tactical-segment:nth-child(3) {
+    clip-path: polygon(0 50%, 100% 37.5%, 100% 100%, 0 100%);
+}
+.hp-tactical-segment:nth-child(4) {
+    clip-path: polygon(0 37.5%, 100% 25%, 100% 100%, 0 100%);
+}
+.hp-tactical-segment:nth-child(5) {
+    clip-path: polygon(0 25%, 100% 12.5%, 100% 100%, 0 100%);
+}
+.hp-tactical-segment:nth-child(6) {
+    clip-path: polygon(0 12.5%, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%);
+}
 
 /* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */
 .hp-tactical-segment.empty {
     background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: none;
     opacity: 0.4;
 }
@@ -1253,16 +1312,6 @@ body.aoe-select-active .token {
     background: rgba(0, 0, 0, 0.2);
     border-bottom: 1px solid var(--border);
     align-items: center;
-    scrollbar-width: thin;
-}
-
-.recent-status-bar::-webkit-scrollbar {
-    height: 4px;
-}
-
-.recent-status-bar::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 2px;
 }
 
 .recent-tag {
@@ -2807,23 +2856,6 @@ body.aoe-select-active .token {
     min-height: 0;
 }
 
-.music-panel-body::-webkit-scrollbar {
-    width: 4px;
-}
-
-.music-panel-body::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.music-panel-body::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 2px;
-}
-
-.music-panel-body::-webkit-scrollbar-thumb:hover {
-    background: var(--accent-yellow);
-}
-
 .music-header {
     display: flex;
     justify-content: space-between;
@@ -3125,19 +3157,6 @@ body.aoe-select-active .token {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
-}
-
-.lyrics-tool-body::-webkit-scrollbar {
-    width: 4px;
-}
-
-.lyrics-tool-body::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.lyrics-tool-body::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 2px;
 }
 
 /* ===== Recording Mode ===== */
@@ -3583,15 +3602,6 @@ body.aoe-select-active .token {
     overflow-y: auto;
 }
 
-.lyrics-line-list::-webkit-scrollbar {
-    width: 4px;
-}
-
-.lyrics-line-list::-webkit-scrollbar-thumb {
-    background: var(--border);
-    border-radius: 2px;
-}
-
 .lyrics-line-item {
     display: flex;
     align-items: center;
@@ -3929,21 +3939,35 @@ body.combat-mode .boss-hud-container {
 .combat-btn-start {
     background: linear-gradient(135deg, var(--accent-green), #2e7d32) !important;
     color: #fff !important;
-    font-weight: 600;
+    font-weight: 700;
+    border-color: rgba(102, 187, 106, 0.55) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 0 14px rgba(67, 160, 71, 0.45) !important;
 }
 
 .combat-btn-start:hover {
     filter: brightness(1.15);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0 20px rgba(67, 160, 71, 0.65) !important;
 }
 
 .combat-btn-reset {
     background: linear-gradient(135deg, var(--accent-red), #c62828) !important;
     color: #fff !important;
-    font-weight: 600;
+    font-weight: 700;
+    border-color: rgba(239, 83, 80, 0.55) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 0 14px rgba(198, 40, 40, 0.45) !important;
 }
 
 .combat-btn-reset:hover {
     filter: brightness(1.15);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        0 0 20px rgba(198, 40, 40, 0.65) !important;
 }
 
 /* BOSS 切換按鈕 */
@@ -6437,11 +6461,6 @@ body.combat-mode .boss-hud-container {
 #sidebar-units .unit-init-value {
     font-size: 1rem;
 }
-#sidebar-units .hp-tactical-container {
-    min-height: 26px;
-    padding: 2px;
-}
-
 #sidebar-units .hp-tactical-container {
     min-height: 26px;
     padding: 2px;

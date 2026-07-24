@@ -522,29 +522,36 @@ body.aoe-select-active .token {
 }
 
 /* ===== Tactical HP Bar (戰術幾何血條) =====
-   固定六格：不論 maxHp 多少，畫面永遠是這 6 塊（血量越高，一格代表的血量就越多）。
-   六格等高、左右邊一律往右傾斜相同幅度（同 .login-btn 的平行四邊形斜切手法，
-   縮小到符合約 8px 的格寬比例），彼此以極窄間隙相接，合起來讀作「同一塊往右
-   傾斜的平行四邊形」被切成六格，而不是各自獨立、高低不一的形狀。 */
+   固定八格：不論 maxHp 多少，畫面永遠是這 8 塊（血量越高，一格代表的血量就越多）。
+   容器刻意拉高到與寬度相近，讓八格頂緣相接而成的斜線斜率接近 45 度、明顯左低
+   右高；每格左右邊維持垂直、無圓角，只有頂緣是斜的，銳利乾脆。 */
 .hp-tactical-container {
     flex: 1;
     display: flex;
     align-items: stretch;
-    gap: 1px; /* 格子間距：夠窄才能讓六格讀作同一個整體造型 */
-    min-height: 28px;
-    padding: 2px;
+    gap: 1px; /* 格子間距：夠窄才能讓八格讀作同一個整體造型 */
+    min-height: 80px;
+    padding: 3px;
 }
 
 .hp-tactical-segment {
-    flex: 1 1 0%; /* 六格平分寬度，永遠填滿容器 */
+    flex: 1 1 0%; /* 八格平分寬度，永遠填滿容器 */
     min-width: 0;
     transition: background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
     opacity: 0.95;
     box-shadow: 0 0 4px currentColor;
-    /* 六格等高、同幅度右傾斜切，彼此頂/底邊在同一水平線上相接，
-       合起來組成一塊完整的右傾平行四邊形（非各自高低不一的階梯）。 */
-    clip-path: polygon(1.5px 0, 100% 0, calc(100% - 1.5px) 100%, 0 100%);
 }
+
+/* 八格的頂緣端點依序相接，共同組成一條左低右高、約 45 度的斜線；
+   最低格仍保留一成高度，避免最左邊被削成接近一點、看起來像三角形。 */
+.hp-tactical-segment:nth-child(1) { clip-path: polygon(0 90%, 100% 78.75%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(2) { clip-path: polygon(0 78.75%, 100% 67.5%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(3) { clip-path: polygon(0 67.5%, 100% 56.25%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(4) { clip-path: polygon(0 56.25%, 100% 45%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(5) { clip-path: polygon(0 45%, 100% 33.75%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(6) { clip-path: polygon(0 33.75%, 100% 22.5%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(7) { clip-path: polygon(0 22.5%, 100% 11.25%, 100% 100%, 0 100%); }
+.hp-tactical-segment:nth-child(8) { clip-path: polygon(0 11.25%, 100% 0, 100% 100%, 0 100%); }
 
 /* 扣血後的空格樣式：保留銳利幾何框線，發光取消 */
 .hp-tactical-segment.empty {
@@ -6421,7 +6428,7 @@ body.combat-mode .boss-hud-container {
 }
 #sidebar-units .unit-info {
     flex: 1 1 auto;
-    max-width: 120px;
+    max-width: 90px; /* 縮窄名稱欄，把空間讓給血條，讓斜率能接近 45 度 */
 }
 /* 名稱單行截斷，避免把卡片撐高；完整名稱以 title 屬性 hover 顯示 */
 #sidebar-units .unit-name {
@@ -6444,10 +6451,8 @@ body.combat-mode .boss-hud-container {
 #sidebar-units .unit-init-value {
     font-size: 1rem;
 }
-#sidebar-units .hp-tactical-container {
-    min-height: 26px;
-    padding: 2px;
-}
+/* 血條容器沿用 .hp-tactical-container 的基礎尺寸（已針對此側欄寬度調校），
+   不再另外覆寫成一組更矮的高度。 */
 
 /* 多重行動「子項目化」：左側縮排 20px + 左邊框線，視覺上依附於本體，
    高度壓到極限，僅顯示「行動代號」與「先攻數字」。 */

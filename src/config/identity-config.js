@@ -29,7 +29,8 @@
  *   gale 疾風、sinking 沉淪、knowledge 學識、trueKnowledge 所解真知、
  *   bind 束縛、provoke 挑釁、paralyze 麻痺、stun 暈眩、flaw 破綻、
  *   defenseDown 防禦等級降低、nails 尖釘、echo 山莊的回響、
- *   commandTarget 指令對象、duelOtis 決鬥宣告-奧提斯、duelDon 決鬥宣告-唐吉訶德。
+ *   commandTarget 指令對象、duelOtis 決鬥宣告-奧提斯、duelDon 決鬥宣告-唐吉訶德、
+ *   strength 強壯、endurance 不屈。
  *
  * 攻擊者欄位約定（依卡片需求，由呼叫端提供）：
  *   initiative（先攻值）、initiativeRank（先攻序位，1 為最快）、severeFull（嚴重生命槽已滿）。
@@ -51,7 +52,8 @@ const IDENTITY_STATUS_KEYMAP = {
     knowledge: 'knowledge', trueKnowledge: 'trueKnowledge', bind: 'bind', provoke: 'provoke',
     paralyze: 'paralyze', stun: 'stun', flaw: 'flaw', defenseDown: 'defenseDown',
     nails: 'nails', echo: 'echo', commandTarget: 'command_target',
-    duelOtis: 'duelOtis', duelDon: 'duelDon', vulnerable: 'vulnerable'
+    duelOtis: 'duelOtis', duelDon: 'duelDon', vulnerable: 'vulnerable',
+    strength: 'strength', endurance: 'endurance'
 };
 
 const IDENTITY_LIBRARY = {
@@ -336,6 +338,53 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, targetStatus: { bleed: 3 }, source: '點畫', skill: '點畫' },
                 { condition: () => true, manual: true, source: '血描畫', skill: '血描畫',
                   desc: '命中可進行一次「連擊判定」：擲 1D10，擲到 10 → 額外進行一次攻擊；目標每帶有一種負面狀態，成功閾值下降 1；每回合最多觸發 2 次。' }
+            ]
+        }
+    },
+
+    // 奧提斯 - 臼齒事務所收尾人 ── 震顫 / 強壯 / 不屈
+    otis_molar: {
+        id: 'otis_molar',
+        name: '奧提斯 - 臼齒事務所收尾人',
+        owner: '奧提斯',
+        repeatUnlockSkill: '當機立斷',
+        keyStatuses: ['tremor', 'strength', 'endurance'],
+        // 本卡專屬【震顫】／【震顫引爆】結算規則（取代一般震顫的「造成傷害」模型）：
+        // 目標受到任何攻擊時，若其身上帶有震顫，該次攻擊消耗其所有震顫層數，削減等同消耗層數的
+        // 「因惡性傷害昏迷」閾值；若該次傷害不會使其因惡性傷害昏迷，改為扣除其生命上限
+        // （自身獲得的震顫僅作為資源，不會觸發此負面效果）。
+        // 【震顫引爆】：特殊宣告，立即觸發一次上述【震顫】結算效果，但不移除層數。
+        formNote: '【震顫】（被動）：目標受到任何攻擊時，若其身上帶有震顫，該次攻擊消耗其所有震顫層數，削減等同消耗層數之目標「因惡性傷害昏迷」的閾值；若該次傷害不會使其因惡性傷害昏迷，改為扣除其生命上限（自身獲得的震顫僅作為資源，不觸發此負面效果）。【震顫引爆】：特殊宣告，立即觸發一次【震顫】的結算效果，且不會移除層數。',
+        hooks: {
+            onAttack: [
+                // 慢著慢著！：宣告攻擊時自身獲得 3 層震顫；自身震顫 6+ → +4 DP
+                { condition: () => true, selfStatus: { tremor: 3 }, source: '慢著慢著！', skill: '慢著慢著！' },
+                { condition: (t, a) => (a.status.tremor || 0) >= 6, dpBonus: 4, source: '慢著慢著！（震顫 6+）', skill: '慢著慢著！' }
+            ],
+            onHit: [
+                // 慢著慢著！：命中時昏迷閾值提升（無法自動判定「昏迷」與否，標記手動）
+                { condition: () => true, manual: true, source: '慢著慢著！', skill: '慢著慢著！',
+                  desc: '命中時，使自身「因惡性傷害昏迷」的閾值提升等同自身【震顫】層數的數值，最多提升 10 點。' },
+                // 鋸刃切割：命中時對目標施加 4 層震顫
+                { condition: () => true, targetStatus: { tremor: 4 }, source: '鋸刃切割', skill: '鋸刃切割' },
+                // 鋸刃切割：命中時若自身震顫 6+，宣告發動震顫引爆，結算後目標震顫減少 1 層
+                { condition: (t, a) => (a.status.tremor || 0) >= 6, manual: true, source: '鋸刃切割', skill: '鋸刃切割',
+                  desc: '命中時若自身【震顫】不低於 6 層，宣告發動「震顫引爆」：立即觸發一次【震顫】的結算效果（不移除層數），結算後目標的【震顫】層數另減少 1 層。' },
+                // 當機立斷【重複抽取解鎖】：命中時對目標施加 4 層震顫，隨後連續發動 3 次震顫引爆
+                { condition: () => true, targetStatus: { tremor: 4 }, source: '當機立斷', skill: '當機立斷', locked: true },
+                { condition: () => true, manual: true, source: '當機立斷', skill: '當機立斷', locked: true,
+                  desc: '命中時，隨後連續發動 3 次「震顫引爆」：每次引爆結算後，目標的【震顫】層數皆另減少 1 層。' }
+            ],
+            onActive: [
+                { name: '慢著慢著！（戰術棄置）', source: '慢著慢著！', skill: '慢著慢著！',
+                  desc: '可主動放棄本回合的「迅捷動作」，宣告棄置此技能（作為蓄力），使自身獲得 4 層【強壯】與 4 層【不屈】。' },
+                { name: '鋸刃切割（戰術棄置）', source: '鋸刃切割', skill: '鋸刃切割',
+                  desc: '可主動放棄本回合的「移動動作」，宣告棄置此技能（作為蓄力），使本回合下一次攻擊檢定加骰提高一級，最高 8 加骰；若已為 8 加骰，則改為本次 +4 DP。' },
+                { name: '當機立斷（雙重戰術棄置）', source: '當機立斷', skill: '當機立斷', locked: true,
+                  desc: '發動此技能時，可宣告放棄本回合的「迅捷動作」與「移動動作」：若如此做，本次攻擊獲得前述兩項戰術棄置的所有增益，並額外 +4 武器傷害。' },
+                { name: '當機立斷（消耗震顫）', source: '當機立斷', skill: '當機立斷', locked: true,
+                  desc: '攻擊時可宣告消耗自身 10 層【震顫】；若如此做，命中時額外對目標施加 3 層【震顫】。',
+                  effect: { cost: { tremor: 10 }, targetStatus: { tremor: 3 } } }
             ]
         }
     },

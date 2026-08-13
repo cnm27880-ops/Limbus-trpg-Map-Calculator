@@ -30,7 +30,7 @@
  *   bind 束縛、provoke 挑釁、paralyze 麻痺、stun 暈眩、flaw 破綻、
  *   defenseDown 防禦等級降低、nails 尖釘、echo 山莊的回響、
  *   commandTarget 指令對象、duelOtis 決鬥宣告-奧提斯、duelDon 決鬥宣告-唐吉訶德、
- *   strength 強壯、endurance 不屈。
+ *   strength 強壯、endurance 不屈、magicBullet 魔彈、blackFlame 黑焰。
  *
  * 攻擊者欄位約定（依卡片需求，由呼叫端提供）：
  *   initiative（先攻值）、initiativeRank（先攻序位，1 為最快）、severeFull（嚴重生命槽已滿）。
@@ -53,7 +53,8 @@ const IDENTITY_STATUS_KEYMAP = {
     paralyze: 'paralyze', stun: 'stun', flaw: 'flaw', defenseDown: 'defenseDown',
     nails: 'nails', echo: 'echo', commandTarget: 'command_target',
     duelOtis: 'duelOtis', duelDon: 'duelDon', vulnerable: 'vulnerable',
-    strength: 'strength', endurance: 'endurance'
+    strength: 'strength', endurance: 'endurance',
+    magicBullet: 'magicBullet', blackFlame: 'blackFlame'
 };
 
 const IDENTITY_LIBRARY = {
@@ -385,6 +386,80 @@ const IDENTITY_LIBRARY = {
                 { name: '當機立斷（消耗震顫）', source: '當機立斷', skill: '當機立斷', locked: true,
                   desc: '攻擊時可宣告消耗自身 10 層【震顫】；若如此做，命中時額外對目標施加 3 層【震顫】。',
                   effect: { cost: { tremor: 10 }, targetStatus: { tremor: 3 } } }
+            ]
+        }
+    },
+
+    // 奧提斯 - 腦葉公司 E.G.O::魔彈 ── 魔彈 / 黑焰 / 燃燒
+    otis_ego_bullet: {
+        id: 'otis_ego_bullet',
+        name: '奧提斯 - 腦葉公司E.G.O::魔彈',
+        owner: '奧提斯',
+        repeatUnlockSkill: '魔彈射擊',
+        keyStatuses: ['magicBullet', 'blackFlame', 'burn'],
+        formNote: '【魔彈】：特殊能量池，最高上限 7 層；宣告攻擊時身上具有 7 層【魔彈】即觸發【第七發魔彈】。【第七發魔彈】：你自動在【魔彈】相關的意志豁免中失敗，且所有被鎖定的目標面對此攻擊時防禦附加成功強制歸零；此次射擊結算完畢後，將【魔彈】層數重置為 0。',
+        // 意志力不在單位卡上追蹤（單位的「意志」欄位為豁免骰值），故以手動輸入欄位供二技能扣減判定。
+        manualInputs: [
+            { key: 'will', label: '當前意志力', hint: '宣告攻擊時扣除等同【魔彈】層數；歸零即觸發第七發魔彈', default: 0 }
+        ],
+        reminders: [
+            { condition: (t, a) => (a.status.magicBullet || 0) >= 7,
+              text: '💥 【第七發魔彈】已觸發（魔彈 7 層）：本次【魔彈】相關意志豁免自動失敗，所有被鎖定目標的防禦附加成功強制歸零；結算完畢後將魔彈重置為 0。' },
+            { condition: (t, a) => (a.status.will || 0) > 0 && (a.status.will || 0) - (a.status.magicBullet || 0) <= 0,
+              text: '⚠️ 本次宣告攻擊將扣除等同【魔彈】層數的意志力，扣除後意志力將歸零 → 觸發【第七發魔彈】。' },
+            { text: '🎯 點火：宣告攻擊時進行意志豁免（DC＝決心＋沉著），減值等同【魔彈】層數；失敗則本次攻擊改為指向場上隨機目標。' }
+        ],
+        hooks: {
+            onAttack: [
+                // 點火①：宣告攻擊時的意志豁免（DC 依角色屬性、失敗改打隨機目標）→ 無法自動化
+                { condition: () => true, manual: true, source: '點火', skill: '點火',
+                  desc: '宣告攻擊時進行一次意志豁免，受到等同自身【魔彈】層數的減值（DC＝你的決心＋沉著）；若失敗，本次攻擊改為指向場上隨機目標，多體攻擊則改為多個隨機目標。' },
+                // 點火②：目標每 6 點燃燒 +6 DP，最多疊三次
+                { condition: (t) => (t.status.burn || 0) >= 6,
+                  dpBonus: (t) => Math.min(Math.floor((t.status.burn || 0) / 6), 3) * 6,
+                  source: '點火（燃燒 6 點／層，最多三次）', skill: '點火' },
+                // 魔彈起爆①：目標每 12 點燃燒 +6 DP，最多疊三次（與一技能分開計算）
+                { condition: (t) => (t.status.burn || 0) >= 12,
+                  dpBonus: (t) => Math.min(Math.floor((t.status.burn || 0) / 12), 3) * 6,
+                  source: '魔彈起爆（燃燒 12 點／層，最多三次）', skill: '魔彈起爆' },
+                // 魔彈起爆④：宣告攻擊扣除等同魔彈層數的意志力，歸零則觸發第七發魔彈
+                { condition: () => true, manual: true, source: '魔彈起爆', skill: '魔彈起爆',
+                  desc: '宣告攻擊時，扣除等同自身【魔彈】層數的意志力；若意志力歸零，觸發【第七發魔彈】。' },
+                // 第七發魔彈（被動）：滿 7 層時的強制結算，需 ST 手動套用
+                { condition: (t, a) => (a.status.magicBullet || 0) >= 7, manual: true,
+                  source: '第七發魔彈', skill: '（被動）',
+                  desc: '宣告攻擊時【魔彈】達 7 層：你自動在【魔彈】相關的意志豁免中失敗，且所有被鎖定的目標在面對此攻擊時防禦附加成功強制歸零。此次射擊結算完畢後，將【魔彈】層數重置為 0。' },
+                // 魔彈射擊①【重複抽取解鎖】：宣告攻擊即獲得 1 層魔彈
+                { condition: () => true, selfStatus: { magicBullet: 1 }, source: '魔彈射擊', skill: '魔彈射擊', locked: true },
+                // 魔彈射擊③【重複抽取解鎖】：目標每 6 點燃燒 → 武器傷害 +1
+                { condition: (t) => (t.status.burn || 0) >= 6,
+                  weaponDamage: (t) => Math.floor((t.status.burn || 0) / 6),
+                  source: '魔彈射擊（燃燒 6 點／點）', skill: '魔彈射擊', locked: true }
+            ],
+            onHit: [
+                // 點火③：命中施加 1 層黑焰
+                { condition: () => true, targetStatus: { blackFlame: 1 }, source: '點火', skill: '點火' },
+                // 點火④：命中疊加等同【黑焰】層數的燃燒。
+                // 結算順序假設：先套上本技能的 1 層黑焰，再依「疊加後」的黑焰層數換算燃燒。
+                { condition: () => true, targetStatus: { burn: (t) => (t.status.blackFlame || 0) + 1 },
+                  source: '點火（黑焰轉燃燒）', skill: '點火' },
+                // 魔彈起爆②：命中時若魔彈少於 6 層則 +1 層（層數以宣告攻擊時的快照判定）
+                { condition: (t, a) => (a.status.magicBullet || 0) < 6, selfStatus: { magicBullet: 1 },
+                  source: '魔彈起爆', skill: '魔彈起爆' },
+                // 魔彈起爆③：命中施加等同自身【魔彈】層數的黑焰
+                { condition: (t, a) => (a.status.magicBullet || 0) > 0,
+                  targetStatus: { blackFlame: (t, a) => (a.status.magicBullet || 0) },
+                  source: '魔彈起爆', skill: '魔彈起爆' },
+                // 魔彈起爆③：再疊加等同【黑焰】層數的燃燒（黑焰＝原有 + 點火 1 層 + 本技能施加的層數）
+                { condition: () => true,
+                  targetStatus: { burn: (t, a) => (t.status.blackFlame || 0) + 1 + (a.status.magicBullet || 0) },
+                  source: '魔彈起爆（黑焰轉燃燒）', skill: '魔彈起爆' }
+            ],
+            onActive: [
+                { name: '魔彈射擊（多體鎖定）', source: '魔彈射擊', skill: '魔彈射擊', locked: true,
+                  desc: '進行攻擊時可宣告將攻擊目標擴展為多體攻擊，最多可同時鎖定等同於你當前【魔彈】層數的目標數量。' },
+                { name: '第七發魔彈（重置魔彈）', source: '第七發魔彈', skill: '（被動）',
+                  desc: '【第七發魔彈】結算完畢後，將自身【魔彈】層數重置為 0（引擎僅做加值累積，歸零請於狀態面板手動清除）。' }
             ]
         }
     },

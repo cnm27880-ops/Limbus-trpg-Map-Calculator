@@ -942,6 +942,26 @@ const STATUS_LIBRARY = {
             effects: { light: '攻擊檢定與武器傷害 +層數', heavy: null, destruction: null }
         },
         {
+            id: 'magicBullet',
+            name: '魔彈',
+            icon: '🔮',
+            type: 'stack',
+            desc: '特殊能量池-魔彈',
+            fullDesc: '特殊能量池，最高上限 7 層。宣告攻擊時，【魔彈】相關的意志豁免受到等同層數的減值。若宣告攻擊時層數達到 7 層，觸發【第七發魔彈】：自動在【魔彈】相關的意志豁免中失敗，且所有被鎖定的目標面對該次攻擊時防禦附加成功強制歸零；該次射擊結算完畢後層數重置為 0。',
+            keyResist: null,
+            effects: { light: '意志豁免 -層數；滿 7 層觸發第七發魔彈', heavy: null, destruction: null }
+        },
+        {
+            id: 'blackFlame',
+            name: '黑焰',
+            icon: '🖤',
+            type: 'stack',
+            desc: '黑焰層數',
+            fullDesc: '奧提斯 E.G.O::魔彈的專屬標記。該卡命中時會對目標疊加等同於目標【黑焰】層數的【燃燒】，層數越高燃燒累積越快。',
+            keyResist: null,
+            effects: { light: '命中時轉化為等量【燃燒】', heavy: null, destruction: null }
+        },
+        {
             id: 'echo',
             name: '山莊的回響',
             icon: '🏚️',

@@ -1618,6 +1618,226 @@ console.log('\n[浮士德回報修正] 疾風疊加／指令加護（消耗動�
     });
 })();
 
+// ====================================================================
+console.log('\n[戰鬥隊列] 等候區排隊、ST 強制中止、代填防禦、刪除單位自動解卡');
+// ====================================================================
+// 以假的 Firebase ref 載入真實的 combat-queue.js：驗證「作用中槽位忙碌時排入等候區」
+// 「閒置時自動推進」「ST 接管」三條路徑，這些是先前整場戰鬥卡死的成因所在。
+(function () {
+    // ---- 假 Firebase ref：以物件樹模擬 child/set/update/transaction/push/once ----
+    function makeFakeDb() {
+        const db = { combatQueue: { status: 'idle' }, combatQueuePending: {} };
+        let pushSeq = 0;
+        const makeRef = (path) => ({
+            path,
+            set(v) { db[path] = v; },
+            update(v) { db[path] = Object.assign({}, db[path], v); },
+            remove() { db[path] = (path === 'combatQueuePending') ? {} : null; },
+            push(v) { const k = 'k' + (++pushSeq); db[path][k] = v; return { key: k }; },
+            once() { return Promise.resolve({ val: () => db[path] }); },
+            on() { return () => {}; },
+            off() {},
+            child(key) {
+                return {
+                    remove() { delete db[path][key]; },
+                    set(v) { db[path][key] = v; },
+                    once() { return Promise.resolve({ val: () => db[path][key] }); }
+                };
+            },
+            transaction(fn, cb) {
+                const next = fn(db[path]);
+                const committed = next !== undefined;
+                if (committed) db[path] = next;
+                if (cb) cb(null, committed);
+            }
+        });
+        return {
+            db,
+            roomRef: { child: (name) => makeRef(name) }
+        };
+    }
+
+    function loadQueue(role) {
+        const fake = makeFakeDb();
+        const sandbox = {
+            console, Object, Array, JSON, Math, Promise, parseInt, Number, Date,
+            myRole: role,
+            roomRef: fake.roomRef,
+            unsubscribeListeners: [],
+            firebase: { database: { ServerValue: { TIMESTAMP: 999 } } },
+            toasts: [],
+            findUnitById: (id) => sandbox.units.find(u => u.id === id) || null,
+            units: [],
+        };
+        sandbox.showToast = (m) => sandbox.toasts.push(m);
+        vm.createContext(sandbox);
+        vm.runInContext(readSource('src/core/combat-queue.js')
+            + '\n;\nvar __q = { cqInitiateAttack, cqTryAdvancePending, cqForceReset, cqCancelPending,'
+            + ' cqSTSubmitDefenseFor, cqAbortIfDefenderRemoved, cqHandleUpdate,'
+            + ' setPending: (l) => { cqPendingList = l; }, getPending: () => cqPendingList,'
+            + ' setLast: (v) => { combatQueueLast = v; } };',
+            sandbox, { filename: 'combat-queue.js' });
+        return { q: sandbox.__q, db: fake.db, sandbox };
+    }
+
+    const atk = (name) => ({ attacker: { name, unitId: 'u_' + name }, target: { id: 't1', name: '敵人' } });
+
+    test('槽位閒置 → 攻擊直接進入作用中槽位，不進等候區', () => {
+        const { q, db } = loadQueue('player');
+        q.cqInitiateAttack(atk('甲'));
+        assert.strictEqual(db.combatQueue.status, 'calculating');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 0);
+    });
+
+    test('槽位忙碌 → 第二筆攻擊排入等候區（不再被拒絕）', () => {
+        const { q, db, sandbox } = loadQueue('player');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqInitiateAttack(atk('乙'));
+        assert.strictEqual(db.combatQueue.attacker.name, '甲', '作用中槽位仍是第一筆');
+        const pending = Object.values(db.combatQueuePending);
+        assert.strictEqual(pending.length, 1, '第二筆應排入等候區');
+        assert.strictEqual(pending[0].attacker.name, '乙');
+        assert.ok(sandbox.toasts.some(t => t.includes('等候區')), '應提示玩家已排入等候區');
+    });
+
+    test('多筆同時發起 → 全部保留（一筆作用中、其餘依序排隊）', () => {
+        const { q, db } = loadQueue('player');
+        ['甲', '乙', '丙', '丁'].forEach(n => q.cqInitiateAttack(atk(n)));
+        assert.strictEqual(db.combatQueue.attacker.name, '甲');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 3, '其餘三筆都應保留在等候區');
+    });
+
+    test('ST 強制中止 → 槽位回到 idle 並標記 abortedAt（等候區完整保留）', () => {
+        const { q, db } = loadQueue('st');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqInitiateAttack(atk('乙'));   // 忙碌 → 實際排進等候區
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 1, '前置條件：等候區有一筆');
+
+        q.cqForceReset();
+        assert.strictEqual(db.combatQueue.status, 'idle');
+        assert.ok(db.combatQueue.abortedAt, '應標記中止時間戳供玩家端提示');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 1,
+            '中止只針對作用中那筆，等候區的攻擊不可被牽連清掉');
+    });
+
+    test('ST 強制中止並清空等候區 → 等候區歸零', () => {
+        const { q, db } = loadQueue('st');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqInitiateAttack(atk('乙'));
+        q.cqForceReset(true);
+        assert.strictEqual(db.combatQueue.status, 'idle');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 0);
+    });
+
+    test('玩家無法強制中止（權限）', () => {
+        const { q, db, sandbox } = loadQueue('player');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqForceReset();
+        assert.strictEqual(db.combatQueue.status, 'calculating', '玩家不應能中止結算');
+        assert.ok(sandbox.toasts.some(t => t.includes('只有 ST')));
+    });
+
+    test('槽位閒置時推進等候區 → 最舊的一筆進入作用中並從等候區移除', async () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueuePending = { k1: { attacker: { name: '乙' }, target: { id: 't1' }, queuedAt: 1 } };
+        q.setPending([{ key: 'k1', attacker: { name: '乙' }, target: { id: 't1' }, queuedAt: 1 }]);
+        q.cqTryAdvancePending();
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.attacker.name, '乙', '等候區最舊的一筆應被推進');
+        assert.ok(!db.combatQueuePending.k1, '推進成功後應從等候區移除');
+    });
+
+    test('槽位忙碌時不推進等候區（不會覆蓋審核中的結算）', async () => {
+        const { q, db } = loadQueue('st');
+        q.cqInitiateAttack(atk('甲'));
+        db.combatQueuePending = { k1: { attacker: { name: '乙' }, target: { id: 't1' } } };
+        q.setPending([{ key: 'k1', attacker: { name: '乙' }, target: { id: 't1' } }]);
+        q.cqTryAdvancePending();
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.attacker.name, '甲', '作用中的結算不應被蓋掉');
+        assert.ok(db.combatQueuePending.k1, '等候區項目應保留');
+    });
+
+    test('玩家端不推進等候區（單一推進者，避免同一筆結算兩次）', async () => {
+        const { q, db } = loadQueue('player');
+        db.combatQueuePending = { k1: { attacker: { name: '乙' }, target: { id: 't1' } } };
+        q.setPending([{ key: 'k1', attacker: { name: '乙' }, target: { id: 't1' } }]);
+        q.cqTryAdvancePending();
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.status, 'idle', '玩家端不應推進');
+        assert.ok(db.combatQueuePending.k1);
+    });
+
+    test('ST 代填防禦 → 狀態轉入 calculating 並標記 defenseByST', async () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'pending_defense', target: { id: 't1', name: '玩家A' } };
+        q.cqSTSubmitDefenseFor(7, 2);
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.status, 'calculating');
+        assert.deepStrictEqual(db.combatQueue.defense, { dp: 7, auto: 2 });
+        assert.strictEqual(db.combatQueue.defenseByST, true, '應標記為 ST 代填');
+    });
+
+    test('ST 代填防禦：狀態不是 pending_defense 時不寫入（不蓋掉已往下跑的結算）', async () => {
+        const { q, db, sandbox } = loadQueue('st');
+        db.combatQueue = { status: 'st_review', baseDice: 5 };
+        q.cqSTSubmitDefenseFor(7, 2);
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.status, 'st_review', '審核中的結算不應被覆寫');
+        assert.ok(sandbox.toasts.some(t => t.includes('沒有等待防禦')));
+    });
+
+    test('刪除防禦方單位 → 自動中止該筆結算（實際踩過的卡死情境）', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'pending_defense', target: { id: 't1', name: '玩家A' }, attacker: { name: 'BOSS' } };
+        q.setLast(db.combatQueue);
+        q.cqAbortIfDefenderRemoved('t1');
+        assert.strictEqual(db.combatQueue.status, 'idle', '刪除防禦方後應自動中止，不再卡死');
+    });
+
+    test('刪除無關單位 → 不影響進行中的結算', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'pending_defense', target: { id: 't1' }, attacker: { name: 'BOSS' } };
+        q.setLast(db.combatQueue);
+        q.cqAbortIfDefenderRemoved('someone-else');
+        assert.strictEqual(db.combatQueue.status, 'pending_defense');
+    });
+
+    test('刪除單位 → 等候區中與該單位相關的攻擊一併清掉', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'idle' };
+        q.setLast(db.combatQueue);
+        db.combatQueuePending = {
+            k1: { attacker: { name: '甲', unitId: 'u1' }, target: { id: 't1' } },
+            k2: { attacker: { name: '乙', unitId: 'u2' }, target: { id: 't9' } }
+        };
+        q.setPending([
+            { key: 'k1', attacker: { name: '甲', unitId: 'u1' }, target: { id: 't1' } },
+            { key: 'k2', attacker: { name: '乙', unitId: 'u2' }, target: { id: 't9' } }
+        ]);
+        q.cqAbortIfDefenderRemoved('t1');
+        assert.ok(!db.combatQueuePending.k1, '目標為被刪單位的攻擊應清掉');
+        assert.ok(db.combatQueuePending.k2, '無關的攻擊應保留');
+    });
+
+    test('ST 取消等候區單筆 → 只移除該筆', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueuePending = { k1: { attacker: { name: '甲' } }, k2: { attacker: { name: '乙' } } };
+        q.cqCancelPending('k1');
+        assert.ok(!db.combatQueuePending.k1);
+        assert.ok(db.combatQueuePending.k2);
+    });
+
+    test('pending_defense 且防禦方已不存在 → ST 端收到更新時自動中止', () => {
+        const { q, db, sandbox } = loadQueue('st');
+        sandbox.units = [];  // 防禦方單位已被刪
+        db.combatQueue = { status: 'pending_defense', target: { id: 'gone', name: '玩家A' } };
+        q.cqHandleUpdate(db.combatQueue);
+        assert.strictEqual(db.combatQueue.status, 'idle');
+        assert.ok(sandbox.toasts.some(t => t.includes('已不在場上')));
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

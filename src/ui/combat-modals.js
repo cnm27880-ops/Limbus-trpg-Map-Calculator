@@ -597,7 +597,15 @@ function submitAttackModal() {
  * combat-queue.js 在 pending_defense 狀態時呼叫：若自己是目標玩家，彈出防禦 QTE。
  */
 function cqOnPendingDefense(data) {
-    if (myRole === 'st') return;
+    if (myRole === 'st') {
+        // ST 端先前對「等待玩家防禦」完全沒有回饋，玩家一離席就只能瞪著沒反應的畫面。
+        // 明確提示是誰在等，並指向可以接管的主控台（代填防禦／強制中止）。
+        const who = (data.target && data.target.name) || '玩家';
+        if (typeof showToast === 'function') {
+            showToast(`⏳ 等待「${who}」送出防禦；玩家離席時可由側邊條「戰鬥隊列主控台」代填或強制中止`);
+        }
+        return;
+    }
     const target = data.target || {};
     // target.id 是棋子(Token)的 unit.id，不是玩家帳號 ID，必須先找到對應單位再比對其 ownerId
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(target.id) : null;

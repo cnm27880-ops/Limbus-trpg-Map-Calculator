@@ -960,6 +960,10 @@ function deleteUnit(id) {
         // 連同其多重行動條目一起刪除
         state.units = state.units.filter(x => x.id !== id && x.actionSlotOf !== id);
         broadcastState();
+        // 這個單位若正是某筆結算的防禦方，刪掉後那筆結算永遠等不到防禦，整個隊列會卡死
+        // （實際跑團踩過：玩家臨時離席 → ST 直接刪角色 → 後續攻擊全部發不出去）。
+        // 刪除當下立即中止該筆結算，等候區會自動接續下一筆。
+        if (typeof cqAbortIfDefenderRemoved === 'function') cqAbortIfDefenderRemoved(id);
     } else {
         sendToHost({
             type: 'deleteUnit',

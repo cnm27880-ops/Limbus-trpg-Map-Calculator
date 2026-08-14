@@ -951,6 +951,9 @@ function setupRoomListeners() {
 
     // 戰爭迷霧：啟用開關 + 各玩家的已探索紀錄
     if (typeof fogSetupListener === 'function') fogSetupListener();
+
+    // 戰鬥隊列主控台：側邊條入口僅 ST 可見（強制中止／代填防禦／等候區管理）
+    if (typeof stqGateUI === 'function') stqGateUI();
 }
 
 /**

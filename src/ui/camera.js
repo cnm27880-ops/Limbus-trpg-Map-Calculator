@@ -103,6 +103,7 @@ function initCameraEvents() {
         if (isPotentialDrag && !isDraggingMap) {
             if (Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY) > DRAG_THRESHOLD) {
                 isDraggingMap = true;   // 確認為拖曳
+                setPanningCursor(true); // 真的開始平移了才切換成抓握游標
             }
         }
         if (isDraggingMap) {
@@ -114,9 +115,20 @@ function initCameraEvents() {
         }
     });
 
+    /**
+     * 切換抓握游標。以 class 明確控制，取代先前的 CSS :active——
+     * :active 在「放開滑鼠時游標下的元素剛好被重繪移除」的情況會卡住不解除，
+     * 導致游標永遠停在抓握手勢。這裡在每個結束路徑都會被清掉。
+     * @param {boolean} on
+     */
+    function setPanningCursor(on) {
+        vp.classList.toggle('is-panning', !!on);
+    }
+
     function endPointer(e) {
         pointers.delete(e.pointerId);
         try { vp.releasePointerCapture(e.pointerId); } catch (err) {}
+        setPanningCursor(false);
 
         // 結束繪製（繪製不在 pointers 內，但需在此收尾）
         if (isPaintingDrag) {
@@ -143,6 +155,27 @@ function initCameraEvents() {
 
     window.addEventListener('pointerup', endPointer);
     window.addEventListener('pointercancel', endPointer);
+
+    // 安全網：滑鼠在視窗外放開、切到別的分頁、或叫出右鍵選單時，
+    // pointerup 可能永遠不會送到本頁。這些情況一律把平移狀態與游標歸位，
+    // 確保游標不會殘留在抓握手勢。
+    const resetPanState = () => {
+        if (!pointers.size && !isDraggingMap && !isPotentialDrag) {
+            setPanningCursor(false);
+            return;
+        }
+        pointers.clear();
+        isDraggingMap = false;
+        isPotentialDrag = false;
+        isPinchZooming = false;
+        pinchPrevDist = 0;
+        setPanningCursor(false);
+    };
+    window.addEventListener('blur', resetPanState);
+    window.addEventListener('contextmenu', resetPanState);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) resetPanState();
+    });
 }
 
 // ===== 相機操作 =====

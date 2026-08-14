@@ -7054,3 +7054,34 @@ select.wheel-cycle { cursor: ns-resize; }
     text-align: center;
     box-shadow: 0 0 0 2px var(--bg-panel);
 }
+
+/* 自動播放被瀏覽器阻擋時的常駐提示：中途加入的玩家點一下即可聽到音樂。
+   toast 只顯示幾秒容易錯過，故改用常駐可點擊橫幅。 */
+.bgm-audio-gate {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 9600;
+    display: none;
+    padding: 10px 20px;
+    border: 1px solid var(--accent-yellow, #fbbf24);
+    border-radius: 999px;
+    background: rgba(20, 20, 26, 0.94);
+    color: var(--accent-yellow, #fbbf24);
+    font-size: 0.9rem;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+    animation: bgm-gate-pulse 2s ease-in-out infinite;
+}
+
+.bgm-audio-gate:hover {
+    background: var(--accent-yellow, #fbbf24);
+    color: #000;
+}
+
+@keyframes bgm-gate-pulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55); }
+    50%      { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55), 0 0 16px rgba(251, 191, 36, 0.55); }
+}

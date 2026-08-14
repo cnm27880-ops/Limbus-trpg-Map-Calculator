@@ -1838,6 +1838,90 @@ console.log('\n[戰鬥隊列] 等候區排隊、ST 強制中止、代填防禦�
     });
 })();
 
+// ====================================================================
+console.log('\n[音樂同步] 進度校正夾限（中途加入的玩家聽不到音樂）與解鎖不打斷播放');
+// ====================================================================
+(function () {
+    const audioSandbox = {
+        console, Object, Array, JSON, Math, Number, isFinite, parseFloat, parseInt, Date, Promise,
+        window: { AudioContext: null, webkitAudioContext: null, escapeHtml: (s) => s },
+        document: { getElementById: () => null, addEventListener() {}, readyState: 'complete', body: null, head: null },
+        localStorage: { getItem: () => null, setItem() {} },
+        showToast: () => {},
+        myRole: 'player',
+    };
+    audioSandbox.Audio = function () {
+        return { addEventListener() {}, removeAttribute() {}, play: () => Promise.resolve(), pause() {} };
+    };
+    vm.createContext(audioSandbox);
+    vm.runInContext(readSource('src/utils/audio.js')
+        + '\n;\nvar __a = { musicManager };', audioSandbox, { filename: 'audio.js' });
+    const mm = audioSandbox.__a.musicManager;
+
+    /** 假 audio 元素：紀錄 seek 結果與 loadedmetadata 監聽 */
+    function fakeAudio(duration, readyState) {
+        const listeners = {};
+        return {
+            currentTime: 0,
+            duration,
+            readyState,
+            paused: false,
+            addEventListener(ev, fn) { listeners[ev] = fn; },
+            fireLoadedMetadata(newDuration) {
+                if (newDuration !== undefined) this.duration = newDuration;
+                if (listeners.loadedmetadata) listeners.loadedmetadata();
+            }
+        };
+    }
+
+    test('進度校正：目標時間超過曲長 → 取模回到曲內（不會跳到範圍外）', () => {
+        mm.currentAudio = fakeAudio(180, 4);
+        mm._seekSynced(1800);   // 開播 30 分鐘後才加入
+        assert.ok(mm.currentAudio.currentTime < 180,
+            `校正後應落在曲內，實得 ${mm.currentAudio.currentTime}`);
+        assert.strictEqual(mm.currentAudio.currentTime, 1800 % 180);
+    });
+
+    test('進度校正：曲長未知（metadata 未載入）→ 等到 loadedmetadata 才校正', () => {
+        mm.currentAudio = fakeAudio(NaN, 0);
+        mm._seekSynced(1800);
+        assert.strictEqual(mm.currentAudio.currentTime, 0, 'metadata 未就緒時不應先亂 seek');
+        mm.currentAudio.fireLoadedMetadata(180);
+        assert.strictEqual(mm.currentAudio.currentTime, 1800 % 180, 'metadata 就緒後才校正到曲內位置');
+    });
+
+    test('進度校正：曲長為 Infinity（串流）→ 不 seek，從頭播', () => {
+        mm.currentAudio = fakeAudio(Infinity, 4);
+        mm._seekSynced(1800);
+        assert.strictEqual(mm.currentAudio.currentTime, 0);
+    });
+
+    test('進度校正：剛好等於曲長 → 夾在結尾之前（不會立刻播完）', () => {
+        mm.currentAudio = fakeAudio(180, 4);
+        mm._seekSynced(180);
+        assert.ok(mm.currentAudio.currentTime < 180 && mm.currentAudio.currentTime >= 0);
+    });
+
+    test('進度校正：目標時間為 0／負值 → 不動（維持從頭播）', () => {
+        mm.currentAudio = fakeAudio(180, 4);
+        mm.currentAudio.currentTime = 5;
+        mm._seekSynced(0);
+        mm._seekSynced(-3);
+        assert.strictEqual(mm.currentAudio.currentTime, 5);
+    });
+
+    test('音訊解鎖：正在播放時不動 src（先前會把播到一半的音樂弄停）', () => {
+        mm._audioUnlocked = false;
+        const playing = fakeAudio(180, 4);
+        playing.paused = false;
+        playing.src = 'https://example.com/song.mp3';
+        mm.currentAudio = playing;
+        mm._unlockAudio();
+        assert.strictEqual(playing.src, 'https://example.com/song.mp3', '播放中的音源不可被靜音 WAV 覆蓋');
+        assert.strictEqual(mm._audioUnlocked, true, '能播放即代表已解鎖');
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

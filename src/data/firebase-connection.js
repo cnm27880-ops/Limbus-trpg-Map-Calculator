@@ -908,6 +908,14 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('users').off('value', usersListener));
 
+    // ST 進房時把自己 localStorage 裡的播放清單推上去，讓所有（含之後才加入的）玩家
+    // 拿得到同一份清單。先前清單只存在 ST 本機，玩家看到的永遠是自己瀏覽器的舊資料。
+    if (myRole === 'st' && typeof musicManager !== 'undefined'
+        && Array.isArray(musicManager.playlist) && musicManager.playlist.length
+        && typeof syncMusicPlaylist === 'function') {
+        syncMusicPlaylist(musicManager.playlist);
+    }
+
     // 監聽音樂狀態變更
     const musicListener = roomRef.child('music').on('value', snapshot => {
         if (typeof handleMusicUpdate === 'function') {

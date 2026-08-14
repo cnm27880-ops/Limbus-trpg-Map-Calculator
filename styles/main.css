@@ -711,8 +711,35 @@ input[type="number"] {
     touch-action: none;
 }
 
-.map-viewport:active {
-    cursor: grabbing;
+/*
+ * 抓握游標改由 JS 依「真的在平移中」加上 .is-panning（見 camera.js），不再用 :active。
+ *
+ * 用 :active 的問題：CSS 的 :active 會沿著祖先鏈生效，所以在視口內按下任何東西
+ * （棋子、按鈕、面板）都會讓整個視口變成抓握手勢；更糟的是只要滑鼠放開時
+ * 落在已被重繪移除的元素上（本專案 renderAll 很頻繁），瀏覽器就收不到對應的
+ * 狀態結束事件，游標會「永遠卡在抓握手勢」直到下次點擊 —— 正是回報的症狀。
+ * .is-panning 由 pointerup / pointercancel 明確清除，不存在卡住的可能。
+ */
+.map-viewport.is-panning,
+.map-viewport.is-panning * {
+    cursor: grabbing !important;
+}
+
+/*
+ * 視口內的互動元件不該顯示「可拖曳地圖」的抓握手勢：cursor 會被子元素繼承，
+ * 於是浮動面板、按鈕、輸入框上通通變成手掌，讓人以為到處都能拖。
+ * 這裡把它們還原成各自語意正確的游標。
+ */
+.map-viewport button,
+.map-viewport .modal-btn,
+.map-viewport [role="button"] {
+    cursor: pointer;
+}
+
+.map-viewport input,
+.map-viewport textarea,
+.map-viewport select {
+    cursor: auto;
 }
 
 .map-container {

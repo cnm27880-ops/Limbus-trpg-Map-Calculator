@@ -668,10 +668,25 @@ function updateIdentityField(field, value) {
  * 蒐集目前「持有」的人格卡，轉為引擎輸入陣列 [{id, unlocked}]。
  * 僅納入「當前選中角色」名下的卡片，避免切換角色後與前一個角色的選取疊加。
  */
-function collectOwnedIdentities() {
+/**
+ * 收集某角色目前「已勾選持有」的人格卡。
+ *
+ * ⚠️ 這是唯一的持有判定入口，面板預覽與實際攻擊都必須走這裡。
+ * 先前 combat-modals 的 cmResolveIdentityBonus 自行實作了一份，且對「沒有紀錄的卡」
+ * 採取相反的預設（視為持有），於是兩邊會給出不同的卡片組合：
+ *   - 玩家從未開過人格卡面板、但單位名稱剛好等於某角色 → 攻擊時套用「該角色全部卡片」的加值，
+ *     面板卻顯示空白；
+ *   - 人格庫新增卡片（或註冊自訂人格卡）後，舊玩家的紀錄裡沒有該卡 → 同樣被當成持有。
+ * 兩者都會讓「明細顯示的」與「實際結算的」對不起來。統一由本函式判定即可根除。
+ *
+ * @param {string} [owner] - 指定角色；省略時用面板目前選中的角色
+ * @returns {Array<{id: string, unlocked: boolean}>}
+ */
+function collectOwnedIdentities(owner) {
+    const useOwner = owner || identityHudState.owner;
     const list = [];
-    const ownerCards = (typeof getIdentitiesByOwner === 'function' && identityHudState.owner)
-        ? getIdentitiesByOwner(identityHudState.owner) : [];
+    const ownerCards = (typeof getIdentitiesByOwner === 'function' && useOwner)
+        ? getIdentitiesByOwner(useOwner) : [];
     for (const cardId of ownerCards) {
         const c = identityHudState.cards[cardId];
         if (c && c.owned) list.push({ id: cardId, unlocked: !!c.unlocked });

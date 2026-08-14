@@ -810,7 +810,7 @@ function openAssignOwnerModal(unitId) {
                 border-radius:8px;
                 cursor:pointer;
                 transition:all 0.2s;
-            " onclick="assignOwner('${escapeHtml(unitId)}', '${escapeHtml(user.id)}', '${escapeHtml(user.name)}')"
+            " onclick="assignOwner('${escapeJsAttr(unitId)}', '${escapeJsAttr(user.id)}', '${escapeJsAttr(user.name)}')"
             onmouseover="this.style.borderColor='var(--accent-yellow)'"
             onmouseout="this.style.borderColor='${isCurrentOwner ? 'var(--accent-green)' : 'var(--border)'}'">
                 <div>

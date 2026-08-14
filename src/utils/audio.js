@@ -496,7 +496,7 @@ class MusicManager {
         container.innerHTML = this.playlist.map((item, index) => {
             const isPlaying = this.currentTrack && this.currentTrack.url === item.url && this.isPlaying;
             return `
-                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
+                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeJsAttr(item.url)}', '${this.escapeJsAttr(item.name)}')">
                     <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${this.escapeHtml(item.name)}</span>
                     ${myRole === 'st' ? `<button class="bgm-item-remove" onclick="event.stopPropagation(); removeFromPlaylist(${index})" title="移除">×</button>` : ''}
                 </div>
@@ -776,6 +776,17 @@ class MusicManager {
      */
     escapeHtml(text) {
         return typeof window.escapeHtml === 'function' ? window.escapeHtml(text) : String(text || '');
+    }
+
+    /**
+     * 轉義要放進 onclick 屬性中單引號 JS 字串的文字（曲名／URL 可能含單引號）。
+     * 用 escapeHtml 會把 `'` 轉成 `&#39;`，屬性解碼後又變回 `'`，反而提前結束 JS 字串，
+     * 使「Don't Stop」這類曲名整列按不動。詳見 utils.js 的 escapeJsAttr。
+     * @param {string} text
+     * @returns {string}
+     */
+    escapeJsAttr(text) {
+        return typeof window.escapeJsAttr === 'function' ? window.escapeJsAttr(text) : this.escapeHtml(text);
     }
 
     /**

@@ -480,9 +480,11 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         'src/ui/combat-modals.js'
     ];
     const combinedIdentity = identityFiles.map(f => readSource(f)).join('\n;\n')
-        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks };';
+        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks,'
+        + ' collectOwnedIdentities, getIdentitiesByOwner };';
     vm.runInContext(combinedIdentity, idSandbox, { filename: 'combined-identity.js' });
-    const { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks } = idSandbox.__identityExports;
+    const { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks,
+        collectOwnedIdentities, getIdentitiesByOwner } = idSandbox.__identityExports;
 
     test('唐吉訶德「延續進攻」命中同時算出 targetStatus 與 selfStatus，兩者皆不遺漏', () => {
         identityHudState.owner = '唐吉訶德';
@@ -493,10 +495,48 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         const result = cmResolveIdentityBonus(attacker, target);
 
         // 命中：延續進攻（selfStatus.swiftness+1／targetStatus.bind+1）+ 雙旋飛刺（targetStatus.bind+1）
-        assert.strictEqual(result.onHitSelfStatus.swiftness, 4, '攻擊者自身應算出 +1 迅捷（修正前這裡會是空物件）');
+        // 只勾選 don_cinq 一張卡，就只應算這張卡的效果。
+        // （修正前未列在 cards 中的卡預設視為持有，這裡會混進其他唐吉訶德卡而得到 4 層迅捷。）
+        assert.strictEqual(result.onHitSelfStatus.swiftness, 1, '攻擊者自身應算出 +1 迅捷');
         assert.ok(result.onHitSelfStatusNotes.length > 0, 'onHitSelfStatusNotes 不應為空');
-        assert.ok(result.onHitSelfStatusNotes.some(n => n.includes('+4')), 'onHitSelfStatusNotes 應包含層數敘述');
+        assert.ok(result.onHitSelfStatusNotes.some(n => n.includes('+1')), 'onHitSelfStatusNotes 應包含層數敘述');
         assert.strictEqual(result.onHitTargetStatus.bind, 2, '目標應疊加 2 層束縛（延續進攻+雙旋飛刺）');
+    });
+
+    test('持有判定：只勾選的卡才算數，未勾選的同角色卡不得混入實際攻擊', () => {
+        identityHudState.owner = '唐吉訶德';
+        // 只給一張卡的紀錄，其餘同角色卡「沒有紀錄」——先前這種卡會被預設視為持有
+        identityHudState.cards = { don_cinq: { owned: true, unlocked: false } };
+        identityHudState.cardInputs = {};
+        const withOne = cmResolveIdentityBonus({ id: 'a', status: {}, init: 10 }, { id: 't', status: {}, init: 5 });
+
+        // 明確把該卡設為未持有 → 應完全沒有加值（而不是退回「其他卡的加值」）
+        identityHudState.cards = { don_cinq: { owned: false, unlocked: false } };
+        const withNone = cmResolveIdentityBonus({ id: 'a', status: {}, init: 10 }, { id: 't', status: {}, init: 5 });
+
+        assert.strictEqual(withOne.onHitSelfStatus.swiftness, 1);
+        assert.strictEqual(Object.keys(withNone.onHitSelfStatus).length, 0,
+            '未持有任何卡時不應算出任何自身狀態');
+        assert.strictEqual(withNone.dpBonus, 0, '未持有任何卡時 DP 加值應為 0');
+    });
+
+    test('持有判定：面板預覽與實際攻擊使用同一組卡片（collectOwnedIdentities 單一入口）', () => {
+        identityHudState.owner = '唐吉訶德';
+        identityHudState.cards = {
+            don_cinq: { owned: true, unlocked: false },
+            don_ego: { owned: true, unlocked: false }
+        };
+        identityHudState.cardInputs = {};
+        // 面板走 collectOwnedIdentities()；實際攻擊經修正後也走同一函式
+        // 注意：vm 沙箱建立的陣列與宿主 realm 的 Array.prototype 不同，
+        // deepStrictEqual 會因原型不符而誤判，故以 JSON 字串比對。
+        const panelCards = collectOwnedIdentities().map(c => c.id).sort();
+        assert.strictEqual(JSON.stringify(panelCards), JSON.stringify(['don_cinq', 'don_ego']),
+            '面板應只認得勾選的兩張卡');
+        // 其餘唐吉訶德卡沒有紀錄，兩邊都不該把它們算進去
+        const all = getIdentitiesByOwner('唐吉訶德');
+        assert.ok(all.length > 2, '前置條件：該角色卡片數多於已勾選的兩張');
+        identityHudState.cardInputs = {};
     });
 
     test('格里高爾：目標無沮喪 → 條件式 DP 加值列入「未觸發」清單而非直接消失', () => {
@@ -2085,6 +2125,61 @@ console.log('\n[結算明細] calcDetail：分項相加等於採用值、先前�
         const d = detail();
         assert.strictEqual(sumParts(d.def.parts), d.def.total,
             `分項(${sumParts(d.def.parts)}) 應等於合計(${d.def.total})：${labels(d.def.parts)}`);
+    });
+})();
+
+// ====================================================================
+console.log('\n[轉義] escapeJsAttr：含單引號的曲名／玩家代號不會弄壞 onclick');
+// ====================================================================
+(function () {
+    const uSandbox = { console, String, Object };
+    vm.createContext(uSandbox);
+    vm.runInContext(readSource('src/utils/utils.js') + '\n;\nvar __u = { escapeHtml, escapeJsAttr };',
+        uSandbox, { filename: 'utils.js' });
+    const { escapeHtml, escapeJsAttr } = uSandbox.__u;
+
+    // 模擬瀏覽器解析 onclick 屬性：先做 HTML 實體解碼，再交給 JS 解析
+    const decodeAttr = (s) => s
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+    test('escapeHtml 用於 JS 字串會被屬性解碼破壞（記錄舊行為，說明為何需要新函式）', () => {
+        const attr = `f('${escapeHtml("Don't Stop")}')`;
+        const decoded = decodeAttr(attr);
+        assert.strictEqual(decoded, "f('Don't Stop')", '解碼後單引號提前結束字串');
+        assert.throws(() => new Function(decoded), '這段 JS 是語法錯誤，按鈕會整個失效');
+    });
+
+    test('escapeJsAttr：單引號經屬性解碼後仍是合法的 JS 字串', () => {
+        const attr = `f('${escapeJsAttr("Don't Stop")}')`;
+        const decoded = decodeAttr(attr);
+        assert.doesNotThrow(() => new Function('f', decoded), '應為合法 JS');
+        let got = null;
+        new Function('f', decoded)((v) => { got = v; });
+        assert.strictEqual(got, "Don't Stop", '傳進函式的值應與原文完全一致');
+    });
+
+    test('escapeJsAttr：反斜線、雙引號、換行與 HTML 特殊字元都還原成原文', () => {
+        const raw = `a\\b "q" <img> & 'x'\nnext`;
+        const decoded = decodeAttr(`f('${escapeJsAttr(raw)}')`);
+        let got = null;
+        new Function('f', decoded)((v) => { got = v; });
+        assert.strictEqual(got, raw);
+    });
+
+    test('escapeJsAttr：無法藉由收尾引號注入額外程式碼', () => {
+        const raw = "'); alert(1); ('";
+        const decoded = decodeAttr(`f('${escapeJsAttr(raw)}')`);
+        let calls = 0, got = null;
+        new Function('f', decoded)((v) => { calls++; got = v; });
+        assert.strictEqual(calls, 1, '只應呼叫一次，注入的敘述不得執行');
+        assert.strictEqual(got, raw, '整段應被當成單純的字串內容');
+    });
+
+    test('escapeJsAttr：null／undefined／數字都安全處理', () => {
+        assert.strictEqual(escapeJsAttr(null), '');
+        assert.strictEqual(escapeJsAttr(undefined), '');
+        assert.strictEqual(escapeJsAttr(42), '42');
     });
 })();
 

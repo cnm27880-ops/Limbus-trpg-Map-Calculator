@@ -291,23 +291,44 @@ function openErosionAttackModal(unitId) {
  * @returns {{ dpBonus: number, extraSuccess: number, names: string[] }}
  */
 function cmResolveIdentityBonus(attackerUnit, targetUnit) {
-    // 所有欄位都給預設值，確保呼叫端（submitAttackModal / cqOnSTReview）即使走早退路徑也能安全存取
-    const empty = { dpBonus: 0, extraSuccess: 0, names: [], targetStatus: {}, statusNotes: [], selfStatus: {}, selfStatusNotes: [] };
+    // 所有欄位都給預設值，確保呼叫端（submitAttackModal / cqOnSTReview）即使走早退路徑也能安全存取。
+    // ⚠️ 這裡必須與成功路徑的回傳形狀一致——先前少了 onHit*／onKill*／onResolve* 等欄位，
+    // 呼叫端讀到 undefined，只能靠每個取用點各自寫 `|| {}` 防呆，漏一個就會拋錯。
+    const empty = {
+        dpBonus: 0, extraSuccess: 0, names: [],
+        onAttackTargetStatus: {}, statusNotes: [],
+        onAttackSelfStatus: {}, selfStatusNotes: [],
+        onHitTargetStatus: {}, onHitTargetStatusNotes: [],
+        onHitSelfStatus: {}, onHitSelfStatusNotes: [],
+        onKillOthersStatus: {}, onKillOthersStatusNotes: [],
+        onKillKilledStatus: {},
+        onKillSelfStatus: {}, onKillSelfStatusNotes: [],
+        onResolveDamagedSelfStatus: {}, onResolveDamagedSelfStatusNotes: [], onResolveDamagedTargetStatus: {},
+        onResolveNoDamageSelfStatus: {}, onResolveNoDamageSelfStatusNotes: [], onResolveNoDamageTargetStatus: {}
+    };
     if (myRole === 'st') return empty;
     if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
 
     let owner = identityHudState.owner;
+    let ownerAutoDetected = false;
     if (!owner && typeof getIdentityOwners === 'function') {
         const allOwners = getIdentityOwners();
-        if (attackerUnit && allOwners.includes(attackerUnit.name)) owner = attackerUnit.name;
-        else if (allOwners.includes(myName)) owner = myName;
+        if (attackerUnit && allOwners.includes(attackerUnit.name)) { owner = attackerUnit.name; ownerAutoDetected = true; }
+        else if (allOwners.includes(myName)) { owner = myName; ownerAutoDetected = true; }
     }
     if (!owner || typeof getIdentitiesByOwner !== 'function') return empty;
 
-    const ownedCards = getIdentitiesByOwner(owner).map(id => {
-        const c = identityHudState.cards[id];
-        return { id, owned: c ? c.owned : true, unlocked: c ? !!c.unlocked : false };
-    }).filter(c => c.owned).map(c => ({ id: c.id, unlocked: c.unlocked }));
+    // 角色是自動偵測出來的（玩家沒開過人格卡面板）→ 先把該角色的卡片以面板的預設值
+    // （全部持有、三技未解鎖）建立紀錄，讓面板與這裡看到的是同一組卡片。
+    if (ownerAutoDetected && typeof selectIdentityOwner === 'function') {
+        selectIdentityOwner(owner, true);
+    }
+
+    // 持有判定一律走 collectOwnedIdentities：面板預覽、回合結算與實際攻擊共用同一套規則，
+    // 避免「面板顯示的卡片組合」與「攻擊實際套用的卡片組合」不一致（明細因此對不起來）。
+    const ownedCards = (typeof collectOwnedIdentities === 'function')
+        ? collectOwnedIdentities(owner)
+        : [];
     if (!ownedCards.length) return empty;
 
     // 與人格卡面板的計算一致：帶入先攻序位（延續進攻／向您致敬等依序位的條件）
@@ -1513,7 +1534,10 @@ function reviewModalClearSaveInfo() {
  * combat-queue.js 在 idle 狀態時呼叫：確保所有戰鬥相關 Modal 皆已關閉。
  */
 function cqOnIdle() {
-    closeModal('attack-modal');
+    // ⚠️ 不要關閉 attack-modal：那是使用者「正在填寫、還沒送出」的視窗，不屬於某一筆結算。
+    // 送出時 submitAttackModal 本來就會自己關掉它。
+    // 現在多名玩家可以同時排隊結算，別人那筆一結束就把你打到一半的攻擊視窗關掉、
+    // 輸入全部消失，會非常擾人。
     closeModal('defense-qte-modal');
     closeModal('st-review-modal');
 }

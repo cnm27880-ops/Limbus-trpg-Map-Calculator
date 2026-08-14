@@ -168,7 +168,7 @@ function showRoomManager() {
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button onclick="enterRoomFromManager('${escapeHtml(room.code)}')" style="
+                            <button onclick="enterRoomFromManager('${escapeJsAttr(room.code)}')" style="
                                 background: var(--accent-green);
                                 color: #000;
                                 border: none;
@@ -177,7 +177,7 @@ function showRoomManager() {
                                 font-weight: bold;
                                 cursor: pointer;
                             ">進入</button>
-                            <button onclick="deleteRoomFromManager('${escapeHtml(room.code)}')" style="
+                            <button onclick="deleteRoomFromManager('${escapeJsAttr(room.code)}')" style="
                                 background: var(--accent-red);
                                 color: #000;
                                 border: none;

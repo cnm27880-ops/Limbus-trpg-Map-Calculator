@@ -20,6 +20,37 @@ function escapeHtml(text) {
         .replace(/'/g, "&#39;");
 }
 
+/**
+ * 轉義「要嵌進 HTML 屬性裡的 JS 單引號字串」的文字。
+ *
+ * 為什麼不能直接用 escapeHtml：像 `onclick="f('${escapeHtml(name)}')"` 這種寫法，
+ * escapeHtml 把 `'` 轉成 `&#39;`，但瀏覽器會先把屬性值的 HTML 實體解碼「再」交給 JS 解析——
+ * `&#39;` 解回 `'` 正好把 JS 字串提前結束。因此曲名叫「Don't Stop」或玩家代號叫「O'Brien」時，
+ * 那一列的按鈕會整個壞掉（點了沒反應或報語法錯）。
+ *
+ * 正確順序是「先做 JS 字串轉義，再做 HTML 轉義」：
+ * 反斜線與單引號轉成 \\ 與 \'（兩者都不是 HTML 特殊字元，會原封不動通過屬性解碼），
+ * 之後再處理 & < > " 這些 HTML 特殊字元。
+ *
+ * @param {string} text - 原始文字
+ * @returns {string} 可安全放進 HTML 屬性中單引號 JS 字串的文字
+ */
+function escapeJsAttr(text) {
+    if (text === null || text === undefined) return '';
+    if (typeof text !== 'string') text = String(text);
+    return text
+        // ① JS 字串轉義
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\r/g, '\\r')
+        .replace(/\n/g, '\\n')
+        // ② HTML 屬性轉義（不含 '，它已在上一步轉為 \'）
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 // ===== Toast 通知 =====
 /**
  * 顯示 Toast 通知
@@ -464,7 +495,7 @@ function modifyHPInternal(unit, type, amount) {
 // 同時掛回 window，確保仍為 classic script 的既有檔案以全域呼叫 showToast / escapeHtml /
 // createUnit 等仍正常運作。
 export {
-    escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
+    escapeHtml, escapeJsAttr, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
     generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
     calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
     countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus,
@@ -474,7 +505,7 @@ export {
 
 if (typeof window !== 'undefined') {
     Object.assign(window, {
-        escapeHtml, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
+        escapeHtml, escapeJsAttr, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
         generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
         calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
         countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus,

@@ -330,6 +330,17 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         killResult = evaluatePlayerKill(ownedCards, attackerState, targetState);
     }
 
+    // onResolve：依「本次攻擊實際造成多少傷害」分歧的效果（如浮士德【人民之盾】
+    // 造成傷害 4 層／未造成傷害 6 層）。玩家端無從得知結算結果，故兩種結果各算一份
+    // 隨攻擊資料送出，由 ST 端在確認結算後依實際傷害擇一套用。
+    const emptyResolve = { selfStatus: {}, targetStatus: {} };
+    let resolveDamaged = emptyResolve;
+    let resolveNoDamage = emptyResolve;
+    if (typeof evaluatePlayerResolve === 'function') {
+        resolveDamaged = evaluatePlayerResolve(ownedCards, attackerState, targetState, { hit: true, damage: 1 });
+        resolveNoDamage = evaluatePlayerResolve(ownedCards, attackerState, targetState, { hit: false, damage: 0 });
+    }
+
     // 人格引擎在攻擊／命中時會對目標（減益）與攻擊者自身（如迅捷/呼吸法等資源）施加的狀態。
     // 整理成「中文狀態名＋層數」清單，供發起攻擊時自動施加並在 ST 明細中列出。
     const buildStatusNotes = (statusMap) => Object.entries(statusMap).map(([engKey, layers]) => {
@@ -361,7 +372,14 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         onKillOthersStatusNotes: buildStatusNotes(killResult.othersTargetStatus || {}),
         onKillKilledStatus: killResult.killedTargetStatus || {},
         onKillSelfStatus: killResult.selfStatus || {},
-        onKillSelfStatusNotes: buildStatusNotes(killResult.selfStatus || {})
+        onKillSelfStatusNotes: buildStatusNotes(killResult.selfStatus || {}),
+        // onResolve：ST 端結算後依實際傷害擇一套用（造成傷害 / 未造成傷害含未命中）
+        onResolveDamagedSelfStatus: resolveDamaged.selfStatus || {},
+        onResolveDamagedSelfStatusNotes: buildStatusNotes(resolveDamaged.selfStatus || {}),
+        onResolveDamagedTargetStatus: resolveDamaged.targetStatus || {},
+        onResolveNoDamageSelfStatus: resolveNoDamage.selfStatus || {},
+        onResolveNoDamageSelfStatusNotes: buildStatusNotes(resolveNoDamage.selfStatus || {}),
+        onResolveNoDamageTargetStatus: resolveNoDamage.targetStatus || {}
     };
 }
 
@@ -461,6 +479,13 @@ function submitAttackModal() {
         onKillKilledStatus: identityBonus.onKillKilledStatus || {},
         onKillSelfStatus: identityBonus.onKillSelfStatus || {},
         onKillSelfStatusNotes: identityBonus.onKillSelfStatusNotes || [],
+        // 結算後依實際傷害擇一套用的人格卡效果（造成傷害 / 未造成傷害含未命中）
+        onResolveDamagedSelfStatus: identityBonus.onResolveDamagedSelfStatus || {},
+        onResolveDamagedSelfStatusNotes: identityBonus.onResolveDamagedSelfStatusNotes || [],
+        onResolveDamagedTargetStatus: identityBonus.onResolveDamagedTargetStatus || {},
+        onResolveNoDamageSelfStatus: identityBonus.onResolveNoDamageSelfStatus || {},
+        onResolveNoDamageSelfStatusNotes: identityBonus.onResolveNoDamageSelfStatusNotes || [],
+        onResolveNoDamageTargetStatus: identityBonus.onResolveNoDamageTargetStatus || {},
         counterPhaseDpBonus,
         // 主動宣告技折算的傷害加值（spellPower／weaponDamage／finalDamage），於擲骰套傷時併入
         declaredDamageBonus,
@@ -827,6 +852,48 @@ function cmHasOnHitIdentityStatuses(atk) {
     );
 }
 
+/**
+ * 攻擊結算完畢後，依「本次是否真的造成傷害」套用人格卡 onResolve 效果。
+ * 玩家端在宣告攻擊時已把兩種結果各算一份送出，這裡只負責擇一套用：
+ *   - dealtDamage=true  → onResolveDamagedSelfStatus / onResolveDamagedTargetStatus
+ *   - dealtDamage=false → onResolveNoDamageSelfStatus / onResolveNoDamageTargetStatus（含未命中）
+ * 浮士德【人民之盾】即走此路徑（造成傷害 +4 層／未造成傷害含未命中 +6 層）。
+ * @param {object} atk - 戰鬥隊列上的攻擊方資料
+ * @param {boolean} dealtDamage - 本次攻擊是否造成傷害
+ * @param {string[]} [targetIds] - 施加目標狀態的單位 id 清單
+ * @returns {boolean} 是否有任何狀態被套用
+ */
+function cmApplyOnResolveIdentityStatuses(atk, dealtDamage, targetIds) {
+    if (!atk || typeof applyEngineStatusesToUnit !== 'function') return false;
+    const selfStatus = dealtDamage ? atk.onResolveDamagedSelfStatus : atk.onResolveNoDamageSelfStatus;
+    const targetStatus = dealtDamage ? atk.onResolveDamagedTargetStatus : atk.onResolveNoDamageTargetStatus;
+    const notes = dealtDamage ? atk.onResolveDamagedSelfStatusNotes : atk.onResolveNoDamageSelfStatusNotes;
+
+    let applied = false;
+    if (atk.unitId && selfStatus && Object.keys(selfStatus).length) {
+        if (applyEngineStatusesToUnit(atk.unitId, selfStatus) > 0) applied = true;
+    }
+    if (targetStatus && Object.keys(targetStatus).length) {
+        (targetIds || []).filter(Boolean).forEach(id => {
+            if (applyEngineStatusesToUnit(id, targetStatus) > 0) applied = true;
+        });
+    }
+    if (applied && Array.isArray(notes) && notes.length && typeof showToast === 'function') {
+        showToast(`${dealtDamage ? '結算（造成傷害）' : '結算（未造成傷害）'}效果已套用：` + notes.join('、'));
+    }
+    return applied;
+}
+
+/** 攻擊方資料是否帶有任何「結算後依傷害分歧」的人格卡狀態 */
+function cmHasOnResolveIdentityStatuses(atk) {
+    if (!atk) return false;
+    const buckets = [
+        atk.onResolveDamagedSelfStatus, atk.onResolveDamagedTargetStatus,
+        atk.onResolveNoDamageSelfStatus, atk.onResolveNoDamageTargetStatus
+    ];
+    return buckets.some(b => b && Object.keys(b).length > 0);
+}
+
 /** 攻擊方資料是否帶有任何「擊殺／昏迷時施加」的人格卡狀態 */
 function cmHasOnKillIdentityStatuses(atk) {
     return !!atk && (
@@ -940,11 +1007,27 @@ function confirmSTReview() {
     // 改以確認視窗詢問 ST 是否命中——確定即自動套用，讓命中狀態（含攻擊者
     // 自身增益）在所有結算路徑都全自動化，ST 不再需要手動補狀態。
     const hitAtk = (combatQueueLast && combatQueueLast.attacker) || null;
+    let manualHitAnswer = null;   // 手動擲骰時 ST 的命中回答，供 onResolve 判定重用（避免問兩次）
     if (cmHasOnHitIdentityStatuses(hitAtk)) {
         const hit = rollResult
             ? rollResult.successes > 0
-            : confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）');
+            : (manualHitAnswer = confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）'));
         if (hit) cmApplyOnHitIdentityStatuses(hitAtk, [targetId]);
+    }
+
+    // 結算後依「實際傷害」分歧的人格卡效果（如浮士德【人民之盾】：
+    // 造成傷害 +4 層、未造成傷害含未命中 +6 層）。
+    // 自動擲骰知道確切傷害；手動擲骰改詢問 ST（若剛才已問過命中且回答未命中，直接視為未造成傷害）。
+    if (cmHasOnResolveIdentityStatuses(hitAtk)) {
+        let dealtDamage;
+        if (rollResult) {
+            dealtDamage = (Number(rollResult.damage) || 0) > 0;
+        } else if (manualHitAnswer === false) {
+            dealtDamage = false;
+        } else {
+            dealtDamage = confirm('此次攻擊是否造成傷害？\n（取消＝未造成傷害／未命中，人格卡會依此分支結算）');
+        }
+        cmApplyOnResolveIdentityStatuses(hitAtk, dealtDamage, [targetId]);
     }
 
     // 擊殺／昏迷判定：自動擲骰造成傷害後，目標若陷入喪失行動（嚴重槽填滿）→ 套用 onKill 效果。
@@ -1107,6 +1190,13 @@ function confirmSTReviewSaveMode(saveInfo) {
     // 人格卡「命中時施加」狀態（豁免抵擋路徑）：只套用到實際受到傷害的目標；
     // 任一目標受創即視為命中，一併套用攻擊者自身增益。ST 發起的 BOSS 威脅無 onHit 欄位，自然不套用。
     cmApplyOnHitIdentityStatuses(atk, results.filter(r => r.dmg > 0).map(r => r.id));
+
+    // onResolve：任一目標實際受創即視為「造成傷害」，否則走「未造成傷害」分支
+    if (cmHasOnResolveIdentityStatuses(atk)) {
+        const damagedIds = results.filter(r => r.dmg > 0).map(r => r.id);
+        cmApplyOnResolveIdentityStatuses(atk, damagedIds.length > 0,
+            damagedIds.length ? damagedIds : results.map(r => r.id));
+    }
 
     // 擊殺／昏迷：逐目標若受創後陷入喪失行動 → 套用 onKill 效果（各被擊殺目標分別觸發）
     if (cmHasOnKillIdentityStatuses(atk)) {

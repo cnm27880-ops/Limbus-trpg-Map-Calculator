@@ -1486,6 +1486,138 @@ test('充能與混亂皆標記 turnEndDecay:1（供回合結束自動 −1）', 
     assert.strictEqual(findDef('confusion')?.turnEndDecay, 1, '混亂應有 turnEndDecay:1');
 });
 
+// ====================================================================
+console.log('\n[浮士德回報修正] 疾風疊加／指令加護（消耗動作）／人民之盾（未造成傷害）');
+// ====================================================================
+(function () {
+    const faustSandbox = {
+        console, Object, Array, Math, JSON, Set, parseInt,
+        window: undefined,
+        document: { getElementById: () => null },
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'player',
+        state: { units: [] },
+        findUnitById: (id) => faustSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        escapeHtml: (s) => s,
+    };
+    vm.createContext(faustSandbox);
+    const files = [
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/core/identity-engine.js',
+        'src/ui/identity-hud.js',
+        'src/ui/combat-modals.js'
+    ];
+    vm.runInContext(files.map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __fExports = { cmResolveIdentityBonus, identityHudState, evaluatePlayerActionUsed,'
+        + ' evaluatePlayerResolve, buildEngineUnitState, IDENTITY_LIBRARY };',
+        faustSandbox, { filename: 'combined-faust-fixes.js' });
+    const {
+        cmResolveIdentityBonus, identityHudState, evaluatePlayerActionUsed,
+        evaluatePlayerResolve, buildEngineUnitState, IDENTITY_LIBRARY
+    } = faustSandbox.__fExports;
+
+    // cmResolveIdentityBonus 對「未列在 cards 中的卡」預設視為持有，
+    // 故測單一張卡時必須把同角色其餘卡明確設為未持有，否則會混入其他卡的效果。
+    const FAUST_CARDS = ['faust_note', 'faust_zwei', 'faust_blackbeast', 'faust_wcorp'];
+    const faustOnly = (keepId) => {
+        const cards = {};
+        FAUST_CARDS.forEach(id => { cards[id] = { owned: id === keepId, unlocked: false }; });
+        return cards;
+    };
+
+    // ---- 疾風（黑獸卯魁首）：法術命中 +1，上限 10 ----
+    test('疾風：法術命中 → onHit 自身 +1 層疾風', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_blackbeast');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: {}, init: 20 }, { id: 'tgt', status: {}, init: 5 });
+        assert.strictEqual(r.onHitSelfStatus.gale, 1, `法術命中應疊 1 層疾風，實得 ${r.onHitSelfStatus.gale}`);
+    });
+
+    test('疾風：已達 10 點上限 → 不再疊加', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_blackbeast');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: { '疾風': 10 }, init: 20 }, { id: 'tgt', status: {}, init: 5 });
+        assert.ok(!r.onHitSelfStatus.gale, `疾風滿 10 點不應再疊，實得 ${r.onHitSelfStatus.gale}`);
+    });
+
+    test('疾風：9 點時只補到上限（+1 而非溢出）', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_blackbeast');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: { '疾風': 9 }, init: 20 }, { id: 'tgt', status: {}, init: 5 });
+        assert.strictEqual(r.onHitSelfStatus.gale, 1, '9 點時應剛好補滿到 10');
+    });
+
+    // ---- 指令加護（紙條）：每消耗一種動作 +5，上限 9 ----
+    test('指令加護：消耗一個動作 → +5 層', () => {
+        const owned = [{ id: 'faust_note', unlocked: false }];
+        const res = evaluatePlayerActionUsed(owned, { status: {} }, 'swift');
+        assert.strictEqual(res.expectedSelfStatus.commandProtect, 5, '消耗迅捷動作應 +5 指令加護');
+    });
+
+    test('指令加護：三種動作各觸發一次（迅捷／移動／標準皆有效）', () => {
+        const owned = [{ id: 'faust_note', unlocked: false }];
+        ['swift', 'move', 'standard'].forEach(type => {
+            const res = evaluatePlayerActionUsed(owned, { status: {} }, type);
+            assert.strictEqual(res.expectedSelfStatus.commandProtect, 5, `${type} 應 +5 指令加護`);
+        });
+    });
+
+    test('指令加護：上限 9 層（已 6 層 → 只 +3；已 9 層 → 不再加）', () => {
+        const owned = [{ id: 'faust_note', unlocked: false }];
+        const at6 = evaluatePlayerActionUsed(owned, { status: { commandProtect: 6 } }, 'move');
+        assert.strictEqual(at6.expectedSelfStatus.commandProtect, 3, '6 層時只應補到 9（+3）');
+        const at9 = evaluatePlayerActionUsed(owned, { status: { commandProtect: 9 } }, 'move');
+        assert.ok(!at9.expectedSelfStatus.commandProtect, '已滿 9 層不應再加');
+    });
+
+    test('指令加護：紙條卡標記 actionUsedTracker（面板才會出現動作消耗按鈕）', () => {
+        assert.strictEqual(IDENTITY_LIBRARY.faust_note.actionUsedTracker, true);
+    });
+
+    // ---- 人民之盾（Zwei）：造成傷害 +4、未造成傷害／未命中 +6 ----
+    test('人民之盾：造成傷害 → 合計 +4 層（地區巡查 2 ＋ 客戶保護 2）', () => {
+        const owned = [{ id: 'faust_zwei', unlocked: false }];
+        const res = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: true, damage: 5 });
+        assert.strictEqual(res.selfStatus.shield, 4, `造成傷害應 +4 層，實得 ${res.selfStatus.shield}`);
+    });
+
+    test('人民之盾：未命中 → 合計 +6 層（地區巡查 3 ＋ 客戶保護 3）', () => {
+        const owned = [{ id: 'faust_zwei', unlocked: false }];
+        const res = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: false, damage: 0 });
+        assert.strictEqual(res.selfStatus.shield, 6, `未命中應 +6 層，實得 ${res.selfStatus.shield}`);
+    });
+
+    test('人民之盾：命中但 0 傷害 → 同樣走 +6 層分支', () => {
+        const owned = [{ id: 'faust_zwei', unlocked: false }];
+        const res = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: true, damage: 0 });
+        assert.strictEqual(res.selfStatus.shield, 6, '命中但未造成傷害應視為「未造成傷害」');
+    });
+
+    test('人民之盾：兩種結果都隨攻擊資料送出，由 ST 端擇一套用', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_zwei');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: {}, init: 10 }, { id: 'tgt', status: {}, init: 10 });
+        assert.strictEqual(r.onResolveDamagedSelfStatus.shield, 4, '造成傷害分支應為 +4');
+        assert.strictEqual(r.onResolveNoDamageSelfStatus.shield, 6, '未造成傷害分支應為 +6');
+    });
+
+    test('無 onResolve hook 的卡 → 兩個分支皆為空（不影響其他角色）', () => {
+        identityHudState.owner = '浮士德';
+        // 未列出的卡在 cmResolveIdentityBonus 中預設視為持有，故其餘浮士德卡需明確設為未持有
+        identityHudState.cards = faustOnly('faust_wcorp');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: {}, init: 10 }, { id: 'tgt', status: {}, init: 10 });
+        assert.strictEqual(Object.keys(r.onResolveDamagedSelfStatus).length, 0);
+        assert.strictEqual(Object.keys(r.onResolveNoDamageSelfStatus).length, 0);
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

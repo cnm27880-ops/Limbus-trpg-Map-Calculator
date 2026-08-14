@@ -478,7 +478,17 @@ const IDENTITY_LIBRARY = {
         // 食指（被動）：回合開始時骰一顆等同場上敵人數量的面骰，骰中者為本回合「指令對象」。
         // 由 identity-hud 於回合開始資源結算時自動抽選並套用狀態（見 idtRollCommandTarget）。
         commandTargetRoll: true,
+        // 指令加護的取得方式為「消耗動作」，故人格卡面板需顯示動作消耗按鈕（見 identity-hud 的動作消耗區）
+        actionUsedTracker: true,
+        formNote: '【指令加護】每消耗一種動作（迅捷／移動／標準）獲得 5 層，上限 9 層；於人格卡面板的「動作消耗」區按下對應動作即自動結算。',
         hooks: {
+            // 消耗動作 → 指令加護 +5（上限 9 層）。
+            // 層數以函式回傳「距離上限還能加多少」，故已達 9 層時回傳 0、不會超過上限。
+            onActionUsed: [
+                { condition: () => true,
+                  selfStatus: { commandProtect: (t, a) => Math.max(0, Math.min(5, 9 - (a.status.commandProtect || 0))) },
+                  source: '指令加護（消耗動作）', skill: '（被動）' }
+            ],
             onTurnStart: [
                 { condition: () => true, selfStatus: { breathing: 2 }, source: '務必保證，遵從指令', skill: '務必保證，遵從指令' },
                 { condition: () => true, selfStatus: { breathing: 2 }, source: '執行指令並修行', skill: '執行指令並修行' },
@@ -522,9 +532,21 @@ const IDENTITY_LIBRARY = {
                 { condition: (t, a) => (a.status.shield || 0) >= 5, dpBonus: 3, source: '客戶保護', skill: '客戶保護' },
                 { condition: (t, a) => (a.status.shield || 0) >= 5, dpBonus: 3, source: '治安維和', skill: '治安維和', locked: true }
             ],
+            // 人民之盾的取得依「本次攻擊有沒有真的打出傷害」分歧，故走 onResolve
+            // （onHit 只知道命中與否，無法區分「命中但 0 傷害」與「未命中」）。
+            // 造成傷害 → 每技能 2 層（地區巡查 + 客戶保護 = 4 層）
+            // 未造成傷害（含未命中）→ 每技能 3 層（合計 6 層）
+            onResolve: [
+                { condition: (t, a) => (a.outcome.damage || 0) > 0, selfStatus: { shield: 2 },
+                  source: '地區巡查（造成傷害）', skill: '地區巡查' },
+                { condition: (t, a) => !((a.outcome.damage || 0) > 0), selfStatus: { shield: 3 },
+                  source: '地區巡查（未造成傷害）', skill: '地區巡查' },
+                { condition: (t, a) => (a.outcome.damage || 0) > 0, selfStatus: { shield: 2 },
+                  source: '客戶保護（造成傷害）', skill: '客戶保護' },
+                { condition: (t, a) => !((a.outcome.damage || 0) > 0), selfStatus: { shield: 3 },
+                  source: '客戶保護（未造成傷害）', skill: '客戶保護' }
+            ],
             onHit: [
-                { condition: () => true, manual: true, source: '地區巡查', skill: '地區巡查', desc: '本回合攻擊命中 → 下回合額外獲得 2 層人民之盾（未造成傷害則改為 3 層）。' },
-                { condition: () => true, manual: true, source: '客戶保護', skill: '客戶保護', desc: '本回合攻擊命中 → 下回合額外獲得 2 層人民之盾（未造成傷害則改為 3 層）。' },
                 { condition: () => true, manual: true, source: '治安維和', skill: '治安維和', locked: true, desc: '攻擊命中 → 生命值恢復等同人民之盾層數/點嚴重傷害（4 點嚴重可轉 1 點惡性）。' }
             ],
             onActive: [
@@ -553,7 +575,12 @@ const IDENTITY_LIBRARY = {
             onHit: [
                 { condition: () => true, targetStatus: { rupture: 2 }, source: '瞬步', skill: '瞬步' },
                 { condition: () => true, targetStatus: { rupture: 2 }, source: '我將開拓道路，主公。', skill: '我將開拓道路，主公。' },
-                { condition: () => true, manual: true, source: '我將開拓道路，主公。', skill: '我將開拓道路，主公。', desc: '法術命中 → 額外獲得 1 點先攻加值，最多疊加 10 點。' }
+                // 法術命中 → 疾風 +1（先攻加值，最多疊加 10 點）。
+                // 層數以函式回傳「距離上限還能加多少」，故已達 10 點時回傳 0、不會超過上限。
+                // 疾風滿 10 點即可發動【奧義 - 雲解顯現】（見下方 onActive）。
+                { condition: () => true,
+                  selfStatus: { gale: (t, a) => Math.max(0, Math.min(1, 10 - (a.status.gale || 0))) },
+                  source: '我將開拓道路，主公。（疾風）', skill: '我將開拓道路，主公。' }
             ],
             onActive: [
                 { name: '目不能追，耳未可及。（能耗削減）', source: '目不能追，耳未可及。', skill: '目不能追，耳未可及。', locked: true,

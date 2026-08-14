@@ -869,6 +869,8 @@ function performIdentityTurnStart(unitId) {
     if (typeof evaluatePlayerTurnStart !== 'function') return 0;
     // 上回合宣告卻沒打出的主動技加值不應延續到本回合，回合開始時清除
     idtClearPendingActiveBonus(unitId);
+    // 動作消耗（迅捷／移動／標準）逐回合重置，讓本回合可再次宣告消耗換取資源
+    idtResetActionUsed(unitId);
     const owned = collectOwnedIdentities();
     const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
     const res = evaluatePlayerTurnStart(owned, buildEngineUnitState(attackerUnit));
@@ -949,6 +951,107 @@ function autoTriggerIdentityTurnStart(unit) {
     if (n > 0 && typeof showToast === 'function') {
         showToast(`🔄 回合開始：已自動對「${unit.name || '你的單位'}」套用 ${n} 種資源`);
     }
+}
+
+// ===== 動作消耗（onActionUsed）=====
+// 浮士德【紙條】的指令加護規則是「每消耗一種動作（迅捷／移動／標準）+5 層，上限 9 層」。
+// 網站本身只追蹤移動距離（unit.moveUsed），沒有迅捷／標準動作的消耗紀錄，
+// 故由玩家在人格卡面板按下對應動作來宣告消耗；每種動作每回合限一次，回合開始自動重置。
+
+/** 三種動作的鍵與顯示名（順序即面板按鈕順序） */
+const IDT_ACTION_TYPES = [
+    { key: 'swift', name: '迅捷動作', icon: '⚡' },
+    { key: 'move', name: '移動動作', icon: '🏃' },
+    { key: 'standard', name: '標準動作', icon: '⚔️' }
+];
+
+/**
+ * 本回合已消耗的動作紀錄：unitId → { swift: true, ... }。
+ * 純本地暫存（與 identityHudState 一樣只存在玩家自己的瀏覽器），回合開始時重置。
+ */
+const idtActionUsed = {};
+
+/** 某單位本回合是否已消耗該動作 */
+function idtIsActionUsed(unitId, actionType) {
+    return !!(idtActionUsed[unitId] && idtActionUsed[unitId][actionType]);
+}
+
+/** 清除某單位的動作消耗紀錄（回合開始時呼叫） */
+function idtResetActionUsed(unitId) {
+    delete idtActionUsed[unitId];
+}
+
+/**
+ * 玩家宣告「消耗掉某個動作」：跑 onActionUsed 結算並把資源套用到自己的單位。
+ * 每種動作每回合限一次，避免重複點擊灌爆資源。
+ * @param {string} actionType - 'swift' | 'move' | 'standard'
+ * @returns {number} 實際套用的狀態種類數
+ */
+function idtUseAction(actionType) {
+    const unitId = identityHudState.attackerId;
+    if (!unitId) {
+        if (typeof showToast === 'function') showToast('請先指定我方單位');
+        return 0;
+    }
+    if (typeof evaluatePlayerActionUsed !== 'function') return 0;
+
+    const meta = IDT_ACTION_TYPES.find(a => a.key === actionType);
+    const actionName = meta ? meta.name : actionType;
+    if (idtIsActionUsed(unitId, actionType)) {
+        if (typeof showToast === 'function') showToast(`本回合的${actionName}已經消耗過了`);
+        return 0;
+    }
+
+    const owned = collectOwnedIdentities();
+    const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    const res = evaluatePlayerActionUsed(owned, buildEngineUnitState(attackerUnit), actionType);
+    const n = applyEngineStatusesToUnit(unitId, res.expectedSelfStatus);
+
+    if (!idtActionUsed[unitId]) idtActionUsed[unitId] = {};
+    idtActionUsed[unitId][actionType] = true;
+
+    if (typeof showToast === 'function') {
+        const notes = Object.entries(res.expectedSelfStatus || {})
+            .map(([k, v]) => `${identityStatusName(k)}+${v}`)
+            .join('、');
+        showToast(notes
+            ? `${meta ? meta.icon : ''} 已消耗${actionName}：${notes}`
+            : `${meta ? meta.icon : ''} 已消耗${actionName}（本組人格卡無對應資源）`);
+    }
+    renderIdentityModal();
+    return n;
+}
+
+/**
+ * 渲染「動作消耗」區：僅在持有帶 actionUsedTracker 標記的卡片時顯示
+ * （目前為浮士德【紙條】的指令加護）。已消耗的動作按鈕會變為停用狀態。
+ * @returns {string} HTML
+ */
+function renderIdentityActionUsed() {
+    const owned = collectOwnedIdentities();
+    const trackerCards = owned
+        .map(entry => (typeof getIdentityById === 'function') ? getIdentityById(entry.id) : null)
+        .filter(card => card && card.actionUsedTracker);
+    if (!trackerCards.length) return '';
+
+    const unitId = identityHudState.attackerId;
+    const btns = IDT_ACTION_TYPES.map(a => {
+        const used = unitId && idtIsActionUsed(unitId, a.key);
+        return `<button class="idt-btn idt-action-btn${used ? ' is-used' : ''}"
+                    ${used ? 'disabled' : ''}
+                    onclick="idtUseAction('${a.key}')"
+                    title="宣告消耗${a.name}，自動結算對應的人格卡資源（每回合一次）">
+                    ${a.icon} ${a.name}${used ? '（已消耗）' : ''}
+                </button>`;
+    }).join('');
+
+    const note = trackerCards.map(c => c.formNote).filter(Boolean).join('　');
+    return `
+        <div class="idt-section idt-action-section">
+            <div class="idt-section-title">🕐 動作消耗（每回合各一次，回合開始自動重置）</div>
+            <div class="idt-action-btns">${btns}</div>
+            ${note ? `<div class="idt-hint">${(typeof escapeHtml === 'function') ? escapeHtml(note) : note}</div>` : ''}
+        </div>`;
 }
 
 /**
@@ -1451,6 +1554,8 @@ function renderIdentityModal() {
                     </div>
                 </div>
 
+                ${renderIdentityActionUsed()}
+
                 ${renderIdentityManualInputs()}
 
                 ${renderIdentityActiveSkills()}
@@ -1501,6 +1606,11 @@ function injectIdentityStyles() {
         .idt-btn{flex:1;min-width:120px;background:var(--bg-input,#222);border:1px solid var(--border,#33333a);color:var(--text,#eee);border-radius:6px;padding:8px;cursor:pointer;font-size:.85rem;}
         .idt-btn-main{background:var(--accent-purple,#7e57c2);border-color:var(--accent-purple,#7e57c2);font-weight:bold;}
         .idt-btn-mini{flex:1;min-width:0;font-size:.78rem;padding:6px 4px;}
+        /* 動作消耗（迅捷／移動／標準）：已消耗的動作變灰且不可再按 */
+        .idt-action-btns{display:flex;gap:6px;flex-wrap:wrap;}
+        .idt-action-btn{flex:1;min-width:104px;font-size:.8rem;padding:7px 4px;}
+        .idt-action-btn.is-used{opacity:.42;cursor:not-allowed;border-style:dashed;}
+        .idt-hint{font-size:.72rem;color:var(--text-dim,#999);margin-top:6px;line-height:1.5;}
         .idt-result{background:var(--bg-input,#111);border:1px solid var(--border,#33333a);border-radius:8px;padding:10px;min-height:48px;}
         .idt-result-empty{color:var(--text-dim,#777);font-size:.85rem;text-align:center;padding:10px;}
         .idt-bonus-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
@@ -1589,6 +1699,8 @@ if (typeof window !== 'undefined') {
     window.runIdentityTurnStart = runIdentityTurnStart;
     window.autoTriggerIdentityTurnStart = autoTriggerIdentityTurnStart;
     window.renderIdentityModal = renderIdentityModal;
+    // 動作消耗（指令加護等「消耗動作換資源」的規則）
+    window.idtUseAction = idtUseAction;
     // 主動宣告技
     window.idtDeclareActiveSkill = idtDeclareActiveSkill;
     window.idtConsumePendingActiveBonus = idtConsumePendingActiveBonus;

@@ -55,6 +55,67 @@ function bbSumStatusCalcMods(unit) {
 }
 
 /**
+ * 把 [label, value] 組整理成明細分項，過濾掉 0（沒有貢獻的項目不必佔版面）。
+ * value 為 null 代表「數值已含在 extraTotal 中，只需列出標籤」（狀態修正走這條）。
+ * @param {Array<[string, number|null]>} rows
+ * @param {number} [extraTotal] - 標籤型項目（value=null）合計貢獻的數值，用於核對
+ * @returns {Array<{label: string, value: number|null}>}
+ */
+function bbDetailParts(rows, extraTotal) {
+    const parts = [];
+    for (const [label, value] of rows) {
+        if (value === null) { parts.push({ label, value: null }); continue; }
+        const n = bbSafeNumber(value);
+        if (n === 0) continue;
+        parts.push({ label, value: n });
+    }
+    // 狀態修正的合計（若有）併為一列，讓分項相加真的等於總計
+    if (typeof extraTotal === 'number' && bbSafeNumber(extraTotal) !== 0) {
+        parts.push({ label: '（上列狀態修正合計）', value: bbSafeNumber(extraTotal) });
+    }
+    return parts;
+}
+
+/**
+ * 蒐集「擲骰之後才會併入傷害」的加減項，供審核面板事先列出。
+ *
+ * 先前這些項目完全不在明細裡，卻全都會改動最終傷害，於是 ST 按下結算後看到的
+ * 數字和審核面板顯示的骰數／附加成功對不起來，無從判斷是明細省略還是算錯。
+ * 口徑必須與 cmAutoRollAndApply 的實際計算一致。
+ * @param {object} attackerUnit
+ * @param {object} targetUnit
+ * @returns {{ bonuses: Array<{label:string,value:number}>, reductions: Array<{label:string,value:number}> }}
+ */
+function bbCollectDamageMods(attackerUnit, targetUnit) {
+    const bonuses = [];
+    const reductions = [];
+    // 直接掃 STATUS_LIBRARY 取名稱，而非依賴 status-manager.js 的 getStatusById——
+    // 黑箱引擎其餘部分同樣只相依 STATUS_LIBRARY，維持一致的相依面也讓本函式可單獨測試。
+    const layers = (unit, statusId) => {
+        if (!unit || !unit.status || typeof STATUS_LIBRARY === 'undefined') return 0;
+        for (const category of Object.values(STATUS_LIBRARY)) {
+            const def = category.find(x => x && x.id === statusId);
+            if (def && def.name) return parseInt(unit.status[def.name]) || 0;
+        }
+        return 0;
+    };
+
+    // 目標身上的破裂（受擊消耗）與易損：受到的傷害 +層數
+    const fragile = layers(targetUnit, 'fragile');
+    if (fragile) bonuses.push({ label: '目標破裂（受擊消耗）', value: fragile });
+    const vulnerable = layers(targetUnit, 'vulnerable');
+    if (vulnerable) bonuses.push({ label: '目標易損', value: vulnerable });
+    // 攻擊者身上的強壯：提升傷害
+    const strength = layers(attackerUnit, 'strength');
+    if (strength) bonuses.push({ label: '攻擊者強壯', value: strength });
+    // 目標身上的不屈：降低傷害（套在攻擊上限之後）
+    const endurance = layers(targetUnit, 'endurance');
+    if (endurance) reductions.push({ label: '目標不屈（上限後扣除）', value: endurance });
+
+    return { bonuses, reductions };
+}
+
+/**
  * 隊列進入 calculating 狀態時，由 ST 端自動執行基礎運算。
  *
  * 注意：「攻擊判定 DP」與「附加成功」是兩種不同的東西，全程分開計算與顯示，絕不相加成單一數字：
@@ -195,6 +256,57 @@ function bbRunBlackBoxCalculation(data) {
     // 避免列出不影響本次計算的負面狀態（例如只扣攻擊 DP 的暈眩出現在目標的防禦計算說明中）。
     const atkLabels = [atkDpBaseLabel, ...attackerMods.atkLabels].filter(Boolean);
     const defLabels = [defDpBaseLabel, ...targetMods.defLabels].filter(Boolean);
+
+    // ===== 結構化明細（calcDetail）=====
+    // debugStr 是給人讀的一整串文字，先前 ST 審核面板另外用零散的 if 拼出幾張卡片，
+    // 兩邊口徑不一致，於是出現「明細少了很多項、和結算後跳出來的數字對不起來」。
+    // 改為在這裡把每一項加減都逐條記錄下來，審核面板與結算後的明細都讀同一份資料，
+    // 保證「看到的分項相加 = 實際採用的數字」。
+    const calcDetail = {
+        mode: saveMode ? 'save' : 'def',
+        // 攻擊 DP 桶
+        atk: {
+            parts: bbDetailParts([
+                ['宣告 DP', atkDpDeclared],
+                ['人格卡加值', atkIdentityDp],
+                ['未對抗加成', atkCounterDp],
+                ['破甲（等效 DP）', atkArmorPierce],
+                ['高速（等效 DP）', atkHastePierce],
+                ['破魔（等效 DP）', atkMagicPierce],
+                ...attackerMods.atkLabels.map(l => [`狀態：${l}`, null])
+            ], attackerMods.atkDp),
+            total: atkDpTotal
+        },
+        // 防禦 DP 桶（豁免模式不扣防禦）
+        def: {
+            parts: bbDetailParts([
+                [data.defense ? (data.defenseByST ? '防禦 DP（ST 代填）' : '防禦 DP（玩家填報）') : '目標基礎防禦 DP', defDpTotal],
+                ...targetMods.defLabels.map(l => [`狀態：${l}`, null]),
+                ['無視防禦', ignoreDef > 0 ? -ignoreDef : 0]
+            ], targetMods.defMod),
+            total: saveMode ? 0 : finalDefense,
+            skipped: saveMode
+        },
+        // 附加成功桶（與 DP 完全分開）
+        extra: {
+            parts: bbDetailParts([
+                ['宣告附加成功', atkAutoDeclared],
+                ['人格卡額外成功', atkIdentityExtra],
+                ['侵蝕增幅換算', atkErosionExtra],
+                [saveMode ? '防禦附加成功（豁免模式不抵銷）' : '防禦方附加成功', saveMode ? 0 : -defExtraTotal]
+            ]),
+            total: baseExtraSuccess
+        },
+        dice: baseDice,
+        // 擲骰設定：這兩項直接左右最終傷害，先前完全沒出現在明細裡
+        explodeAt: parseInt(attacker.explodeAt, 10) || 10,
+        damageCap: Math.max(0, bbSafeNumber(attacker.damageCap)),
+        critVicious: Math.max(0, bbSafeNumber(attacker.critVicious)),
+        declaredDamageBonus: Math.max(0, bbSafeNumber(attacker.declaredDamageBonus)),
+        defenseByST: !!data.defenseByST,
+        // 擲骰後才會併入傷害的加減項（審核面板先預告，結算後再對照實際值）
+        damageMods: bbCollectDamageMods(attackerUnit, targetUnit)
+    };
     const ignoreLabel = ignoreDef > 0 ? `,無視防禦(-${ignoreDef})` : '';
     // 附加成功同樣分項列出人格引擎與侵蝕攻擊的貢獻
     const atkExtraParts = [`宣告${atkAutoDeclared}`];
@@ -229,7 +341,9 @@ function bbRunBlackBoxCalculation(data) {
             + `【附加成功】攻: ${atkExtraLabel} = ${atkExtraTotal} | 防: ${defExtraTotal} ➡️ 附加成功: ${baseExtraSuccess}`;
     }
 
-    cqEnterSTReview(baseDice, baseExtraSuccess, debugStr, saveInfo ? { saveInfo } : null);
+    const extras = { calcDetail };
+    if (saveInfo) extras.saveInfo = saveInfo;
+    cqEnterSTReview(baseDice, baseExtraSuccess, debugStr, extras);
 }
 
 /**

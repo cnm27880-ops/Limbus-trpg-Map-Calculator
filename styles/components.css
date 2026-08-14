@@ -7085,3 +7085,87 @@ select.wheel-cycle { cursor: ns-resize; }
     0%, 100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55); }
     50%      { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55), 0 0 16px rgba(251, 191, 36, 0.55); }
 }
+
+/* ==========================================================================
+   完整計算明細（calc-detail-full）
+   每一桶列出「分項 → 小計」，分項相加必等於小計；審核面板與結算後明細共用同一套樣式，
+   讓 ST 可以逐行對照「明細寫的」與「實際採用的」是不是同一組數字。
+   ========================================================================== */
+.calc-detail-full {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.cdf-bucket {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 6px;
+    background: var(--bg-card);
+    padding: 6px 8px;
+}
+
+.cdf-bucket-title {
+    font-size: 0.78rem;
+    font-weight: bold;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.cdf-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 0.78rem;
+    padding: 2px 0;
+}
+
+.cdf-label {
+    color: var(--text-dim);
+    flex: 1;
+    min-width: 0;
+}
+
+.cdf-value {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.cdf-value.is-pos { color: var(--bonus-color, #4ade80); }
+.cdf-value.is-neg { color: var(--penalty-color, #f87171); }
+
+.cdf-empty {
+    color: var(--text-dim);
+    font-style: italic;
+    font-size: 0.72rem;
+}
+
+.cdf-total {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border);
+}
+
+.cdf-total .cdf-label { color: var(--text); font-weight: bold; }
+.cdf-total .cdf-value { font-size: 0.9rem; }
+
+/* 依桶別上色，一眼分辨攻擊／防禦／附加成功／傷害 */
+.cdf-atk        { border-left-color: var(--accent-orange, #f97316); }
+.cdf-def        { border-left-color: #38bdf8; }
+.cdf-extra      { border-left-color: #a78bfa; }
+.cdf-conclusion { border-left-color: var(--accent-yellow, #fbbf24); }
+.cdf-damage     { border-left-color: #ef4444; }
+
+/* 骰點流水（結算明細）：字級小、可換行，不擠壓其他欄位 */
+.cdf-rolls {
+    margin-top: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    word-break: break-all;
+}

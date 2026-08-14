@@ -1922,6 +1922,172 @@ console.log('\n[音樂同步] 進度校正夾限（中途加入的玩家聽不�
     });
 })();
 
+// ====================================================================
+console.log('\n[結算明細] calcDetail：分項相加等於採用值、先前遺漏的項目都列進去');
+// ====================================================================
+// 明細與結算結果對不起來的根因是「明細只列了幾項、實際計算用了更多項」。
+// 這裡驗證每個桶的分項總和等於該桶的小計，並確認先前完全沒出現在明細裡的項目都在。
+(function () {
+    const sumParts = (parts) => (parts || []).reduce((s, p) => s + (Number(p.value) || 0), 0);
+    const labels = (parts) => (parts || []).map(p => p.label).join(' | ');
+    const detail = () => captured.stReview.extras.calcDetail;
+
+    test('攻擊 DP：分項相加 = 攻擊 DP 合計（含破甲／高速／破魔／人格卡）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 5, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 10, auto: 0, armorPierce: 3, hastePierce: 2, magicPierce: 1,
+                        identityDpBonus: 4, counterPhaseDpBonus: 2 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.atk.parts), d.atk.total,
+            `分項(${sumParts(d.atk.parts)}) 應等於合計(${d.atk.total})：${labels(d.atk.parts)}`);
+        assert.strictEqual(d.atk.total, 22, '10+3+2+1+4+2 = 22');
+    });
+
+    test('攻擊 DP 明細列出先前遺漏的破甲／高速／破魔與未對抗加成', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 5, auto: 0, armorPierce: 3, hastePierce: 2, magicPierce: 1, counterPhaseDpBonus: 7 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const txt = labels(detail().atk.parts);
+        ['破甲', '高速', '破魔', '未對抗加成'].forEach(k =>
+            assert.ok(txt.includes(k), `明細應列出「${k}」，實際：${txt}`));
+    });
+
+    test('防禦 DP：分項相加 = 防禦合計（含無視防禦）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 12, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 20, auto: 0, ignoreDef: 5 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.def.parts), d.def.total,
+            `分項(${sumParts(d.def.parts)}) 應等於合計(${d.def.total})：${labels(d.def.parts)}`);
+        assert.strictEqual(d.def.total, 7, '12 − 5 = 7');
+        assert.ok(labels(d.def.parts).includes('無視防禦'));
+    });
+
+    test('附加成功：分項相加 = 附加成功合計（含人格卡／侵蝕／防禦方抵銷）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 2 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 5, auto: 3, identityExtraSuccess: 2, erosionExtraSuccess: 1 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.extra.parts), d.extra.total,
+            `分項(${sumParts(d.extra.parts)}) 應等於合計(${d.extra.total})：${labels(d.extra.parts)}`);
+        assert.strictEqual(d.extra.total, 4, '3+2+1 − 2 = 4');
+    });
+
+    test('明細帶出擲骰設定（加骰門檻／攻擊上限／嚴重轉惡性）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 8, auto: 0, explodeAt: 9, damageCap: 15, critVicious: 2 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(d.explodeAt, 9, '加骰門檻先前完全不在明細裡');
+        assert.strictEqual(d.damageCap, 15, '攻擊上限先前完全不在明細裡');
+        assert.strictEqual(d.critVicious, 2);
+    });
+
+    test('明細預告擲骰後併入傷害的加減項（破裂／易損／強壯／不屈）', () => {
+        resetCaptures();
+        sandbox.state.units = [
+            { id: 'me', type: 'player', status: { '強壯': 4 } },
+            { id: 'boss', type: 'enemy', defDp: 0, defAuto: 0, status: { '破裂': 3, '易損': 2, '不屈': 5 } }
+        ];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 8, auto: 0, unitId: 'me' },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const mods = detail().damageMods;
+        const bonusTxt = mods.bonuses.map(b => `${b.label}=${b.value}`).join(' | ');
+        assert.ok(bonusTxt.includes('破裂'), `應預告破裂加傷：${bonusTxt}`);
+        assert.ok(bonusTxt.includes('易損'), `應預告易損加傷：${bonusTxt}`);
+        assert.ok(bonusTxt.includes('強壯'), `應預告強壯加傷：${bonusTxt}`);
+        assert.strictEqual(mods.reductions.length, 1, '應預告不屈減傷');
+        assert.strictEqual(mods.reductions[0].value, 5);
+    });
+
+    test('無任何加減項時 damageMods 為空（明細不塞無關項目）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 0 }];
+        bbRunBlackBoxCalculation({ attacker: { dp: 8, auto: 0 }, target: { id: 'boss' }, defense: null });
+        const mods = detail().damageMods;
+        assert.strictEqual(mods.bonuses.length, 0);
+        assert.strictEqual(mods.reductions.length, 0);
+    });
+
+    test('豁免抵擋模式：防禦桶標記 skipped，明細不會誤導成有扣防禦', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'p1', type: 'player', status: {}, saveReflex: 4, saveReflexAuto: 1 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 9, auto: 0, resolveMode: 'save', saveType: 'saveReflex' },
+            target: { id: 'p1', name: '玩家A' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(d.mode, 'save');
+        assert.strictEqual(d.def.skipped, true);
+    });
+
+    test('ST 代填防禦：明細標示來源為 ST 而非玩家填報', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'p1', type: 'player', status: {} }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 10, auto: 0 },
+            target: { id: 'p1' },
+            defense: { dp: 4, auto: 1 },
+            defenseByST: true
+        });
+        const d = detail();
+        assert.strictEqual(d.defenseByST, true);
+        assert.ok(labels(d.def.parts).includes('ST 代填'), `防禦來源應標示 ST 代填：${labels(d.def.parts)}`);
+    });
+
+    test('玩家自填防禦：明細標示為玩家填報', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'p1', type: 'player', status: {} }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 10, auto: 0 },
+            target: { id: 'p1' },
+            defense: { dp: 4, auto: 1 }
+        });
+        assert.ok(labels(detail().def.parts).includes('玩家填報'));
+    });
+
+    test('狀態修正計入明細，且分項相加仍等於合計', () => {
+        resetCaptures();
+        // 麻痺對攻防都有 calcMod，用它驗證狀態修正確實被列出且不破壞加總
+        sandbox.state.units = [
+            { id: 'me', type: 'player', status: {} },
+            { id: 'boss', type: 'enemy', defDp: 10, defAuto: 0, status: { '麻痺': 2 } }
+        ];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 12, auto: 0, unitId: 'me' },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.def.parts), d.def.total,
+            `分項(${sumParts(d.def.parts)}) 應等於合計(${d.def.total})：${labels(d.def.parts)}`);
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

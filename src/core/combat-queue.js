@@ -407,7 +407,8 @@ function cqEnterSTReview(baseDice, baseExtraSuccess, debugStr, extras) {
         baseDice: baseDice,
         baseExtraSuccess: baseExtraSuccess,
         debugStr: debugStr || '',
-        saveInfo: null  // 預設清空，避免上一場豁免模式的資料殘留到本場防禦扣除模式
+        saveInfo: null,  // 預設清空，避免上一場豁免模式的資料殘留到本場防禦扣除模式
+        calcDetail: null // 同上：結構化明細一律由本次運算重新提供，不沿用上一場
     }, (extras && typeof extras === 'object') ? extras : {}));
 }
 

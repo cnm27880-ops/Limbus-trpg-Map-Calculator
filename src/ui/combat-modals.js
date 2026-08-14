@@ -650,6 +650,139 @@ function submitDefenseModal() {
 }
 
 /**
+ * 把黑箱輸出的結構化明細（calcDetail）渲染成逐項相加的表格。
+ *
+ * 解決的問題：先前審核面板只顯示「系統建議骰數 / 附加成功」兩個數字，加上幾張零散的
+ * 修正卡片；破甲、雙方狀態修正、破裂／易損／強壯／不屈、攻擊上限等會實際改動結果的項目
+ * 都不在明細內。ST 按下結算後跳出來的攻擊／防禦／傷害因此和明細對不起來，
+ * 無從判斷是「明細省略但內容正確」還是「根本算錯」。
+ *
+ * 現在每一桶都列出「分項 → 小計」，分項相加必定等於小計；擲骰後才決定的加減項
+ * 也先預告出來，結算後的明細用同一組標籤呈現，可以逐行對照。
+ *
+ * 全程以 DOM 節點 + textContent 建構（不用 innerHTML），避免跨客戶端資料造成 XSS。
+ * @param {HTMLElement} container
+ * @param {object|null} detail - black-box-engine 產生的 calcDetail
+ * @param {number} baseDice
+ * @param {number} baseExtraSuccess
+ */
+function cmRenderCalcDetail(container, detail, baseDice, baseExtraSuccess) {
+    if (!container) return;
+    if (!detail || typeof detail !== 'object') return;
+
+    const box = document.createElement('div');
+    box.className = 'calc-detail-full';
+
+    /** 單一桶：標題 + 分項列 + 小計列 */
+    const addBucket = (title, parts, totalLabel, totalValue, opts) => {
+        const o = opts || {};
+        const sec = document.createElement('div');
+        sec.className = 'cdf-bucket' + (o.cls ? ' ' + o.cls : '');
+
+        const h = document.createElement('div');
+        h.className = 'cdf-bucket-title';
+        h.textContent = title;
+        sec.appendChild(h);
+
+        (parts || []).forEach(p => {
+            const row = document.createElement('div');
+            row.className = 'cdf-row';
+            const l = document.createElement('span');
+            l.className = 'cdf-label';
+            l.textContent = p.label;
+            const v = document.createElement('span');
+            v.className = 'cdf-value' + (p.value > 0 ? ' is-pos' : (p.value < 0 ? ' is-neg' : ''));
+            v.textContent = (p.value === null || p.value === undefined)
+                ? '—'
+                : (p.value > 0 ? `+${p.value}` : String(p.value));
+            row.appendChild(l);
+            row.appendChild(v);
+            sec.appendChild(row);
+        });
+
+        if (!parts || !parts.length) {
+            const row = document.createElement('div');
+            row.className = 'cdf-row cdf-empty';
+            row.textContent = o.emptyText || '（無）';
+            sec.appendChild(row);
+        }
+
+        const sum = document.createElement('div');
+        sum.className = 'cdf-row cdf-total';
+        const sl = document.createElement('span');
+        sl.className = 'cdf-label';
+        sl.textContent = totalLabel;
+        const sv = document.createElement('span');
+        sv.className = 'cdf-value';
+        sv.textContent = String(totalValue);
+        sum.appendChild(sl);
+        sum.appendChild(sv);
+        sec.appendChild(sum);
+
+        box.appendChild(sec);
+    };
+
+    const saveMode = detail.mode === 'save';
+
+    addBucket('⚔ 攻擊 DP', detail.atk && detail.atk.parts, '攻擊 DP 合計',
+        (detail.atk && detail.atk.total) || 0, { cls: 'cdf-atk' });
+
+    if (detail.def && detail.def.skipped) {
+        addBucket('🛡 防禦 DP', [], '豁免抵擋模式：不扣防禦', '—',
+            { cls: 'cdf-def', emptyText: '本次為豁免抵擋，攻擊擲全額 DP，由目標另擲豁免對銷' });
+    } else {
+        addBucket('🛡 防禦 DP', detail.def && detail.def.parts, '防禦 DP 合計（最低 0）',
+            (detail.def && detail.def.total) || 0, { cls: 'cdf-def' });
+    }
+
+    addBucket('🎯 附加成功（與 DP 分開計算）', detail.extra && detail.extra.parts,
+        '附加成功合計（最低 0）', (detail.extra && detail.extra.total) || 0, { cls: 'cdf-extra' });
+
+    // 骰數結論：把「攻擊 − 防禦 = 骰數」明白寫出來
+    const conc = document.createElement('div');
+    conc.className = 'cdf-bucket cdf-conclusion';
+    const concTitle = document.createElement('div');
+    concTitle.className = 'cdf-bucket-title';
+    concTitle.textContent = '🎲 本次擲骰';
+    conc.appendChild(concTitle);
+    const concRows = [
+        [saveMode ? '骰數（豁免模式＝全額攻擊 DP）' : '骰數（攻擊 DP − 防禦 DP）', String(baseDice)],
+        ['附加成功（直接算成功，不投骰）', String(baseExtraSuccess)],
+        ['加骰門檻', `骰到 ${detail.explodeAt || 10} 以上追加一顆`],
+    ];
+    if (detail.damageCap > 0) concRows.push(['攻擊上限', `${detail.damageCap}（玩家攻擊適用；BOSS 不受限）`]);
+    if (detail.critVicious > 0) concRows.push(['嚴重轉惡性', `${detail.critVicious} 點轉為 A 傷`]);
+    concRows.forEach(([label, value]) => {
+        const row = document.createElement('div');
+        row.className = 'cdf-row';
+        const l = document.createElement('span');
+        l.className = 'cdf-label';
+        l.textContent = label;
+        const v = document.createElement('span');
+        v.className = 'cdf-value';
+        v.textContent = value;
+        row.appendChild(l);
+        row.appendChild(v);
+        conc.appendChild(row);
+    });
+    box.appendChild(conc);
+
+    // 擲骰後才併入傷害的加減項：先預告，讓 ST 知道結算後為什麼傷害不等於「成功數＋附加」
+    const mods = detail.damageMods || { bonuses: [], reductions: [] };
+    const dmgParts = []
+        .concat((mods.bonuses || []).map(b => ({ label: b.label, value: b.value })))
+        .concat(detail.declaredDamageBonus > 0
+            ? [{ label: '主動宣告技傷害', value: detail.declaredDamageBonus }] : [])
+        .concat((mods.reductions || []).map(r => ({ label: r.label, value: -r.value })));
+    if (dmgParts.length) {
+        addBucket('💥 擲骰後併入傷害的加減項', dmgParts, '傷害＝成功數＋附加成功＋上列加減', '見結算結果',
+            { cls: 'cdf-damage' });
+    }
+
+    container.appendChild(box);
+}
+
+/**
  * combat-queue.js 在 st_review 狀態時呼叫（僅 ST 端）：彈出黑箱審核 Modal。
  */
 function cqOnSTReview(data) {
@@ -722,25 +855,30 @@ function cqOnSTReview(data) {
         // data.* 來自跨客戶端的戰鬥隊列，可能含使用者輸入的人格卡/狀態名稱。
         ctx.textContent = '';
 
+        // ① 逐項相加的完整計算明細（攻擊 DP／防禦 DP／附加成功／傷害加減項）。
+        //    先前這裡只有幾張零散的修正卡片，破甲、狀態修正、破裂／強壯／不屈、攻擊上限
+        //    等會實際改動結果的項目都不在明細內，導致按下結算後跳出的數字對不起來。
+        //    現在改讀黑箱輸出的結構化明細，分項相加即等於採用的數字。
+        cmRenderCalcDetail(ctx, data.calcDetail, baseDice, baseExtraSuccess);
+
+        // ② 其餘上下文（人格卡施加的狀態、擊殺效果、受擊消耗等）
         // 卡片清單：每筆修正獨立色塊，依語意上色（加成=綠 / 減益=紅 / 資源類=藍），
         // ST 可一眼用顏色判斷修正方向，不必逐字閱讀。
         const rows = [];
+        if (data.defenseByST) rows.push({
+            label: '⚠️ 防禦由 ST 代填',
+            value: '這筆防禦值不是玩家自己送出的（玩家離線／離席時由 ST 接管）',
+            cls: 'is-resource'
+        });
         if (saveInfo) rows.push({
             label: '結算模式',
             value: `豁免抵擋：目標${saveInfo.saveName || '豁免'} ${Math.max(0, parseInt(saveInfo.saveDice, 10) || 0)} 顆自動對擲（傷害 = 攻擊成功+附加 − 豁免成功）`,
             cls: 'is-resource'
         });
-        // 無視防禦已由黑箱引擎直接扣減防禦、反映在「系統建議骰數」中；明確標示為已套用（綠色加成），
-        // 避免 ST 誤以為尚未計入而再手動扣一次，導致最終傷害反而變低。
-        if (ignoreDef > 0)            rows.push({ label: '無視防禦', value: `−${ignoreDef} 防禦（已計入建議骰數）`, cls: 'is-bonus' });
-        if (critVicious > 0)          rows.push({ label: '嚴重轉惡性', value: `${critVicious} 點`, cls: 'is-resource' });
-        if (identityDpBonus > 0)      rows.push({ label: '人格卡 DP', value: `+${identityDpBonus}`, cls: 'is-bonus' });
-        if (identityExtraSuccess > 0) rows.push({ label: '人格卡額外成功', value: `+${identityExtraSuccess}`, cls: 'is-bonus' });
-        const erosionExtra = Number(atk.erosionExtraSuccess) || 0;
-        if (atk.erosionAttack) rows.push({ label: '🩸 侵蝕攻擊附加成功', value: `+${erosionExtra}（每層侵蝕增幅 +1，已計入附加成功）`, cls: 'is-bonus' });
-        const declaredDmg = Number(atk.declaredDamageBonus) || 0;
-        if (declaredDmg > 0) rows.push({ label: '主動宣告技傷害', value: `+${declaredDmg}（法術威力／武器傷害，擲骰套傷時併入）`, cls: 'is-bonus' });
-        if (counterPhaseDpBonus > 0)  rows.push({ label: '未對抗加成 DP', value: `+${counterPhaseDpBonus}`, cls: 'is-bonus' });
+        // 數值型修正（無視防禦／人格卡 DP／未對抗加成／侵蝕附加／宣告技傷害等）都已逐項列在
+        // 上方的計算明細中，這裡不再重覆列出，避免同一筆加值出現兩次讓 ST 誤以為要再算一遍。
+        // 以下只保留「明細算不進去、但 ST 需要知道」的上下文。
+        if (critVicious > 0) rows.push({ label: '嚴重轉惡性', value: `${critVicious} 點（傷害中此部分轉為 A 傷）`, cls: 'is-resource' });
         if (Array.isArray(atk.identityNotes) && atk.identityNotes.length)
             rows.push({ label: '套用人格卡', value: atk.identityNotes.join('、'), cls: 'is-bonus' });
         if (Array.isArray(atk.identityStatusNotes) && atk.identityStatusNotes.length)
@@ -755,6 +893,12 @@ function cqOnSTReview(data) {
             rows.push({ label: '擊殺→其他敵方', value: atk.onKillOthersStatusNotes.join('、') + '（目標倒下時自動套用）', cls: 'is-penalty' });
         if (Array.isArray(atk.onKillSelfStatusNotes) && atk.onKillSelfStatusNotes.length)
             rows.push({ label: '擊殺→自己', value: atk.onKillSelfStatusNotes.join('、') + '（目標倒下時自動套用）', cls: 'is-bonus' });
+        // 結算後依實際傷害擇一套用的人格卡效果（如浮士德【人民之盾】），兩個分支都先列出，
+        // 讓 ST 事先知道「打中了會給什麼、沒打中會給什麼」，而不是結算後才冒出一個數字。
+        if (Array.isArray(atk.onResolveDamagedSelfStatusNotes) && atk.onResolveDamagedSelfStatusNotes.length)
+            rows.push({ label: '造成傷害→自己', value: atk.onResolveDamagedSelfStatusNotes.join('、'), cls: 'is-bonus' });
+        if (Array.isArray(atk.onResolveNoDamageSelfStatusNotes) && atk.onResolveNoDamageSelfStatusNotes.length)
+            rows.push({ label: '未造成傷害→自己', value: atk.onResolveNoDamageSelfStatusNotes.join('、') + '（含未命中）', cls: 'is-bonus' });
 
         // 防禦方身上的「受擊消耗」狀態（破裂/震顫）：提示 ST 本次結算需計入其效果，
         // 確認廣播後會自動清除層數
@@ -996,6 +1140,13 @@ function confirmSTReview() {
     closeModal('st-review-modal');
     cqBroadcastResult(finalDice, baseExtraSuccess, modifier, rollResult);
 
+    // 結算後立刻讓 ST 看到「實際採用的傷害組成」，標籤與審核面板的預告一致，可逐行核對。
+    // 廣播橫幅四秒就消失，先前無從確認明細與結果是否一致。
+    if (rollResult) {
+        const tName = (combatQueueLast && combatQueueLast.target && combatQueueLast.target.name) || '目標';
+        cmShowSettlementDetail(rollResult, tName);
+    }
+
     // 攻擊結算完成：自動消耗防禦方身上的受擊消耗狀態（破裂/震顫），ST 不必手動歸零。
     // ⚠️ 順序關鍵：必須在「命中狀態套用」之前消耗——
     //   1) cmAutoRollAndApply 已把本次攻擊前既有的破裂層數計入傷害，此處清掉的是那批；
@@ -1119,6 +1270,20 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
     }
     if (typeof broadcastState === 'function') broadcastState();
 
+    // 逐項傷害明細：標籤與審核面板預告的加減項一致，讓 ST 可以逐行對照
+    // 「明細寫的」與「實際採用的」是不是同一組數字。
+    const damageParts = [{ label: '擲骰成功數', value: roll.successes }];
+    if ((Number(extraSuccess) || 0) > 0) damageParts.push({ label: '附加成功', value: Number(extraSuccess) || 0 });
+    statusBonusParts.forEach(txt => {
+        // statusBonusParts 形如「破裂+3」，拆回標籤與數值以便對齊其他分項的呈現
+        const m = /^(.*)\+(\d+)$/.exec(txt);
+        if (m) damageParts.push({ label: `目標${m[1]}`, value: parseInt(m[2], 10) || 0 });
+    });
+    if (strengthBonus > 0) damageParts.push({ label: '攻擊者強壯', value: strengthBonus });
+    if (declaredDmgBonus > 0) damageParts.push({ label: '主動宣告技傷害', value: declaredDmgBonus });
+    if (capApplied) damageParts.push({ label: `攻擊上限（${totalBeforeCap} → ${cap}）`, value: cap - totalBeforeCap });
+    if (enduranceReduction > 0) damageParts.push({ label: '目標不屈（上限後扣除）', value: -enduranceReduction });
+
     return {
         rolls: roll.rolls,             // 各骰點數明細（供「骰到 N 個 10 觸發」類人格卡判定）
         tens: tens,                    // 骰出 10 的數量
@@ -1133,9 +1298,71 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         statusBonus: statusBonus,
         statusBonusText: statusBonusParts.join('、'),
         strengthBonus: strengthBonus,
+        declaredDamageBonus: declaredDmgBonus,
         enduranceReduction: enduranceReduction,
+        damageParts: damageParts,
         damage: damage
     };
+}
+
+/**
+ * ST 端：結算完畢後彈出「實際採用的傷害明細」。
+ *
+ * 審核面板的預告與這裡的實際值使用同一組標籤，ST 可以逐行核對；
+ * 先前只有廣播橫幅上一長串文字，四秒就消失，也和審核面板的數字對不起來。
+ * @param {object} rollResult - cmAutoRollAndApply 的回傳
+ * @param {string} targetName
+ */
+function cmShowSettlementDetail(rollResult, targetName) {
+    if (!rollResult || !Array.isArray(rollResult.damageParts)) return;
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s == null ? '' : s));
+
+    const rows = rollResult.damageParts.map(p => `
+        <div class="cdf-row">
+            <span class="cdf-label">${esc(p.label)}</span>
+            <span class="cdf-value ${p.value > 0 ? 'is-pos' : (p.value < 0 ? 'is-neg' : '')}">${p.value > 0 ? '+' : ''}${p.value}</span>
+        </div>`).join('');
+
+    const rollsTxt = Array.isArray(rollResult.rolls) ? rollResult.rolls.join('、') : '';
+    const html = `
+        <div class="modal-overlay show" id="settlement-detail-modal"
+             onclick="if(event.target.id==='settlement-detail-modal')this.remove()">
+            <div class="modal" style="max-width:440px;" onclick="event.stopPropagation()">
+                <div class="modal-header modal-header--combat">
+                    <span style="font-weight:bold;">🧾 結算明細 → ${esc(targetName || '目標')}</span>
+                    <button onclick="document.getElementById('settlement-detail-modal').remove()" style="background:none;font-size:1.2rem;">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="calc-detail-full">
+                        <div class="cdf-bucket cdf-damage">
+                            <div class="cdf-bucket-title">💥 實際採用的傷害組成</div>
+                            ${rows}
+                            <div class="cdf-row cdf-total">
+                                <span class="cdf-label">最終傷害（已套用，護盾優先消耗）</span>
+                                <span class="cdf-value">${rollResult.damage}</span>
+                            </div>
+                        </div>
+                        <div class="cdf-bucket">
+                            <div class="cdf-bucket-title">🎲 擲骰紀錄</div>
+                            <div class="cdf-row">
+                                <span class="cdf-label">擲出骰數（含加骰 ${rollResult.exploded || 0} 顆，門檻 ${rollResult.explodeAt || 10}）</span>
+                                <span class="cdf-value">${rollResult.totalRolled}</span>
+                            </div>
+                            <div class="cdf-row">
+                                <span class="cdf-label">骰到 10 的數量（人格卡觸發判定）</span>
+                                <span class="cdf-value">${rollResult.tens || 0}</span>
+                            </div>
+                            ${rollsTxt ? `<div class="cdf-rolls">${esc(rollsTxt)}</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="modal-btn" onclick="document.getElementById('settlement-detail-modal').remove()"
+                            style="background:var(--accent-green);color:#000;">確認</button>
+                </div>
+            </div>
+        </div>`;
+    (document.getElementById('modals-container') || document.body).insertAdjacentHTML('beforeend', html);
 }
 
 /**

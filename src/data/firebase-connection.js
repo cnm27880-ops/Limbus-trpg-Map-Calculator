@@ -168,7 +168,7 @@ function showRoomManager() {
                             </div>
                         </div>
                         <div style="display: flex; gap: 8px;">
-                            <button onclick="enterRoomFromManager('${escapeHtml(room.code)}')" style="
+                            <button onclick="enterRoomFromManager('${escapeJsAttr(room.code)}')" style="
                                 background: var(--accent-green);
                                 color: #000;
                                 border: none;
@@ -177,7 +177,7 @@ function showRoomManager() {
                                 font-weight: bold;
                                 cursor: pointer;
                             ">進入</button>
-                            <button onclick="deleteRoomFromManager('${escapeHtml(room.code)}')" style="
+                            <button onclick="deleteRoomFromManager('${escapeJsAttr(room.code)}')" style="
                                 background: var(--accent-red);
                                 color: #000;
                                 border: none;
@@ -908,6 +908,14 @@ function setupRoomListeners() {
     });
     unsubscribeListeners.push(() => roomRef.child('users').off('value', usersListener));
 
+    // ST 進房時把自己 localStorage 裡的播放清單推上去，讓所有（含之後才加入的）玩家
+    // 拿得到同一份清單。先前清單只存在 ST 本機，玩家看到的永遠是自己瀏覽器的舊資料。
+    if (myRole === 'st' && typeof musicManager !== 'undefined'
+        && Array.isArray(musicManager.playlist) && musicManager.playlist.length
+        && typeof syncMusicPlaylist === 'function') {
+        syncMusicPlaylist(musicManager.playlist);
+    }
+
     // 監聽音樂狀態變更
     const musicListener = roomRef.child('music').on('value', snapshot => {
         if (typeof handleMusicUpdate === 'function') {
@@ -951,6 +959,9 @@ function setupRoomListeners() {
 
     // 戰爭迷霧：啟用開關 + 各玩家的已探索紀錄
     if (typeof fogSetupListener === 'function') fogSetupListener();
+
+    // 戰鬥隊列主控台：側邊條入口僅 ST 可見（強制中止／代填防禦／等候區管理）
+    if (typeof stqGateUI === 'function') stqGateUI();
 }
 
 /**

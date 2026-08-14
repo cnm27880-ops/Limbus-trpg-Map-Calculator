@@ -497,6 +497,18 @@
     <div class="counter-float-body" id="counter-float-body">尚未開始本輪徵詢</div>
 </div>
 
+<!-- 戰鬥隊列主控台（ST 專用）：強制中止卡住的結算、代填防禦、管理等候區 -->
+<div id="st-queue-panel" class="stq-panel hidden">
+    <div class="stq-header" id="stq-header">
+        <span class="stq-title">⚔️ 戰鬥隊列主控台</span>
+        <span class="float-modal-btns">
+            <button class="float-modal-icon-btn" id="stq-collapse" title="收起">▾</button>
+            <button class="stq-close" onclick="stqClosePanel(event)">×</button>
+        </span>
+    </div>
+    <div class="stq-body" id="stq-body"></div>
+</div>
+
 <!-- 快速操作球 (Quick Action Ball) -->
 
 <div id="quick-action-ball" class="qab-container">
@@ -718,6 +730,7 @@
 <script src="src/ui/lyrics.js"></script>
 <script src="src/ui/combat-modals.js"></script>
 <script src="src/ui/combat-broadcast.js"></script>
+<script src="src/ui/st-combat-queue.js"></script>
 <script src="src/ui/st-skill-hud.js"></script>
 <script src="src/ui/aoe-select.js"></script>
 <script src="src/ui/boss-battle-hud.js"></script>

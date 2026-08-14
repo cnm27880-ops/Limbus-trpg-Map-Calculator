@@ -31,6 +31,7 @@ const SideRail = (function () {
         { key: 'act-fog',      fa: 'fa-smog',              color: '#22d3ee', label: '戰爭迷霧',          id: 'qab-fog-item',           hidden: true, fn: 'toggleFogHud' },
         { key: 'act-mapai',    fa: 'fa-robot',             color: '#c084fc', label: 'AI 地圖助手',       id: 'qab-map-ai-item',        hidden: true, fn: 'maiTogglePanel' },
         { key: 'act-counter',  fa: 'fa-scale-balanced',    color: '#2dd4bf', label: '本回合對抗分配',    id: 'qab-counter-panel-item', hidden: true, fn: 'cpToggleFloatPanel' },
+        { key: 'act-stqueue',  fa: 'fa-list-check',        color: '#f97316', label: '戰鬥隊列主控台',    id: 'qab-stq-item',           hidden: true, fn: 'stqTogglePanel' },
         // 快捷鍵說明已移出側邊條：改由底部連線狀態圖示（被圈起來的驚嘆號）觸發，見 index.html #conn-status。
         // 單位側欄固定排在圖標列最下方（其餘為分頁/浮動面板，此項只切換左側戰鬥序列側欄，使用頻率較低）。
         { key: 'act-sidebar',  fa: 'fa-table-columns',     color: '#818cf8', label: '單位側欄',          id: 'sidebar-toggle', fn: 'toggleSidebar' }

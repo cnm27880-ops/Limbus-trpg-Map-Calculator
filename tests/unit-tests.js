@@ -480,9 +480,11 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         'src/ui/combat-modals.js'
     ];
     const combinedIdentity = identityFiles.map(f => readSource(f)).join('\n;\n')
-        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks };';
+        + '\n;\nvar __identityExports = { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks,'
+        + ' collectOwnedIdentities, getIdentitiesByOwner };';
     vm.runInContext(combinedIdentity, idSandbox, { filename: 'combined-identity.js' });
-    const { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks } = idSandbox.__identityExports;
+    const { cmResolveIdentityBonus, identityHudState, collectUntriggeredBonusHooks,
+        collectOwnedIdentities, getIdentitiesByOwner } = idSandbox.__identityExports;
 
     test('唐吉訶德「延續進攻」命中同時算出 targetStatus 與 selfStatus，兩者皆不遺漏', () => {
         identityHudState.owner = '唐吉訶德';
@@ -493,10 +495,48 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
         const result = cmResolveIdentityBonus(attacker, target);
 
         // 命中：延續進攻（selfStatus.swiftness+1／targetStatus.bind+1）+ 雙旋飛刺（targetStatus.bind+1）
-        assert.strictEqual(result.onHitSelfStatus.swiftness, 4, '攻擊者自身應算出 +1 迅捷（修正前這裡會是空物件）');
+        // 只勾選 don_cinq 一張卡，就只應算這張卡的效果。
+        // （修正前未列在 cards 中的卡預設視為持有，這裡會混進其他唐吉訶德卡而得到 4 層迅捷。）
+        assert.strictEqual(result.onHitSelfStatus.swiftness, 1, '攻擊者自身應算出 +1 迅捷');
         assert.ok(result.onHitSelfStatusNotes.length > 0, 'onHitSelfStatusNotes 不應為空');
-        assert.ok(result.onHitSelfStatusNotes.some(n => n.includes('+4')), 'onHitSelfStatusNotes 應包含層數敘述');
+        assert.ok(result.onHitSelfStatusNotes.some(n => n.includes('+1')), 'onHitSelfStatusNotes 應包含層數敘述');
         assert.strictEqual(result.onHitTargetStatus.bind, 2, '目標應疊加 2 層束縛（延續進攻+雙旋飛刺）');
+    });
+
+    test('持有判定：只勾選的卡才算數，未勾選的同角色卡不得混入實際攻擊', () => {
+        identityHudState.owner = '唐吉訶德';
+        // 只給一張卡的紀錄，其餘同角色卡「沒有紀錄」——先前這種卡會被預設視為持有
+        identityHudState.cards = { don_cinq: { owned: true, unlocked: false } };
+        identityHudState.cardInputs = {};
+        const withOne = cmResolveIdentityBonus({ id: 'a', status: {}, init: 10 }, { id: 't', status: {}, init: 5 });
+
+        // 明確把該卡設為未持有 → 應完全沒有加值（而不是退回「其他卡的加值」）
+        identityHudState.cards = { don_cinq: { owned: false, unlocked: false } };
+        const withNone = cmResolveIdentityBonus({ id: 'a', status: {}, init: 10 }, { id: 't', status: {}, init: 5 });
+
+        assert.strictEqual(withOne.onHitSelfStatus.swiftness, 1);
+        assert.strictEqual(Object.keys(withNone.onHitSelfStatus).length, 0,
+            '未持有任何卡時不應算出任何自身狀態');
+        assert.strictEqual(withNone.dpBonus, 0, '未持有任何卡時 DP 加值應為 0');
+    });
+
+    test('持有判定：面板預覽與實際攻擊使用同一組卡片（collectOwnedIdentities 單一入口）', () => {
+        identityHudState.owner = '唐吉訶德';
+        identityHudState.cards = {
+            don_cinq: { owned: true, unlocked: false },
+            don_ego: { owned: true, unlocked: false }
+        };
+        identityHudState.cardInputs = {};
+        // 面板走 collectOwnedIdentities()；實際攻擊經修正後也走同一函式
+        // 注意：vm 沙箱建立的陣列與宿主 realm 的 Array.prototype 不同，
+        // deepStrictEqual 會因原型不符而誤判，故以 JSON 字串比對。
+        const panelCards = collectOwnedIdentities().map(c => c.id).sort();
+        assert.strictEqual(JSON.stringify(panelCards), JSON.stringify(['don_cinq', 'don_ego']),
+            '面板應只認得勾選的兩張卡');
+        // 其餘唐吉訶德卡沒有紀錄，兩邊都不該把它們算進去
+        const all = getIdentitiesByOwner('唐吉訶德');
+        assert.ok(all.length > 2, '前置條件：該角色卡片數多於已勾選的兩張');
+        identityHudState.cardInputs = {};
     });
 
     test('格里高爾：目標無沮喪 → 條件式 DP 加值列入「未觸發」清單而非直接消失', () => {
@@ -1485,6 +1525,663 @@ test('充能與混亂皆標記 turnEndDecay:1（供回合結束自動 −1）', 
     assert.strictEqual(findDef('charge')?.turnEndDecay, 1, '充能應有 turnEndDecay:1');
     assert.strictEqual(findDef('confusion')?.turnEndDecay, 1, '混亂應有 turnEndDecay:1');
 });
+
+// ====================================================================
+console.log('\n[浮士德回報修正] 疾風疊加／指令加護（消耗動作）／人民之盾（未造成傷害）');
+// ====================================================================
+(function () {
+    const faustSandbox = {
+        console, Object, Array, Math, JSON, Set, parseInt,
+        window: undefined,
+        document: { getElementById: () => null },
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'player',
+        state: { units: [] },
+        findUnitById: (id) => faustSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        escapeHtml: (s) => s,
+    };
+    vm.createContext(faustSandbox);
+    const files = [
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/core/identity-engine.js',
+        'src/ui/identity-hud.js',
+        'src/ui/combat-modals.js'
+    ];
+    vm.runInContext(files.map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __fExports = { cmResolveIdentityBonus, identityHudState, evaluatePlayerActionUsed,'
+        + ' evaluatePlayerResolve, buildEngineUnitState, IDENTITY_LIBRARY };',
+        faustSandbox, { filename: 'combined-faust-fixes.js' });
+    const {
+        cmResolveIdentityBonus, identityHudState, evaluatePlayerActionUsed,
+        evaluatePlayerResolve, buildEngineUnitState, IDENTITY_LIBRARY
+    } = faustSandbox.__fExports;
+
+    // cmResolveIdentityBonus 對「未列在 cards 中的卡」預設視為持有，
+    // 故測單一張卡時必須把同角色其餘卡明確設為未持有，否則會混入其他卡的效果。
+    const FAUST_CARDS = ['faust_note', 'faust_zwei', 'faust_blackbeast', 'faust_wcorp'];
+    const faustOnly = (keepId) => {
+        const cards = {};
+        FAUST_CARDS.forEach(id => { cards[id] = { owned: id === keepId, unlocked: false }; });
+        return cards;
+    };
+
+    // ---- 疾風（黑獸卯魁首）：法術命中 +1，上限 10 ----
+    test('疾風：法術命中 → onHit 自身 +1 層疾風', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_blackbeast');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: {}, init: 20 }, { id: 'tgt', status: {}, init: 5 });
+        assert.strictEqual(r.onHitSelfStatus.gale, 1, `法術命中應疊 1 層疾風，實得 ${r.onHitSelfStatus.gale}`);
+    });
+
+    test('疾風：已達 10 點上限 → 不再疊加', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_blackbeast');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: { '疾風': 10 }, init: 20 }, { id: 'tgt', status: {}, init: 5 });
+        assert.ok(!r.onHitSelfStatus.gale, `疾風滿 10 點不應再疊，實得 ${r.onHitSelfStatus.gale}`);
+    });
+
+    test('疾風：9 點時只補到上限（+1 而非溢出）', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_blackbeast');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: { '疾風': 9 }, init: 20 }, { id: 'tgt', status: {}, init: 5 });
+        assert.strictEqual(r.onHitSelfStatus.gale, 1, '9 點時應剛好補滿到 10');
+    });
+
+    // ---- 指令加護（紙條）：每消耗一種動作 +5，上限 9 ----
+    test('指令加護：消耗一個動作 → +5 層', () => {
+        const owned = [{ id: 'faust_note', unlocked: false }];
+        const res = evaluatePlayerActionUsed(owned, { status: {} }, 'swift');
+        assert.strictEqual(res.expectedSelfStatus.commandProtect, 5, '消耗迅捷動作應 +5 指令加護');
+    });
+
+    test('指令加護：三種動作各觸發一次（迅捷／移動／標準皆有效）', () => {
+        const owned = [{ id: 'faust_note', unlocked: false }];
+        ['swift', 'move', 'standard'].forEach(type => {
+            const res = evaluatePlayerActionUsed(owned, { status: {} }, type);
+            assert.strictEqual(res.expectedSelfStatus.commandProtect, 5, `${type} 應 +5 指令加護`);
+        });
+    });
+
+    test('指令加護：上限 9 層（已 6 層 → 只 +3；已 9 層 → 不再加）', () => {
+        const owned = [{ id: 'faust_note', unlocked: false }];
+        const at6 = evaluatePlayerActionUsed(owned, { status: { commandProtect: 6 } }, 'move');
+        assert.strictEqual(at6.expectedSelfStatus.commandProtect, 3, '6 層時只應補到 9（+3）');
+        const at9 = evaluatePlayerActionUsed(owned, { status: { commandProtect: 9 } }, 'move');
+        assert.ok(!at9.expectedSelfStatus.commandProtect, '已滿 9 層不應再加');
+    });
+
+    test('指令加護：紙條卡標記 actionUsedTracker（面板才會出現動作消耗按鈕）', () => {
+        assert.strictEqual(IDENTITY_LIBRARY.faust_note.actionUsedTracker, true);
+    });
+
+    // ---- 人民之盾（Zwei）：造成傷害 +4、未造成傷害／未命中 +6 ----
+    test('人民之盾：造成傷害 → 合計 +4 層（地區巡查 2 ＋ 客戶保護 2）', () => {
+        const owned = [{ id: 'faust_zwei', unlocked: false }];
+        const res = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: true, damage: 5 });
+        assert.strictEqual(res.selfStatus.shield, 4, `造成傷害應 +4 層，實得 ${res.selfStatus.shield}`);
+    });
+
+    test('人民之盾：未命中 → 合計 +6 層（地區巡查 3 ＋ 客戶保護 3）', () => {
+        const owned = [{ id: 'faust_zwei', unlocked: false }];
+        const res = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: false, damage: 0 });
+        assert.strictEqual(res.selfStatus.shield, 6, `未命中應 +6 層，實得 ${res.selfStatus.shield}`);
+    });
+
+    test('人民之盾：命中但 0 傷害 → 同樣走 +6 層分支', () => {
+        const owned = [{ id: 'faust_zwei', unlocked: false }];
+        const res = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: true, damage: 0 });
+        assert.strictEqual(res.selfStatus.shield, 6, '命中但未造成傷害應視為「未造成傷害」');
+    });
+
+    test('人民之盾：兩種結果都隨攻擊資料送出，由 ST 端擇一套用', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = faustOnly('faust_zwei');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: {}, init: 10 }, { id: 'tgt', status: {}, init: 10 });
+        assert.strictEqual(r.onResolveDamagedSelfStatus.shield, 4, '造成傷害分支應為 +4');
+        assert.strictEqual(r.onResolveNoDamageSelfStatus.shield, 6, '未造成傷害分支應為 +6');
+    });
+
+    test('無 onResolve hook 的卡 → 兩個分支皆為空（不影響其他角色）', () => {
+        identityHudState.owner = '浮士德';
+        // 未列出的卡在 cmResolveIdentityBonus 中預設視為持有，故其餘浮士德卡需明確設為未持有
+        identityHudState.cards = faustOnly('faust_wcorp');
+        identityHudState.cardInputs = {};
+        const r = cmResolveIdentityBonus({ id: 'atk', status: {}, init: 10 }, { id: 'tgt', status: {}, init: 10 });
+        assert.strictEqual(Object.keys(r.onResolveDamagedSelfStatus).length, 0);
+        assert.strictEqual(Object.keys(r.onResolveNoDamageSelfStatus).length, 0);
+    });
+})();
+
+// ====================================================================
+console.log('\n[戰鬥隊列] 等候區排隊、ST 強制中止、代填防禦、刪除單位自動解卡');
+// ====================================================================
+// 以假的 Firebase ref 載入真實的 combat-queue.js：驗證「作用中槽位忙碌時排入等候區」
+// 「閒置時自動推進」「ST 接管」三條路徑，這些是先前整場戰鬥卡死的成因所在。
+(function () {
+    // ---- 假 Firebase ref：以物件樹模擬 child/set/update/transaction/push/once ----
+    function makeFakeDb() {
+        const db = { combatQueue: { status: 'idle' }, combatQueuePending: {} };
+        let pushSeq = 0;
+        const makeRef = (path) => ({
+            path,
+            set(v) { db[path] = v; },
+            update(v) { db[path] = Object.assign({}, db[path], v); },
+            remove() { db[path] = (path === 'combatQueuePending') ? {} : null; },
+            push(v) { const k = 'k' + (++pushSeq); db[path][k] = v; return { key: k }; },
+            once() { return Promise.resolve({ val: () => db[path] }); },
+            on() { return () => {}; },
+            off() {},
+            child(key) {
+                return {
+                    remove() { delete db[path][key]; },
+                    set(v) { db[path][key] = v; },
+                    once() { return Promise.resolve({ val: () => db[path][key] }); }
+                };
+            },
+            transaction(fn, cb) {
+                const next = fn(db[path]);
+                const committed = next !== undefined;
+                if (committed) db[path] = next;
+                if (cb) cb(null, committed);
+            }
+        });
+        return {
+            db,
+            roomRef: { child: (name) => makeRef(name) }
+        };
+    }
+
+    function loadQueue(role) {
+        const fake = makeFakeDb();
+        const sandbox = {
+            console, Object, Array, JSON, Math, Promise, parseInt, Number, Date,
+            myRole: role,
+            roomRef: fake.roomRef,
+            unsubscribeListeners: [],
+            firebase: { database: { ServerValue: { TIMESTAMP: 999 } } },
+            toasts: [],
+            findUnitById: (id) => sandbox.units.find(u => u.id === id) || null,
+            units: [],
+        };
+        sandbox.showToast = (m) => sandbox.toasts.push(m);
+        vm.createContext(sandbox);
+        vm.runInContext(readSource('src/core/combat-queue.js')
+            + '\n;\nvar __q = { cqInitiateAttack, cqTryAdvancePending, cqForceReset, cqCancelPending,'
+            + ' cqSTSubmitDefenseFor, cqAbortIfDefenderRemoved, cqHandleUpdate,'
+            + ' setPending: (l) => { cqPendingList = l; }, getPending: () => cqPendingList,'
+            + ' setLast: (v) => { combatQueueLast = v; } };',
+            sandbox, { filename: 'combat-queue.js' });
+        return { q: sandbox.__q, db: fake.db, sandbox };
+    }
+
+    const atk = (name) => ({ attacker: { name, unitId: 'u_' + name }, target: { id: 't1', name: '敵人' } });
+
+    test('槽位閒置 → 攻擊直接進入作用中槽位，不進等候區', () => {
+        const { q, db } = loadQueue('player');
+        q.cqInitiateAttack(atk('甲'));
+        assert.strictEqual(db.combatQueue.status, 'calculating');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 0);
+    });
+
+    test('槽位忙碌 → 第二筆攻擊排入等候區（不再被拒絕）', () => {
+        const { q, db, sandbox } = loadQueue('player');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqInitiateAttack(atk('乙'));
+        assert.strictEqual(db.combatQueue.attacker.name, '甲', '作用中槽位仍是第一筆');
+        const pending = Object.values(db.combatQueuePending);
+        assert.strictEqual(pending.length, 1, '第二筆應排入等候區');
+        assert.strictEqual(pending[0].attacker.name, '乙');
+        assert.ok(sandbox.toasts.some(t => t.includes('等候區')), '應提示玩家已排入等候區');
+    });
+
+    test('多筆同時發起 → 全部保留（一筆作用中、其餘依序排隊）', () => {
+        const { q, db } = loadQueue('player');
+        ['甲', '乙', '丙', '丁'].forEach(n => q.cqInitiateAttack(atk(n)));
+        assert.strictEqual(db.combatQueue.attacker.name, '甲');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 3, '其餘三筆都應保留在等候區');
+    });
+
+    test('ST 強制中止 → 槽位回到 idle 並標記 abortedAt（等候區完整保留）', () => {
+        const { q, db } = loadQueue('st');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqInitiateAttack(atk('乙'));   // 忙碌 → 實際排進等候區
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 1, '前置條件：等候區有一筆');
+
+        q.cqForceReset();
+        assert.strictEqual(db.combatQueue.status, 'idle');
+        assert.ok(db.combatQueue.abortedAt, '應標記中止時間戳供玩家端提示');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 1,
+            '中止只針對作用中那筆，等候區的攻擊不可被牽連清掉');
+    });
+
+    test('ST 強制中止並清空等候區 → 等候區歸零', () => {
+        const { q, db } = loadQueue('st');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqInitiateAttack(atk('乙'));
+        q.cqForceReset(true);
+        assert.strictEqual(db.combatQueue.status, 'idle');
+        assert.strictEqual(Object.keys(db.combatQueuePending).length, 0);
+    });
+
+    test('玩家無法強制中止（權限）', () => {
+        const { q, db, sandbox } = loadQueue('player');
+        q.cqInitiateAttack(atk('甲'));
+        q.cqForceReset();
+        assert.strictEqual(db.combatQueue.status, 'calculating', '玩家不應能中止結算');
+        assert.ok(sandbox.toasts.some(t => t.includes('只有 ST')));
+    });
+
+    test('槽位閒置時推進等候區 → 最舊的一筆進入作用中並從等候區移除', async () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueuePending = { k1: { attacker: { name: '乙' }, target: { id: 't1' }, queuedAt: 1 } };
+        q.setPending([{ key: 'k1', attacker: { name: '乙' }, target: { id: 't1' }, queuedAt: 1 }]);
+        q.cqTryAdvancePending();
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.attacker.name, '乙', '等候區最舊的一筆應被推進');
+        assert.ok(!db.combatQueuePending.k1, '推進成功後應從等候區移除');
+    });
+
+    test('槽位忙碌時不推進等候區（不會覆蓋審核中的結算）', async () => {
+        const { q, db } = loadQueue('st');
+        q.cqInitiateAttack(atk('甲'));
+        db.combatQueuePending = { k1: { attacker: { name: '乙' }, target: { id: 't1' } } };
+        q.setPending([{ key: 'k1', attacker: { name: '乙' }, target: { id: 't1' } }]);
+        q.cqTryAdvancePending();
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.attacker.name, '甲', '作用中的結算不應被蓋掉');
+        assert.ok(db.combatQueuePending.k1, '等候區項目應保留');
+    });
+
+    test('玩家端不推進等候區（單一推進者，避免同一筆結算兩次）', async () => {
+        const { q, db } = loadQueue('player');
+        db.combatQueuePending = { k1: { attacker: { name: '乙' }, target: { id: 't1' } } };
+        q.setPending([{ key: 'k1', attacker: { name: '乙' }, target: { id: 't1' } }]);
+        q.cqTryAdvancePending();
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.status, 'idle', '玩家端不應推進');
+        assert.ok(db.combatQueuePending.k1);
+    });
+
+    test('ST 代填防禦 → 狀態轉入 calculating 並標記 defenseByST', async () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'pending_defense', target: { id: 't1', name: '玩家A' } };
+        q.cqSTSubmitDefenseFor(7, 2);
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.status, 'calculating');
+        assert.deepStrictEqual(db.combatQueue.defense, { dp: 7, auto: 2 });
+        assert.strictEqual(db.combatQueue.defenseByST, true, '應標記為 ST 代填');
+    });
+
+    test('ST 代填防禦：狀態不是 pending_defense 時不寫入（不蓋掉已往下跑的結算）', async () => {
+        const { q, db, sandbox } = loadQueue('st');
+        db.combatQueue = { status: 'st_review', baseDice: 5 };
+        q.cqSTSubmitDefenseFor(7, 2);
+        await Promise.resolve(); await Promise.resolve();
+        assert.strictEqual(db.combatQueue.status, 'st_review', '審核中的結算不應被覆寫');
+        assert.ok(sandbox.toasts.some(t => t.includes('沒有等待防禦')));
+    });
+
+    test('刪除防禦方單位 → 自動中止該筆結算（實際踩過的卡死情境）', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'pending_defense', target: { id: 't1', name: '玩家A' }, attacker: { name: 'BOSS' } };
+        q.setLast(db.combatQueue);
+        q.cqAbortIfDefenderRemoved('t1');
+        assert.strictEqual(db.combatQueue.status, 'idle', '刪除防禦方後應自動中止，不再卡死');
+    });
+
+    test('刪除無關單位 → 不影響進行中的結算', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'pending_defense', target: { id: 't1' }, attacker: { name: 'BOSS' } };
+        q.setLast(db.combatQueue);
+        q.cqAbortIfDefenderRemoved('someone-else');
+        assert.strictEqual(db.combatQueue.status, 'pending_defense');
+    });
+
+    test('刪除單位 → 等候區中與該單位相關的攻擊一併清掉', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueue = { status: 'idle' };
+        q.setLast(db.combatQueue);
+        db.combatQueuePending = {
+            k1: { attacker: { name: '甲', unitId: 'u1' }, target: { id: 't1' } },
+            k2: { attacker: { name: '乙', unitId: 'u2' }, target: { id: 't9' } }
+        };
+        q.setPending([
+            { key: 'k1', attacker: { name: '甲', unitId: 'u1' }, target: { id: 't1' } },
+            { key: 'k2', attacker: { name: '乙', unitId: 'u2' }, target: { id: 't9' } }
+        ]);
+        q.cqAbortIfDefenderRemoved('t1');
+        assert.ok(!db.combatQueuePending.k1, '目標為被刪單位的攻擊應清掉');
+        assert.ok(db.combatQueuePending.k2, '無關的攻擊應保留');
+    });
+
+    test('ST 取消等候區單筆 → 只移除該筆', () => {
+        const { q, db } = loadQueue('st');
+        db.combatQueuePending = { k1: { attacker: { name: '甲' } }, k2: { attacker: { name: '乙' } } };
+        q.cqCancelPending('k1');
+        assert.ok(!db.combatQueuePending.k1);
+        assert.ok(db.combatQueuePending.k2);
+    });
+
+    test('pending_defense 且防禦方已不存在 → ST 端收到更新時自動中止', () => {
+        const { q, db, sandbox } = loadQueue('st');
+        sandbox.units = [];  // 防禦方單位已被刪
+        db.combatQueue = { status: 'pending_defense', target: { id: 'gone', name: '玩家A' } };
+        q.cqHandleUpdate(db.combatQueue);
+        assert.strictEqual(db.combatQueue.status, 'idle');
+        assert.ok(sandbox.toasts.some(t => t.includes('已不在場上')));
+    });
+})();
+
+// ====================================================================
+console.log('\n[音樂同步] 進度校正夾限（中途加入的玩家聽不到音樂）與解鎖不打斷播放');
+// ====================================================================
+(function () {
+    const audioSandbox = {
+        console, Object, Array, JSON, Math, Number, isFinite, parseFloat, parseInt, Date, Promise,
+        window: { AudioContext: null, webkitAudioContext: null, escapeHtml: (s) => s },
+        document: { getElementById: () => null, addEventListener() {}, readyState: 'complete', body: null, head: null },
+        localStorage: { getItem: () => null, setItem() {} },
+        showToast: () => {},
+        myRole: 'player',
+    };
+    audioSandbox.Audio = function () {
+        return { addEventListener() {}, removeAttribute() {}, play: () => Promise.resolve(), pause() {} };
+    };
+    vm.createContext(audioSandbox);
+    vm.runInContext(readSource('src/utils/audio.js')
+        + '\n;\nvar __a = { musicManager };', audioSandbox, { filename: 'audio.js' });
+    const mm = audioSandbox.__a.musicManager;
+
+    /** 假 audio 元素：紀錄 seek 結果與 loadedmetadata 監聽 */
+    function fakeAudio(duration, readyState) {
+        const listeners = {};
+        return {
+            currentTime: 0,
+            duration,
+            readyState,
+            paused: false,
+            addEventListener(ev, fn) { listeners[ev] = fn; },
+            fireLoadedMetadata(newDuration) {
+                if (newDuration !== undefined) this.duration = newDuration;
+                if (listeners.loadedmetadata) listeners.loadedmetadata();
+            }
+        };
+    }
+
+    test('進度校正：目標時間超過曲長 → 取模回到曲內（不會跳到範圍外）', () => {
+        mm.currentAudio = fakeAudio(180, 4);
+        mm._seekSynced(1800);   // 開播 30 分鐘後才加入
+        assert.ok(mm.currentAudio.currentTime < 180,
+            `校正後應落在曲內，實得 ${mm.currentAudio.currentTime}`);
+        assert.strictEqual(mm.currentAudio.currentTime, 1800 % 180);
+    });
+
+    test('進度校正：曲長未知（metadata 未載入）→ 等到 loadedmetadata 才校正', () => {
+        mm.currentAudio = fakeAudio(NaN, 0);
+        mm._seekSynced(1800);
+        assert.strictEqual(mm.currentAudio.currentTime, 0, 'metadata 未就緒時不應先亂 seek');
+        mm.currentAudio.fireLoadedMetadata(180);
+        assert.strictEqual(mm.currentAudio.currentTime, 1800 % 180, 'metadata 就緒後才校正到曲內位置');
+    });
+
+    test('進度校正：曲長為 Infinity（串流）→ 不 seek，從頭播', () => {
+        mm.currentAudio = fakeAudio(Infinity, 4);
+        mm._seekSynced(1800);
+        assert.strictEqual(mm.currentAudio.currentTime, 0);
+    });
+
+    test('進度校正：剛好等於曲長 → 夾在結尾之前（不會立刻播完）', () => {
+        mm.currentAudio = fakeAudio(180, 4);
+        mm._seekSynced(180);
+        assert.ok(mm.currentAudio.currentTime < 180 && mm.currentAudio.currentTime >= 0);
+    });
+
+    test('進度校正：目標時間為 0／負值 → 不動（維持從頭播）', () => {
+        mm.currentAudio = fakeAudio(180, 4);
+        mm.currentAudio.currentTime = 5;
+        mm._seekSynced(0);
+        mm._seekSynced(-3);
+        assert.strictEqual(mm.currentAudio.currentTime, 5);
+    });
+
+    test('音訊解鎖：正在播放時不動 src（先前會把播到一半的音樂弄停）', () => {
+        mm._audioUnlocked = false;
+        const playing = fakeAudio(180, 4);
+        playing.paused = false;
+        playing.src = 'https://example.com/song.mp3';
+        mm.currentAudio = playing;
+        mm._unlockAudio();
+        assert.strictEqual(playing.src, 'https://example.com/song.mp3', '播放中的音源不可被靜音 WAV 覆蓋');
+        assert.strictEqual(mm._audioUnlocked, true, '能播放即代表已解鎖');
+    });
+})();
+
+// ====================================================================
+console.log('\n[結算明細] calcDetail：分項相加等於採用值、先前遺漏的項目都列進去');
+// ====================================================================
+// 明細與結算結果對不起來的根因是「明細只列了幾項、實際計算用了更多項」。
+// 這裡驗證每個桶的分項總和等於該桶的小計，並確認先前完全沒出現在明細裡的項目都在。
+(function () {
+    const sumParts = (parts) => (parts || []).reduce((s, p) => s + (Number(p.value) || 0), 0);
+    const labels = (parts) => (parts || []).map(p => p.label).join(' | ');
+    const detail = () => captured.stReview.extras.calcDetail;
+
+    test('攻擊 DP：分項相加 = 攻擊 DP 合計（含破甲／高速／破魔／人格卡）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 5, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 10, auto: 0, armorPierce: 3, hastePierce: 2, magicPierce: 1,
+                        identityDpBonus: 4, counterPhaseDpBonus: 2 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.atk.parts), d.atk.total,
+            `分項(${sumParts(d.atk.parts)}) 應等於合計(${d.atk.total})：${labels(d.atk.parts)}`);
+        assert.strictEqual(d.atk.total, 22, '10+3+2+1+4+2 = 22');
+    });
+
+    test('攻擊 DP 明細列出先前遺漏的破甲／高速／破魔與未對抗加成', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 5, auto: 0, armorPierce: 3, hastePierce: 2, magicPierce: 1, counterPhaseDpBonus: 7 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const txt = labels(detail().atk.parts);
+        ['破甲', '高速', '破魔', '未對抗加成'].forEach(k =>
+            assert.ok(txt.includes(k), `明細應列出「${k}」，實際：${txt}`));
+    });
+
+    test('防禦 DP：分項相加 = 防禦合計（含無視防禦）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 12, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 20, auto: 0, ignoreDef: 5 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.def.parts), d.def.total,
+            `分項(${sumParts(d.def.parts)}) 應等於合計(${d.def.total})：${labels(d.def.parts)}`);
+        assert.strictEqual(d.def.total, 7, '12 − 5 = 7');
+        assert.ok(labels(d.def.parts).includes('無視防禦'));
+    });
+
+    test('附加成功：分項相加 = 附加成功合計（含人格卡／侵蝕／防禦方抵銷）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 2 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 5, auto: 3, identityExtraSuccess: 2, erosionExtraSuccess: 1 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.extra.parts), d.extra.total,
+            `分項(${sumParts(d.extra.parts)}) 應等於合計(${d.extra.total})：${labels(d.extra.parts)}`);
+        assert.strictEqual(d.extra.total, 4, '3+2+1 − 2 = 4');
+    });
+
+    test('明細帶出擲骰設定（加骰門檻／攻擊上限／嚴重轉惡性）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 0 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 8, auto: 0, explodeAt: 9, damageCap: 15, critVicious: 2 },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(d.explodeAt, 9, '加骰門檻先前完全不在明細裡');
+        assert.strictEqual(d.damageCap, 15, '攻擊上限先前完全不在明細裡');
+        assert.strictEqual(d.critVicious, 2);
+    });
+
+    test('明細預告擲骰後併入傷害的加減項（破裂／易損／強壯／不屈）', () => {
+        resetCaptures();
+        sandbox.state.units = [
+            { id: 'me', type: 'player', status: { '強壯': 4 } },
+            { id: 'boss', type: 'enemy', defDp: 0, defAuto: 0, status: { '破裂': 3, '易損': 2, '不屈': 5 } }
+        ];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 8, auto: 0, unitId: 'me' },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const mods = detail().damageMods;
+        const bonusTxt = mods.bonuses.map(b => `${b.label}=${b.value}`).join(' | ');
+        assert.ok(bonusTxt.includes('破裂'), `應預告破裂加傷：${bonusTxt}`);
+        assert.ok(bonusTxt.includes('易損'), `應預告易損加傷：${bonusTxt}`);
+        assert.ok(bonusTxt.includes('強壯'), `應預告強壯加傷：${bonusTxt}`);
+        assert.strictEqual(mods.reductions.length, 1, '應預告不屈減傷');
+        assert.strictEqual(mods.reductions[0].value, 5);
+    });
+
+    test('無任何加減項時 damageMods 為空（明細不塞無關項目）', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'boss', type: 'enemy', status: {}, defDp: 0, defAuto: 0 }];
+        bbRunBlackBoxCalculation({ attacker: { dp: 8, auto: 0 }, target: { id: 'boss' }, defense: null });
+        const mods = detail().damageMods;
+        assert.strictEqual(mods.bonuses.length, 0);
+        assert.strictEqual(mods.reductions.length, 0);
+    });
+
+    test('豁免抵擋模式：防禦桶標記 skipped，明細不會誤導成有扣防禦', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'p1', type: 'player', status: {}, saveReflex: 4, saveReflexAuto: 1 }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 9, auto: 0, resolveMode: 'save', saveType: 'saveReflex' },
+            target: { id: 'p1', name: '玩家A' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(d.mode, 'save');
+        assert.strictEqual(d.def.skipped, true);
+    });
+
+    test('ST 代填防禦：明細標示來源為 ST 而非玩家填報', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'p1', type: 'player', status: {} }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 10, auto: 0 },
+            target: { id: 'p1' },
+            defense: { dp: 4, auto: 1 },
+            defenseByST: true
+        });
+        const d = detail();
+        assert.strictEqual(d.defenseByST, true);
+        assert.ok(labels(d.def.parts).includes('ST 代填'), `防禦來源應標示 ST 代填：${labels(d.def.parts)}`);
+    });
+
+    test('玩家自填防禦：明細標示為玩家填報', () => {
+        resetCaptures();
+        sandbox.state.units = [{ id: 'p1', type: 'player', status: {} }];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 10, auto: 0 },
+            target: { id: 'p1' },
+            defense: { dp: 4, auto: 1 }
+        });
+        assert.ok(labels(detail().def.parts).includes('玩家填報'));
+    });
+
+    test('狀態修正計入明細，且分項相加仍等於合計', () => {
+        resetCaptures();
+        // 麻痺對攻防都有 calcMod，用它驗證狀態修正確實被列出且不破壞加總
+        sandbox.state.units = [
+            { id: 'me', type: 'player', status: {} },
+            { id: 'boss', type: 'enemy', defDp: 10, defAuto: 0, status: { '麻痺': 2 } }
+        ];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 12, auto: 0, unitId: 'me' },
+            target: { id: 'boss' },
+            defense: null
+        });
+        const d = detail();
+        assert.strictEqual(sumParts(d.def.parts), d.def.total,
+            `分項(${sumParts(d.def.parts)}) 應等於合計(${d.def.total})：${labels(d.def.parts)}`);
+    });
+})();
+
+// ====================================================================
+console.log('\n[轉義] escapeJsAttr：含單引號的曲名／玩家代號不會弄壞 onclick');
+// ====================================================================
+(function () {
+    const uSandbox = { console, String, Object };
+    vm.createContext(uSandbox);
+    vm.runInContext(readSource('src/utils/utils.js') + '\n;\nvar __u = { escapeHtml, escapeJsAttr };',
+        uSandbox, { filename: 'utils.js' });
+    const { escapeHtml, escapeJsAttr } = uSandbox.__u;
+
+    // 模擬瀏覽器解析 onclick 屬性：先做 HTML 實體解碼，再交給 JS 解析
+    const decodeAttr = (s) => s
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+    test('escapeHtml 用於 JS 字串會被屬性解碼破壞（記錄舊行為，說明為何需要新函式）', () => {
+        const attr = `f('${escapeHtml("Don't Stop")}')`;
+        const decoded = decodeAttr(attr);
+        assert.strictEqual(decoded, "f('Don't Stop')", '解碼後單引號提前結束字串');
+        assert.throws(() => new Function(decoded), '這段 JS 是語法錯誤，按鈕會整個失效');
+    });
+
+    test('escapeJsAttr：單引號經屬性解碼後仍是合法的 JS 字串', () => {
+        const attr = `f('${escapeJsAttr("Don't Stop")}')`;
+        const decoded = decodeAttr(attr);
+        assert.doesNotThrow(() => new Function('f', decoded), '應為合法 JS');
+        let got = null;
+        new Function('f', decoded)((v) => { got = v; });
+        assert.strictEqual(got, "Don't Stop", '傳進函式的值應與原文完全一致');
+    });
+
+    test('escapeJsAttr：反斜線、雙引號、換行與 HTML 特殊字元都還原成原文', () => {
+        const raw = `a\\b "q" <img> & 'x'\nnext`;
+        const decoded = decodeAttr(`f('${escapeJsAttr(raw)}')`);
+        let got = null;
+        new Function('f', decoded)((v) => { got = v; });
+        assert.strictEqual(got, raw);
+    });
+
+    test('escapeJsAttr：無法藉由收尾引號注入額外程式碼', () => {
+        const raw = "'); alert(1); ('";
+        const decoded = decodeAttr(`f('${escapeJsAttr(raw)}')`);
+        let calls = 0, got = null;
+        new Function('f', decoded)((v) => { calls++; got = v; });
+        assert.strictEqual(calls, 1, '只應呼叫一次，注入的敘述不得執行');
+        assert.strictEqual(got, raw, '整段應被當成單純的字串內容');
+    });
+
+    test('escapeJsAttr：null／undefined／數字都安全處理', () => {
+        assert.strictEqual(escapeJsAttr(null), '');
+        assert.strictEqual(escapeJsAttr(undefined), '');
+        assert.strictEqual(escapeJsAttr(42), '42');
+    });
+})();
 
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);

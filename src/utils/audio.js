@@ -211,6 +211,8 @@ class MusicManager {
                 this._audioUnlocked = true;
                 this.updateUI();
                 this._setupUnmuteOnInteraction();
+                // 音訊實際在跑但沒有聲音——常駐橫幅讓玩家知道「不是沒播，是被靜音了」
+                this._showAudioGate();
             } catch (mutedError) {
                 // 連靜音都無法播放（極罕見情境）
                 console.warn('BGM: 靜音播放也失敗，等待用戶互動', mutedError);
@@ -494,9 +496,9 @@ class MusicManager {
         container.innerHTML = this.playlist.map((item, index) => {
             const isPlaying = this.currentTrack && this.currentTrack.url === item.url && this.isPlaying;
             return `
-                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeHtml(item.url)}', '${this.escapeHtml(item.name)}')">
+                <div class="bgm-playlist-item ${isPlaying ? 'playing' : ''}" onclick="switchMusic('${this.escapeJsAttr(item.url)}', '${this.escapeJsAttr(item.name)}')">
                     <span class="bgm-item-name">${isPlaying ? '▶ ' : ''}${this.escapeHtml(item.name)}</span>
-                    ${myRole === 'st' ? `<button class="bgm-item-remove" onclick="event.stopPropagation(); musicManager.removeFromPlaylist(${index})" title="移除">×</button>` : ''}
+                    ${myRole === 'st' ? `<button class="bgm-item-remove" onclick="event.stopPropagation(); removeFromPlaylist(${index})" title="移除">×</button>` : ''}
                 </div>
             `;
         }).join('');
@@ -580,6 +582,16 @@ class MusicManager {
         const audio = this.currentAudio;
         if (!audio) return;
 
+        // ⚠️ 正在播放中就不要解鎖：解鎖流程會把 src 換成靜音 WAV 再換回來，
+        // 對「已經在播的音訊」而言等於中途把歌換掉又不重新播放，結果是音樂直接停掉。
+        // 玩家中途加入房間時特別容易踩到：音樂自動播起來 → 玩家點了畫面任一處
+        // （setupAutoplayHandler 監聽所有 click）→ 音樂無聲無息地停了。
+        // 能播放本身就代表音訊已經解鎖，直接標記完成即可。
+        if (!audio.paused) {
+            this._audioUnlocked = true;
+            return;
+        }
+
         // 記住原始狀態
         const origSrc = audio.src;
         const origMuted = audio.muted;
@@ -624,10 +636,57 @@ class MusicManager {
     }
 
     /**
-     * 顯示需要用戶互動的提示
+     * 顯示需要用戶互動的提示。
+     *
+     * 除了 toast（幾秒就消失、剛加入房間的玩家常常錯過），另外掛一個常駐的可點擊橫幅，
+     * 點下去就直接解鎖／取消靜音。瀏覽器的自動播放政策一定會擋掉沒互動過的分頁，
+     * 中途加入的玩家幾乎必然走到這條路徑，提示必須一直看得到才有用。
      */
     showInteractionPrompt() {
-        showToast('請點擊頁面任意處以啟用音樂播放');
+        if (typeof showToast === 'function') showToast('請點擊頁面任意處以啟用音樂播放');
+        this._showAudioGate();
+    }
+
+    /** 建立（或顯示）常駐的「點我開啟音樂」橫幅 */
+    _showAudioGate() {
+        if (typeof document === 'undefined' || !document.body) return;
+        let gate = document.getElementById('bgm-audio-gate');
+        if (!gate) {
+            gate = document.createElement('button');
+            gate.id = 'bgm-audio-gate';
+            gate.className = 'bgm-audio-gate';
+            gate.type = 'button';
+            gate.textContent = '🔊 點我開啟音樂';
+            gate.title = '瀏覽器阻擋了自動播放，點一下即可聽到背景音樂';
+            gate.addEventListener('click', () => {
+                this.userInteracted = true;
+                this._unlockAudio();
+                // 已在靜音播放 → 取消靜音；還沒播 → 重試等待中的曲目
+                if (this.currentAudio && !this.currentAudio.paused) {
+                    this.currentAudio.muted = false;
+                    this.muted = false;
+                    this.currentAudio.volume = this.volume;
+                    this.updateUI();
+                } else if (this.pendingPlayUrl) {
+                    const url = this.pendingPlayUrl;
+                    const name = this.pendingPlayName;
+                    this.pendingPlayUrl = null;
+                    this.pendingPlayName = null;
+                    this.playMusic(url, name, true);
+                } else if (this.currentAudio && this.currentAudio.src) {
+                    this.resumeMusic();
+                }
+                this._hideAudioGate();
+            });
+            document.body.appendChild(gate);
+        }
+        gate.style.display = 'block';
+    }
+
+    /** 收起「點我開啟音樂」橫幅 */
+    _hideAudioGate() {
+        const gate = document.getElementById('bgm-audio-gate');
+        if (gate) gate.style.display = 'none';
     }
 
     /**
@@ -695,6 +754,7 @@ class MusicManager {
                 console.log('BGM: 用戶互動，已取消靜音');
                 self.updateUI();
             }
+            self._hideAudioGate();
             ['click', 'touchstart', 'keydown'].forEach(ev =>
                 document.removeEventListener(ev, unmute)
             );
@@ -716,6 +776,53 @@ class MusicManager {
      */
     escapeHtml(text) {
         return typeof window.escapeHtml === 'function' ? window.escapeHtml(text) : String(text || '');
+    }
+
+    /**
+     * 轉義要放進 onclick 屬性中單引號 JS 字串的文字（曲名／URL 可能含單引號）。
+     * 用 escapeHtml 會把 `'` 轉成 `&#39;`，屬性解碼後又變回 `'`，反而提前結束 JS 字串，
+     * 使「Don't Stop」這類曲名整列按不動。詳見 utils.js 的 escapeJsAttr。
+     * @param {string} text
+     * @returns {string}
+     */
+    escapeJsAttr(text) {
+        return typeof window.escapeJsAttr === 'function' ? window.escapeJsAttr(text) : this.escapeHtml(text);
+    }
+
+    /**
+     * 把播放進度校正到 ST 的位置（含網路延遲補償）。
+     *
+     * 中途加入的玩家最容易在這裡失聲：ST 的 music 節點只有在他操作時才更新 timestamp，
+     * 所以一位在開播 30 分鐘後才進來的玩家算出的 targetTime 會是「1800 秒」。
+     * 直接寫進 currentTime 會超出曲長 —— 循環曲目應該取模回到曲內位置，
+     * 但 duration 在 metadata 載入前是 NaN，取模判斷會整個失效、把 1800 原封不動寫進去，
+     * 結果就是音訊瞬間跳到結尾（或 seek 直接失敗），玩家什麼都聽不到。
+     *
+     * 因此這裡改為：duration 尚未就緒時，等 loadedmetadata 之後再校正；
+     * 且無論如何都夾在 [0, duration) 之內，永遠不會 seek 到範圍外。
+     * @param {number} targetTime - 期望的播放位置（秒）
+     */
+    _seekSynced(targetTime) {
+        const audio = this.currentAudio;
+        if (!audio || !(targetTime > 0)) return;
+
+        const applySeek = () => {
+            const dur = audio.duration;
+            if (!dur || !isFinite(dur) || dur <= 0) {
+                // 曲長仍然未知（串流等）：不做任何跳轉，從頭播比跳到未知位置安全
+                return;
+            }
+            // 循環曲目取模回到曲內；再夾一次上界防止浮點誤差剛好落在 duration 上
+            const wrapped = targetTime % dur;
+            audio.currentTime = Math.max(0, Math.min(wrapped, Math.max(0, dur - 0.25)));
+        };
+
+        if (audio.readyState >= 1 && isFinite(audio.duration) && audio.duration > 0) {
+            applySeek();
+        } else {
+            // metadata 還沒到 → 等它就緒再校正（once，避免重複綁定）
+            audio.addEventListener('loadedmetadata', applySeek, { once: true });
+        }
     }
 
     /**
@@ -758,25 +865,13 @@ class MusicManager {
                 const processedUrl = this.processAudioUrl(state.currentUrl);
                 const isSameTrack = this.currentAudio && this.currentAudio.src === processedUrl;
 
-                // 對循環音樂做 duration 取模，避免 targetTime 超出範圍
-                const applyModulo = (audio, time) => {
-                    if (time > 0 && audio && audio.duration && isFinite(audio.duration) && time > audio.duration) {
-                        return time % audio.duration;
-                    }
-                    return time;
-                };
-
                 if (isSameTrack && !this.currentAudio.paused) {
                     // 同一首歌已在播放，僅校正進度
-                    if (targetTime > 0) {
-                        this.currentAudio.currentTime = applyModulo(this.currentAudio, targetTime);
-                    }
+                    this._seekSynced(targetTime);
                 } else {
                     // 播放新歌曲或從暫停恢復
                     this.playMusic(state.currentUrl, state.currentName, true).then(() => {
-                        if (targetTime > 0 && this.currentAudio) {
-                            this.currentAudio.currentTime = applyModulo(this.currentAudio, targetTime);
-                        }
+                        this._seekSynced(targetTime);
                     });
                 }
             } else {
@@ -869,6 +964,11 @@ function addToPlaylist(name, url) {
         const urlInput = document.getElementById('bgm-input-url');
         if (nameInput) nameInput.value = '';
         if (urlInput) urlInput.value = '';
+
+        // 播放清單先前只寫進 ST 自己的 localStorage，從未同步到 Firebase——
+        // 於是 ST 新增的曲目在玩家端根本不存在（玩家看到的是自己瀏覽器裡的舊清單），
+        // 表現就是「新加的音樂玩家聽不到，舊的倒是正常」。新增後同步整份清單。
+        if (typeof syncMusicPlaylist === 'function') syncMusicPlaylist(musicManager.playlist);
     }
 }
 
@@ -884,6 +984,8 @@ function removeFromPlaylist(index) {
     }
 
     musicManager.removeFromPlaylist(index);
+    // 與新增對稱：移除後同步整份清單，否則玩家端仍會看到已被刪掉的曲目
+    if (typeof syncMusicPlaylist === 'function') syncMusicPlaylist(musicManager.playlist);
 }
 
 /**

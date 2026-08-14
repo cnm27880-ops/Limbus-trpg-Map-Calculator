@@ -18,6 +18,14 @@
  *     source, skill, locked, manual, desc
  *   }
  *
+ * 額外的觸發時機（各有專屬評估入口，結構與上表相同）：
+ *   - onTurnStart / onTurnEnd → 回合開始／結束的資源結算（對象只有自己）。
+ *   - onKill                  → 擊殺／使目標昏迷時（scope:'others' 可打到場上其他敵方）。
+ *   - onResolve               → 攻擊結算完畢後，依實際結果分歧的效果；條件以 attacker.outcome
+ *                               = { hit, damage } 判斷（例：命中造成傷害 vs 未造成傷害）。
+ *   - onActionUsed            → 消耗一個動作時；條件以 attacker.actionType 判斷
+ *                               （'swift' 迅捷／'move' 移動／'standard' 標準）。
+ *
  * 特殊旗標：
  *   - locked: true  → 屬於「重複抽取解鎖」技能，僅在該卡 unlocked 時才計入。
  *   - manual: true  → 需玩家／ST 自行判定的效果（擲骰、友軍指定、複雜結算等）。
@@ -147,7 +155,9 @@ function pickTargetStatusBucket(result, phase, hook) {
         // scope:'others' → 場上其他敵方；否則視為施加給被擊殺目標本身（少見）
         return (hook.scope === 'others') ? (result.onKillOthersStatus || null) : (result.onKillTargetStatus || null);
     }
-    // turnStart / turnEnd 對象皆為自己，無 targetStatus 語意，落到 onHit 桶（呼叫端多半未初始化 → null）
+    if (phase === 'resolve') return result.onResolveTargetStatus || null;
+    // turnStart / turnEnd / actionUsed 對象皆為自己，無 targetStatus 語意，
+    // 落到 onHit 桶（呼叫端多半未初始化 → null）
     return result.onHitTargetStatus || null;
 }
 
@@ -162,6 +172,8 @@ function pickSelfStatusBucket(result, phase) {
     if (phase === 'hit') return result.onHitSelfStatus || null;
     if (phase === 'kill') return result.onKillSelfStatus || null;
     if (phase === 'turnEnd') return result.onTurnEndSelfStatus || null;
+    if (phase === 'resolve') return result.onResolveSelfStatus || null;
+    if (phase === 'actionUsed') return result.onActionUsedSelfStatus || null;
     // turnStart 沿用 onAttackSelfStatus（既有 evaluatePlayerTurnStart 的桶）
     return result.onAttackSelfStatus || null;
 }
@@ -406,6 +418,88 @@ function evaluatePlayerTurnEnd(playerIdentities, attackerState) {
 
 
 /**
+ * 評估「攻擊結算完畢」時依實際結果觸發的效果（onResolve）。
+ *
+ * 與 onHit 的差別：onHit 只問「有沒有命中」，onResolve 還能問「這一擊到底打出了多少傷害」，
+ * 因此適合「命中造成傷害 → 2 層；未造成傷害（含未命中）→ 3 層」這種依結果分歧的規則
+ * （浮士德 Zwei【人民之盾】即為此類）。
+ *
+ * 結果由 hook 條件透過 attacker.outcome 取用：
+ *   outcome = { hit: boolean, damage: number }
+ * 玩家端在宣告攻擊時「兩種結果各算一次」並隨攻擊資料送出，ST 端結算後依實際結果擇一套用
+ * （與 onHit / onKill 相同的「玩家端算、ST 端套」流程，因人格卡資料只存在各玩家自己的瀏覽器）。
+ *
+ * @param {Array<string|object>} playerIdentities
+ * @param {object} attackerState - 攻擊者狀態
+ * @param {object} targetState - 目標狀態
+ * @param {{ hit: boolean, damage: number }} outcome - 假定的結算結果
+ * @returns {{ selfStatus: object, targetStatus: object, totals: object, triggerLogs: Array<object> }}
+ */
+function evaluatePlayerResolve(playerIdentities, attackerState, targetState, outcome) {
+    const attacker = ensureStatefulUnit(attackerState);
+    const target = ensureStatefulUnit(targetState);
+    // 條件函式一律透過 attacker.outcome 讀取結果，缺值時視為「未命中且無傷害」最保守解讀
+    attacker.outcome = {
+        hit: !!(outcome && outcome.hit),
+        damage: Math.max(0, Number(outcome && outcome.damage) || 0)
+    };
+
+    const result = {
+        totals: makeZeroTotals(),
+        triggerLogs: [],
+        onResolveSelfStatus: {},
+        onResolveTargetStatus: {}
+    };
+
+    if (Array.isArray(playerIdentities)) {
+        for (const rawEntry of playerIdentities) {
+            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
+            const card = resolveIdentityCard(id);
+            if (!card || !card.hooks || !Array.isArray(card.hooks.onResolve)) continue;
+            processHooks(card.hooks.onResolve, 'resolve', card, unlocked, target, attacker, result);
+        }
+    }
+
+    result.selfStatus = result.onResolveSelfStatus;
+    result.targetStatus = result.onResolveTargetStatus;
+    return result;
+}
+
+/**
+ * 評估「消耗掉一個動作」時觸發的效果（onActionUsed）。
+ *
+ * 浮士德【紙條】的指令加護即屬此類：每消耗一種動作（迅捷／移動／標準）獲得 5 層，上限 9 層。
+ * 上限夾限寫在各卡的層數函式中（讀 attacker.status 當下層數自行收斂），引擎本身不預設任何上限。
+ *
+ * hook 條件可透過 attacker.actionType 取用本次消耗的動作類型：
+ *   'swift'（迅捷）｜'move'（移動）｜'standard'（標準）
+ *
+ * @param {Array<string|object>} playerIdentities
+ * @param {object} attackerState - 玩家自身狀態
+ * @param {string} actionType - 'swift' | 'move' | 'standard'
+ * @returns {{ expectedSelfStatus: object, triggerLogs: Array<object>, totals: object }}
+ */
+function evaluatePlayerActionUsed(playerIdentities, attackerState, actionType) {
+    const attacker = ensureStatefulUnit(attackerState);
+    attacker.actionType = actionType || '';
+
+    const result = { totals: makeZeroTotals(), triggerLogs: [], onActionUsedSelfStatus: {} };
+
+    if (Array.isArray(playerIdentities)) {
+        for (const rawEntry of playerIdentities) {
+            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
+            const card = resolveIdentityCard(id);
+            if (!card || !card.hooks || !Array.isArray(card.hooks.onActionUsed)) continue;
+            // 消耗動作的對象只有自己，故 target 以 attacker 代入
+            processHooks(card.hooks.onActionUsed, 'actionUsed', card, unlocked, attacker, attacker, result);
+        }
+    }
+
+    result.expectedSelfStatus = mergeStatuses(result.onActionUsedSelfStatus);
+    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
+}
+
+/**
  * 合併多個狀態物件，用於相容 UI 需要的統一 expectedTargetStatus 與 expectedSelfStatus
  */
 function mergeStatuses(...statusMaps) {
@@ -428,7 +522,9 @@ if (typeof module !== 'undefined' && module.exports) {
         evaluatePlayerAttack,
         evaluatePlayerTurnStart,
         evaluatePlayerKill,
-        evaluatePlayerTurnEnd
+        evaluatePlayerTurnEnd,
+        evaluatePlayerResolve,
+        evaluatePlayerActionUsed
     };
 }
 

@@ -106,6 +106,9 @@ function openAttackModal(unitId) {
     threatUnopposedInfo = null;
     cmRenderThreatActions();
 
+    // 人格卡可自動決定的攻擊欄位（嚴重轉惡性／加骰門檻）：於 memo 帶入後覆寫，玩家仍可再改
+    cmPrefillIdentityAttackFields(u);
+
     openModal('attack-modal');
 
     // ST 開啟威脅視窗時，自動點選第一個可用行動，預先帶入其 DP / 狀態（仍可再手動切換）
@@ -114,6 +117,48 @@ function openAttackModal(unitId) {
             const firstBtn = document.querySelector('#attack-boss-actions .threat-action-btn');
             if (firstBtn) firstBtn.click();
         }, 0);
+    }
+}
+
+/**
+ * 把「加骰下推級數」換算成實際的加骰門檻：10 → 9 → 8，最低 8。
+ * @param {number} steps
+ * @returns {number}
+ */
+function cmIdentityExplodeAt(steps) {
+    return Math.max(8, 10 - Math.max(0, parseInt(steps) || 0));
+}
+
+/**
+ * 玩家開啟攻擊視窗時，依人格卡自動預填「嚴重轉惡性」與「加骰」兩個欄位。
+ *
+ * 這兩項過去只能靠玩家讀著卡面說明自己換算再手動填（良秀的流血轉惡性、羅佳的燃燒轉惡性、
+ * 黑雲會的流血加骰…），漏填就等於白白少算傷害。現在依目標當下的狀態算好直接帶入，
+ * 玩家仍可手動改（例如還想再多轉幾點）。
+ * @param {object} targetUnit
+ */
+function cmPrefillIdentityAttackFields(targetUnit) {
+    if (myRole === 'st') return;
+    const attackerUnit = (typeof state !== 'undefined' && Array.isArray(state.units))
+        ? state.units.find(u => u.ownerId === myPlayerId) : null;
+    if (!attackerUnit) return;
+
+    const bonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
+    const notes = [];
+
+    const critInput = document.getElementById('attack-crit-vicious');
+    if (critInput && (bonus.critVicious || 0) > 0) {
+        critInput.value = bonus.critVicious;
+        notes.push(`嚴重轉惡性 ${bonus.critVicious} 點`);
+    }
+    const explodeSel = document.getElementById('attack-explode');
+    if (explodeSel && (bonus.explodeStep || 0) > 0) {
+        const at = cmIdentityExplodeAt(bonus.explodeStep);
+        explodeSel.value = String(at);
+        notes.push(`加骰門檻 ${at}`);
+    }
+    if (notes.length && typeof showToast === 'function') {
+        showToast('🃏 人格卡已自動帶入：' + notes.join('、') + '（可手動調整）');
     }
 }
 
@@ -306,7 +351,8 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         onResolveDamagedSelfStatus: {}, onResolveDamagedSelfStatusNotes: [], onResolveDamagedTargetStatus: {},
         onResolveNoDamageSelfStatus: {}, onResolveNoDamageSelfStatusNotes: [], onResolveNoDamageTargetStatus: {},
         onResolveTable: [],
-        poolDelta: {}
+        poolDelta: {},
+        critVicious: 0, explodeStep: 0
     };
     if (myRole === 'st') return empty;
     if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
@@ -389,6 +435,9 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     return {
         dpBonus: result.totalDpBonus || 0,
         extraSuccess: result.totalExtraSuccess || 0,
+        // 攻擊視窗可預填的兩個欄位：嚴重轉惡性點數、加骰門檻下推級數
+        critVicious: (result.totals && result.totals.critVicious) || 0,
+        explodeStep: (result.totals && result.totals.explodeStep) || 0,
         names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))],
         onAttackTargetStatus,
         statusNotes: buildStatusNotes(onAttackTargetStatus),

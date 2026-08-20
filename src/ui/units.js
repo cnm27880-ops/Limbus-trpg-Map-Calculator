@@ -68,6 +68,8 @@ function toggleCombat() {
         // 全隊共用資源池（血宴）同樣是「本場戰鬥限定」的資源，連同累計消耗量一併歸零；
         // 它不掛在任何單位身上，故不會被 clearBattleEndStatuses 掃到，必須在此另外重置。
         const poolsCleared = clearBattleEndTeamPools();
+        // 「每場戰鬥限一次」的宣告技使用紀錄同樣隨戰鬥結束重置
+        if (typeof idtResetDeclaredUses === 'function') idtResetDeclaredUses();
 
         broadcastState();
         showToast('戰鬥已結束，先攻已歸零'
@@ -86,6 +88,8 @@ function toggleCombat() {
     } else {
         // 開始戰鬥：排序並設定第一回合
         state.isCombatActive = true;
+        // 「每場戰鬥限一次」的宣告技紀錄以「開戰」為界重置，避免上一場沒按結束就開新戰鬥時殘留
+        if (typeof idtResetDeclaredUses === 'function') idtResetDeclaredUses();
         // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;

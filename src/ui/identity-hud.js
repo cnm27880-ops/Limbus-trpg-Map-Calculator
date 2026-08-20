@@ -72,8 +72,33 @@ function buildEngineUnitState(unit, extra) {
         // 上一回合是否完全沒受到傷害（浮士德倖存者【伺機而動】的條件）。
         // dmgTakenLastTurn 由 nextTurn() 在輪到該單位時，從本回合累計值輪替過來（見 units.js）。
         noDamageLastTurn: !(unit && (parseInt(unit.dmgTakenLastTurn) || 0) > 0),
+        // 嚴重生命槽是否已填滿（希斯克利夫「極意之劍」、提燈的雙倍恢復等條件）
+        severeFull: !!(unit && typeof isSevereGaugeFull === 'function' && isSevereGaugeFull(unit)),
+        // 身上是否帶有惡性 (A) 傷（格里高爾「都切碎吧」的條件）
+        hasViciousDamage: !!(unit && Array.isArray(unit.hpArr) && unit.hpArr.some(v => (parseInt(v) || 0) >= 3)),
+        // 身上「不同種類的負面狀態」數量（奧提斯【點彩派】依負面狀態種類數加武器傷害）
+        debuffTypeCount: idtCountDebuffTypes(unit),
     };
     return Object.assign(base, extra || {});
+}
+
+/**
+ * 計算單位身上「不同種類的負面狀態」數量。
+ * 沿用狀態庫的 isDebuffStatus 判定（欄位 > 分類 > 白名單回退），與罪業抽取的口徑一致，
+ * 免得同一個狀態在兩處被判成不同陣營。
+ * @param {object} unit
+ * @returns {number}
+ */
+function idtCountDebuffTypes(unit) {
+    if (!unit || !unit.status || typeof isDebuffStatus !== 'function') return 0;
+    let n = 0;
+    for (const [name, raw] of Object.entries(unit.status)) {
+        if ((parseInt(raw) || 0) <= 0) continue;
+        const def = (typeof getStatusByName === 'function') ? getStatusByName(name) : null;
+        // isDebuffStatus 取的是狀態 id；自訂狀態查不到定義時以名稱當 id 交給白名單回退
+        if (isDebuffStatus(def ? def.id : name)) n++;
+    }
+    return n;
 }
 
 /**
@@ -821,7 +846,8 @@ function computeIdentityResult() {
 // 引擎數值加值欄位 → 顯示名稱（與 identity-engine.js 的 IDENTITY_BONUS_KEYS 對應）
 const IDT_BONUS_FIELD_LABELS = {
     dpBonus: 'DP', weaponDamage: '武器傷害', extraSuccess: '附加成功',
-    spellPower: '法術威力', finalDamage: '最終傷害', selfShield: '一次性護盾'
+    spellPower: '法術威力', finalDamage: '最終傷害', selfShield: '一次性護盾',
+    critVicious: '嚴重轉惡性', explodeStep: '加骰級數'
 };
 
 /**
@@ -1347,39 +1373,337 @@ function renderIdentityManualInputs() {
 }
 
 // ===== 主動宣告技（onActive）=====
+//
+// 宣告技的完整結算流程：按下「宣告」→ 檢查使用次數與資源 → 二次確認 → 扣除資源 →
+// 套用效果（狀態／傷害／恢復／資源池）→ 數值加值併入「下一次攻擊」的黑箱計算。
+// 之所以把加值暫存而不是當場算進某次攻擊：宣告的時機是「攻擊前」，玩家還沒送出攻擊。
+//
+// effect 的完整欄位（數值欄位皆可寫成 (ctx) => number，ctx 見 idtBuildDeclareCtx）：
+//   ── 自身成本 ──
+//     cost:        { charge: 2 }          固定層數，不足則無法宣告
+//     costAll:     ['knowledge']          消耗全部層數（消耗量記入 ctx.consumedSelf）
+//     poolCost:    { bloodFeast: 2 }      全隊共用資源池
+//     selfHp:      { type: 'a', amount: 3 }  對自己造成傷害（閃擊戰術的自傷加骰）
+//   ── 目標成本 ──
+//     targetCost:      { tremor: 10 }     固定層數，目標不足則無法宣告
+//     targetCostMax:   { tremor: 5 }      最多 N 層（有多少扣多少）
+//     targetCostAll:   ['tremor']         全部層數
+//     targetCostHalve: ['burn']           減半（消耗量 = 原值 − floor(原值/2)）
+//   ── 效果 ──
+//     selfClear:    ['magicBullet']       自身狀態歸零（非成本，純重置）
+//     selfStatus / targetStatus           施加狀態（層數可為 ctx 函式）
+//     poolDelta:    { bloodFeast: 1 }     資源池增減
+//     targetDamage: { type:'l', amount }  直接對目標造成傷害
+//     selfHeal:     { type:'heal-l', amount }  恢復自身傷害
+//     targetMaxHpReduce: n | (ctx)=>n     削減目標生命上限（＝震顫的「昏迷閾值前移」）
+//   ── 擲骰退費 ──
+//     costRoll: { die: 10, refundAtLeast: 8, label }  宣告時擲骰，骰到門檻以上則不扣目標成本
+//   ── 併入攻擊的數值加值 ──
+//     dpBonus / extraSuccess / spellPower / weaponDamage / finalDamage → 併入「下一次攻擊」
+//     nextTurnBonus: { extraSuccess: 2, weaponDamage: 3 } → 改為併入「下一回合」的攻擊
+//   ── 前置條件（檢查但不消耗）──
+//     requireSelf:   { gale: 10 }        自身層數需達門檻
+//     requireTarget: { burn: 15 }        目標層數需達門檻
+//   ── 使用限制 ──
+//     once: 'battle' | 'turn'
+//
 // 已宣告、待併入「下一次攻擊」的主動技加值（依攻擊者單位 id 暫存，發起攻擊時取用並清除）。
 // { [unitId]: { dp, extraSuccess, damage, notes: [] } }
 let idtPendingActiveBonus = {};
 
-/** 某 onActive 是否可由本面板自動宣告：帶結構化 effect 且有可消耗成本（cost）。 */
+// 宣告後要留到「下一回合」才生效的加值（噩夢吞噬、穿刺劍法這類「下一次攻擊 +N」）。
+// 與 idtPendingActiveBonus 分開存放，因為回合開始會清空 pending（避免上回合宣告卻沒打出的加值殘留），
+// 若共用同一個桶，這類效果會在生效前就被清掉。回合開始時由本桶轉入 pending。
+let idtNextTurnActiveBonus = {};
+
+// 宣告技的使用次數紀錄：unitId → { [cardId#index]: { battle: true, round: 3 } }
+// 純本地暫存（與 identityHudState 一樣只存在玩家自己的瀏覽器）。
+const idtDeclaredUses = {};
+
+/** 某 onActive 是否可由本面板自動宣告：帶結構化 effect（有成本或有可套用的效果）。 */
 function idtIsDeclarable(hook) {
     if (!hook || !hook.effect) return false;
     const eff = hook.effect;
-    // 可一鍵宣告的條件：帶結構化成本（自身狀態成本 cost／全隊資源池成本 poolCost），
-    // 或雖無成本但效果是純數值套用（如公主「放棄消耗血宴 → 自身承受流血」）。
-    return !!(
-        (eff.cost && typeof eff.cost === 'object')
-        || (eff.poolCost && typeof eff.poolCost === 'object')
-        || (eff.selfStatus && typeof eff.selfStatus === 'object')
-        || (eff.targetStatus && typeof eff.targetStatus === 'object')
-    );
+    return ['cost', 'costAll', 'poolCost', 'selfHp',
+            'targetCost', 'targetCostMax', 'targetCostAll', 'targetCostHalve',
+            'selfClear', 'selfStatus', 'targetStatus', 'poolDelta',
+            'targetDamage', 'selfHeal', 'targetMaxHpReduce', 'selfShield', 'nextTurnBonus',
+            // 純加值型宣告技（無成本，例：鋸刃切割「已為 8 加骰 → +4 DP」）同樣要能按下宣告
+            'dpBonus', 'extraSuccess', 'spellPower', 'weaponDamage', 'finalDamage']
+        .some(k => eff[k] !== undefined);
 }
 
-/** 計算某 effect 的數值加值（spellPower／weaponDamage／finalDamage 皆折算為傷害）。 */
-function idtEffectBonuses(eff) {
+/** 解析 effect 上「數字或 (ctx)=>數字」的欄位。 */
+function idtResolveEffectValue(value, ctx) {
+    try {
+        const n = (typeof value === 'function') ? value(ctx) : value;
+        return Number.isFinite(Number(n)) ? Number(n) : 0;
+    } catch (e) { return 0; }
+}
+
+/** 把 effect 上的狀態物件（層數可為 ctx 函式）解析成純數字物件。 */
+function idtResolveStatusMap(map, ctx) {
+    const out = {};
+    for (const [k, v] of Object.entries(map || {})) {
+        const n = Math.round(idtResolveEffectValue(v, ctx));
+        if (n !== 0) out[k] = n;
+    }
+    return out;
+}
+
+/** 取得單位身上某引擎狀態鍵目前的層數。 */
+function idtStatusLayers(unit, engKey) {
+    if (!unit || !unit.status) return 0;
+    const name = identityStatusName(engKey);
+    return parseInt(unit.status[name]) || 0;
+}
+
+/** 直接設定單位身上某引擎狀態鍵的層數（0 會移除該狀態）。 */
+function idtSetStatusLayers(unitId, engKey, layers) {
+    if (typeof updateStatusStacks !== 'function') return;
+    updateStatusStacks(unitId, identityStatusName(engKey), Math.max(0, parseInt(layers) || 0));
+}
+
+/**
+ * 對任一單位套用傷害／恢復。
+ *
+ * 刻意不走 units.js 的 modifyHP()：那個入口帶 canControlUnit() 檢查，玩家無法對敵方使用；
+ * 但「震顫引爆」「一點突破」這類宣告技本來就是玩家對敵方造成傷害的正規手段，
+ * 與既有「玩家端把命中狀態直接套到敵方單位」（applyEngineStatusesToUnit）是同一類操作。
+ * 傷害會寫進戰鬥日誌，ST 端看得到來源。
+ * @param {string} unitId
+ * @param {string} type - 'b' | 'l' | 'a' | 'heal' | 'heal-b' | 'heal-l' | 'heal-a'
+ * @param {number} amount
+ */
+function idtApplyHpChange(unitId, type, amount) {
+    const n = Math.max(0, parseInt(amount) || 0);
+    if (!unitId || !n) return;
+    const unit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    if (!unit) return;
+
+    if (typeof myRole !== 'undefined' && myRole === 'st') {
+        if (typeof modifyHPInternal === 'function') modifyHPInternal(unit, type, n);
+        if (typeof broadcastState === 'function') broadcastState();
+    } else if (typeof sendToHost === 'function') {
+        sendToHost({ type: 'modifyHP', playerId: (typeof myPlayerId !== 'undefined' ? myPlayerId : null),
+                     unitId, dmgType: type, amount: n });
+    }
+}
+
+/** 宣告技的使用紀錄鍵。 */
+function idtUseKey(cardId, index) { return `${cardId}#${index}`; }
+
+/**
+ * 檢查宣告技的使用次數限制。
+ * @returns {{ ok: boolean, reason: string }}
+ */
+function idtCheckUseLimit(unitId, cardId, index, once) {
+    if (!once) return { ok: true, reason: '' };
+    const rec = (idtDeclaredUses[unitId] || {})[idtUseKey(cardId, index)];
+    if (!rec) return { ok: true, reason: '' };
+    if (once === 'battle' && rec.battle) return { ok: false, reason: '本場戰鬥已使用過' };
+    if (once === 'turn') {
+        const round = (typeof state !== 'undefined' && state.roundNum) || 0;
+        if (rec.round === round) return { ok: false, reason: '本回合已使用過' };
+    }
+    return { ok: true, reason: '' };
+}
+
+/** 記錄一次宣告技的使用。 */
+function idtRecordUse(unitId, cardId, index, once) {
+    if (!once) return;
+    if (!idtDeclaredUses[unitId]) idtDeclaredUses[unitId] = {};
+    const key = idtUseKey(cardId, index);
+    const rec = idtDeclaredUses[unitId][key] || {};
+    if (once === 'battle') rec.battle = true;
+    if (once === 'turn') rec.round = (typeof state !== 'undefined' && state.roundNum) || 0;
+    idtDeclaredUses[unitId][key] = rec;
+}
+
+/** 戰鬥結束／重新開始時清除所有宣告技使用紀錄。 */
+function idtResetDeclaredUses() {
+    for (const k of Object.keys(idtDeclaredUses)) delete idtDeclaredUses[k];
+}
+
+/**
+ * 先「試算」一次宣告：算出所有成本的實際數量與是否負擔得起，但不真的扣除。
+ * 供渲染時顯示成本／停用按鈕，以及宣告時的二次確認文案共用同一份計算，
+ * 避免「按鈕說得起、按下去卻失敗」或「確認視窗寫的數字與實際扣的不同」。
+ *
+ * @param {object} eff - onActive 的 effect
+ * @param {object} unit - 宣告者單位
+ * @param {object} targetUnit - 目標單位（可為 null）
+ * @returns {{ affordable: boolean, blockers: string[], costParts: string[],
+ *             selfCost: object, poolCost: object, targetCost: object, selfHp: object|null }}
+ */
+function idtPlanDeclareCost(eff, unit, targetUnit) {
+    const out = { affordable: true, blockers: [], costParts: [],
+                  selfCost: {}, poolCost: {}, targetCost: {}, selfHp: null };
+    const block = (msg) => { out.affordable = false; out.blockers.push(msg); };
+
+    // ── 前置條件（檢查但不消耗）──
+    for (const [engKey, amt] of Object.entries(eff.requireSelf || {})) {
+        const need = parseInt(amt) || 0;
+        const cur = idtStatusLayers(unit, engKey);
+        out.costParts.push(`需自身${identityStatusName(engKey)} ${cur}/${need}`);
+        if (cur < need) block(`自身${identityStatusName(engKey)}未達 ${need}（現有 ${cur}）`);
+    }
+    for (const [engKey, amt] of Object.entries(eff.requireTarget || {})) {
+        const need = parseInt(amt) || 0;
+        const cur = idtStatusLayers(targetUnit, engKey);
+        out.costParts.push(`需目標${identityStatusName(engKey)} ${cur}/${need}`);
+        if (!targetUnit) block('尚未指定目標單位');
+        else if (cur < need) block(`目標${identityStatusName(engKey)}未達 ${need}（現有 ${cur}）`);
+    }
+
+    // ── 自身狀態成本 ──
+    for (const [engKey, amt] of Object.entries(eff.cost || {})) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const cur = idtStatusLayers(unit, engKey);
+        out.selfCost[engKey] = need;
+        out.costParts.push(`${identityStatusName(engKey)} ${cur}/${need}`);
+        if (cur < need) block(`${identityStatusName(engKey)} 不足（需 ${need}、現有 ${cur}）`);
+    }
+    for (const engKey of (eff.costAll || [])) {
+        const cur = idtStatusLayers(unit, engKey);
+        out.selfCost[engKey] = cur;
+        out.costParts.push(`${identityStatusName(engKey)} 全部 ${cur}`);
+        if (cur <= 0) block(`沒有可消耗的${identityStatusName(engKey)}`);
+    }
+
+    // ── 全隊共用資源池成本 ──
+    const pools = idtGetTeamPools();
+    for (const [key, amt] of Object.entries(eff.poolCost || {})) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
+        const label = def ? def.name : key;
+        const cur = pools[key] || 0;
+        out.poolCost[key] = need;
+        out.costParts.push(`${label} ${cur}/${need}`);
+        if (cur < need) block(`${label} 不足（需 ${need}、現有 ${cur}）`);
+    }
+
+    // ── 目標狀態成本 ──
+    const needsTarget = !!(eff.targetCost || eff.targetCostMax || eff.targetCostAll || eff.targetCostHalve
+                        || eff.targetStatus || eff.targetDamage || eff.targetMaxHpReduce || eff.requireTarget);
+    if (needsTarget && !targetUnit) block('尚未指定目標單位');
+
+    for (const [engKey, amt] of Object.entries(eff.targetCost || {})) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const cur = idtStatusLayers(targetUnit, engKey);
+        out.targetCost[engKey] = need;
+        out.costParts.push(`目標${identityStatusName(engKey)} ${cur}/${need}`);
+        if (targetUnit && cur < need) block(`目標的${identityStatusName(engKey)} 不足（需 ${need}、現有 ${cur}）`);
+    }
+    for (const [engKey, amt] of Object.entries(eff.targetCostMax || {})) {
+        const cap = parseInt(amt) || 0;
+        const cur = idtStatusLayers(targetUnit, engKey);
+        const take = Math.min(cap, cur);
+        out.targetCost[engKey] = take;
+        out.costParts.push(`目標${identityStatusName(engKey)} ${cur} → 消耗 ${take}（上限 ${cap}）`);
+        if (targetUnit && take <= 0) block(`目標沒有可引爆的${identityStatusName(engKey)}`);
+    }
+    for (const engKey of (eff.targetCostAll || [])) {
+        const cur = idtStatusLayers(targetUnit, engKey);
+        out.targetCost[engKey] = cur;
+        out.costParts.push(`目標${identityStatusName(engKey)} 全部 ${cur}`);
+        if (targetUnit && cur <= 0) block(`目標沒有可消耗的${identityStatusName(engKey)}`);
+    }
+    for (const engKey of (eff.targetCostHalve || [])) {
+        const cur = idtStatusLayers(targetUnit, engKey);
+        const take = cur - Math.floor(cur / 2);   // 減半後被消耗掉的量
+        out.targetCost[engKey] = take;
+        out.costParts.push(`目標${identityStatusName(engKey)} ${cur} → ${Math.floor(cur / 2)}（減半）`);
+        if (targetUnit && cur <= 0) block(`目標沒有可減半的${identityStatusName(engKey)}`);
+    }
+
+    // ── 自傷成本 ──
+    if (eff.selfHp) {
+        const amount = Math.max(0, parseInt(eff.selfHp.amount) || 0);
+        out.selfHp = { type: eff.selfHp.type || 'a', amount };
+        if (amount > 0) out.costParts.push(`自身承受 ${amount} 點 ${String(out.selfHp.type).toUpperCase()} 傷`);
+    }
+
+    return out;
+}
+
+/** 宣告是否需要二次確認：只要會扣掉任何資源／自傷就要，避免誤按把資源灌掉。 */
+function idtDeclareHasCost(plan) {
+    return Object.keys(plan.selfCost).length > 0
+        || Object.keys(plan.poolCost).length > 0
+        || Object.keys(plan.targetCost).length > 0
+        || !!(plan.selfHp && plan.selfHp.amount > 0);
+}
+
+/**
+ * 建立效果數值函式可讀的 ctx。
+ * selfBefore / targetBefore 是「扣除成本之前」的快照——像震顫引爆這種
+ * 「削減量依原本的層數、但只移除其中幾層」的規則，必須讀扣除前的數字才會對。
+ * @param {object} unit
+ * @param {object} targetUnit
+ * @param {object} consumedSelf - 實際從自身扣掉的層數
+ * @param {object} consumedTarget - 實際從目標扣掉的層數
+ * @param {object} [before] - { self, target } 扣除前的引擎格式快照
+ */
+function idtBuildDeclareCtx(unit, targetUnit, consumedSelf, consumedTarget, before) {
     return {
-        dp: parseInt(eff.dpBonus) || 0,
-        extraSuccess: parseInt(eff.extraSuccess) || 0,
-        damage: (parseInt(eff.spellPower) || 0) + (parseInt(eff.weaponDamage) || 0) + (parseInt(eff.finalDamage) || 0)
+        self: unit ? buildEngineUnitState(unit) : { status: {} },
+        target: targetUnit ? buildEngineUnitState(targetUnit) : { status: {} },
+        selfBefore: (before && before.self) || { status: {} },
+        targetBefore: (before && before.target) || { status: {} },
+        consumedSelf: consumedSelf || {},
+        consumedTarget: consumedTarget || {},
+        pools: idtGetTeamPools()
     };
 }
 
 /**
- * 玩家宣告一項主動技（onActive 且帶 effect.cost）：
- *   1) 檢查自身資源足夠（充能／愛憎等）→ 不足則中止
- *   2) 扣除成本
- *   3) 套用 targetStatus（對目標）／selfStatus（對自己）
- *   4) 數值加值（DP／附加成功／傷害）暫存到「下一次攻擊」，發起攻擊時自動併入黑箱計算
+ * 削減單位的生命上限（震顫引爆的「昏迷閾值前移」）。
+ * hpArr 依新上限截短（先排序保留最嚴重的傷害），與 status-manager 的震顫消耗行為一致。
+ * @param {string} unitId
+ * @param {number} amount
+ * @returns {number} 實際削減量
+ */
+function idtReduceMaxHp(unitId, amount) {
+    const cut = Math.max(0, parseInt(amount) || 0);
+    const unit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
+    if (!unit || !cut) return 0;
+    const before = Math.max(1, parseInt(unit.maxHp) || (Array.isArray(unit.hpArr) ? unit.hpArr.length : 1));
+    const next = Math.max(1, before - cut);
+    if (next === before) return 0;
+
+    if (typeof myRole !== 'undefined' && myRole === 'st') {
+        unit.maxHp = next;
+        if (Array.isArray(unit.hpArr)) {
+            unit.hpArr.sort((a, b) => b - a);
+            unit.hpArr = unit.hpArr.slice(0, next);
+        }
+        if (typeof broadcastState === 'function') broadcastState();
+    } else if (typeof sendToHost === 'function') {
+        sendToHost({ type: 'modifyMaxHp', playerId: (typeof myPlayerId !== 'undefined' ? myPlayerId : null),
+                     unitId, newMaxHp: next });
+    }
+    return before - next;
+}
+
+/** 計算 effect 的數值加值（spellPower／weaponDamage／finalDamage 皆折算為傷害）。 */
+function idtEffectBonuses(eff, ctx) {
+    const v = (k) => Math.round(idtResolveEffectValue(eff[k], ctx));
+    return {
+        dp: v('dpBonus'),
+        extraSuccess: v('extraSuccess'),
+        damage: v('spellPower') + v('weaponDamage') + v('finalDamage')
+    };
+}
+
+/**
+ * 玩家宣告一項主動技（onActive 且帶結構化 effect）。
+ *
+ * 流程：使用次數檢查 → 資源試算 → 二次確認（有成本時）→ 扣除成本 → 套用效果 →
+ *       數值加值併入下一次攻擊（或下一回合）→ 記錄使用次數。
  * @param {string} cardId
  * @param {number} index - onActive 陣列索引
  */
@@ -1389,90 +1713,186 @@ function idtDeclareActiveSkill(cardId, index) {
     const hook = card.hooks.onActive[index];
     if (!idtIsDeclarable(hook)) return;
     const eff = hook.effect;
+    const skillName = hook.name || hook.source || '宣告技';
 
     const unitId = identityHudState.attackerId;
     const unit = (typeof findUnitById === 'function' && unitId) ? findUnitById(unitId) : null;
     if (!unit) { if (typeof showToast === 'function') showToast('請先指定我方單位'); return; }
 
-    // 1) 檢查成本（自身狀態）
-    const cost = eff.cost || {};
-    for (const [engKey, amt] of Object.entries(cost)) {
-        const need = parseInt(amt) || 0;
-        if (need <= 0) continue;
-        const name = identityStatusName(engKey);
-        const cur = (unit.status && parseInt(unit.status[name])) || 0;
-        if (cur < need) {
-            if (typeof showToast === 'function') showToast(`${hook.name || '宣告技'}：${name} 不足（需 ${need}、現有 ${cur}）`);
-            return;
-        }
+    const targetId = identityHudState.targetId;
+    const targetUnit = (typeof findUnitById === 'function' && targetId) ? findUnitById(targetId) : null;
+
+    // 1) 使用次數限制
+    const limit = idtCheckUseLimit(unitId, cardId, index, eff.once);
+    if (!limit.ok) {
+        if (typeof showToast === 'function') showToast(`${skillName}：${limit.reason}`);
+        return;
     }
-    // 1b) 檢查成本（全隊共用資源池）
-    const poolCost = eff.poolCost || {};
-    const poolsNow = idtGetTeamPools();
-    for (const [key, amt] of Object.entries(poolCost)) {
-        const need = parseInt(amt) || 0;
-        if (need <= 0) continue;
-        const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
-        const label = def ? def.name : key;
-        if ((poolsNow[key] || 0) < need) {
-            if (typeof showToast === 'function') {
-                showToast(`${hook.name || '宣告技'}：${label} 不足（需 ${need}、現有 ${poolsNow[key] || 0}）`);
-            }
-            return;
-        }
+
+    // 2) 資源試算
+    const plan = idtPlanDeclareCost(eff, unit, targetUnit);
+    if (!plan.affordable) {
+        if (typeof showToast === 'function') showToast(`${skillName}：${plan.blockers[0]}`);
+        return;
     }
-    // 2) 扣除成本
+
+    // 3) 二次確認（只有「會扣掉東西」的宣告才問；純增益宣告不打斷節奏）
+    if (idtDeclareHasCost(plan) && typeof confirm === 'function') {
+        const lines = [`宣告「${skillName}」？`, '', '將扣除：'];
+        for (const [k, n] of Object.entries(plan.selfCost)) lines.push(`　• 自身 ${identityStatusName(k)} −${n}`);
+        for (const [k, n] of Object.entries(plan.poolCost)) {
+            const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[k] : null;
+            lines.push(`　• ${def ? def.name : k}（全隊共用）−${n}`);
+        }
+        for (const [k, n] of Object.entries(plan.targetCost)) {
+            lines.push(`　• 目標「${(targetUnit && targetUnit.name) || '敵方'}」的 ${identityStatusName(k)} −${n}`);
+        }
+        if (plan.selfHp && plan.selfHp.amount > 0) {
+            lines.push(`　• 自身承受 ${plan.selfHp.amount} 點 ${String(plan.selfHp.type).toUpperCase()} 傷`);
+        }
+        if (eff.once) lines.push('', eff.once === 'battle' ? '※ 本場戰鬥限用一次' : '※ 本回合限用一次');
+        if (!confirm(lines.join('\n'))) return;
+    }
+
+    // 4) 扣除成本（記下實際消耗量，供效果的動態數值使用）
+    // 先拍下「扣除前」的快照：像震顫引爆這種「削減量看原本層數、只移除其中幾層」的規則，
+    // 若在扣完之後才讀層數就會少算。
+    const before = {
+        self: buildEngineUnitState(unit),
+        target: targetUnit ? buildEngineUnitState(targetUnit) : { status: {} }
+    };
+    const consumedSelf = {};
+    const consumedTarget = {};
     const costNotes = [];
-    for (const [engKey, amt] of Object.entries(cost)) {
-        const need = parseInt(amt) || 0;
-        if (need <= 0) continue;
-        const name = identityStatusName(engKey);
-        const cur = (unit.status && parseInt(unit.status[name])) || 0;
-        if (typeof updateStatusStacks === 'function') updateStatusStacks(unitId, name, cur - need);
-        costNotes.push(`${name}-${need}`);
-    }
-    for (const [key, amt] of Object.entries(poolCost)) {
-        const need = parseInt(amt) || 0;
-        if (need <= 0) continue;
-        const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
-        idtAdjustTeamPool(key, -need);
-        costNotes.push(`${def ? def.name : key}-${need}`);
-    }
 
-    // 3) 套用狀態
-    const statusNote = (m) => Object.entries(m || {}).map(([k, v]) => `${identityStatusName(k)}+${v}`).join('、');
-    const applyNotes = [];
-    if (eff.targetStatus) {
-        if (identityHudState.targetId) {
-            applyEngineStatusesToUnit(identityHudState.targetId, eff.targetStatus);
-            applyNotes.push('對目標：' + statusNote(eff.targetStatus));
-        } else {
-            applyNotes.push('⚠ 未指定目標，未套用：' + statusNote(eff.targetStatus));
+    // 擲骰退費（噩夢吞噬：擲 1D10，8–10 則本次不扣除目標的層數但仍獲得強化）
+    let refundTargetCost = false;
+    if (eff.costRoll) {
+        const die = Math.max(2, parseInt(eff.costRoll.die) || 10);
+        const need = parseInt(eff.costRoll.refundAtLeast) || 0;
+        const rolled = Math.floor(Math.random() * die) + 1;
+        refundTargetCost = need > 0 && rolled >= need;
+        if (typeof showToast === 'function') {
+            showToast(`🎲 ${eff.costRoll.label || skillName}：1D${die} 骰出 ${rolled}`
+                + (refundTargetCost ? ` → 達 ${need}，本次不扣除目標的層數` : ` → 未達 ${need}，照常扣除`));
         }
     }
-    if (eff.selfStatus) {
-        applyEngineStatusesToUnit(unitId, eff.selfStatus);
-        applyNotes.push('對自己：' + statusNote(eff.selfStatus));
+
+    for (const [engKey, n] of Object.entries(plan.selfCost)) {
+        if (n <= 0) continue;
+        idtSetStatusLayers(unitId, engKey, idtStatusLayers(unit, engKey) - n);
+        consumedSelf[engKey] = n;
+        costNotes.push(`${identityStatusName(engKey)}-${n}`);
+    }
+    for (const [key, n] of Object.entries(plan.poolCost)) {
+        if (n <= 0) continue;
+        const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
+        idtAdjustTeamPool(key, -n);
+        costNotes.push(`${def ? def.name : key}-${n}`);
+    }
+    for (const [engKey, n] of Object.entries(plan.targetCost)) {
+        if (n <= 0 || !targetUnit) continue;
+        // 消耗量照記（效果的動態數值依「引爆了多少層」計算），只是實際層數不扣
+        consumedTarget[engKey] = n;
+        if (refundTargetCost) { costNotes.push(`目標${identityStatusName(engKey)} 免扣（擲骰退費）`); continue; }
+        idtSetStatusLayers(targetUnit.id, engKey, idtStatusLayers(targetUnit, engKey) - n);
+        costNotes.push(`目標${identityStatusName(engKey)}-${n}`);
+    }
+    if (plan.selfHp && plan.selfHp.amount > 0) {
+        idtApplyHpChange(unitId, plan.selfHp.type, plan.selfHp.amount);
+        costNotes.push(`自身 ${plan.selfHp.amount} 點 ${String(plan.selfHp.type).toUpperCase()} 傷`);
     }
 
-    // 4) 數值加值暫存到下一次攻擊
-    const b = idtEffectBonuses(eff);
-    if (b.dp || b.extraSuccess || b.damage) {
-        const p = idtPendingActiveBonus[unitId] || { dp: 0, extraSuccess: 0, damage: 0, notes: [] };
-        p.dp += b.dp; p.extraSuccess += b.extraSuccess; p.damage += b.damage;
-        p.notes.push(hook.name || hook.source || '主動技');
-        idtPendingActiveBonus[unitId] = p;
+    const ctx = idtBuildDeclareCtx(unit, targetUnit, consumedSelf, consumedTarget, before);
+
+    // 5) 套用效果
+    const applyNotes = [];
+    for (const engKey of (eff.selfClear || [])) {
+        const cur = idtStatusLayers(unit, engKey);
+        if (cur > 0) { idtSetStatusLayers(unitId, engKey, 0); applyNotes.push(`${identityStatusName(engKey)} 歸零`); }
+    }
+    const tgtStatus = idtResolveStatusMap(eff.targetStatus, ctx);
+    if (Object.keys(tgtStatus).length) {
+        if (targetUnit) {
+            applyEngineStatusDeltasToUnit(targetUnit.id, tgtStatus);
+            applyNotes.push('對目標：' + idtStatusMapNote(tgtStatus));
+        } else {
+            applyNotes.push('⚠ 未指定目標，未套用：' + idtStatusMapNote(tgtStatus));
+        }
+    }
+    const selfStatus = idtResolveStatusMap(eff.selfStatus, ctx);
+    if (Object.keys(selfStatus).length) {
+        applyEngineStatusDeltasToUnit(unitId, selfStatus);
+        applyNotes.push('對自己：' + idtStatusMapNote(selfStatus));
+    }
+    if (eff.poolDelta) applyEnginePoolDelta(idtResolveStatusMap(eff.poolDelta, ctx));
+    if (eff.targetDamage && targetUnit) {
+        const dmg = Math.max(0, Math.round(idtResolveEffectValue(eff.targetDamage.amount, ctx)));
+        if (dmg > 0) {
+            idtApplyHpChange(targetUnit.id, eff.targetDamage.type || 'l', dmg);
+            applyNotes.push(`對目標造成 ${dmg} 點 ${String(eff.targetDamage.type || 'l').toUpperCase()} 傷`);
+        }
+    }
+    if (eff.targetMaxHpReduce !== undefined && targetUnit) {
+        const cut = idtReduceMaxHp(targetUnit.id, Math.round(idtResolveEffectValue(eff.targetMaxHpReduce, ctx)));
+        if (cut > 0) applyNotes.push(`目標生命上限 −${cut}（昏迷閾值前移）`);
+    }
+    if (eff.selfHeal) {
+        const heal = Math.max(0, Math.round(idtResolveEffectValue(eff.selfHeal.amount, ctx)));
+        if (heal > 0) {
+            idtApplyHpChange(unitId, eff.selfHeal.type || 'heal-l', heal);
+            applyNotes.push(`自身恢復 ${heal} 點傷害`);
+        }
+    }
+    if (eff.selfShield !== undefined) {
+        // 一次性護盾（單位卡上的護盾值），與人民之盾狀態不同
+        const gain = Math.max(0, Math.round(idtResolveEffectValue(eff.selfShield, ctx)));
+        if (gain > 0) {
+            unit.shieldTemp = (parseInt(unit.shieldTemp) || 0) + gain;
+            if (typeof broadcastState === 'function') broadcastState();
+            applyNotes.push(`一次性護盾 +${gain}`);
+        }
     }
 
-    const bonusTxt = [b.dp ? `DP+${b.dp}` : '', b.extraSuccess ? `附加+${b.extraSuccess}` : '', b.damage ? `傷害+${b.damage}` : '']
-        .filter(Boolean).join('、');
+    // 6) 數值加值併入下一次攻擊（或下一回合的攻擊）
+    const b = idtEffectBonuses(eff, ctx);
+    if (b.dp || b.extraSuccess || b.damage) idtAddPendingBonus(idtPendingActiveBonus, unitId, b, skillName);
+
+    let nextTurnTxt = '';
+    if (eff.nextTurnBonus) {
+        const nb = idtEffectBonuses(eff.nextTurnBonus, ctx);
+        if (nb.dp || nb.extraSuccess || nb.damage) {
+            idtAddPendingBonus(idtNextTurnActiveBonus, unitId, nb, skillName);
+            nextTurnTxt = idtBonusText(nb) + '（下一回合生效）';
+        }
+    }
+
+    // 7) 記錄使用次數
+    idtRecordUse(unitId, cardId, index, eff.once);
+
+    const bonusTxt = idtBonusText(b);
     if (typeof showToast === 'function') {
-        showToast(`✅ 宣告「${hook.name || hook.source}」`
+        showToast(`✅ 宣告「${skillName}」`
             + (costNotes.length ? `（消耗 ${costNotes.join('、')}）` : '')
             + (bonusTxt ? `，${bonusTxt} 併入下次攻擊` : '')
+            + (nextTurnTxt ? `，${nextTurnTxt}` : '')
             + (applyNotes.length ? `；${applyNotes.join('；')}` : ''));
     }
     renderIdentityModal();
+}
+
+/** 把一筆加值累加進指定的暫存桶。 */
+function idtAddPendingBonus(bucket, unitId, b, note) {
+    const p = bucket[unitId] || { dp: 0, extraSuccess: 0, damage: 0, notes: [] };
+    p.dp += b.dp; p.extraSuccess += b.extraSuccess; p.damage += b.damage;
+    p.notes.push(note);
+    bucket[unitId] = p;
+}
+
+/** 把加值物件轉成「DP+2、附加+1、傷害+3」這種顯示字串。 */
+function idtBonusText(b) {
+    return [b.dp ? `DP+${b.dp}` : '', b.extraSuccess ? `附加+${b.extraSuccess}` : '', b.damage ? `傷害+${b.damage}` : '']
+        .filter(Boolean).join('、');
 }
 
 /**
@@ -1487,22 +1907,37 @@ function idtConsumePendingActiveBonus(unitId) {
     return p;
 }
 
-/** 清除某單位待併入的主動技加值（回合開始時呼叫，避免上回合宣告卻沒打出的加值殘留）。 */
+/**
+ * 清除某單位待併入的主動技加值，並把「下一回合才生效」的加值轉入。
+ * 回合開始時呼叫：上回合宣告卻沒打出的加值不應延續，但明確標記為「下一回合生效」的必須留下來。
+ */
 function idtClearPendingActiveBonus(unitId) {
-    if (unitId && idtPendingActiveBonus[unitId]) delete idtPendingActiveBonus[unitId];
+    if (!unitId) return;
+    delete idtPendingActiveBonus[unitId];
+    const next = idtNextTurnActiveBonus[unitId];
+    if (next) {
+        idtPendingActiveBonus[unitId] = next;
+        delete idtNextTurnActiveBonus[unitId];
+        if (typeof showToast === 'function') {
+            showToast(`🎯 上回合宣告的加值本回合生效：${idtBonusText(next)}（${next.notes.join('、')}）`);
+        }
+    }
 }
 
 /**
- * 渲染「主動宣告技」區：列出持有卡的 onActive 技能（超載、消耗充能／愛憎等）。
- * 帶結構化 effect.cost 的技能提供「宣告」按鈕：一鍵扣成本、套狀態、加值併入下次攻擊；
- * 資源不足時按鈕禁用並標示。純敘述型（無 effect）維持說明顯示，由玩家／ST 依描述判定。
+ * 渲染「主動宣告技」區：列出持有卡的 onActive 技能（超載、震顫引爆、消耗資源類等）。
+ * 帶結構化 effect 的技能提供「宣告」按鈕：一鍵扣成本、套用效果、加值併入下次攻擊；
+ * 資源不足／目標未指定／使用次數已滿時按鈕禁用並標示原因。
+ * 純敘述型（無 effect）維持說明顯示，由玩家／ST 依描述判定。
  * 重複抽取解鎖技未勾選解鎖時以半透明＋標籤顯示、不可宣告。
  */
 function renderIdentityActiveSkills() {
     const owned = collectOwnedIdentities();
     const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
     const unit = (typeof findUnitById === 'function' && identityHudState.attackerId) ? findUnitById(identityHudState.attackerId) : null;
+    const targetUnit = (typeof findUnitById === 'function' && identityHudState.targetId) ? findUnitById(identityHudState.targetId) : null;
     const pending = unit ? idtPendingActiveBonus[unit.id] : null;
+    const nextTurn = unit ? idtNextTurnActiveBonus[unit.id] : null;
 
     let rows = '';
     for (const { id, unlocked } of owned) {
@@ -1515,30 +1950,22 @@ function renderIdentityActiveSkills() {
 
             let btn = '';
             if (idtIsDeclarable(h) && !lockedOut) {
-                // 成本標示與可負擔判定（自身狀態成本 + 全隊共用資源池成本）
-                const costParts = [];
-                let affordable = !!unit;
-                for (const [engKey, amt] of Object.entries(h.effect.cost || {})) {
-                    const need = parseInt(amt) || 0;
-                    if (need <= 0) continue;
-                    const name = identityStatusName(engKey);
-                    const cur = (unit && unit.status && parseInt(unit.status[name])) || 0;
-                    if (cur < need) affordable = false;
-                    costParts.push(`${esc(name)} ${cur}/${need}`);
-                }
-                const poolsNow = idtGetTeamPools();
-                for (const [key, amt] of Object.entries(h.effect.poolCost || {})) {
-                    const need = parseInt(amt) || 0;
-                    if (need <= 0) continue;
-                    const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
-                    const cur = poolsNow[key] || 0;
-                    if (cur < need) affordable = false;
-                    costParts.push(`${esc(def ? def.name : key)} ${cur}/${need}`);
-                }
-                const costTxt = costParts.length ? `<span class="idt-active-cost">消耗：${costParts.join('、')}</span>` : '';
-                btn = `${costTxt}<button class="idt-btn idt-active-declare" ${affordable ? '' : 'disabled'}
+                const eff = h.effect;
+                // 成本試算與宣告時走同一個 idtPlanDeclareCost，按鈕顯示的數字必定等於實際會扣的數字
+                const plan = unit ? idtPlanDeclareCost(eff, unit, targetUnit)
+                                  : { affordable: false, blockers: ['尚未指定我方單位'], costParts: [] };
+                const limit = unit ? idtCheckUseLimit(unit.id, id, i, eff.once) : { ok: true, reason: '' };
+                const affordable = plan.affordable && limit.ok;
+                const why = !limit.ok ? limit.reason : (plan.blockers[0] || '');
+
+                const costTxt = plan.costParts.length
+                    ? `<span class="idt-active-cost">消耗：${esc(plan.costParts.join('、'))}</span>` : '';
+                const onceTxt = eff.once
+                    ? `<span class="idt-active-once">${eff.once === 'battle' ? '每場一次' : '每回合一次'}</span>` : '';
+                const needConfirm = idtDeclareHasCost(plan);
+                btn = `${costTxt}${onceTxt}<button class="idt-btn idt-active-declare" ${affordable ? '' : 'disabled'}
                             onclick="idtDeclareActiveSkill('${id}',${i})"
-                            title="${affordable ? '扣除成本並宣告' : '資源不足'}">宣告</button>`;
+                            title="${affordable ? (needConfirm ? '扣除成本並宣告（會先跳出確認）' : '宣告並套用效果') : esc(why)}">宣告</button>`;
             }
             return `<div class="idt-active-item${lockedOut ? ' idt-active-locked' : ''}">
                         <span class="idt-active-name">${esc(h.name || h.source || '')}${tag}</span>
@@ -1550,20 +1977,17 @@ function renderIdentityActiveSkills() {
     }
     if (!rows) return '';
 
-    const pendingBanner = (pending && (pending.dp || pending.extraSuccess || pending.damage))
-        ? `<div class="idt-active-pending">🎯 已宣告待併入下次攻擊：${[
-                pending.dp ? `DP+${pending.dp}` : '',
-                pending.extraSuccess ? `附加成功+${pending.extraSuccess}` : '',
-                pending.damage ? `傷害+${pending.damage}` : ''
-            ].filter(Boolean).join('、')}
-            <button class="idt-btn idt-active-clear" onclick="idtClearPendingActiveBonus('${unit.id}');renderIdentityModal();" title="取消已宣告的加值">清除</button></div>`
+    const banner = (label, p, showClear) => (p && (p.dp || p.extraSuccess || p.damage))
+        ? `<div class="idt-active-pending">${label}：${idtBonusText(p)}（${esc(p.notes.join('、'))}）
+            ${showClear && unit ? `<button class="idt-btn idt-active-clear" onclick="idtClearPendingActiveBonus('${unit.id}');renderIdentityModal();" title="取消已宣告的加值">清除</button>` : ''}</div>`
         : '';
 
     return `
         <div class="idt-section">
             <div class="idt-section-title">②‧6 主動宣告技（宣告扣成本、加值自動併入下次攻擊）</div>
-            <div class="idt-mi-hint-top">超載／消耗資源類技能按「宣告」即自動扣除成本並套用效果；數值加值會併入你下一次發起的攻擊。純敘述型技能仍由描述判定。</div>
-            ${pendingBanner}
+            <div class="idt-mi-hint-top">帶成本的技能按「宣告」會先跳出二次確認，確認後才扣除資源（自身層數／全隊資源池／目標身上的層數／自傷）並套用效果；數值加值會自動併入你下一次發起的攻擊。純敘述型技能仍由描述判定。</div>
+            ${banner('🎯 已宣告待併入下次攻擊', pending, true)}
+            ${banner('⏭ 下一回合開始才生效', nextTurn, false)}
             ${rows}
         </div>`;
 }
@@ -1746,7 +2170,10 @@ function renderIdentityResult() {
         ['附加成功', r.totalExtraSuccess],
         ['法術威力', r.totalSpellPower],
         ['最終傷害', r.totalFinalDamage],
-        ['一次性護盾', r.totals && r.totals.selfShield]
+        ['一次性護盾', r.totals && r.totals.selfShield],
+        // 這兩項不是加值而是攻擊視窗的欄位值，開啟攻擊視窗時會自動預填
+        ['嚴重轉惡性（自動預填）', r.totals && r.totals.critVicious],
+        ['加骰下推級數（自動預填）', r.totals && r.totals.explodeStep]
     ].filter(([, v]) => (v || 0) !== 0)
      .map(([k, v]) => `<div class="idt-bonus"><span>${k}</span><b>+${v}</b></div>`).join('');
 
@@ -1768,6 +2195,8 @@ function renderIdentityResult() {
         if (l.spellPower) parts.push(`威力+${l.spellPower}`);
         if (l.finalDamage) parts.push(`最終傷害+${l.finalDamage}`);
         if (l.selfShield) parts.push(`護盾+${l.selfShield}`);
+        if (l.critVicious) parts.push(`嚴重轉惡性+${l.critVicious}`);
+        if (l.explodeStep) parts.push(`加骰下推${l.explodeStep}級`);
         if (l.targetStatus) parts.push('→敵：' + fmtStatus(resolveLogStatus(l.targetStatus, r)));
         if (l.selfStatus) parts.push('→己：' + fmtStatus(resolveLogStatus(l.selfStatus, r)));
         const src = (typeof escapeHtml === 'function') ? escapeHtml(l.source || '') : (l.source || '');
@@ -1983,6 +2412,8 @@ function injectIdentityStyles() {
         .idt-pool-fill{height:100%;background:linear-gradient(90deg,#8e2b3f,#d64a63);transition:width .2s;}
         .idt-pool-btns{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;}
         .idt-pool-btn{padding:2px 8px;font-size:.78rem;min-width:34px;}
+        /* 宣告技的「每場/每回合一次」標籤 */
+        .idt-active-once{font-size:.7rem;color:var(--accent-orange,#e6a23c);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-right:6px;white-space:nowrap;}
         .idt-action-btn{flex:1;min-width:104px;font-size:.8rem;padding:7px 4px;}
         .idt-action-btn.is-used{opacity:.42;cursor:not-allowed;border-style:dashed;}
         .idt-hint{font-size:.72rem;color:var(--text-dim,#999);margin-top:6px;line-height:1.5;}

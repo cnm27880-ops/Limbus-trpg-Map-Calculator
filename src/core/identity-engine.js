@@ -47,7 +47,11 @@
 // 引擎會自動累加的數值加值欄位
 // selfShield：使自身獲得「單位護盾值」（一次性護盾，見 units.js 護盾系統），
 //             與 shield（人民之盾狀態）不同——後者是狀態層數，前者是單位卡上的護盾點數。
-const IDENTITY_BONUS_KEYS = ['dpBonus', 'weaponDamage', 'extraSuccess', 'spellPower', 'finalDamage', 'selfShield'];
+// critVicious：本次攻擊有幾點「嚴重傷害轉惡性傷害」（對應攻擊視窗的『嚴重轉惡性』欄位）。
+// explodeStep：加骰門檻往下推幾級（10 → 9 → 8）。以「級數」而非門檻值累加，
+//              多張卡各推一級時才能正確疊加；換算成門檻由呼叫端做（見 cmIdentityExplodeAt）。
+const IDENTITY_BONUS_KEYS = ['dpBonus', 'weaponDamage', 'extraSuccess', 'spellPower', 'finalDamage',
+                             'selfShield', 'critVicious', 'explodeStep'];
 
 /** 產生歸零的加值累積物件（兩個評估入口共用，避免未初始化鍵累加出 NaN） */
 function makeZeroTotals() {

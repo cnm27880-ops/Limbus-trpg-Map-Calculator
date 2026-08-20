@@ -126,8 +126,13 @@ const IDENTITY_LIBRARY = {
             ],
             onActive: [
                 { name: '噩夢吞噬', source: '噩夢狩獵', skill: '噩夢狩獵', locked: true,
-                  desc: '命中時可宣告：吸收目標 10 點沮喪。下一回合攻擊檢定 +2 附加成功、武器傷害 +3。擲 1D10，8–10 則本次不扣除目標沮喪但仍獲強化。',
-                  effect: { absorbTargetStatus: { depression: 10 }, nextTurnBonus: { extraSuccess: 2, weaponDamage: 3 }, gambit: { dice: '1D10', keepTargetStatusOn: [8, 9, 10] } } }
+                  desc: '命中時可宣告：吸收目標 10 點沮喪。下一回合攻擊檢定 +2 附加成功、武器傷害 +3。宣告時自動擲 1D10，8–10 則本次不扣除目標沮喪但仍獲強化。',
+                  effect: {
+                      requireTarget: { depression: 10 },
+                      targetCost: { depression: 10 },
+                      costRoll: { die: 10, refundAtLeast: 8, label: '噩夢吞噬' },
+                      nextTurnBonus: { extraSuccess: 2, weaponDamage: 3 }
+                  } }
             ]
         }
     },
@@ -191,24 +196,33 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, selfStatus: { charge: 3 }, source: '發動引擎', skill: '發動引擎' },
                 { condition: () => true, selfStatus: { charge: 3 }, source: '潤滑鏈鋸', skill: '潤滑鏈鋸' },
                 // 都切碎吧：震顫 5+ → +3 DP，並額外施加 3 層破裂
-                { condition: (t) => (t.status.tremor || 0) >= 5, dpBonus: 3, targetStatus: { rupture: 3 }, source: '都切碎吧', skill: '都切碎吧', locked: true }
+                { condition: (t) => (t.status.tremor || 0) >= 5, dpBonus: 3, targetStatus: { rupture: 3 }, source: '都切碎吧', skill: '都切碎吧', locked: true },
+                // 都切碎吧：目標身上帶有惡性 (A) 傷 → 武器傷害 +3。
+                // hasViciousDamage 由 UI 層讀單位的 hpArr 判定（見 identity-hud 的 buildEngineUnitState），
+                // 過去只能靠玩家自己看血條記得加，現在自動計入。
+                { condition: (t) => !!t.hasViciousDamage, weaponDamage: 3,
+                  source: '都切碎吧（目標帶惡性 A 傷）', skill: '都切碎吧', locked: true }
             ],
             onHit: [
                 { condition: () => true, targetStatus: { rupture: 2 }, source: '發動引擎', skill: '發動引擎' },
                 { condition: (t) => (t.status.tremor || 0) >= 5, targetStatus: { rupture: 3 }, source: '發動引擎（震顫 5+）', skill: '發動引擎' },
                 { condition: () => true, targetStatus: { tremor: 2 }, source: '潤滑鏈鋸', skill: '潤滑鏈鋸' },
                 { condition: () => true, targetStatus: { rupture: 2 }, source: '潤滑鏈鋸', skill: '潤滑鏈鋸' },
-                { condition: () => true, targetStatus: { rupture: 2 }, source: '都切碎吧', skill: '都切碎吧', locked: true },
-                { condition: () => true, manual: true, source: '都切碎吧', skill: '都切碎吧', locked: true,
-                  desc: '若目標具有惡性 A 傷，本次攻擊武器傷害 +3。' }
+                { condition: () => true, targetStatus: { rupture: 2 }, source: '都切碎吧', skill: '都切碎吧', locked: true }
             ],
             onActive: [
                 { name: '超載 2 - 輕度運轉', source: '發動引擎', skill: '發動引擎',
                   desc: '攻擊前宣告消耗 2 層充能，本次攻擊 DP +2。', effect: { cost: { charge: 2 }, dpBonus: 2 } },
                 { name: '超載 5 - 齒輪加速', source: '潤滑鏈鋸', skill: '潤滑鏈鋸',
                   desc: '攻擊前宣告消耗 5 層充能，本次攻擊 DP +7。', effect: { cost: { charge: 5 }, dpBonus: 7 } },
-                { name: '震顫引爆', source: '都切碎吧', skill: '都切碎吧', locked: true,
-                  desc: '命中時宣告：立即結算一次震顫削減，隨後目標震顫僅減少 2 層而非全清；每回合限一次。' }
+                { name: '震顫引爆（都切碎吧）', source: '都切碎吧', skill: '都切碎吧', locked: true,
+                  desc: '命中時宣告：立即結算一次震顫削減（依引爆前的層數削減目標生命上限），隨後目標震顫僅減少 2 層而非全清；每回合限一次。',
+                  effect: {
+                      once: 'turn',
+                      // 削減量看「引爆前」的層數，但只移除其中 2 層——故用 targetBefore 讀快照
+                      targetMaxHpReduce: (ctx) => ctx.targetBefore.status.tremor || 0,
+                      targetCostMax: { tremor: 2 }
+                  } }
             ]
         }
     },
@@ -267,6 +281,13 @@ const IDENTITY_LIBRARY = {
             ],
             onActive: [
                 { name: '回響引爆', source: '遵夫人之命', skill: '遵夫人之命', locked: true,
+                  effect: {
+                      requireTarget: { echo: 1 },
+                      // 傷害看「引爆前」的沮喪點數；結算後回響清空、沮喪減半
+                      targetDamage: { type: 'l', amount: (ctx) => ctx.targetBefore.status.depression || 0 },
+                      targetCostAll: ['echo'],
+                      targetCostHalve: ['depression']
+                  },
                   desc: '命中時若目標帶有山莊的回響：目標額外受到等同其沮喪點數的精神傷害（忽略一般物理減免），結算後回響消失、沮喪點數減半。' }
             ]
         }
@@ -314,8 +335,12 @@ const IDENTITY_LIBRARY = {
             ],
             onHit: [
                 { condition: () => true, selfStatus: { breathing: 2 }, source: '穿刺劍法', skill: '穿刺劍法' },
-                { condition: () => true, manual: true, source: '穿刺劍法', skill: '穿刺劍法', desc: '命中後，你的下一次攻擊武器傷害 +2。' },
                 { condition: () => true, manual: true, source: '腰擊劍勢', skill: '腰擊劍勢', locked: true, desc: '攻擊時若骰中四個以上的 10，可額外對目標造成 4 點 A 傷。' }
+            ],
+            onActive: [
+                { name: '穿刺劍法（命中後蓄勢）', source: '穿刺劍法', skill: '穿刺劍法',
+                  desc: '命中後按此鍵登記：你的下一次攻擊武器傷害 +2（加值會自動併入下一回合的攻擊）。',
+                  effect: { once: 'turn', nextTurnBonus: { weaponDamage: 2 } } }
             ]
         }
     },
@@ -327,6 +352,19 @@ const IDENTITY_LIBRARY = {
         owner: '奧提斯',
         repeatUnlockSkill: '要害勘破',
         keyStatuses: ['paralyze', 'rupture'],
+        // 三段「對抗減值」都依主要攻擊技能等級換算，技能等級不在單位資料中，故由玩家填一次即可
+        manualInputs: [
+            { key: 'mainSkillLevel', label: '主要攻擊技能等級', hint: '預測分析／臨場指揮／要害勘破的減值都依此換算', default: 0 }
+        ],
+        reminders: [
+            { condition: (t, a) => (a.status.mainSkillLevel || 0) > 0,
+              text: (t, a) => {
+                  const lv = a.status.mainSkillLevel || 0;
+                  const half = Math.max(1, Math.floor(lv / 2));
+                  const quarter = Math.max(1, Math.floor(lv / 4));
+                  return `📐 技能等級 ${lv} → 預測分析：目標該次 DP −${half}｜臨場指揮：目標附加成功 −${quarter}、造成傷害時其防禦 −${half}｜要害勘破：其防禦附加成功 −${quarter}（請由 ST 於審核面板扣除）。`;
+              } }
+        ],
         hooks: {
             onHit: [
                 // 造成傷害施加點數（豁免已移除，直接施加）
@@ -365,9 +403,12 @@ const IDENTITY_LIBRARY = {
                 // 檢查作品：宣告攻擊 → 先攻最低兩名友方 +1 迅捷（需指定友軍，手動）
                 { condition: () => true, manual: true, source: '檢查作品', skill: '檢查作品', locked: true,
                   desc: '宣告攻擊動作時，使我方先攻值最低的兩名友方單位獲得 1 層迅捷。' },
-                // 檢查作品：目標每 1 種不同類型的負面狀態 → 武器傷害 +1（需盤點狀態種類，手動）
-                { condition: () => true, manual: true, source: '檢查作品', skill: '檢查作品', locked: true,
-                  desc: '目標身上每帶有 1 種「不同類型的負面狀態」，本次攻擊武器傷害 +1。' }
+                // 檢查作品：目標每 1 種不同類型的負面狀態 → 武器傷害 +1。
+                // debuffTypeCount 由 UI 層以狀態庫的 isDebuffStatus 逐一判定（見 buildEngineUnitState），
+                // 與罪業抽取採同一套負面判定口徑；過去只能靠玩家自己數狀態。
+                { condition: (t) => (t.debuffTypeCount || 0) > 0,
+                  weaponDamage: (t) => t.debuffTypeCount || 0,
+                  source: '檢查作品（目標負面狀態種類數）', skill: '檢查作品', locked: true }
             ],
             onHit: [
                 { condition: () => true, targetStatus: { bleed: 3 }, source: '點畫', skill: '點畫' },
@@ -403,19 +444,39 @@ const IDENTITY_LIBRARY = {
                 // 鋸刃切割：命中時對目標施加 4 層震顫
                 { condition: () => true, targetStatus: { tremor: 4 }, source: '鋸刃切割', skill: '鋸刃切割' },
                 // 鋸刃切割：命中時若自身震顫 6+，宣告發動震顫引爆，結算後目標震顫減少 1 層
-                { condition: (t, a) => (a.status.tremor || 0) >= 6, manual: true, source: '鋸刃切割', skill: '鋸刃切割',
-                  desc: '命中時若自身【震顫】不低於 6 層，宣告發動「震顫引爆」：立即觸發一次【震顫】的結算效果（不移除層數），結算後目標的【震顫】層數另減少 1 層。' },
-                // 當機立斷【重複抽取解鎖】：命中時對目標施加 4 層震顫，隨後連續發動 3 次震顫引爆
-                { condition: () => true, targetStatus: { tremor: 4 }, source: '當機立斷', skill: '當機立斷', locked: true },
-                { condition: () => true, manual: true, source: '當機立斷', skill: '當機立斷', locked: true,
-                  desc: '命中時，隨後連續發動 3 次「震顫引爆」：每次引爆結算後，目標的【震顫】層數皆另減少 1 層。' }
+                // 當機立斷【重複抽取解鎖】：命中時對目標施加 4 層震顫（隨後的三連引爆見「主動宣告技」）
+                { condition: () => true, targetStatus: { tremor: 4 }, source: '當機立斷', skill: '當機立斷', locked: true }
             ],
             onActive: [
-                { name: '慢著慢著！（戰術棄置）', source: '慢著慢著！', skill: '慢著慢著！',
-                  desc: '可主動放棄本回合的「迅捷動作」，宣告棄置此技能（作為蓄力），使自身獲得 4 層【強壯】與 4 層【不屈】。' },
-                { name: '鋸刃切割（戰術棄置）', source: '鋸刃切割', skill: '鋸刃切割',
-                  desc: '可主動放棄本回合的「移動動作」，宣告棄置此技能（作為蓄力），使本回合下一次攻擊檢定加骰提高一級，最高 8 加骰；若已為 8 加骰，則改為本次 +4 DP。' },
+                { name: '慢著慢著！（戰術棄置：放棄迅捷動作）', source: '慢著慢著！', skill: '慢著慢著！',
+                  desc: '主動放棄本回合的「迅捷動作」宣告棄置此技能（蓄力），自身獲得 4 層【強壯】與 4 層【不屈】。（放棄的動作請自行記得不再使用）',
+                  effect: { once: 'turn', selfStatus: { strength: 4, endurance: 4 } } },
+                { name: '震顫引爆（鋸刃切割）', source: '鋸刃切割', skill: '鋸刃切割',
+                  desc: '命中時若自身【震顫】不低於 6 層，宣告發動「震顫引爆」：立即結算一次【震顫】效果（依引爆前的層數削減目標生命上限），結算後目標的【震顫】層數另減少 1 層。',
+                  effect: {
+                      requireSelf: { tremor: 6 },
+                      requireTarget: { tremor: 1 },
+                      targetMaxHpReduce: (ctx) => ctx.targetBefore.status.tremor || 0,
+                      targetCostMax: { tremor: 1 }
+                  } },
+                { name: '震顫引爆 ×3（當機立斷）', source: '當機立斷', skill: '當機立斷', locked: true,
+                  desc: '命中時連續發動 3 次「震顫引爆」：每次引爆皆依當下層數削減目標生命上限，結算後目標的【震顫】層數各再減少 1 層（合計 −3）。',
+                  effect: {
+                      requireTarget: { tremor: 1 },
+                      // 三次引爆的削減量：第一次看原層數 N，之後各少 1 層 → N + (N−1) + (N−2)，不低於 0
+                      targetMaxHpReduce: (ctx) => {
+                          const n = ctx.targetBefore.status.tremor || 0;
+                          return Math.max(0, n) + Math.max(0, n - 1) + Math.max(0, n - 2);
+                      },
+                      targetCostMax: { tremor: 3 }
+                  } },
+                { name: '鋸刃切割（戰術棄置：加骰提高一級）', source: '鋸刃切割', skill: '鋸刃切割',
+                  desc: '主動放棄本回合的「移動動作」宣告棄置此技能，使本回合下一次攻擊檢定加骰提高一級（最高 8 加骰）。加骰門檻請於攻擊視窗的「加骰」欄改選。' },
+                { name: '鋸刃切割（戰術棄置：已為 8 加骰 → +4 DP）', source: '鋸刃切割', skill: '鋸刃切割',
+                  desc: '若已是 8 加骰，改為本次攻擊 +4 DP（同樣需放棄本回合的「移動動作」）。',
+                  effect: { once: 'turn', dpBonus: 4 } },
                 { name: '當機立斷（雙重戰術棄置）', source: '當機立斷', skill: '當機立斷', locked: true,
+                  effect: { once: 'turn', selfStatus: { strength: 4, endurance: 4 }, weaponDamage: 4 },
                   desc: '發動此技能時，可宣告放棄本回合的「迅捷動作」與「移動動作」：若如此做，本次攻擊獲得前述兩項戰術棄置的所有增益，並額外 +4 武器傷害。' },
                 { name: '當機立斷（消耗震顫）', source: '當機立斷', skill: '當機立斷', locked: true,
                   desc: '攻擊時可宣告消耗自身 10 層【震顫】；若如此做，命中時額外對目標施加 3 層【震顫】。',
@@ -511,7 +572,8 @@ const IDENTITY_LIBRARY = {
                   desc: '進行攻擊時可宣告將攻擊目標擴展為多體攻擊：每額外鎖定 2 名目標需多消耗 1 點意志力，'
                       + '最多可同時鎖定等同於你當前【魔彈】層數的目標數量。' },
                 { name: '第七發魔彈（重置魔彈）', source: '第七發魔彈', skill: '（被動）',
-                  desc: '【第七發魔彈】結算完畢後，將自身【魔彈】層數重置為 0（引擎僅做加值累積，歸零請於狀態面板手動清除）。' }
+                  desc: '【第七發魔彈】結算完畢後按此鍵，將自身【魔彈】層數重置為 0。',
+                  effect: { selfClear: ['magicBullet'] } }
             ]
         }
     },
@@ -681,6 +743,7 @@ const IDENTITY_LIBRARY = {
                 { name: '目不能追，耳未可及。（能耗削減）', source: '目不能追，耳未可及。', skill: '目不能追，耳未可及。', locked: true,
                   desc: '先攻高於目標 25/30 → 對其施法能耗 -1/-2；先攻為目標兩倍以上時，可額外施放一次同階且不耗能/動作的法術，每回合一次。' },
                 { name: '奧義 - 雲解顯現', source: '奧義-雲解顯現', skill: '奧義-雲解顯現', locked: true,
+                  effect: { requireSelf: { gale: 10 }, costAll: ['gale'], spellPower: 5 },
                   desc: '疾風達 10 點時消耗所有點數施放：整輪動作指定一名目標施法，威力值 +5 且增幅無需額外能耗；先攻每高出目標 3 點 +1；先攻為目標兩倍以上則歸還整輪動作，疾風回合結束變為 5 點。' }
             ]
         }
@@ -743,9 +806,14 @@ const IDENTITY_LIBRARY = {
             onHit: [
                 { condition: () => true, targetStatus: { stun: 3 }, source: '當頭一棒', skill: '當頭一棒' },
                 { condition: () => true, targetStatus: { flaw: 2 }, source: '重棍前戳', skill: '重棍前戳' },
-                { condition: () => true, manual: true, source: '重棍前戳', skill: '重棍前戳', desc: '單次攻擊造成 5 點以上嚴重傷害 → 額外施加 2 層破綻。' },
                 { condition: () => true, targetStatus: { stun: 1 }, source: '武力壓制', skill: '武力壓制', locked: true },
                 { condition: () => true, targetStatus: { defenseDown: 2 }, source: '武力壓制', skill: '武力壓制', locked: true }
+            ],
+            // 「單次攻擊造成 5 點以上嚴重傷害」的門檻寫在傷害數值上，故走 onResolve
+            //（ST 端依實際打出的傷害查結算階梯表擇一套用）
+            onResolve: [
+                { condition: (t, a) => (a.outcome.damage || 0) >= 5, targetStatus: { flaw: 2 },
+                  source: '重棍前戳（造成 5 點以上傷害）', skill: '重棍前戳' }
             ]
         }
     },
@@ -761,7 +829,8 @@ const IDENTITY_LIBRARY = {
             onAttack: [
                 { condition: (t) => (t.status.burn || 0) >= 3, dpBonus: 3, source: '熾焰拳擊', skill: '熾焰拳擊' },
                 { condition: (t) => (t.status.burn || 0) >= 6, manual: true, source: '熾焰手刀-燃', skill: '熾焰手刀-燃', desc: '目標 6+ 燃燒 → 對距目標 3 米內另外兩名敵方單位（優先無/最低燃燒者）施加 2 點燃燒。' },
-                { condition: (t) => (t.status.burn || 0) >= 12, manual: true, source: '熾焰手刀-燃', skill: '熾焰手刀-燃', desc: '目標 12+ 燃燒 → 本次造成的 2 點嚴重傷害轉化為惡性傷害。' }
+                // 目標 12+ 燃燒 → 2 點嚴重傷害轉惡性（開啟攻擊視窗時自動預填『嚴重轉惡性』欄位）
+                { condition: (t) => (t.status.burn || 0) >= 12, critVicious: 2, source: '熾焰手刀-燃（燃燒 12+ 轉惡性）', skill: '熾焰手刀-燃' }
             ],
             onHit: [
                 { condition: () => true, targetStatus: { burn: 2 }, source: '熾焰拳擊', skill: '熾焰拳擊' },
@@ -770,7 +839,14 @@ const IDENTITY_LIBRARY = {
             ],
             onActive: [
                 { name: '惡意燃燒', source: '一點突破', skill: '一點突破', locked: true, desc: '所施加燃燒視為「惡意燃燒」：不使用動作撲滅則每輪結束 +1，且一般物理手段無法熄滅。' },
-                { name: '一點突破', source: '一點突破', skill: '一點突破', locked: true, desc: '造成傷害時若目標燃燒 15+，可額外造成等同其當前燃燒點數的嚴重傷害，隨後燃燒減半。每場戰鬥限一次。' }
+                { name: '一點突破', source: '一點突破', skill: '一點突破', locked: true,
+                  desc: '造成傷害時若目標燃燒 15+，可額外造成等同其當前燃燒點數的嚴重傷害，隨後燃燒減半。每場戰鬥限一次。',
+                  effect: {
+                      once: 'battle',
+                      requireTarget: { burn: 15 },
+                      targetDamage: { type: 'l', amount: (ctx) => ctx.targetBefore.status.burn || 0 },
+                      targetCostHalve: ['burn']
+                  } }
             ]
         }
     },
@@ -791,7 +867,8 @@ const IDENTITY_LIBRARY = {
                 { condition: (t, a) => (a.status.breathing || 0) >= 15, weaponDamage: 2, source: '鋒芒畢現', skill: '鋒芒畢現' },
                 { condition: (t, a) => (a.status.breathing || 0) >= 30, weaponDamage: 2, source: '散亂之舞', skill: '散亂之舞' },
                 { condition: (t, a) => (a.status.breathing || 0) >= 45, weaponDamage: 2, source: '斬破長空', skill: '斬破長空', locked: true },
-                { condition: (t) => (t.status.bleed || 0) >= 6, manual: true, source: '斬破長空', skill: '斬破長空', locked: true, desc: '目標 6+ 流血狀態 → 該次攻擊加骰上升一級（最多 8 加骰）。' },
+                // 目標 6+ 流血 → 加骰上升一級（開啟攻擊視窗時自動把『加骰』欄位下推到 9）
+                { condition: (t) => (t.status.bleed || 0) >= 6, explodeStep: 1, source: '斬破長空（流血 6+ 加骰）', skill: '斬破長空', locked: true },
                 { condition: () => true, manual: true, source: '斬破長空', skill: '斬破長空', locked: true, desc: '攻擊若骰中數字 10 → 命中目標獲得 10 層流血狀態。' }
             ],
             onHit: [
@@ -829,9 +906,10 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, manual: true, source: '威脅鎮壓', skill: '威脅鎮壓', locked: true,
                   desc: '命中時若骰子中具有兩個以上的數字 10，對目標施加 1 層易損。' }
             ],
-            onActive: [
-                { name: '牽制戰術（失手回氣）', source: '牽制戰術', skill: '牽制戰術',
-                  desc: '若你在對抗檢定中失敗（或攻擊未命中），使自身獲得 2 層呼吸法。' }
+            // 「攻擊未命中 → 回 2 層呼吸法」以 onResolve 判定：onHit 只在命中時觸發，表達不了「沒打中」
+            onResolve: [
+                { condition: (t, a) => !a.outcome.hit, selfStatus: { breathing: 2 },
+                  source: '牽制戰術（未命中回氣）', skill: '牽制戰術' }
             ]
         }
     },
@@ -895,8 +973,14 @@ const IDENTITY_LIBRARY = {
                   desc: '在進行攻擊檢定前宣告消耗自身 8 層【震顫】；若如此做，你本次攻擊獲得 +2 附加成功。',
                   effect: { cost: { tremor: 8 }, extraSuccess: 2 } },
                 { name: '震顫引爆（徵收執行）', source: '徵收執行', skill: '徵收執行', locked: true,
-                  desc: '命中目標時宣告發動「震顫引爆」：立即結算一次【震顫】效果；'
-                      + '且與一般引爆不同——結算後目標身上的【震顫】層數僅減少 1 層（不清空）。' }
+                  desc: '命中目標時宣告發動「震顫引爆」：立即結算一次【震顫】效果（依引爆前的層數削減目標生命上限）；'
+                      + '且與一般引爆不同——結算後目標身上的【震顫】層數僅減少 1 層（不清空）。',
+                  effect: {
+                      requireTarget: { tremor: 1 },
+                      // 削減量看「引爆前」的層數，但只移除 1 層
+                      targetMaxHpReduce: (ctx) => ctx.targetBefore.status.tremor || 0,
+                      targetCostMax: { tremor: 1 }
+                  } }
             ]
         }
     },
@@ -1048,6 +1132,9 @@ const IDENTITY_LIBRARY = {
                   source: '綻放荊棘（近戰反傷）', skill: '（被動）' }
             ],
             onActive: [
+                { name: '落幕（結算後清除所有綻放荊棘）', source: '慶典總會結束', skill: '慶典總會結束', locked: true,
+                  desc: '【落幕】攻擊結算完畢後按此鍵，消耗並清除自身所有的【綻放荊棘】。',
+                  effect: { selfClear: ['bloomingThorns'] } },
                 { name: '退下…（消耗 2 點血宴）', source: '退下…', skill: '退下…',
                   desc: '回合開始時宣告消耗 2 點【血宴】：自身獲得 1 層【綻放荊棘】；'
                       + '除你以外生命值上限最高的一名友方同樣獲得 1 層（若該友方為血魔，改為 2 層，請手動套用）。'
@@ -1092,8 +1179,12 @@ const IDENTITY_LIBRARY = {
                 { condition: (t, a) => (a.status.breathing || 0) > 20, weaponDamage: 2, source: '閃擊戰術', skill: '閃擊戰術', locked: true }
             ],
             onActive: [
+                { name: '閃擊戰術（自傷換附加成功，已為 8 加骰時）', source: '閃擊戰術', skill: '閃擊戰術', locked: true,
+                  desc: '若你已是 8 加骰：宣告對自己造成 3 點無法減免的 A 傷，改為本次攻擊附加成功 +3。',
+                  effect: { selfHp: { type: 'a', amount: 3 }, extraSuccess: 3 } },
                 { name: '閃擊戰術（自傷加骰）', source: '閃擊戰術', skill: '閃擊戰術', locked: true,
-                  desc: '攻擊前可宣告對自己造成 3 點無法減免的 A 傷，使本次攻擊加骰增加一級（最高 8 加骰）；若已是 8 加骰，改為附加成功 +3。' }
+                  desc: '攻擊前宣告對自己造成 3 點無法減免的 A 傷，使本次攻擊加骰增加一級（最高 8 加骰）。加骰門檻請於攻擊視窗的「加骰」欄改選。',
+                  effect: { selfHp: { type: 'a', amount: 3 } } }
             ]
         }
     },
@@ -1151,8 +1242,19 @@ const IDENTITY_LIBRARY = {
                 { condition: () => true, targetStatus: { depression: (t, a) => (a.status.trueKnowledge || 0) * 2 }, source: '燃盡知識', skill: '燃盡知識', locked: true }
             ],
             onActive: [
-                { name: '學業精進（捨棄技能）', source: '學業精進', skill: '學業精進', desc: '回合開始捨棄 1 個技能 → 獲得（所解真知層數×5）臨時生命。' },
-                { name: '燃盡知識（消耗學識）', source: '燃盡知識', skill: '燃盡知識', locked: true, desc: '學識 5+ 時攻擊可消耗所有學識，每點 +1 附加成功；此後學識與所解真知歸零，戰鬥結束前不可再獲得。' }
+                { name: '學業精進（捨棄技能換臨時生命）', source: '學業精進', skill: '學業精進',
+                  desc: '回合開始捨棄 1 個技能 → 獲得（所解真知層數×5）臨時生命（以一次性護盾表示）。捨棄哪個技能請自行記錄。',
+                  effect: { once: 'turn', selfShield: (ctx) => (ctx.self.status.trueKnowledge || 0) * 5 } },
+                { name: '燃盡知識（消耗所有學識）', source: '燃盡知識', skill: '燃盡知識', locked: true,
+                  desc: '學識 5+ 時攻擊可消耗所有學識，每點 +1 附加成功；此後學識與所解真知歸零，戰鬥結束前不可再獲得。',
+                  effect: {
+                      once: 'battle',
+                      requireSelf: { knowledge: 5 },
+                      costAll: ['knowledge'],
+                      // 附加成功依「實際燒掉幾點學識」計算
+                      extraSuccess: (ctx) => ctx.consumedSelf.knowledge || 0,
+                      selfClear: ['trueKnowledge']
+                  } }
             ]
         }
     },
@@ -1172,11 +1274,16 @@ const IDENTITY_LIBRARY = {
             onHit: [
                 // 豁免已移除，直接施加
                 { condition: () => true, targetStatus: { paralyze: 3 }, source: '斂芒在鞘', skill: '斂芒在鞘' },
-                { condition: (t) => (t.status.bleed || 0) >= 2, manual: true, source: '斂芒在鞘', skill: '斂芒在鞘', desc: '命中時目標 2+ 流血 → 本次造成的 1 點嚴重傷害轉化為惡性傷害。' },
                 { condition: () => true, targetStatus: { bleed: 2 }, source: '血振納刀', skill: '血振納刀' },
-                { condition: (t) => (t.status.bleed || 0) >= 5, manual: true, source: '血振納刀', skill: '血振納刀', desc: '命中時目標 5+ 流血 → 本次造成的 2 點嚴重傷害轉化為惡性傷害。' },
-                { condition: () => true, targetStatus: { bleed: 3 }, source: '黑雲亂渦', skill: '黑雲亂渦', locked: true },
-                { condition: (t) => (t.status.bleed || 0) >= 9, manual: true, source: '黑雲亂渦', skill: '黑雲亂渦', locked: true, desc: '命中時目標 9+ 流血 → 本次造成的 3 點嚴重傷害轉化為惡性傷害。' }
+                { condition: () => true, targetStatus: { bleed: 3 }, source: '黑雲亂渦', skill: '黑雲亂渦', locked: true }
+            ],
+            // 「嚴重傷害轉惡性」對應攻擊視窗的『嚴重轉惡性』欄位：放在 onAttack 才能在開視窗時預填。
+            // 三段依目標流血門檻各給 1／2／3 點，且三者互相取代而非疊加（卡面是階梯而非累加），
+            // 故以「差額」寫成三條疊加式 hook：2+ 給 1、5+ 再 +1、9+ 再 +1 → 合計恰為 1/2/3。
+            onAttack: [
+                { condition: (t) => (t.status.bleed || 0) >= 2, critVicious: 1, source: '斂芒在鞘（流血 2+ 轉惡性）', skill: '斂芒在鞘' },
+                { condition: (t) => (t.status.bleed || 0) >= 5, critVicious: 1, source: '血振納刀（流血 5+ 轉惡性）', skill: '血振納刀' },
+                { condition: (t) => (t.status.bleed || 0) >= 9, critVicious: 1, source: '黑雲亂渦（流血 9+ 轉惡性）', skill: '黑雲亂渦', locked: true }
             ],
             onActive: [
                 { name: '黑雲亂渦（流血減骰）', source: '黑雲亂渦', skill: '黑雲亂渦', locked: true, desc: '你所施加的流血層數會使目標所有判定扣除與層數相等的骰子數。' }
@@ -1217,6 +1324,7 @@ const IDENTITY_LIBRARY = {
             ],
             onActive: [
                 { name: '雙旋飛刺（連續攻擊迅捷）', source: '雙旋飛刺', skill: '雙旋飛刺',
+                  effect: { once: 'turn', selfStatus: { swiftness: 2 } },
                   desc: '連續兩回合以標準動作攻擊，從第二回合起每次標準動作攻擊額外獲得 2 層迅捷（一回合一次），直到標準動作未攻擊為止。' }
             ]
         }
@@ -1269,7 +1377,8 @@ const IDENTITY_LIBRARY = {
                 { name: '【光】要用愛！喲！（消耗愛憎）', source: '【光】要用愛！喲！', skill: '【光】要用愛！喲！', desc: '命中時可主動消耗 12 點愛/憎，使本次攻擊 DP 額外 +10（與另一消耗獨立，不可疊加）。', effect: { cost: { loveHate: 12 }, dpBonus: 10 } },
                 { name: '【暗】從我的腦袋裡出去…（次要目標）', source: '【暗】從我的腦袋裡出去…', skill: '【暗】從我的腦袋裡出去…', desc: '命中時可額外選擇鄰近次要目標，在主要目標結算傷害後對其造成一半傷害。' },
                 { name: '【光】阿卡納律動（強制逆位）', source: '【光】阿卡納律動！', skill: '阿卡納律動', locked: true, desc: '魔法阿卡納達 5 層 → 意志力強制變 -1，下回合開始強制進入逆位-暗狀態。' },
-                { name: '【暗】逆位律動 / 逆位阿卡納光破斬', source: '【暗】逆位律動', skill: '逆位律動', locked: true, desc: '逆位-暗狀態命中時可消耗所有魔法阿卡納，每 1 層額外指定 1 名敵方目標；若僅指定 1 名目標則傷害 +10；回合結束時意志力回滿、魔法阿卡納清零。' }
+                { name: '【暗】逆位律動 / 逆位阿卡納光破斬', source: '【暗】逆位律動', skill: '逆位律動', locked: true,
+                  effect: { requireSelf: { arcana: 1 }, costAll: ['arcana'] }, desc: '逆位-暗狀態命中時可消耗所有魔法阿卡納，每 1 層額外指定 1 名敵方目標；若僅指定 1 名目標則傷害 +10；回合結束時意志力回滿、魔法阿卡納清零。' }
             ]
         }
     },
@@ -1293,7 +1402,14 @@ const IDENTITY_LIBRARY = {
                 { condition: (t) => (t.status.nails || 0) >= 5, targetStatus: { weak: 3 }, source: '狂熱審判（尖釘 5+）', skill: '狂熱審判', locked: true }
             ],
             onActive: [
-                { name: '震顫引爆', source: '執行！', skill: '執行！', desc: '命中時若目標具有震顫，宣告引爆：先結算正常震顫效果，隨後額外造成等同被消耗震顫層數的嚴重傷害（無視防禦與減免）。' }
+                { name: '震顫引爆', source: '執行！', skill: '執行！',
+                  desc: '命中時若目標具有震顫，宣告引爆：先結算正常震顫效果（依層數削減目標生命上限），隨後額外造成等同被消耗震顫層數的嚴重傷害（無視防禦與減免）。',
+                  effect: {
+                      requireTarget: { tremor: 1 },
+                      targetMaxHpReduce: (ctx) => ctx.targetBefore.status.tremor || 0,
+                      targetCostAll: ['tremor'],
+                      targetDamage: { type: 'l', amount: (ctx) => ctx.consumedTarget.tremor || 0 }
+                  } }
             ]
         }
     },
@@ -1331,19 +1447,19 @@ const IDENTITY_LIBRARY = {
         owner: '唐吉訶德',
         repeatUnlockSkill: '過度呼吸',
         keyStatuses: ['swiftness', 'breathing'],
+        // 【迅捷】的先攻加成由先攻軸自動計算（getEffectiveInit＝先攻基準＋迅捷−束縛），
+        // 不需要人格卡再提醒一次，故從 hook 移到型態說明。
+        formNote: '【迅捷】先攻值增加等同層數（先攻軸已自動計入）。'
+            + '【呼吸增幅】呼吸法達 15 層以上時，所有能看見你的友方單位在攻擊檢定上獲得 2 點士氣加值，每 15 層疊加一次'
+            + '（對象是友方單位、視線由 ST 判定，引擎不代為套用，實際數值見下方提醒）。',
+        reminders: [
+            { condition: (t, a) => (a.status.breathing || 0) >= 15,
+              text: (t, a) => `💨 呼吸法 ${a.status.breathing} 層 → 所有能看見你的友方單位攻擊檢定 +${Math.floor((a.status.breathing || 0) / 15) * 2} 士氣加值（每 15 層 +2，請由 ST 對友方套用）。` }
+        ],
         hooks: {
             onAttack: [
-                // 迅捷（被動）：先攻值增加等同於迅捷層數，引擎不直接運算先攻，故保留為手動提示
-                { condition: () => true, manual: true, source: '迅捷', skill: '（被動）',
-                  desc: '你的先攻值增加等同於你身上【迅捷】層數。' },
-                // 呼吸增幅（被動）：呼吸法 15+ 使能看見你的友方在攻擊檢定獲得士氣加值，每 15 層疊加一次
-                { condition: (t, a) => (a.status.breathing || 0) >= 15, manual: true, source: '呼吸增幅', skill: '（被動）',
-                  desc: '你的【呼吸法】達到 15 層以上時，所有能看見你的友方單位在攻擊檢定上獲得 2 點士氣加值，每 15 層疊加一次。' },
                 // 調整呼吸：宣告攻擊時立即獲得 2 層迅捷
                 { condition: () => true, selfStatus: { swiftness: 2 }, source: '調整呼吸', skill: '調整呼吸' },
-                // 二連斬擊：嚴重生命槽被填滿時獲得 4 層迅捷（持續到戰鬥結束，一場戰鬥僅觸發一次）
-                { condition: (t, a) => !!a.severeFull, manual: true, source: '二連斬擊', skill: '二連斬擊',
-                  desc: '本次戰鬥中，若你的嚴重生命槽被填滿，立即獲得 4 層【迅捷】，效果持續到戰鬥結束；一場戰鬥僅觸發一次。' },
                 // 過度呼吸【重複抽取解鎖】：迅捷 10+ → 本次攻擊 +15 DP
                 { condition: (t, a) => (a.status.swiftness || 0) >= 10, dpBonus: 15, source: '過度呼吸', skill: '過度呼吸', locked: true }
             ],
@@ -1353,6 +1469,11 @@ const IDENTITY_LIBRARY = {
                 // 二連斬擊：命中時再獲得 3 層呼吸法、3 層迅捷
                 { condition: () => true, selfStatus: { breathing: 3 }, source: '二連斬擊', skill: '二連斬擊' },
                 { condition: () => true, selfStatus: { swiftness: 3 }, source: '二連斬擊', skill: '二連斬擊' }
+            ],
+            onActive: [
+                { name: '二連斬擊（嚴重槽填滿）', source: '二連斬擊', skill: '二連斬擊',
+                  desc: '本次戰鬥中，若你的嚴重生命槽被填滿，立即獲得 4 層【迅捷】，效果持續到戰鬥結束；一場戰鬥僅觸發一次。',
+                  effect: { once: 'battle', selfStatus: { swiftness: 4 } } }
             ]
         }
     },
@@ -1370,9 +1491,6 @@ const IDENTITY_LIBRARY = {
                 { condition: (t) => (t.status.rupture || 0) >= 5, dpBonus: 3, source: '閃爍誘餌', skill: '閃爍誘餌' },
                 // 嚼嚼旋風【重複抽取解鎖】：目標破裂 7+ → 再 +5 DP
                 { condition: (t) => (t.status.rupture || 0) >= 7, dpBonus: 5, source: '嚼嚼旋風！', skill: '嚼嚼旋風！', locked: true },
-                // 嚼嚼旋風【重複抽取解鎖】：提燈噬咬（可宣告，恢復嚴重傷害，需手動結算）
-                { condition: () => true, manual: true, source: '提燈噬咬', skill: '嚼嚼旋風！', locked: true,
-                  desc: '可宣告發動「提燈噬咬」：恢復 2 點嚴重傷害 (L)；目標身上每有 2 層【破裂】，再額外恢復 1 點嚴重傷害 (L)。若此時你的嚴重生命槽已被填滿，本次攻擊額外造成 2 點物理嚴重傷害，且上述生命恢復量翻倍。' }
             ],
             onHit: [
                 // 吾當嚙之！：命中時附加 3 層挑釁、2 層破裂
@@ -1384,6 +1502,19 @@ const IDENTITY_LIBRARY = {
                 { condition: (t) => (t.status.rupture || 0) <= 3, targetStatus: { rupture: 3 }, source: '閃爍誘餌（破裂 ≤3 加成）', skill: '閃爍誘餌' },
                 // 嚼嚼旋風【重複抽取解鎖】：命中時再附加 3 層挑釁
                 { condition: () => true, targetStatus: { provoke: 3 }, source: '嚼嚼旋風！', skill: '嚼嚼旋風！', locked: true }
+            ],
+            onActive: [
+                { name: '提燈噬咬', source: '提燈噬咬', skill: '嚼嚼旋風！', locked: true,
+                  desc: '宣告發動「提燈噬咬」：恢復 2 點嚴重傷害 (L)；目標身上每有 2 層【破裂】再額外恢復 1 點。'
+                      + '若此時你的嚴重生命槽已被填滿，恢復量翻倍，且本次攻擊額外造成 2 點物理嚴重傷害。',
+                  effect: {
+                      // 恢復量＝(2 + 目標破裂/2) × (嚴重槽已滿 ? 2 : 1)
+                      selfHeal: { type: 'heal-l',
+                                  amount: (ctx) => (2 + Math.floor((ctx.target.status.rupture || 0) / 2))
+                                                   * (ctx.self.severeFull ? 2 : 1) },
+                      // 嚴重槽已滿時本次攻擊額外造成 2 點嚴重傷害（併入下一次攻擊的傷害加值）
+                      finalDamage: (ctx) => (ctx.self.severeFull ? 2 : 0)
+                  } }
             ]
         }
     },
@@ -1414,9 +1545,20 @@ const IDENTITY_LIBRARY = {
             ],
             onActive: [
                 { name: '震顫引爆（加速切斷）', source: 'T公司產加速切斷器', skill: 'T公司產加速切斷器',
-                  desc: '命中時可宣告引爆目標身上最多 5 層震顫：對目標造成等同引爆層數的嚴重傷害，並施加等同消耗層數的【束縛】（若為 BOSS，可自選其行動條目承受）。' },
+                  desc: '命中時可宣告引爆目標身上最多 5 層震顫：對目標造成等同引爆層數的嚴重傷害，並施加等同消耗層數的【束縛】（若為 BOSS，可自選其行動條目承受）。',
+                  effect: {
+                      requireTarget: { tremor: 1 },
+                      targetCostMax: { tremor: 5 },
+                      targetDamage: { type: 'l', amount: (ctx) => ctx.consumedTarget.tremor || 0 },
+                      targetStatus: { bind: (ctx) => ctx.consumedTarget.tremor || 0 }
+                  } },
                 { name: '時間延付', source: '那位，請止步！', skill: '那位，請止步！', locked: true,
-                  desc: '命中時若目標震顫達 10 層以上，可宣告消耗其 10 層震顫：目標立即受到 10 點惡性傷害 (A)，且直到下一回合開始，其防禦檢定受到 10 DP 減值。' }
+                  desc: '命中時若目標震顫達 10 層以上，可宣告消耗其 10 層震顫：目標立即受到 10 點惡性傷害 (A)，且直到下一回合開始，其防禦檢定受到 10 DP 減值（DP 減值請由 ST 於審核面板扣除）。',
+                  effect: {
+                      requireTarget: { tremor: 10 },
+                      targetCost: { tremor: 10 },
+                      targetDamage: { type: 'a', amount: 10 }
+                  } }
             ]
         }
     }

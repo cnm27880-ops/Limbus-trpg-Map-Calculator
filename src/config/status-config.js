@@ -1278,7 +1278,9 @@ const STATUS_DEBUFF_ID_FALLBACK = [
     'exhausted', 'blind', 'deaf', 'tinnitus', 'airborne', 'prone', 'immobilized', 'slow',
     'limb_impair', 'fatigue', 'pain', 'weak', 'banish', 'frozen_solid', 'limb_disabled', 'fear',
     'mental_bind', 'depression', 'charmed', 'fascinated', 'silence', 'seal', 'addiction',
-    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking', 'vulnerable'
+    'confusion', 'dominate', 'bind', 'provoke', 'defenseDown', 'sinking', 'vulnerable',
+    // 黑焰是施加在敵方身上的燃燒引信，屬減益；綻放荊棘／狂信／魔彈等是自身資源，刻意不列入
+    'blackFlame'
 ];
 
 /**

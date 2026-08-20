@@ -199,11 +199,15 @@ const STATUS_LIBRARY = {
             name: '強壯',
             icon: '💪',
             type: 'stack',
-            desc: '物理力量增加',
-            fullDesc: '提升物理攻擊傷害。',
+            desc: '攻擊檢定 DP 增加',
+            fullDesc: '你的所有攻擊檢定獲得等同於層數的 DP 加值。',
+            // 黑箱引擎自動套用：每層強壯使攻擊方 DP +1
+            // （註：早期版本把強壯實作為「傷害 +層數」，已依規則書定義統一為攻擊檢定加值，
+            //   避免同一層強壯同時吃到 DP 與傷害兩份好處。）
+            calcMod: { atkDp: 1 },
             keyResist: null,
             effects: {
-                light: '傷害提升',
+                light: '攻擊檢定 +1 DP/層',
                 heavy: null,
                 destruction: null
             }
@@ -271,7 +275,7 @@ const STATUS_LIBRARY = {
             icon: '🔔',
             type: 'stack',
             desc: '受擊時消耗，削減昏迷閾值',
-            fullDesc: '受到攻擊時消耗所有層數，削減同等數值的昏迷閾值／生命上限。（ST 確認攻擊結算後，系統會自動清除層數並同步扣減目標生命上限）',
+            fullDesc: '受到攻擊時消耗所有層數，削減同等數值之「因惡性傷害昏迷」的閾值；若不會因惡性傷害昏迷，則改為扣除其生命上限。（ST 確認攻擊結算後，系統會自動清除層數並同步扣減目標生命上限）　※ 由 T 公司系人格卡「自身獲得」的震顫僅作為技能資源，不觸發本負面效果。',
             consumeOnAttacked: true,
             consumeReducesMaxHp: true,
             keyResist: null,
@@ -328,11 +332,16 @@ const STATUS_LIBRARY = {
             name: '尖釘',
             icon: '📍',
             type: 'stack',
-            desc: '被釘入尖釘',
-            fullDesc: '回合結束時受到流血，並增加麻痺。',
+            desc: '回合結束受傷並增加流血，隨後層數減半',
+            fullDesc: 'N 公司專屬釘刑標記。目標回合結束時，受到等同於【尖釘】層數的嚴重傷害 (L)，並額外獲得等同於層數的【流血】；結算後層數減半（無條件捨去）。',
+            // 回合結束結算面板（units.js buildTurnEndItems）依這三個欄位自動組出可一鍵套用的項目：
+            //   tickDamage 'l' → 受等同層數的 L 傷；tickBleed → 疊加等同層數的流血；turnEndHalve → 結算後層數減半
+            tickDamage: 'l',
+            tickBleed: true,
+            turnEndHalve: true,
             keyResist: null,
             effects: {
-                light: '流血與麻痺累積',
+                light: '回合結束受 L 傷 + 等量流血，層數減半',
                 heavy: null,
                 destruction: null
             }
@@ -980,6 +989,48 @@ const STATUS_LIBRARY = {
             fullDesc: '標記一名目標。當你對該目標進行任何檢定時，你獲得 +3 DP 完美加值。施加新標記時舊標記消失。',
             keyResist: null,
             effects: { light: '對其檢定 +3 DP 完美加值', heavy: null, destruction: null }
+        },
+        {
+            id: 'bloomingThorns',
+            name: '綻放荊棘',
+            icon: '🌹',
+            type: 'stack',
+            maxStacks: 30,
+            desc: '每 2 層基礎防禦 +1，受近戰攻擊反傷流血',
+            fullDesc: '拉·曼卻領公主的個人專屬印記，上限 30 層。你每擁有 2 層，自身基礎防禦 +1（黑箱引擎自動計入）。受到近戰攻擊時，對攻擊者施加 1 點【流血】，隨後層數 -1（於人格卡面板的「被攻擊反應」區一鍵結算）。',
+            // 「每 2 層 +1」無法用「每層 +0.5」表示（會算出小數），
+            // 故以函式型 calcMod 回傳 defModTotal（整段狀態的總加值，引擎不再乘以層數）。
+            calcMod: (unit, stacks) => ({ defModTotal: Math.floor((parseInt(stacks) || 0) / 2) }),
+            keyResist: null,
+            effects: { light: '每 2 層基礎防禦 +1；近戰反傷 1 流血並 -1 層', heavy: null, destruction: null }
+        },
+        {
+            id: 'fanaticism',
+            name: '狂信',
+            icon: '🕯️',
+            type: 'binary',
+            desc: '基礎防禦 +4、傷害減免 2',
+            fullDesc: '狂熱信仰狀態。持有此狀態期間，你的基礎防禦 +4，並獲得 2 點傷害減免；此狀態持續到你下一次回合開始前（回合開始結算時自動清除）。',
+            // binary 狀態層數恆為 1，故直接以 defModTotal 給固定 +4，不隨層數放大
+            calcMod: () => ({ defModTotal: 4 }),
+            damageReduction: 2,   // 受到傷害時扣除（與不屈同樣套在攻擊上限之後，見 combat-modals.js）
+            clearOnTurnStart: true,
+            keyResist: null,
+            effects: { light: '基礎防禦 +4、傷害 -2', heavy: null, destruction: null }
+        },
+        {
+            id: 'bloodFeast',
+            name: '血宴',
+            icon: '🍷',
+            type: 'stack',
+            maxStacks: 100,
+            // 全隊共用資源池：實際數值存於 state.teamPools.bloodFeast（透過 Firebase 同步給全房間），
+            // 不掛在任何單一單位身上。人格卡面板的「全隊共用資源池」區塊負責顯示與增減。
+            sharedPool: 'bloodFeast',
+            desc: '全場共用資源池-血宴',
+            fullDesc: '全場共用資源池（上限 100 層）。戰場上任何單位每受到 5 點【流血】傷害，此資源池便增加 1 點【血宴】（回合結束結算流血時自動累計，不足 5 點的餘數會留到下次）。由拉·曼卻領公主的技能消耗換取【綻放荊棘】與【強壯】。',
+            keyResist: null,
+            effects: { light: '可消耗換取綻放荊棘／強壯', heavy: null, destruction: null }
         },
         {
             id: 'duelDon',

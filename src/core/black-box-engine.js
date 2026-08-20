@@ -35,14 +35,20 @@ function bbSumStatusCalcMods(unit) {
             const stacks = parseInt(unit.status[def.name]) || 0;
             if (!stacks) continue;
 
-            // calcMod 可能是純數值物件，也可能是回傳 { atkDp, defMod } 的函式；兩者都安全處理
+            // calcMod 可能是純數值物件，也可能是回傳 { atkDp, defMod } 的函式；兩者都安全處理。
+            // 兩種數值口徑：
+            //   atkDp / defMod           → 「每層」的加值，引擎乘以層數（暈眩／麻痺／凍結／強壯）
+            //   atkDpTotal / defModTotal → 「整段狀態」的總加值，引擎直接採用、不再乘層數
+            //                              （綻放荊棘「每 2 層 +1」、狂信固定 +4 這類非線性規則）
             const raw = (typeof def.calcMod === 'function') ? (def.calcMod(unit, stacks) || {}) : def.calcMod;
+            const hasAtkTotal = raw.atkDpTotal !== undefined;
+            const hasDefTotal = raw.defModTotal !== undefined;
             const atkPer = bbSafeNumber(raw.atkDp);
             const defPer = bbSafeNumber(raw.defMod);
-            if (!atkPer && !defPer) continue;
+            if (!atkPer && !defPer && !hasAtkTotal && !hasDefTotal) continue;
 
-            const atkDelta = atkPer * stacks;
-            const defDelta = defPer * stacks;
+            const atkDelta = hasAtkTotal ? bbSafeNumber(raw.atkDpTotal) : atkPer * stacks;
+            const defDelta = hasDefTotal ? bbSafeNumber(raw.defModTotal) : defPer * stacks;
             mods.atkDp += atkDelta;
             mods.defMod += defDelta;
             if (atkDelta) mods.atkLabels.push(`${def.name}(${atkDelta > 0 ? '+' : ''}${atkDelta})`);
@@ -77,6 +83,29 @@ function bbDetailParts(rows, extraTotal) {
 }
 
 /**
+ * 掃出某單位身上所有標註 damageReduction 的狀態（如狂信 -2），回傳可併入傷害扣減的項目。
+ * 與不屈（依層數扣減）不同，damageReduction 是「該狀態固定提供的減免值」，不隨層數放大——
+ * 狂信是 binary 狀態，層數恆為 1，若照層數乘算只會得到相同結果，但寫成固定值語意更清楚，
+ * 也讓未來的 binary 減免狀態不必假裝自己有層數。
+ * @param {object} unit
+ * @returns {Array<{label: string, value: number}>}
+ */
+function bbCollectDamageReductionStatuses(unit) {
+    const out = [];
+    if (!unit || !unit.status || typeof STATUS_LIBRARY === 'undefined') return out;
+    for (const category of Object.values(STATUS_LIBRARY)) {
+        for (const def of category) {
+            if (!def || !def.damageReduction) continue;
+            const stacks = parseInt(unit.status[def.name]) || 0;
+            if (stacks <= 0) continue;
+            const value = bbSafeNumber(def.damageReduction);
+            if (value > 0) out.push({ label: `目標${def.name}（上限後扣除）`, value });
+        }
+    }
+    return out;
+}
+
+/**
  * 蒐集「擲骰之後才會併入傷害」的加減項，供審核面板事先列出。
  *
  * 先前這些項目完全不在明細裡，卻全都會改動最終傷害，於是 ST 按下結算後看到的
@@ -105,12 +134,13 @@ function bbCollectDamageMods(attackerUnit, targetUnit) {
     if (fragile) bonuses.push({ label: '目標破裂（受擊消耗）', value: fragile });
     const vulnerable = layers(targetUnit, 'vulnerable');
     if (vulnerable) bonuses.push({ label: '目標易損', value: vulnerable });
-    // 攻擊者身上的強壯：提升傷害
-    const strength = layers(attackerUnit, 'strength');
-    if (strength) bonuses.push({ label: '攻擊者強壯', value: strength });
+    // 註：強壯已依規則書定義改為「攻擊檢定 +1 DP/層」，由 bbSumStatusCalcMods 併入 DP 桶，
+    //     不再於此列為傷害加值（否則同一層強壯會被算兩次）。
     // 目標身上的不屈：降低傷害（套在攻擊上限之後）
     const endurance = layers(targetUnit, 'endurance');
     if (endurance) reductions.push({ label: '目標不屈（上限後扣除）', value: endurance });
+    // 目標身上帶 damageReduction 的狀態（狂信：-2）：同樣套在攻擊上限之後
+    for (const red of bbCollectDamageReductionStatuses(targetUnit)) reductions.push(red);
 
     return { bonuses, reductions };
 }

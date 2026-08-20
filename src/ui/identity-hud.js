@@ -67,8 +67,71 @@ function buildEngineUnitState(unit, extra) {
         unitShield: unit ? ((parseInt(unit.shieldTemp) || 0) + (parseInt(unit.shieldAuto) || 0)) : 0,
         // 場上是否存在「指令對象」（食指的業判定：攻擊指令對象以外的目標 → 獲得業）
         commandTargetOnField: idtHasCommandTargetOnField(),
+        // 全隊共用資源池（血宴等）：不屬於任何單位，故不放進 status，改以 pools 提供給條件函式
+        pools: idtGetTeamPools(),
+        // 上一回合是否完全沒受到傷害（浮士德倖存者【伺機而動】的條件）。
+        // dmgTakenLastTurn 由 nextTurn() 在輪到該單位時，從本回合累計值輪替過來（見 units.js）。
+        noDamageLastTurn: !(unit && (parseInt(unit.dmgTakenLastTurn) || 0) > 0),
     };
     return Object.assign(base, extra || {});
+}
+
+/**
+ * 取得目前的全隊共用資源池（含防呆預設值）。
+ * state.teamPools 可能因舊房間資料或尚未連線而不存在，一律補齊為 0，避免條件函式讀到 undefined。
+ * @returns {{bloodFeast:number, bloodFeastSpent:number, bleedDamageAcc:number}}
+ */
+function idtGetTeamPools() {
+    const raw = (typeof state !== 'undefined' && state.teamPools) ? state.teamPools : {};
+    return {
+        bloodFeast: parseInt(raw.bloodFeast) || 0,
+        bloodFeastSpent: parseInt(raw.bloodFeastSpent) || 0,
+        bleedDamageAcc: parseInt(raw.bleedDamageAcc) || 0
+    };
+}
+
+/**
+ * 調整全隊共用資源池並同步給整個房間。
+ * @param {string} key - 資源池鍵（如 'bloodFeast'）
+ * @param {number} delta - 增減量（可為負；負值同時累計到 <key>Spent 供「累計消耗」類技能使用）
+ * @returns {number} 實際變動量（受 0 與上限夾限後可能小於 delta）
+ */
+function idtAdjustTeamPool(key, delta) {
+    const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
+    if (!def) return 0;
+    const pools = idtGetTeamPools();
+    const cur = pools[key] || 0;
+    const next = Math.max(0, Math.min(def.max || 999, cur + (parseInt(delta) || 0)));
+    const actual = next - cur;
+    if (actual === 0) return 0;
+
+    pools[key] = next;
+    // 累計消耗量只記「真的扣掉的量」——玩家手動加回去不該把累計消耗一起倒扣
+    if (def.trackSpent && actual < 0) {
+        pools[key + 'Spent'] = (pools[key + 'Spent'] || 0) + Math.abs(actual);
+    }
+    if (typeof syncTeamPools === 'function') syncTeamPools(pools);
+    else if (typeof state !== 'undefined') state.teamPools = pools;
+
+    if (typeof showToast === 'function') {
+        showToast(`${def.icon || '🎴'} ${def.name}${actual > 0 ? '+' : ''}${actual} → ${next}/${def.max}`);
+    }
+    renderIdentityModal();
+    return actual;
+}
+
+/**
+ * 把引擎輸出的資源池增減（poolDelta）實際套用到全隊共用資源池。
+ * @param {object} poolDelta - 例如 { bloodFeast: -2 }
+ * @returns {number} 實際變動的資源池種類數
+ */
+function applyEnginePoolDelta(poolDelta) {
+    if (!poolDelta || typeof poolDelta !== 'object') return 0;
+    let n = 0;
+    for (const [key, amount] of Object.entries(poolDelta)) {
+        if (idtAdjustTeamPool(key, parseInt(amount) || 0) !== 0) n++;
+    }
+    return n;
 }
 
 /** 場上任一單位是否帶有「指令對象」狀態 */
@@ -185,7 +248,9 @@ const IDT_STATUS_LABELS = {
     charge: '充能', rupture: '破裂', tremor: '震顫', breathing: '呼吸法', shield: '人民之盾',
     sinking: '沉淪', gale: '疾風', knowledge: '學識', paralyze: '麻痺', stun: '暈眩',
     flaw: '破綻', bind: '束縛', provoke: '挑釁', nails: '尖釘', defenseDown: '防禦等級降低',
-    loveHate: '愛/憎', karma: '業'
+    loveHate: '愛/憎', karma: '業', rupture: '破裂', strength: '強壯', endurance: '不屈',
+    magicBullet: '魔彈', blackFlame: '黑焰', vulnerable: '易損',
+    bloomingThorns: '綻放荊棘', fanaticism: '狂信'
 };
 
 function loadCustomIdentities() {
@@ -745,6 +810,10 @@ function computeIdentityResult() {
     // 現在明確列出哪些加值存在但未觸發、以及未觸發的原因。
     result.untriggered = collectUntriggeredBonusHooks(owned, attacker, target);
     result.noTarget = !identityHudState.targetId;
+    // 「結算後（依實際傷害）」與「被攻擊時」這兩個時機過去完全不在面板上，
+    // 玩家看不到浮士德【人民之盾】、伺機而動的傷害門檻、綻放荊棘反傷等效果會怎麼結算。
+    result.resolvePreview = collectResolvePreview(owned, attacker, target);
+    result.defendPreview = collectDefendPreview(owned, attacker);
     identityHudState.lastResult = result;
     return true;
 }
@@ -819,6 +888,49 @@ function collectUntriggeredBonusHooks(owned, attacker, target) {
 }
 
 /**
+ * 產生「結算後（onResolve）」的預覽：依造成的傷害列出各階段會套用什麼。
+ * 直接沿用 combat-modals 的階梯表建構器，確保面板預覽與實際結算完全同一套規則。
+ * @param {Array<{id:string,unlocked:boolean}>} owned
+ * @param {object} attacker
+ * @param {object} target
+ * @returns {Array<{label:string, selfTxt:string, targetTxt:string}>}
+ */
+function collectResolvePreview(owned, attacker, target) {
+    if (typeof cmBuildResolveTable !== 'function') return [];
+    const notes = (m) => Object.entries(m || {})
+        .map(([k, v]) => `${identityStatusName(k)}${(parseInt(v) || 0) >= 0 ? '+' : ''}${parseInt(v) || 0}`);
+    const table = cmBuildResolveTable(owned, attacker, target, notes);
+    return table.map((entry, i) => {
+        const next = table[i + 1];
+        const from = parseInt(entry.from) || 0;
+        const label = (from === 0)
+            ? '未造成傷害（含未命中）'
+            : (next ? `造成 ${from}～${(parseInt(next.from) || 0) - 1} 點傷害` : `造成 ${from} 點以上傷害`);
+        return { label, selfTxt: (entry.selfStatusNotes || []).join('、'), targetTxt: (entry.targetStatusNotes || []).join('、') };
+    }).filter(row => row.selfTxt || row.targetTxt);
+}
+
+/**
+ * 產生「被攻擊時（onDefend）」的預覽：近戰／遠程各算一次。
+ * @param {Array<{id:string,unlocked:boolean}>} owned
+ * @param {object} selfState - 引擎格式的自身狀態
+ * @returns {Array<{label:string, foeTxt:string, selfTxt:string}>}
+ */
+function collectDefendPreview(owned, selfState) {
+    if (typeof evaluatePlayerDefend !== 'function') return [];
+    const foeUnit = (typeof findUnitById === 'function' && idtLastAttackerUnitId)
+        ? findUnitById(idtLastAttackerUnitId) : null;
+    const foeState = buildEngineUnitState(foeUnit);
+    return [
+        { label: '🗡 被近戰攻擊', melee: true },
+        { label: '🏹 被遠程攻擊', melee: false }
+    ].map(({ label, melee }) => {
+        const res = evaluatePlayerDefend(owned, selfState, foeState, { melee });
+        return { label, foeTxt: idtStatusMapNote(res.attackerStatus), selfTxt: idtStatusMapNote(res.selfStatus) };
+    }).filter(row => row.foeTxt || row.selfTxt);
+}
+
+/**
  * 把持有卡的手動資源輸入覆寫到攻擊者狀態。
  * 對應到引擎狀態鍵（如 arcana / loveHate）者直接寫入 status；其餘自訂鍵（如 will）亦寫入。
  */
@@ -851,7 +963,13 @@ function collectIdentityReminders(owned, attacker, target) {
                 if (typeof rm.condition === 'function') {
                     try { show = !!rm.condition(target, attacker); } catch (e) { show = false; }
                 }
-                if (show && rm.text) out.push({ card: card.name, text: rm.text });
+                // text 可為字串或 (target, attacker) => string：讓提醒直接把算好的數字寫進去
+                // （例：「呼吸法 32 層 → 友方攻擊檢定 +4」），玩家不必自己心算門檻。
+                let text = rm.text;
+                if (typeof text === 'function') {
+                    try { text = text(target, attacker); } catch (e) { text = ''; }
+                }
+                if (show && text) out.push({ card: card.name, text });
             }
         }
         if (card.formNote) out.push({ card: card.name, text: card.formNote, note: true });
@@ -889,7 +1007,10 @@ function performIdentityTurnStart(unitId) {
     const owned = collectOwnedIdentities();
     const attackerUnit = (typeof findUnitById === 'function') ? findUnitById(unitId) : null;
     const res = evaluatePlayerTurnStart(owned, buildEngineUnitState(attackerUnit));
-    let n = applyEngineStatusesToUnit(unitId, res.expectedSelfStatus);
+    // 回合開始的 selfStatus 可能含負值（如【狂信】持續到「下一次回合開始前」→ 以負層數自動清除），
+    // 故走 delta 版本：正值累加、負值扣減並於歸零時移除。
+    let n = applyEngineStatusDeltasToUnit(unitId, res.expectedSelfStatus);
+    if (res.poolDelta) applyEnginePoolDelta(res.poolDelta);
 
     // 護盾值獲取（如羅佳「穩紮穩打」）：加到單位卡的一次性護盾，而非狀態層數
     const shieldGain = (res.totals && parseInt(res.totals.selfShield)) || 0;
@@ -1232,7 +1353,16 @@ let idtPendingActiveBonus = {};
 
 /** 某 onActive 是否可由本面板自動宣告：帶結構化 effect 且有可消耗成本（cost）。 */
 function idtIsDeclarable(hook) {
-    return !!(hook && hook.effect && hook.effect.cost && typeof hook.effect.cost === 'object');
+    if (!hook || !hook.effect) return false;
+    const eff = hook.effect;
+    // 可一鍵宣告的條件：帶結構化成本（自身狀態成本 cost／全隊資源池成本 poolCost），
+    // 或雖無成本但效果是純數值套用（如公主「放棄消耗血宴 → 自身承受流血」）。
+    return !!(
+        (eff.cost && typeof eff.cost === 'object')
+        || (eff.poolCost && typeof eff.poolCost === 'object')
+        || (eff.selfStatus && typeof eff.selfStatus === 'object')
+        || (eff.targetStatus && typeof eff.targetStatus === 'object')
+    );
 }
 
 /** 計算某 effect 的數值加值（spellPower／weaponDamage／finalDamage 皆折算為傷害）。 */
@@ -1264,7 +1394,7 @@ function idtDeclareActiveSkill(cardId, index) {
     const unit = (typeof findUnitById === 'function' && unitId) ? findUnitById(unitId) : null;
     if (!unit) { if (typeof showToast === 'function') showToast('請先指定我方單位'); return; }
 
-    // 1) 檢查成本
+    // 1) 檢查成本（自身狀態）
     const cost = eff.cost || {};
     for (const [engKey, amt] of Object.entries(cost)) {
         const need = parseInt(amt) || 0;
@@ -1273,6 +1403,21 @@ function idtDeclareActiveSkill(cardId, index) {
         const cur = (unit.status && parseInt(unit.status[name])) || 0;
         if (cur < need) {
             if (typeof showToast === 'function') showToast(`${hook.name || '宣告技'}：${name} 不足（需 ${need}、現有 ${cur}）`);
+            return;
+        }
+    }
+    // 1b) 檢查成本（全隊共用資源池）
+    const poolCost = eff.poolCost || {};
+    const poolsNow = idtGetTeamPools();
+    for (const [key, amt] of Object.entries(poolCost)) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
+        const label = def ? def.name : key;
+        if ((poolsNow[key] || 0) < need) {
+            if (typeof showToast === 'function') {
+                showToast(`${hook.name || '宣告技'}：${label} 不足（需 ${need}、現有 ${poolsNow[key] || 0}）`);
+            }
             return;
         }
     }
@@ -1285,6 +1430,13 @@ function idtDeclareActiveSkill(cardId, index) {
         const cur = (unit.status && parseInt(unit.status[name])) || 0;
         if (typeof updateStatusStacks === 'function') updateStatusStacks(unitId, name, cur - need);
         costNotes.push(`${name}-${need}`);
+    }
+    for (const [key, amt] of Object.entries(poolCost)) {
+        const need = parseInt(amt) || 0;
+        if (need <= 0) continue;
+        const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
+        idtAdjustTeamPool(key, -need);
+        costNotes.push(`${def ? def.name : key}-${need}`);
     }
 
     // 3) 套用狀態
@@ -1363,16 +1515,25 @@ function renderIdentityActiveSkills() {
 
             let btn = '';
             if (idtIsDeclarable(h) && !lockedOut) {
-                // 成本標示與可負擔判定
+                // 成本標示與可負擔判定（自身狀態成本 + 全隊共用資源池成本）
                 const costParts = [];
                 let affordable = !!unit;
-                for (const [engKey, amt] of Object.entries(h.effect.cost)) {
+                for (const [engKey, amt] of Object.entries(h.effect.cost || {})) {
                     const need = parseInt(amt) || 0;
                     if (need <= 0) continue;
                     const name = identityStatusName(engKey);
                     const cur = (unit && unit.status && parseInt(unit.status[name])) || 0;
                     if (cur < need) affordable = false;
                     costParts.push(`${esc(name)} ${cur}/${need}`);
+                }
+                const poolsNow = idtGetTeamPools();
+                for (const [key, amt] of Object.entries(h.effect.poolCost || {})) {
+                    const need = parseInt(amt) || 0;
+                    if (need <= 0) continue;
+                    const def = (typeof IDENTITY_TEAM_POOLS !== 'undefined') ? IDENTITY_TEAM_POOLS[key] : null;
+                    const cur = poolsNow[key] || 0;
+                    if (cur < need) affordable = false;
+                    costParts.push(`${esc(def ? def.name : key)} ${cur}/${need}`);
                 }
                 const costTxt = costParts.length ? `<span class="idt-active-cost">消耗：${costParts.join('、')}</span>` : '';
                 btn = `${costTxt}<button class="idt-btn idt-active-declare" ${affordable ? '' : 'disabled'}
@@ -1403,6 +1564,174 @@ function renderIdentityActiveSkills() {
             <div class="idt-section-title">②‧6 主動宣告技（宣告扣成本、加值自動併入下次攻擊）</div>
             <div class="idt-mi-hint-top">超載／消耗資源類技能按「宣告」即自動扣除成本並套用效果；數值加值會併入你下一次發起的攻擊。純敘述型技能仍由描述判定。</div>
             ${pendingBanner}
+            ${rows}
+        </div>`;
+}
+
+/**
+ * 渲染「全隊共用資源池」區：僅在持有帶 teamPools 標記的卡片時顯示（目前為拉·曼卻領公主的【血宴】）。
+ *
+ * 之所以獨立成一區、而不塞進單位的狀態列：血宴是全場共用的一個數字，任何單位受到流血傷害都會累積、
+ * 任何持有該卡的玩家都能消耗，掛在誰身上都會誤導。實際數值存於 state.teamPools 並即時同步全房間。
+ * @returns {string} HTML
+ */
+function renderIdentityTeamPoolSection() {
+    if (typeof IDENTITY_TEAM_POOLS === 'undefined') return '';
+    const owned = collectOwnedIdentities();
+    const keys = new Set();
+    for (const { id } of owned) {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
+        if (card && Array.isArray(card.teamPools)) card.teamPools.forEach(k => keys.add(k));
+    }
+    if (!keys.size) return '';
+
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+    const pools = idtGetTeamPools();
+    const rows = [...keys].map(key => {
+        const def = IDENTITY_TEAM_POOLS[key];
+        if (!def) return '';
+        const cur = pools[key] || 0;
+        const spent = pools[key + 'Spent'] || 0;
+        const pct = def.max ? Math.min(100, Math.round((cur / def.max) * 100)) : 0;
+        const steps = [-10, -4, -2, -1, 1, 2, 5, 10];
+        const btns = steps.map(d => `<button class="idt-btn idt-pool-btn" onclick="idtAdjustTeamPool('${key}',${d})"
+                        title="${d > 0 ? '增加' : '消耗'} ${Math.abs(d)} 點${esc(def.name)}">${d > 0 ? '+' : ''}${d}</button>`).join('');
+        return `<div class="idt-pool-row">
+                    <div class="idt-pool-head">
+                        <span class="idt-pool-name">${def.icon || '🎴'} ${esc(def.name)}</span>
+                        <span class="idt-pool-val">${cur} / ${def.max}${def.trackSpent ? `　（本場累計消耗 ${spent}）` : ''}</span>
+                    </div>
+                    <div class="idt-pool-bar"><div class="idt-pool-fill" style="width:${pct}%"></div></div>
+                    <div class="idt-pool-btns">${btns}</div>
+                    <div class="idt-hint">${esc(def.desc || '')}</div>
+                </div>`;
+    }).join('');
+
+    return `
+        <div class="idt-section">
+            <div class="idt-section-title">②‧5 全隊共用資源池（全房間即時同步）</div>
+            <div class="idt-mi-hint-top">這些資源不屬於任何單位，任何人增減都會同步給整場戰鬥；流血傷害的自動累積由 ST 的「回合結束結算」面板套用。</div>
+            ${rows}
+        </div>`;
+}
+
+// 上次重繪時面板上顯示的資源池內容（JSON 快照）。
+// state 監聽器每次同步都會呼叫 renderIdentityTeamPools，但多數同步（回合推進、單位移動…）
+// 與資源池無關；只有數值真的變了才重繪，避免面板每次同步都整個重建。
+let _idtLastPoolsJson = null;
+
+/** 資源池數值變動後才重繪面板（供 Firebase 監聽器在別人增減時呼叫）。 */
+function renderIdentityTeamPools() {
+    const json = JSON.stringify(idtGetTeamPools());
+    if (json === _idtLastPoolsJson) return;
+    _idtLastPoolsJson = json;
+    const el = document.getElementById('identity-modal');
+    if (el && el.style.display === 'block' && el.innerHTML) renderIdentityModal();
+}
+
+// ===== 被攻擊反應（onDefend）=====
+// 有些人格卡的效果在「你被攻擊時」觸發（公主的綻放荊棘近戰反傷、N公司中錘的狂信反擊流血）。
+// 網站的防禦流程只知道「有人要打你」，不知道是近戰還是遠程，故由玩家按下對應按鈕宣告，
+// 系統再把反應效果套用到攻擊者與自己身上。攻擊者預設取「最近一次對你發動攻擊的單位」。
+
+/** 最近一次對本玩家單位發動攻擊的單位 id（由 cqOnPendingDefense 記錄）。 */
+let idtLastAttackerUnitId = null;
+
+/**
+ * 記錄「現在是誰在打我」，供被攻擊反應套用反傷對象。
+ * @param {string} unitId
+ */
+function idtNoteIncomingAttacker(unitId) {
+    if (unitId) idtLastAttackerUnitId = unitId;
+}
+
+/**
+ * 玩家宣告「我被（近戰／遠程）攻擊了」：跑 onDefend 結算並套用效果。
+ * @param {boolean} melee - 是否為近戰攻擊（綻放荊棘的反傷僅對近戰生效）
+ * @returns {number} 實際套用的效果數
+ */
+function idtDeclareDefendReaction(melee) {
+    if (typeof evaluatePlayerDefend !== 'function') return 0;
+    const unitId = identityHudState.attackerId;
+    const unit = (typeof findUnitById === 'function' && unitId) ? findUnitById(unitId) : null;
+    if (!unit) { if (typeof showToast === 'function') showToast('請先指定我方單位'); return 0; }
+
+    const foeId = idtLastAttackerUnitId || identityHudState.targetId;
+    const foeUnit = (typeof findUnitById === 'function' && foeId) ? findUnitById(foeId) : null;
+
+    const owned = collectOwnedIdentities();
+    const res = evaluatePlayerDefend(owned, buildEngineUnitState(unit), buildEngineUnitState(foeUnit), { melee: !!melee });
+
+    const notes = [];
+    let n = 0;
+    // 反傷等施加給攻擊者的效果：沒有明確的攻擊者就不亂套，改提示玩家先選目標
+    if (Object.keys(res.attackerStatus || {}).length) {
+        if (foeUnit) {
+            n += applyEngineStatusDeltasToUnit(foeUnit.id, res.attackerStatus);
+            notes.push(`對「${foeUnit.name || '攻擊者'}」：` + idtStatusMapNote(res.attackerStatus));
+        } else {
+            notes.push('⚠ 未偵測到攻擊者，未套用：' + idtStatusMapNote(res.attackerStatus));
+        }
+    }
+    // 自身效果（綻放荊棘 -1 這類負值）走 delta 版本，歸零時會正確移除狀態
+    if (Object.keys(res.selfStatus || {}).length) {
+        n += applyEngineStatusDeltasToUnit(unitId, res.selfStatus);
+        notes.push('對自己：' + idtStatusMapNote(res.selfStatus));
+    }
+    if (res.poolDelta && Object.keys(res.poolDelta).length) applyEnginePoolDelta(res.poolDelta);
+
+    if (typeof showToast === 'function') {
+        showToast(notes.length
+            ? `🛡 已結算${melee ? '近戰' : '遠程'}被攻擊反應：${notes.join('；')}`
+            : `🛡 本組人格卡沒有${melee ? '近戰' : '遠程'}被攻擊反應`);
+    }
+    renderIdentityModal();
+    return n;
+}
+
+/** 把狀態增減物件轉成「中文名+層數」的說明字串（負值顯示為 -N）。 */
+function idtStatusMapNote(map) {
+    return Object.entries(map || {})
+        .map(([k, v]) => `${identityStatusName(k)}${(parseInt(v) || 0) >= 0 ? '+' : ''}${parseInt(v) || 0}`)
+        .join('、');
+}
+
+/**
+ * 渲染「被攻擊反應」區：僅在持有帶 onDefend hook 的卡片時顯示。
+ * @returns {string} HTML
+ */
+function renderIdentityDefendReactions() {
+    const owned = collectOwnedIdentities();
+    const items = [];
+    for (const { id, unlocked } of owned) {
+        const card = (typeof getIdentityById === 'function') ? getIdentityById(id) : null;
+        if (!card || !card.hooks || !Array.isArray(card.hooks.onDefend)) continue;
+        for (const h of card.hooks.onDefend) {
+            if (!h) continue;
+            if (h.locked && !unlocked) continue;
+            items.push({ card: card.name, source: h.source || h.skill || '', desc: h.desc || '' });
+        }
+    }
+    if (!items.length) return '';
+
+    const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+    const foe = (typeof findUnitById === 'function' && idtLastAttackerUnitId) ? findUnitById(idtLastAttackerUnitId) : null;
+    const foeTxt = foe ? `目前偵測到的攻擊者：${esc(foe.name || '敵方單位')}` : '尚未偵測到攻擊者（將退回使用②的目標）';
+    const rows = items.map(it => `<div class="idt-active-item">
+                    <span class="idt-active-name">${esc(it.card)}</span>
+                    <span class="idt-active-desc">${esc(it.source)}${it.desc ? '：' + esc(it.desc) : ''}</span>
+                </div>`).join('');
+
+    return `
+        <div class="idt-section">
+            <div class="idt-section-title">②‧7 被攻擊反應（你被打時觸發）</div>
+            <div class="idt-mi-hint-top">系統無從得知這次是近戰還是遠程攻擊，請在被攻擊時按下對應按鈕結算反應效果。${esc(foeTxt)}</div>
+            <div class="idt-action-btns">
+                <button class="idt-btn idt-action-btn" onclick="idtDeclareDefendReaction(true)"
+                        title="宣告本次受到近戰攻擊，結算人格卡的被攻擊反應">🗡 被近戰攻擊</button>
+                <button class="idt-btn idt-action-btn" onclick="idtDeclareDefendReaction(false)"
+                        title="宣告本次受到遠程攻擊，結算人格卡的被攻擊反應">🏹 被遠程攻擊</button>
+            </div>
             ${rows}
         </div>`;
 }
@@ -1470,6 +1799,24 @@ function renderIdentityResult() {
             </div>
         </div>`;
 
+    // 結算後（依實際傷害分歧）：ST 端會依實際打出的傷害查表擇一套用
+    if (Array.isArray(r.resolvePreview) && r.resolvePreview.length) {
+        const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+        html += '<div class="idt-log-title">🎲 結算後（ST 依實際傷害擇一自動套用）</div>';
+        html += r.resolvePreview.map(row =>
+            `<div class="idt-log"><span class="idt-log-src">${esc(row.label)}</span><span class="idt-log-eff">${
+                [row.targetTxt ? '→敵：' + esc(row.targetTxt) : '', row.selfTxt ? '→己：' + esc(row.selfTxt) : '']
+                    .filter(Boolean).join('，')}</span></div>`).join('');
+    }
+    // 被攻擊時：需玩家於「被攻擊反應」區宣告近戰／遠程後才結算
+    if (Array.isArray(r.defendPreview) && r.defendPreview.length) {
+        const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => s);
+        html += '<div class="idt-log-title">🛡 被攻擊時（需於「被攻擊反應」區宣告）</div>';
+        html += r.defendPreview.map(row =>
+            `<div class="idt-log"><span class="idt-log-src">${esc(row.label)}</span><span class="idt-log-eff">${
+                [row.foeTxt ? '→攻擊者：' + esc(row.foeTxt) : '', row.selfTxt ? '→己：' + esc(row.selfTxt) : '']
+                    .filter(Boolean).join('，')}</span></div>`).join('');
+    }
     if (autoLogs.length) {
         html += '<div class="idt-log-title">觸發明細</div>' + autoLogs.map(logRow).join('');
     }
@@ -1571,9 +1918,13 @@ function renderIdentityModal() {
 
                 ${renderIdentityActionUsed()}
 
+                ${renderIdentityTeamPoolSection()}
+
                 ${renderIdentityManualInputs()}
 
                 ${renderIdentityActiveSkills()}
+
+                ${renderIdentityDefendReactions()}
 
                 <div class="idt-section">
                     <div class="idt-section-title">③ 結算結果</div>
@@ -1623,6 +1974,15 @@ function injectIdentityStyles() {
         .idt-btn-mini{flex:1;min-width:0;font-size:.78rem;padding:6px 4px;}
         /* 動作消耗（迅捷／移動／標準）：已消耗的動作變灰且不可再按 */
         .idt-action-btns{display:flex;gap:6px;flex-wrap:wrap;}
+        /* 全隊共用資源池（血宴）：進度條 + 快速增減按鈕 */
+        .idt-pool-row{background:var(--bg-input,#15151b);border:1px solid var(--border,#33333a);border-radius:8px;padding:8px 10px;margin-bottom:8px;}
+        .idt-pool-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;}
+        .idt-pool-name{font-weight:bold;font-size:.9rem;}
+        .idt-pool-val{font-size:.8rem;color:var(--text-dim,#888);}
+        .idt-pool-bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:6px;}
+        .idt-pool-fill{height:100%;background:linear-gradient(90deg,#8e2b3f,#d64a63);transition:width .2s;}
+        .idt-pool-btns{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;}
+        .idt-pool-btn{padding:2px 8px;font-size:.78rem;min-width:34px;}
         .idt-action-btn{flex:1;min-width:104px;font-size:.8rem;padding:7px 4px;}
         .idt-action-btn.is-used{opacity:.42;cursor:not-allowed;border-style:dashed;}
         .idt-hint{font-size:.72rem;color:var(--text-dim,#999);margin-top:6px;line-height:1.5;}

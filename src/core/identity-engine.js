@@ -25,6 +25,17 @@
  *                               = { hit, damage } 判斷（例：命中造成傷害 vs 未造成傷害）。
  *   - onActionUsed            → 消耗一個動作時；條件以 attacker.actionType 判斷
  *                               （'swift' 迅捷／'move' 移動／'standard' 標準）。
+ *   - onDefend                → 「你被攻擊時」的反應（綻放荊棘反傷、狂信反擊流血…）。
+ *                               對象有兩個：defender（自己）與 attacker（打你的人），
+ *                               故條件函式簽名沿用 (target, attacker) 但語意為
+ *                               (攻擊你的人, 你自己)——與其他時機一致：第二個參數恆為「本卡持有者」。
+ *                               context 透過 self.defendContext 取用，例：{ melee: true }。
+ *
+ * 全隊共用資源池（team pools）：
+ *   拉·曼卻領公主的【血宴】是全場共用、不掛在任何單位身上的資源池，故不走 selfStatus，
+ *   改以 hook 的 `poolDelta: { bloodFeast: -2 }` 表示增減，引擎累加進 result.poolDelta，
+ *   由 UI 層（identity-hud）寫回 state.teamPools 並同步給整個房間。
+ *   條件函式讀取目前池量請用 `a.pools.bloodFeast`（由呼叫端於 attacker 上帶入）。
  *
  * 特殊旗標：
  *   - locked: true  → 屬於「重複抽取解鎖」技能，僅在該卡 unlocked 時才計入。
@@ -43,6 +54,22 @@ function makeZeroTotals() {
     const totals = {};
     for (const key of IDENTITY_BONUS_KEYS) totals[key] = 0;
     return totals;
+}
+
+/**
+ * 把一組全隊共用資源池的增減量累加進累積物件（可為負；數量同樣支援函式）。
+ * @param {object} accumulator - 累積結果（會被就地修改）
+ * @param {object} poolMap - 例如 { bloodFeast: -2 } 或 { bloodFeast: (t,a)=>... }
+ * @param {object} target
+ * @param {object} attacker
+ */
+function accumulatePools(accumulator, poolMap, target, attacker) {
+    if (!poolMap || typeof poolMap !== 'object' || Array.isArray(poolMap)) return;
+    for (const [key, value] of Object.entries(poolMap)) {
+        const amount = resolveAmount(value, target, attacker);
+        if (amount === 0) continue;
+        accumulator[key] = (accumulator[key] || 0) + amount;
+    }
 }
 
 /**
@@ -151,6 +178,8 @@ function evalCondition(hook, target, attacker) {
 function pickTargetStatusBucket(result, phase, hook) {
     if (phase === 'attack') return result.onAttackTargetStatus || null;
     if (phase === 'hit') return result.onHitTargetStatus || null;
+    // defend：targetStatus 的「對象」是打你的那個人（反傷流血等）
+    if (phase === 'defend') return result.onDefendAttackerStatus || null;
     if (phase === 'kill') {
         // scope:'others' → 場上其他敵方；否則視為施加給被擊殺目標本身（少見）
         return (hook.scope === 'others') ? (result.onKillOthersStatus || null) : (result.onKillTargetStatus || null);
@@ -170,6 +199,7 @@ function pickTargetStatusBucket(result, phase, hook) {
 function pickSelfStatusBucket(result, phase) {
     if (phase === 'attack') return result.onAttackSelfStatus || null;
     if (phase === 'hit') return result.onHitSelfStatus || null;
+    if (phase === 'defend') return result.onDefendSelfStatus || null;
     if (phase === 'kill') return result.onKillSelfStatus || null;
     if (phase === 'turnEnd') return result.onTurnEndSelfStatus || null;
     if (phase === 'resolve') return result.onResolveSelfStatus || null;
@@ -242,6 +272,14 @@ function processHooks(hooks, phase, card, unlocked, target, attacker, result) {
                 log.selfStatus = hook.selfStatus;
             }
 
+            // 全隊共用資源池的增減（血宴）：所有時機共用同一個桶，
+            // 因為資源池本來就不屬於任何單位，沒有「對誰」的分歧。
+            if (hook.poolDelta) {
+                if (!result.poolDelta) result.poolDelta = {};
+                accumulatePools(result.poolDelta, hook.poolDelta, target, attacker);
+                log.poolDelta = hook.poolDelta;
+            }
+
             result.triggerLogs.push(log);
         } catch (e) {
             // 格式異常的 hook 直接跳過，不影響其他人格卡的計算
@@ -285,6 +323,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
     const result = {
         totals: makeZeroTotals(),
         triggerLogs: [],
+        poolDelta: {},
         onAttackTargetStatus: {},
         onAttackSelfStatus: {},
         onHitTargetStatus: {},
@@ -328,7 +367,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
  */
 function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     const attacker = ensureStatefulUnit(attackerState);
-    const result = { triggerLogs: [], totals: makeZeroTotals(), onAttackTargetStatus: {}, onAttackSelfStatus: {}, onHitTargetStatus: {}, onHitSelfStatus: {} };
+    const result = { triggerLogs: [], totals: makeZeroTotals(), poolDelta: {}, onAttackTargetStatus: {}, onAttackSelfStatus: {}, onHitTargetStatus: {}, onHitSelfStatus: {} };
 
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
@@ -341,7 +380,8 @@ function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     }
     result.expectedSelfStatus = mergeStatuses(result.onAttackSelfStatus, result.onHitSelfStatus);
     result.expectedTargetStatus = mergeStatuses(result.onAttackTargetStatus, result.onHitTargetStatus);
-    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
+    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs,
+             totals: result.totals, poolDelta: result.poolDelta };
 }
 
 /**
@@ -366,6 +406,7 @@ function evaluatePlayerKill(playerIdentities, attackerState, killedTargetState) 
     const result = {
         totals: makeZeroTotals(),
         triggerLogs: [],
+        poolDelta: {},
         onKillTargetStatus: {},
         onKillOthersStatus: {},
         onKillSelfStatus: {}
@@ -400,7 +441,7 @@ function evaluatePlayerKill(playerIdentities, attackerState, killedTargetState) 
  */
 function evaluatePlayerTurnEnd(playerIdentities, attackerState) {
     const attacker = ensureStatefulUnit(attackerState);
-    const result = { totals: makeZeroTotals(), triggerLogs: [], onTurnEndSelfStatus: {} };
+    const result = { totals: makeZeroTotals(), triggerLogs: [], poolDelta: {}, onTurnEndSelfStatus: {} };
 
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
@@ -412,7 +453,8 @@ function evaluatePlayerTurnEnd(playerIdentities, attackerState) {
     }
 
     result.expectedSelfStatus = mergeStatuses(result.onTurnEndSelfStatus);
-    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
+    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs,
+             totals: result.totals, poolDelta: result.poolDelta };
 }
 
 
@@ -447,6 +489,7 @@ function evaluatePlayerResolve(playerIdentities, attackerState, targetState, out
     const result = {
         totals: makeZeroTotals(),
         triggerLogs: [],
+        poolDelta: {},
         onResolveSelfStatus: {},
         onResolveTargetStatus: {}
     };
@@ -483,7 +526,7 @@ function evaluatePlayerActionUsed(playerIdentities, attackerState, actionType) {
     const attacker = ensureStatefulUnit(attackerState);
     attacker.actionType = actionType || '';
 
-    const result = { totals: makeZeroTotals(), triggerLogs: [], onActionUsedSelfStatus: {} };
+    const result = { totals: makeZeroTotals(), triggerLogs: [], poolDelta: {}, onActionUsedSelfStatus: {} };
 
     if (Array.isArray(playerIdentities)) {
         for (const rawEntry of playerIdentities) {
@@ -496,7 +539,55 @@ function evaluatePlayerActionUsed(playerIdentities, attackerState, actionType) {
     }
 
     result.expectedSelfStatus = mergeStatuses(result.onActionUsedSelfStatus);
-    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs, totals: result.totals };
+    return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs,
+             totals: result.totals, poolDelta: result.poolDelta };
+}
+
+/**
+ * 評估「你被攻擊時」觸發的反應效果（onDefend）。
+ *
+ * 與其他時機的差別：這裡同時存在兩個對象——你自己（本卡持有者）與攻擊你的人。
+ * 為了讓條件函式的簽名與其餘時機一致（第二個參數恆為「本卡持有者」），
+ * 這裡刻意把 defender 放在 attacker 參數位、把攻擊者放在 target 參數位：
+ *   condition: (attackerUnit, self) => ...
+ * 對應地，hook 的 targetStatus 施加給「攻擊你的人」（反傷流血），selfStatus 施加給你自己
+ * （綻放荊棘 -1 這類自身層數變動，以負值表示）。
+ *
+ * 攻擊型態（近戰／遠程）由呼叫端以 context 帶入，條件函式讀 `self.defendContext.melee`。
+ *
+ * @param {Array<string|object>} playerIdentities
+ * @param {object} defenderState - 你自己的狀態（引擎格式）
+ * @param {object} attackerUnitState - 攻擊你的單位狀態（引擎格式）
+ * @param {{ melee?: boolean }} [context] - 本次被攻擊的型態
+ * @returns {{ selfStatus: object, attackerStatus: object, totals: object,
+ *            poolDelta: object, triggerLogs: Array<object> }}
+ */
+function evaluatePlayerDefend(playerIdentities, defenderState, attackerUnitState, context) {
+    const self = ensureStatefulUnit(defenderState);
+    const foe = ensureStatefulUnit(attackerUnitState);
+    // 缺值時保守解讀為「非近戰」，避免遠程攻擊誤觸近戰限定的反傷
+    self.defendContext = { melee: !!(context && context.melee) };
+
+    const result = {
+        totals: makeZeroTotals(),
+        triggerLogs: [],
+        poolDelta: {},
+        onDefendSelfStatus: {},
+        onDefendAttackerStatus: {}
+    };
+
+    if (Array.isArray(playerIdentities)) {
+        for (const rawEntry of playerIdentities) {
+            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
+            const card = resolveIdentityCard(id);
+            if (!card || !card.hooks || !Array.isArray(card.hooks.onDefend)) continue;
+            processHooks(card.hooks.onDefend, 'defend', card, unlocked, foe, self, result);
+        }
+    }
+
+    result.selfStatus = result.onDefendSelfStatus;
+    result.attackerStatus = result.onDefendAttackerStatus;
+    return result;
 }
 
 /**
@@ -524,7 +615,8 @@ if (typeof module !== 'undefined' && module.exports) {
         evaluatePlayerKill,
         evaluatePlayerTurnEnd,
         evaluatePlayerResolve,
-        evaluatePlayerActionUsed
+        evaluatePlayerActionUsed,
+        evaluatePlayerDefend
     };
 }
 

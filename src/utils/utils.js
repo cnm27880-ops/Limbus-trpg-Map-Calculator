@@ -467,6 +467,9 @@ function modifyHPInternal(unit, type, amount) {
                 continue;
             }
             // 造成傷害
+            // 本回合累計「真的吃到的」傷害點數（被護盾吸收的不算）：
+            // 供人格卡「上一回合未受到任何傷害」類條件判定（見 units.js nextTurn 的輪替）。
+            unit.dmgTakenThisTurn = (parseInt(unit.dmgTakenThisTurn) || 0) + 1;
             const val = type === 'b' ? 1 : type === 'l' ? 2 : 3;
             const emptyIdx = unit.hpArr.findIndex(x => x === 0);
 

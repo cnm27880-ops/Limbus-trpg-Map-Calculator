@@ -159,13 +159,20 @@ function changeMapTheme(id) {
     if (myRole !== 'st') return;
     state.themeId = parseInt(id);
 
-    // 用該主題的地形取代調色盤
+    // 用該主題的地形匯入調色盤：合併進現有調色盤、不覆蓋已存在的（含 ST 手動新增／AI
+    // 地圖助手建立的自訂地形）。之前這裡是整份取代，切一次主題就會把自訂地形全部清掉，
+    // 導致已經畫好的地圖（包含存在地圖庫裡的）色塊全部找不到定義、顯示成空地板。
     const theme = MAP_PRESETS[state.themeId] || MAP_PRESETS[0];
-    state.mapPalette = theme.tiles.map(t => ({
-        id: t.id, name: t.name,
-        color: t.color, effect: t.effect,
-        moveCostMultiplier: t.moveCostMultiplier || 1
-    }));
+    if (!state.mapPalette) state.mapPalette = [];
+    const existingIds = new Set(state.mapPalette.map(t => t.id));
+    theme.tiles.forEach(t => {
+        if (existingIds.has(t.id)) return;
+        state.mapPalette.push({
+            id: t.id, name: t.name,
+            color: t.color, effect: t.effect,
+            moveCostMultiplier: t.moveCostMultiplier || 1
+        });
+    });
 
     updateToolbar();
     if (typeof syncMapPalette === 'function') syncMapPalette();

@@ -567,6 +567,558 @@ console.log('\n[人格卡狀態套用] cmResolveIdentityBonus() 不再遺漏 sel
 })();
 
 // ====================================================================
+console.log('\n[主動宣告技] 扣資源、二次確認、加值併入戰鬥計算');
+// ====================================================================
+(function () {
+    const calls = { hp: [], stacks: [], addStatus: [], toasts: [], confirms: [] };
+    let confirmAnswer = true;
+    const dcSandbox = {
+        console, Object, Array, Math, JSON, Set, Number, String, parseInt, isNaN,
+        window: undefined,
+        document: { getElementById: () => null, querySelector: () => null },
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'st',                       // 以 ST 身分執行，扣血走 modifyHPInternal（可直接觀察）
+        myPlayerId: 'p1',
+        state: { units: [], roundNum: 1, teamPools: { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 } },
+        findUnitById: (id) => dcSandbox.state.units.find(u => u && u.id === id) || null,
+        modifyHPInternal: (u, type, amount) => { calls.hp.push({ id: u.id, type, amount }); },
+        updateStatusStacks: (id, name, n) => {
+            calls.stacks.push({ id, name, n });
+            const u = dcSandbox.findUnitById(id);
+            if (u && u.status) { if (n <= 0) delete u.status[name]; else u.status[name] = String(n); }
+        },
+        addStatusToUnit: (id, statusId, n) => {
+            calls.addStatus.push({ id, statusId, n });
+            const u = dcSandbox.findUnitById(id);
+            if (!u) return;
+            const def = dcSandbox.getStatusById ? dcSandbox.getStatusById(statusId) : null;
+            const name = def ? def.name : statusId;
+            u.status = u.status || {};
+            u.status[name] = String((parseInt(u.status[name]) || 0) + n);
+        },
+        broadcastState: () => {},
+        showToast: (t) => calls.toasts.push(t),
+        confirm: (msg) => { calls.confirms.push(msg); return confirmAnswer; },
+        escapeHtml: (s) => s,
+        isSevereGaugeFull: (u) => !!(u && Array.isArray(u.hpArr) && u.hpArr.length > 0 && u.hpArr.every(v => v >= 3)),
+        renderUnitsList: () => {}, renderSidebarUnits: () => {}, syncUnitStatus: () => {},
+    };
+    vm.createContext(dcSandbox);
+    vm.runInContext([
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/core/identity-engine.js',
+        'src/ui/identity-hud.js',
+        'src/ui/combat-modals.js'
+    ].map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __dc = { idtDeclareActiveSkill, idtPlanDeclareCost, idtIsDeclarable, identityHudState,'
+        + ' idtPendingActiveBonus, idtNextTurnActiveBonus, idtConsumePendingActiveBonus,'
+        + ' idtClearPendingActiveBonus, idtResetDeclaredUses, getIdentityById, cmResolveIdentityBonus,'
+        + ' IDENTITY_LIBRARY };',
+        dcSandbox, { filename: 'combined-declare.js' });
+    // renderIdentityModal 在宣告結束時會被呼叫；沙箱無 DOM，直接覆寫成 no-op
+    vm.runInContext('renderIdentityModal = function () {};', dcSandbox);
+    const { idtDeclareActiveSkill, idtPlanDeclareCost, idtIsDeclarable, identityHudState,
+            idtPendingActiveBonus, idtNextTurnActiveBonus, idtConsumePendingActiveBonus,
+            idtClearPendingActiveBonus, idtResetDeclaredUses, getIdentityById,
+            cmResolveIdentityBonus, IDENTITY_LIBRARY } = dcSandbox.__dc;
+
+    /** 找出某張卡上指定名稱的 onActive 索引 */
+    const activeIndex = (cardId, name) =>
+        getIdentityById(cardId).hooks.onActive.findIndex(h => h && h.name === name);
+
+    const setup = (attackerStatus, targetStatus, targetExtra) => {
+        calls.hp = []; calls.stacks = []; calls.addStatus = []; calls.toasts = []; calls.confirms = [];
+        confirmAnswer = true;
+        idtResetDeclaredUses();
+        for (const k of Object.keys(idtPendingActiveBonus)) delete idtPendingActiveBonus[k];
+        for (const k of Object.keys(idtNextTurnActiveBonus)) delete idtNextTurnActiveBonus[k];
+        dcSandbox.state.units = [
+            { id: 'me', name: '我', type: 'player', ownerId: 'p1', status: attackerStatus || {}, hpArr: [0, 0, 0], maxHp: 3, init: 10 },
+            Object.assign({ id: 'foe', name: '敵人', type: 'enemy', status: targetStatus || {}, hpArr: [0, 0, 0, 0, 0], maxHp: 5, init: 5 }, targetExtra || {})
+        ];
+        identityHudState.attackerId = 'me';
+        identityHudState.targetId = 'foe';
+        identityHudState.cardInputs = {};
+    };
+
+    test('有成本的宣告會先跳二次確認；取消時完全不扣資源', () => {
+        setup({ '充能': '10' });
+        identityHudState.owner = '格里高爾';
+        identityHudState.cards = { gregor_rosewrench: { owned: true, unlocked: false } };
+        confirmAnswer = false;
+        idtDeclareActiveSkill('gregor_rosewrench', activeIndex('gregor_rosewrench', '超載 2 - 輕度運轉'));
+        assert.strictEqual(calls.confirms.length, 1, '應跳出一次二次確認');
+        assert.ok(calls.confirms[0].includes('充能'), `確認文案應列出將扣除的資源：${calls.confirms[0]}`);
+        assert.strictEqual(calls.stacks.length, 0, '取消後不得扣除任何層數');
+        assert.strictEqual(dcSandbox.state.units[0].status['充能'], '10');
+        assert.strictEqual(idtPendingActiveBonus['me'], undefined, '取消後不得留下待併入加值');
+    });
+
+    test('確認後扣除資源，加值進入「待併入下次攻擊」的暫存', () => {
+        setup({ '充能': '10' });
+        identityHudState.owner = '格里高爾';
+        identityHudState.cards = { gregor_rosewrench: { owned: true, unlocked: false } };
+        idtDeclareActiveSkill('gregor_rosewrench', activeIndex('gregor_rosewrench', '超載 2 - 輕度運轉'));
+        assert.strictEqual(dcSandbox.state.units[0].status['充能'], '8', '充能應扣掉 2');
+        assert.strictEqual(idtPendingActiveBonus['me'].dp, 2, 'DP +2 應待併入下次攻擊');
+    });
+
+    test('宣告的加值真的併入戰鬥計算（cmResolveIdentityBonus → 攻擊 DP／附加成功／傷害）', () => {
+        setup({ '充能': '10' });
+        identityHudState.owner = '格里高爾';
+        identityHudState.cards = { gregor_rosewrench: { owned: true, unlocked: false } };
+        idtDeclareActiveSkill('gregor_rosewrench', activeIndex('gregor_rosewrench', '超載 5 - 齒輪加速'));
+        // submitAttackModal 會呼叫 idtConsumePendingActiveBonus 併進 identityBonus，這裡直接驗證取出的內容
+        const pend = idtConsumePendingActiveBonus('me');
+        assert.strictEqual(pend.dp, 7, '超載 5 的 +7 DP 應可被攻擊流程取出');
+        assert.strictEqual(idtConsumePendingActiveBonus('me'), null, '取出後應清空，不會重複計入下一次攻擊');
+    });
+
+    test('資源不足時不可宣告，也不會跳確認', () => {
+        setup({ '充能': '1' });
+        identityHudState.owner = '格里高爾';
+        identityHudState.cards = { gregor_rosewrench: { owned: true, unlocked: false } };
+        idtDeclareActiveSkill('gregor_rosewrench', activeIndex('gregor_rosewrench', '超載 5 - 齒輪加速'));
+        assert.strictEqual(calls.confirms.length, 0, '資源不足應直接擋下，不跳確認');
+        assert.strictEqual(dcSandbox.state.units[0].status['充能'], '1');
+        assert.ok(calls.toasts.some(t => t.includes('不足')), '應提示資源不足');
+    });
+
+    test('震顫引爆：依「引爆前」層數削減目標生命上限，但只移除指定層數', () => {
+        setup({}, { '震顫': '7' });
+        identityHudState.owner = '羅佳';
+        identityHudState.cards = { rodion_tcorp: { owned: true, unlocked: true } };
+        idtDeclareActiveSkill('rodion_tcorp', activeIndex('rodion_tcorp', '震顫引爆（徵收執行）'));
+        const foe = dcSandbox.findUnitById('foe');
+        // 生命上限 5 → 削減 7 但下限為 1
+        assert.strictEqual(foe.maxHp, 1, '應依引爆前的 7 層削減生命上限（最低 1）');
+        assert.strictEqual(foe.status['震顫'], '6', '層數只減 1（7 → 6）');
+    });
+
+    test('震顫引爆（N公司）：全清層數，並造成等同消耗層數的傷害', () => {
+        setup({}, { '震顫': '4' });
+        identityHudState.owner = '唐吉訶德';
+        identityHudState.cards = { don_ncompany: { owned: true, unlocked: false } };
+        idtDeclareActiveSkill('don_ncompany', activeIndex('don_ncompany', '震顫引爆'));
+        const foe = dcSandbox.findUnitById('foe');
+        assert.strictEqual(foe.status['震顫'], undefined, '震顫應被清空');
+        assert.deepStrictEqual(calls.hp, [{ id: 'foe', type: 'l', amount: 4 }], '應造成 4 點 L 傷');
+    });
+
+    test('燃盡知識：消耗所有學識，附加成功等同實際燒掉的點數，並清空所解真知', () => {
+        setup({ '學識': '7', '所解真知': '3' });
+        identityHudState.owner = '莫爾索';
+        identityHudState.cards = { meursault_dieci: { owned: true, unlocked: true } };
+        idtDeclareActiveSkill('meursault_dieci', activeIndex('meursault_dieci', '燃盡知識（消耗所有學識）'));
+        const me = dcSandbox.findUnitById('me');
+        assert.strictEqual(me.status['學識'], undefined, '學識應全數消耗');
+        assert.strictEqual(me.status['所解真知'], undefined, '所解真知應歸零');
+        assert.strictEqual(idtPendingActiveBonus['me'].extraSuccess, 7, '附加成功應等同燒掉的 7 點學識');
+    });
+
+    test('每場戰鬥限一次：第二次宣告被擋下，戰鬥重置後可再用', () => {
+        setup({ '學識': '9' });
+        identityHudState.owner = '莫爾索';
+        identityHudState.cards = { meursault_dieci: { owned: true, unlocked: true } };
+        const idx = activeIndex('meursault_dieci', '燃盡知識（消耗所有學識）');
+        idtDeclareActiveSkill('meursault_dieci', idx);
+        dcSandbox.findUnitById('me').status['學識'] = '9';   // 補回資源，排除「資源不足」這個變因
+        calls.toasts = [];
+        idtDeclareActiveSkill('meursault_dieci', idx);
+        assert.ok(calls.toasts.some(t => t.includes('本場戰鬥已使用過')), `第二次應被次數限制擋下：${calls.toasts}`);
+        idtResetDeclaredUses();
+        calls.toasts = [];
+        idtDeclareActiveSkill('meursault_dieci', idx);
+        assert.ok(!calls.toasts.some(t => t.includes('已使用過')), '重置後應可再次宣告');
+    });
+
+    test('目標成本不足時擋下（時間延付需目標 10 層震顫）', () => {
+        setup({}, { '震顫': '9' });
+        identityHudState.owner = '唐吉訶德';
+        identityHudState.cards = { don_tcorp: { owned: true, unlocked: true } };
+        idtDeclareActiveSkill('don_tcorp', activeIndex('don_tcorp', '時間延付'));
+        assert.strictEqual(calls.confirms.length, 0);
+        assert.strictEqual(dcSandbox.findUnitById('foe').status['震顫'], '9', '不足時不得動到目標層數');
+    });
+
+    test('一點突破：目標燃燒減半、造成等同原燃燒點數的傷害，且每場限一次', () => {
+        setup({}, { '燃燒': '15' });
+        identityHudState.owner = '羅佳';
+        identityHudState.cards = { ryoshu_south4: { owned: true, unlocked: true } };
+        idtDeclareActiveSkill('ryoshu_south4', activeIndex('ryoshu_south4', '一點突破'));
+        assert.deepStrictEqual(calls.hp, [{ id: 'foe', type: 'l', amount: 15 }], '傷害＝引爆前的 15 點燃燒');
+        assert.strictEqual(dcSandbox.findUnitById('foe').status['燃燒'], '7', '15 → floor(15/2) = 7');
+    });
+
+    test('nextTurnBonus：宣告當下不進入 pending，回合開始才轉入並生效', () => {
+        setup({}, { '沮喪': '12' });
+        identityHudState.owner = '格里高爾';
+        identityHudState.cards = { gregor_edgar: { owned: true, unlocked: true } };
+        idtDeclareActiveSkill('gregor_edgar', activeIndex('gregor_edgar', '噩夢吞噬'));
+        assert.strictEqual(idtPendingActiveBonus['me'], undefined, '不該立刻併入本次攻擊');
+        assert.strictEqual(idtNextTurnActiveBonus['me'].extraSuccess, 2, '應存進「下一回合」桶');
+        // 回合開始：pending 清空，next 轉入
+        idtClearPendingActiveBonus('me');
+        assert.strictEqual(idtNextTurnActiveBonus['me'], undefined);
+        assert.strictEqual(idtPendingActiveBonus['me'].weaponDamage === undefined ? idtPendingActiveBonus['me'].damage : 0, 3,
+            '武器傷害 +3 應折算為傷害加值併入本回合');
+    });
+
+    test('selfClear：一鍵把自身資源歸零（第七發魔彈重置魔彈）', () => {
+        setup({ '魔彈': '7' });
+        identityHudState.owner = '奧提斯';
+        identityHudState.cards = { otis_ego_bullet: { owned: true, unlocked: true } };
+        idtDeclareActiveSkill('otis_ego_bullet', activeIndex('otis_ego_bullet', '第七發魔彈（重置魔彈）'));
+        assert.strictEqual(dcSandbox.findUnitById('me').status['魔彈'], undefined, '魔彈應歸零');
+        assert.strictEqual(calls.confirms.length, 0, '純重置沒有資源成本，不需二次確認');
+    });
+
+    test('全隊共用資源池成本同樣走二次確認並扣款（公主：退下…）', () => {
+        setup({});
+        dcSandbox.state.teamPools = { bloodFeast: 5, bloodFeastSpent: 0, bleedDamageAcc: 0 };
+        identityHudState.owner = '羅佳';
+        identityHudState.cards = { rodion_manchaland: { owned: true, unlocked: false } };
+        idtDeclareActiveSkill('rodion_manchaland', activeIndex('rodion_manchaland', '退下…（消耗 2 點血宴）'));
+        assert.ok(calls.confirms[0].includes('血宴'), `確認文案應提到血宴：${calls.confirms[0]}`);
+        assert.strictEqual(dcSandbox.state.teamPools.bloodFeast, 3, '血宴 5 → 3');
+        assert.strictEqual(dcSandbox.state.teamPools.bloodFeastSpent, 2, '累計消耗應記錄 2');
+    });
+
+    test('嚴重轉惡性／加骰級數會隨人格卡算出，供攻擊視窗預填', () => {
+        setup({}, { '流血': '9' });
+        dcSandbox.myRole = 'player';   // cmResolveIdentityBonus 只在玩家端運算（ST 走 BOSS 資料）
+        identityHudState.owner = '良秀';
+        identityHudState.cards = { yoshu_blackcloud: { owned: true, unlocked: true } };
+        const bonus = cmResolveIdentityBonus(dcSandbox.findUnitById('me'), dcSandbox.findUnitById('foe'));
+        assert.strictEqual(bonus.critVicious, 3, '流血 9 → 1+1+1 = 3 點嚴重轉惡性');
+
+        identityHudState.owner = '羅佳';
+        identityHudState.cards = { ryoshu_blackcloud: { owned: true, unlocked: true } };
+        const b2 = cmResolveIdentityBonus(dcSandbox.findUnitById('me'), dcSandbox.findUnitById('foe'));
+        assert.strictEqual(b2.explodeStep, 1, '流血 6+ → 加骰下推 1 級');
+        dcSandbox.myRole = 'st';
+    });
+
+    test('所有帶結構化 effect 的宣告技都能被面板辨識為可宣告', () => {
+        let declarable = 0;
+        for (const card of Object.values(IDENTITY_LIBRARY)) {
+            for (const h of ((card.hooks && card.hooks.onActive) || [])) {
+                if (h && h.effect) {
+                    assert.ok(idtIsDeclarable(h), `${card.name}「${h.name}」帶 effect 卻不可宣告`);
+                    declarable++;
+                }
+            }
+        }
+        assert.ok(declarable >= 20, `可宣告的技能數應相當可觀，實得 ${declarable}`);
+    });
+})();
+
+// ====================================================================
+console.log('\n[回合結束結算] 尖釘釘刑三段式 + 流血傷害累積血宴');
+// ====================================================================
+(function () {
+    const applied = { hp: [], status: [], stacks: [], pools: null };
+    const teSandbox = {
+        console, Object, Array, Math, JSON, Set, Number, String, parseInt, isNaN, Date,
+        window: undefined,
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'st',
+        state: { units: [], teamPools: { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 } },
+        findUnitById: (id) => teSandbox.state.units.find(u => u && u.id === id) || null,
+        modifyHPInternal: (u, type, amount) => { applied.hp.push({ id: u.id, type, amount }); },
+        addStatusToUnit: (id, statusId, n) => { applied.status.push({ id, statusId, n }); },
+        updateStatusStacks: (id, name, n) => { applied.stacks.push({ id, name, n }); },
+        syncTeamPools: (pools) => { applied.pools = pools; teSandbox.state.teamPools = pools; },
+        broadcastState: () => {},
+        showToast: () => {},
+        escapeHtml: (s) => s,
+        document: { getElementById: () => null, createElement: () => ({ style: {}, classList: { add() {} } }),
+                    body: { appendChild() {} }, addEventListener: () => {}, readyState: 'complete' },
+    };
+    vm.createContext(teSandbox);
+    vm.runInContext([
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/ui/units.js'
+    ].map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __te = { buildTurnEndItems, applyTurnEndItem, accumulateBloodFeastFromBleed, _setItems: (it) => { _turnEndItems = it; } };',
+        teSandbox, { filename: 'combined-turnend.js' });
+    const { buildTurnEndItems, applyTurnEndItem, accumulateBloodFeastFromBleed, _setItems } = teSandbox.__te;
+
+    const reset = () => { applied.hp = []; applied.status = []; applied.stacks = []; applied.pools = null; };
+
+    test('尖釘：回合結束結算不再只是提醒，而是可一鍵套用的三段式效果', () => {
+        const items = buildTurnEndItems({ id: 'u1', status: { '尖釘': 5 } });
+        const nails = items.find(i => i.statusName === '尖釘');
+        assert.ok(nails, '應產出尖釘結算項目');
+        assert.strictEqual(nails.kind, 'nails', '不應再是 remind（過去只能手動處理）');
+        assert.strictEqual(nails.amount, 5);
+        assert.ok(nails.label.includes('2'), `標籤應預告減半後的層數：${nails.label}`);
+    });
+
+    test('尖釘：套用後 → 受等量 L 傷、疊加等量流血、層數減半（無條件捨去）', () => {
+        reset();
+        const u = { id: 'u1', status: { '尖釘': 5 } };
+        teSandbox.state.units = [u];
+        _setItems(buildTurnEndItems(u).filter(i => i.statusName === '尖釘'));
+        applyTurnEndItem('u1', 0);
+        assert.deepStrictEqual(applied.hp, [{ id: 'u1', type: 'l', amount: 5 }]);
+        assert.deepStrictEqual(applied.status, [{ id: 'u1', statusId: 'bleed', n: 5 }]);
+        assert.deepStrictEqual(applied.stacks, [{ id: 'u1', name: '尖釘', n: 2 }], '5 → floor(5/2) = 2');
+    });
+
+    test('血宴：流血傷害全場累計，每滿 5 點 +1；不足 5 點的餘數保留到下次', () => {
+        teSandbox.state.teamPools = { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 };
+        // 三個單位各受 2 點流血 → 合計 6 點 → 應給 1 點血宴（逐次 floor(2/5) 會全部歸零）
+        assert.strictEqual(accumulateBloodFeastFromBleed(2), 0);
+        assert.strictEqual(accumulateBloodFeastFromBleed(2), 0);
+        assert.strictEqual(accumulateBloodFeastFromBleed(2), 1);
+        assert.strictEqual(teSandbox.state.teamPools.bloodFeast, 1);
+        assert.strictEqual(teSandbox.state.teamPools.bleedDamageAcc, 1, '餘數 1 點應保留');
+    });
+
+    test('血宴：單次大量流血一次補足多點，且不超過 100 上限', () => {
+        teSandbox.state.teamPools = { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 };
+        assert.strictEqual(accumulateBloodFeastFromBleed(23), 4, '23 / 5 = 4 點，餘 3');
+        assert.strictEqual(teSandbox.state.teamPools.bleedDamageAcc, 3);
+
+        teSandbox.state.teamPools = { bloodFeast: 98, bloodFeastSpent: 0, bleedDamageAcc: 0 };
+        accumulateBloodFeastFromBleed(100);
+        assert.strictEqual(teSandbox.state.teamPools.bloodFeast, 100, '不得超過上限');
+    });
+
+    test('流血結算項目帶 bleedPool 旗標 → 套用扣血時同步累積血宴', () => {
+        reset();
+        teSandbox.state.teamPools = { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 };
+        const u = { id: 'u1', status: { '流血': 7 } };
+        teSandbox.state.units = [u];
+        const items = buildTurnEndItems(u).filter(i => i.statusName === '流血');
+        assert.strictEqual(items[0].bleedPool, true);
+        _setItems(items);
+        applyTurnEndItem('u1', 0);
+        assert.deepStrictEqual(applied.hp, [{ id: 'u1', type: 'l', amount: 7 }]);
+        assert.strictEqual(teSandbox.state.teamPools.bloodFeast, 1, '7 點流血 → 血宴 +1（餘 2）');
+    });
+})();
+
+// ====================================================================
+console.log('\n[新人格卡] 浮士德倖存者／魔彈奧提斯／羅佳三卡與全隊共用資源池');
+// ====================================================================
+(function () {
+    const newSandbox = {
+        console, Object, Array, Math, JSON, Set, Number, parseInt, isNaN,
+        window: undefined,
+        document: { getElementById: () => null, querySelector: () => null },
+        localStorage: { getItem: () => null, setItem() {} },
+        myRole: 'player',
+        myPlayerId: 'p1',
+        state: { units: [], teamPools: { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 } },
+        findUnitById: (id) => newSandbox.state.units.find(u => u && u.id === id) || null,
+        showToast: () => {},
+        escapeHtml: (s) => s,
+    };
+    vm.createContext(newSandbox);
+    vm.runInContext([
+        'src/config/status-config.js',
+        'src/config/identity-config.js',
+        'src/core/identity-engine.js',
+        'src/ui/identity-hud.js',
+        'src/ui/combat-modals.js'
+    ].map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __nx = { evaluatePlayerAttack, evaluatePlayerDefend, evaluatePlayerResolve,'
+        + ' evaluatePlayerTurnStart, getIdentityById, cmResolveIdentityBonus, identityHudState,'
+        + ' cmBuildResolveTable, cmLookupResolveEntry, IDENTITY_TEAM_POOLS, IDENTITY_STATUS_KEYMAP,'
+        + ' idtGetTeamPools };',
+        newSandbox, { filename: 'combined-new-identities.js' });
+    const { evaluatePlayerAttack, evaluatePlayerDefend, evaluatePlayerResolve, evaluatePlayerTurnStart,
+            getIdentityById, cmResolveIdentityBonus, identityHudState, cmLookupResolveEntry,
+            IDENTITY_TEAM_POOLS, IDENTITY_STATUS_KEYMAP } = newSandbox.__nx;
+
+    // ── 浮士德 - 腦葉公司倖存者 ──────────────────────────────────────
+    test('浮士德倖存者：單擊宣告 +2 呼吸法、命中破裂與深度撕裂的呼吸法／迅捷全部疊加', () => {
+        const r = evaluatePlayerAttack([{ id: 'faust_lcb', unlocked: false }], { status: {} }, { status: {} });
+        assert.strictEqual(r.onAttackSelfStatus.breathing, 2, '宣告攻擊 → 呼吸法 +2');
+        assert.strictEqual(r.onHitSelfStatus.breathing, 3, '命中 → 深度撕裂呼吸法 +3');
+        assert.strictEqual(r.onHitSelfStatus.swiftness, 2, '命中 → 迅捷 +2');
+        assert.strictEqual(r.onHitTargetStatus.rupture, 4, '單擊 2 + 深度撕裂 2 = 破裂 4');
+    });
+
+    test('浮士德倖存者：伺機而動需解鎖，且只在「上一回合未受傷」時給 +6 DP／+2 附加成功', () => {
+        const locked = evaluatePlayerAttack([{ id: 'faust_lcb', unlocked: false }],
+            { status: {}, noDamageLastTurn: true }, { status: {} });
+        assert.strictEqual(locked.totalDpBonus, 0, '未解鎖三技 → 不得計入');
+
+        const damaged = evaluatePlayerAttack([{ id: 'faust_lcb', unlocked: true }],
+            { status: {}, noDamageLastTurn: false }, { status: {} });
+        assert.strictEqual(damaged.totalDpBonus, 0, '上回合受過傷 → 條件未達');
+
+        const clean = evaluatePlayerAttack([{ id: 'faust_lcb', unlocked: true }],
+            { status: {}, noDamageLastTurn: true }, { status: {} });
+        assert.strictEqual(clean.totalDpBonus, 6);
+        assert.strictEqual(clean.totalExtraSuccess, 2);
+        assert.strictEqual(clean.onHitTargetStatus.rupture, 7, '單擊 2 + 深度撕裂 2 + 伺機而動 3');
+    });
+
+    test('浮士德倖存者：「至少造成 3 點傷害」的破裂走 onResolve，2 點不給、3 點才給', () => {
+        const owned = [{ id: 'faust_lcb', unlocked: true }];
+        const at2 = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: true, damage: 2 });
+        const at3 = evaluatePlayerResolve(owned, { status: {} }, { status: {} }, { hit: true, damage: 3 });
+        assert.strictEqual(Object.keys(at2.targetStatus).length, 0, '2 點傷害不觸發');
+        assert.strictEqual(at3.targetStatus.rupture, 3, '3 點傷害 → 再施加 3 層破裂');
+    });
+
+    test('傷害門檻階梯表：ST 端依實際傷害查表，2 點與 3 點取到不同格', () => {
+        identityHudState.owner = '浮士德';
+        identityHudState.cards = { faust_lcb: { owned: true, unlocked: true } };
+        identityHudState.cardInputs = {};
+        const bonus = cmResolveIdentityBonus({ id: 'a', status: {}, init: 10 }, { id: 't', status: {} });
+        assert.ok(bonus.onResolveTable.length >= 2, '應產出至少兩格階梯');
+        assert.strictEqual(cmLookupResolveEntry(bonus, 2, true).targetStatus.rupture, undefined);
+        assert.strictEqual(cmLookupResolveEntry(bonus, 3, true).targetStatus.rupture, 3);
+        assert.strictEqual(cmLookupResolveEntry(bonus, 99, true).targetStatus.rupture, 3, '超出取樣範圍沿用最後一格');
+        identityHudState.cards = {};
+    });
+
+    // ── 奧提斯 - E.G.O::魔彈（效果修改）────────────────────────────
+    test('魔彈奧提斯：燃燒 9 點 → 點火 +9 DP（每 3 點 +3，三次封頂）、魔彈起爆 +3 DP', () => {
+        const r = evaluatePlayerAttack([{ id: 'otis_ego_bullet', unlocked: false }],
+            { status: { magicBullet: 0 } }, { status: { burn: 9 } });
+        // 點火 min(floor(9/3),3)*3 = 9；魔彈起爆 min(floor(9/6),3)*3 = 3
+        assert.strictEqual(r.totalDpBonus, 12);
+    });
+
+    test('魔彈奧提斯：魔彈滿 7 層 → 武器傷害 +5，且不再自動疊加第 8 層', () => {
+        const r = evaluatePlayerAttack([{ id: 'otis_ego_bullet', unlocked: true }],
+            { status: { magicBullet: 7 } }, { status: {} });
+        assert.strictEqual(r.totalWeaponDamage, 5, '第七發魔彈：武器傷害 +5');
+        assert.strictEqual(r.onAttackSelfStatus.magicBullet, undefined, '已滿 7 層 → 魔彈射擊不再 +1');
+        assert.strictEqual(r.onHitSelfStatus.magicBullet, undefined, '已滿 7 層 → 魔彈起爆不再 +1');
+    });
+
+    test('魔彈奧提斯：魔彈 6 層時起爆仍可 +1（門檻由 <6 修正為 <7）', () => {
+        const r = evaluatePlayerAttack([{ id: 'otis_ego_bullet', unlocked: false }],
+            { status: { magicBullet: 6 } }, { status: {} });
+        assert.strictEqual(r.onHitSelfStatus.magicBullet, 1);
+    });
+
+    // ── 羅佳 - T公司2級徵收人員 ──────────────────────────────────
+    test('T公司羅佳：目標震顫 12 層 → 兩技能各 +4 DP（各自封頂），解鎖後再 +4', () => {
+        const base = evaluatePlayerAttack([{ id: 'rodion_tcorp', unlocked: false }],
+            { status: {} }, { status: { tremor: 12 } });
+        assert.strictEqual(base.totalDpBonus, 8, '徵收準備 +4、鎮壓格鬥 +4');
+
+        const unlocked = evaluatePlayerAttack([{ id: 'rodion_tcorp', unlocked: true }],
+            { status: {} }, { status: { tremor: 12 } });
+        assert.strictEqual(unlocked.totalDpBonus, 12, '再加徵收執行（震顫 8+）的 +4');
+    });
+
+    test('T公司羅佳：命中對目標施加束縛（震顫 6+ 時 2 層），自身震顫只作資源累積', () => {
+        const r = evaluatePlayerAttack([{ id: 'rodion_tcorp', unlocked: false }],
+            { status: { tremor: 0 } }, { status: { tremor: 6 } });
+        assert.strictEqual(r.onHitTargetStatus.bind, 2, '震顫 6 層以上 → 束縛共 2 層');
+        assert.strictEqual(r.onAttackSelfStatus.tremor, 4, '兩技能宣告攻擊各 +2 震顫');
+        assert.strictEqual(r.onHitSelfStatus.tremor, 1, '徵收準備命中再 +1');
+    });
+
+    test('T公司羅佳：束縛換武器傷害封頂 +4（解鎖後）', () => {
+        const r = evaluatePlayerAttack([{ id: 'rodion_tcorp', unlocked: true }],
+            { status: {} }, { status: { bind: 9 } });
+        assert.strictEqual(r.totalWeaponDamage, 4);
+    });
+
+    // ── 羅佳 - N公司中錘 ────────────────────────────────────────
+    test('N公司羅佳：虔信釘擊的額外尖釘只在目標「原本就帶尖釘」時觸發', () => {
+        const noNails = evaluatePlayerAttack([{ id: 'rodion_ncorp', unlocked: false }],
+            { status: {} }, { status: {} });
+        assert.strictEqual(noNails.onHitTargetStatus.nails, 2, '狂熱淨化 1 + 鋼鐵裁決 1');
+
+        const withNails = evaluatePlayerAttack([{ id: 'rodion_ncorp', unlocked: false }],
+            { status: {} }, { status: { nails: 1 } });
+        assert.strictEqual(withNails.onHitTargetStatus.nails, 4, '再加虔信釘擊的 2 層');
+    });
+
+    test('N公司羅佳：命中獲得狂信；下一次回合開始時自動以負層數清除', () => {
+        const hit = evaluatePlayerAttack([{ id: 'rodion_ncorp', unlocked: false }],
+            { status: {} }, { status: {} });
+        assert.strictEqual(hit.onHitSelfStatus.fanaticism, 1);
+
+        const turn = evaluatePlayerTurnStart([{ id: 'rodion_ncorp', unlocked: false }],
+            { status: { fanaticism: 1 } });
+        assert.strictEqual(turn.expectedSelfStatus.fanaticism, -1, '回合開始應扣掉 1 層（歸零）');
+    });
+
+    test('N公司羅佳：狂信時被攻擊 → 對攻擊者施加 3 點流血（onDefend）', () => {
+        const owned = [{ id: 'rodion_ncorp', unlocked: false }];
+        const noFaith = evaluatePlayerDefend(owned, { status: {} }, { status: {} }, { melee: true });
+        assert.strictEqual(Object.keys(noFaith.attackerStatus).length, 0, '沒有狂信 → 不反擊');
+
+        const faith = evaluatePlayerDefend(owned, { status: { fanaticism: 1 } }, { status: {} }, { melee: false });
+        assert.strictEqual(faith.attackerStatus.bleed, 3, '遠程被攻擊同樣可反擊流血');
+    });
+
+    // ── 羅佳 - 拉·曼卻領 公主 ──────────────────────────────────
+    test('公主：綻放荊棘 10 層以上 → 退下…的流血／破裂各 +1；20 層以上四散再各 +2', () => {
+        const low = evaluatePlayerAttack([{ id: 'rodion_manchaland', unlocked: false }],
+            { status: { bloomingThorns: 0 } }, { status: {} });
+        assert.strictEqual(low.onHitTargetStatus.bleed, 5, '退下 2 + 四散 3');
+        assert.strictEqual(low.onHitTargetStatus.rupture, 5);
+
+        const high = evaluatePlayerAttack([{ id: 'rodion_manchaland', unlocked: false }],
+            { status: { bloomingThorns: 20 } }, { status: {} });
+        assert.strictEqual(high.onHitTargetStatus.bleed, 8, '退下 3 + 四散 5');
+        assert.strictEqual(high.onHitTargetStatus.rupture, 8);
+    });
+
+    test('公主：綻放荊棘未滿 20 → 觸發慶典熱潮；達 20 層後不再觸發', () => {
+        const hot = evaluatePlayerAttack([{ id: 'rodion_manchaland', unlocked: true }],
+            { status: { bloomingThorns: 18 } }, { status: {} });
+        assert.strictEqual(hot.onAttackSelfStatus.strength, 3);
+        assert.strictEqual(hot.onAttackSelfStatus.bloomingThorns, 4);
+
+        // 20～29 層是「兩段都不觸發」的區間：慶典熱潮要求未滿 20、落幕要求滿 30
+        const idle = evaluatePlayerAttack([{ id: 'rodion_manchaland', unlocked: true }],
+            { status: { bloomingThorns: 20 } }, { status: {} });
+        assert.strictEqual(idle.onAttackSelfStatus.strength, undefined);
+        assert.strictEqual(idle.totalDpBonus, 0);
+    });
+
+    test('公主：綻放荊棘 30 層 →【落幕】+6 DP／+2 附加成功，並依累計消耗血宴加最終傷害', () => {
+        const r = evaluatePlayerAttack([{ id: 'rodion_manchaland', unlocked: true }],
+            { status: { bloomingThorns: 30 }, pools: { bloodFeast: 10, bloodFeastSpent: 35 } },
+            { status: {} });
+        assert.strictEqual(r.totalDpBonus, 6, '荊棘滿 30 → 走落幕，不再觸發慶典熱潮的 DP');
+        assert.strictEqual(r.totalExtraSuccess, 2);
+        assert.strictEqual(r.totalFinalDamage, 3, '累計消耗 35 → floor(35/10) = 3');
+        assert.strictEqual(r.onHitTargetStatus.bleed, 3 + 5 + 6, '退下 3 + 四散 5 + 落幕 6');
+        assert.strictEqual(r.onHitTargetStatus.rupture, 3 + 5 + 6);
+    });
+
+    test('公主：綻放荊棘的近戰反傷只對近戰生效，且會自扣 1 層', () => {
+        const owned = [{ id: 'rodion_manchaland', unlocked: false }];
+        const ranged = evaluatePlayerDefend(owned, { status: { bloomingThorns: 5 } }, { status: {} }, { melee: false });
+        assert.strictEqual(Object.keys(ranged.attackerStatus).length, 0, '遠程攻擊不觸發反傷');
+
+        const melee = evaluatePlayerDefend(owned, { status: { bloomingThorns: 5 } }, { status: {} }, { melee: true });
+        assert.strictEqual(melee.attackerStatus.bleed, 1);
+        assert.strictEqual(melee.selfStatus.bloomingThorns, -1, '反傷後自身層數 -1');
+
+        const empty = evaluatePlayerDefend(owned, { status: { bloomingThorns: 0 } }, { status: {} }, { melee: true });
+        assert.strictEqual(Object.keys(empty.attackerStatus).length, 0, '沒有荊棘就沒有反傷');
+    });
+
+    test('全隊共用資源池：血宴定義齊備，且不會被當成單位狀態塞進 unit.status', () => {
+        assert.ok(IDENTITY_TEAM_POOLS.bloodFeast, '應有血宴資源池定義');
+        assert.strictEqual(IDENTITY_TEAM_POOLS.bloodFeast.max, 100);
+        assert.strictEqual(IDENTITY_TEAM_POOLS.bloodFeast.gainPer.amount, 5);
+        const card = getIdentityById('rodion_manchaland');
+        assert.ok(card.teamPools.includes('bloodFeast'), '公主應標記使用血宴資源池');
+        // 血宴不在 IDENTITY_STATUS_KEYMAP 中 → buildEngineUnitState 不會把它當單位狀態讀取
+        assert.strictEqual(IDENTITY_STATUS_KEYMAP.bloodFeast, undefined);
+    });
+})();
+
+// ====================================================================
 console.log('\n[模板整併] 單位模板：完整數值保存與同名覆蓋更新');
 // ====================================================================
 (function () {
@@ -1111,7 +1663,7 @@ console.log('\n[命中全自動化] cmApplyOnHitIdentityStatuses：命中才套�
 })();
 
 // ====================================================================
-console.log('\n[強壯／不屈自動化] 攻擊者強壯加傷、目標不屈減傷（防禦扣除模式 + 豁免抵擋模式）');
+console.log('\n[傷害減免自動化] 強壯改為 DP 加值、目標不屈／狂信減傷（防禦扣除模式 + 豁免抵擋模式）');
 // ====================================================================
 (function () {
     let hpMods;
@@ -1123,7 +1675,7 @@ console.log('\n[強壯／不屈自動化] 攻擊者強壯加傷、目標不屈�
         state: { units: [], roundNum: 1 },
         combatQueueLast: null,
         findUnitById: (id) => dmgSandbox.state.units.find(u => u && u.id === id) || null,
-        // 每顆骰都算成功（成功數 = 骰數），排除隨機性，只驗證強壯/不屈的疊加
+        // 每顆骰都算成功（成功數 = 骰數），排除隨機性，只驗證傷害加減項的疊加
         bbRollAttackDice: (dice) => ({ rolls: Array(Math.max(0, dice)).fill(8), successes: Math.max(0, dice), explodedCount: 0, totalRolled: dice }),
         modifyHPInternal: (unit, type, amount) => { hpMods.push({ id: unit.id, type, amount }); },
         broadcastState: () => {},
@@ -1148,16 +1700,28 @@ console.log('\n[強壯／不屈自動化] 攻擊者強壯加傷、目標不屈�
         assert.strictEqual(cmGetStatusLayers(null, 'strength'), 0);
     });
 
-    test('防禦扣除模式：攻擊者強壯 3 層 → 傷害自動 +3（計入攻擊上限）', () => {
+    // 強壯依規則書定義為「所有攻擊檢定獲得等同層數的 DP 加值」，已改由黑箱引擎的 calcMod
+    // 併入攻擊 DP 桶；若這裡仍加傷，同一層強壯會被算兩次（DP 一次、傷害一次）。
+    test('防禦扣除模式：攻擊者強壯不再重複加傷（已改為攻擊檢定 DP 加值）', () => {
         hpMods = [];
         const attacker = { id: 'atk1', status: { '強壯': '3' } };
         const target = { id: 'tgt1', status: {}, hpArr: [1, 1, 1] };
         dmgSandbox.state.units = [attacker, target];
         dmgSandbox.combatQueueLast = { attacker: { unitId: 'atk1', attackerRole: 'player', damageCap: 0 } };
         const roll = cmAutoRollAndApply(5, 0, 'tgt1');
-        assert.strictEqual(roll.strengthBonus, 3, '應讀出強壯 3 層');
-        assert.strictEqual(roll.damage, 5 + 3, '成功數 5 + 強壯 3');
-        assert.strictEqual(hpMods[0].amount, 8, '應對目標套用 8 點傷害');
+        assert.strictEqual(roll.damage, 5, '傷害應只有成功數 5，強壯不再加傷');
+        assert.strictEqual(hpMods[0].amount, 5, '應對目標套用 5 點傷害');
+    });
+
+    test('防禦扣除模式：目標狂信 → 傷害自動 -2（damageReduction，與不屈相加）', () => {
+        hpMods = [];
+        const attacker = { id: 'atk1', status: {} };
+        const target = { id: 'tgt1', status: { '狂信': 1, '不屈': '1' }, hpArr: [1, 1, 1] };
+        dmgSandbox.state.units = [attacker, target];
+        dmgSandbox.combatQueueLast = { attacker: { unitId: 'atk1', attackerRole: 'player', damageCap: 0 } };
+        const roll = cmAutoRollAndApply(5, 0, 'tgt1');
+        assert.strictEqual(roll.enduranceReduction, 3, '狂信 2 + 不屈 1 = 3');
+        assert.strictEqual(roll.damage, 5 - 3);
     });
 
     test('防禦扣除模式：目標不屈 2 層 → 傷害自動 -2（套用在攻擊上限封頂之後）', () => {
@@ -1183,7 +1747,7 @@ console.log('\n[強壯／不屈自動化] 攻擊者強壯加傷、目標不屈�
         assert.strictEqual(hpMods.length, 0, '傷害為 0 不應呼叫扣血');
     });
 
-    test('豁免抵擋模式：攻擊者強壯與目標不屈都會自動疊加進每目標傷害', () => {
+    test('豁免抵擋模式：目標不屈與狂信減傷都會自動疊加進每目標傷害（強壯不加傷）', () => {
         hpMods = [];
         dmgSandbox.__cells = {
             'st-review-modal': { dataset: { baseExtraSuccess: '0' } },
@@ -1192,7 +1756,7 @@ console.log('\n[強壯／不屈自動化] 攻擊者強壯加傷、目標不屈�
             'modals-container': { insertAdjacentHTML: () => {} },
         };
         const attacker = { id: 'atk1', status: { '強壯': '2' } };
-        const target = { id: 'tgt1', status: { '不屈': '1' }, hpArr: [1, 1, 1] };
+        const target = { id: 'tgt1', status: { '不屈': '1', '狂信': 1 }, hpArr: [1, 1, 1] };
         dmgSandbox.state.units = [attacker, target];
         dmgSandbox.combatQueueLast = {
             attacker: { unitId: 'atk1', attackerRole: 'player', name: '玩家' },
@@ -1200,8 +1764,8 @@ console.log('\n[強壯／不屈自動化] 攻擊者強壯加傷、目標不屈�
         };
         const saveInfo = { atkRoll: { successes: 5 }, saveName: '反射', targets: [{ id: 'tgt1', name: '目標', saveDice: 0, saveAuto: 0 }] };
         confirmSTReviewSaveMode(saveInfo);
-        // 傷害 = 攻擊成功 5 + 強壯 2 - 豁免 0 - 不屈 1 = 6
-        assert.strictEqual(hpMods[0].amount, 6);
+        // 傷害 = 攻擊成功 5 - 豁免 0 - 不屈 1 - 狂信 2 = 2（強壯已改為 DP 加值，不加傷）
+        assert.strictEqual(hpMods[0].amount, 2);
     });
 })();
 
@@ -2043,11 +2607,11 @@ console.log('\n[結算明細] calcDetail：分項相加等於採用值、先前�
         assert.strictEqual(d.critVicious, 2);
     });
 
-    test('明細預告擲骰後併入傷害的加減項（破裂／易損／強壯／不屈）', () => {
+    test('明細預告擲骰後併入傷害的加減項（破裂／易損／不屈／狂信）', () => {
         resetCaptures();
         sandbox.state.units = [
             { id: 'me', type: 'player', status: { '強壯': 4 } },
-            { id: 'boss', type: 'enemy', defDp: 0, defAuto: 0, status: { '破裂': 3, '易損': 2, '不屈': 5 } }
+            { id: 'boss', type: 'enemy', defDp: 0, defAuto: 0, status: { '破裂': 3, '易損': 2, '不屈': 5, '狂信': 1 } }
         ];
         bbRunBlackBoxCalculation({
             attacker: { dp: 8, auto: 0, unitId: 'me' },
@@ -2058,9 +2622,45 @@ console.log('\n[結算明細] calcDetail：分項相加等於採用值、先前�
         const bonusTxt = mods.bonuses.map(b => `${b.label}=${b.value}`).join(' | ');
         assert.ok(bonusTxt.includes('破裂'), `應預告破裂加傷：${bonusTxt}`);
         assert.ok(bonusTxt.includes('易損'), `應預告易損加傷：${bonusTxt}`);
-        assert.ok(bonusTxt.includes('強壯'), `應預告強壯加傷：${bonusTxt}`);
-        assert.strictEqual(mods.reductions.length, 1, '應預告不屈減傷');
-        assert.strictEqual(mods.reductions[0].value, 5);
+        // 強壯已改為攻擊檢定 DP 加值，不再出現在傷害加減項裡（否則會被算兩次）
+        assert.ok(!bonusTxt.includes('強壯'), `強壯不應再列為傷害加值：${bonusTxt}`);
+        const redTxt = mods.reductions.map(r => `${r.label}=${r.value}`).join(' | ');
+        assert.ok(redTxt.includes('不屈'), `應預告不屈減傷：${redTxt}`);
+        assert.ok(redTxt.includes('狂信'), `應預告狂信減傷：${redTxt}`);
+    });
+
+    test('強壯：以攻擊檢定 DP 加值計入 DP 桶（每層 +1）', () => {
+        resetCaptures();
+        sandbox.state.units = [
+            { id: 'me', type: 'player', status: { '強壯': 4 } },
+            { id: 'boss', type: 'enemy', defDp: 0, defAuto: 0, status: {} }
+        ];
+        bbRunBlackBoxCalculation({
+            attacker: { dp: 8, auto: 0, unitId: 'me' },
+            target: { id: 'boss' },
+            defense: null
+        });
+        assert.strictEqual(captured.stReview.baseDice, 12, '攻擊 8 + 強壯 4 層 → 骰數 12');
+        assert.ok(/強壯\(\+4\)/.test(captured.stReview.debugStr), `debugStr 應列出 強壯(+4)：${captured.stReview.debugStr}`);
+    });
+
+    test('狂信：基礎防禦固定 +4（binary 狀態不隨層數放大）', () => {
+        resetCaptures();
+        sandbox.state.units = [
+            { id: 'boss', type: 'enemy', defDp: 3, defAuto: 0, status: { '狂信': 1 } }
+        ];
+        bbRunBlackBoxCalculation({ attacker: { dp: 10, auto: 0 }, target: { id: 'boss' }, defense: null });
+        assert.strictEqual(captured.stReview.baseDice, 10 - (3 + 4), '防禦 3 + 狂信 4 → 骰數 3');
+    });
+
+    test('綻放荊棘：每 2 層基礎防禦 +1（奇數層無條件捨去，不產生小數）', () => {
+        resetCaptures();
+        sandbox.state.units = [
+            { id: 'boss', type: 'enemy', defDp: 0, defAuto: 0, status: { '綻放荊棘': 7 } }
+        ];
+        bbRunBlackBoxCalculation({ attacker: { dp: 10, auto: 0 }, target: { id: 'boss' }, defense: null });
+        assert.strictEqual(captured.stReview.baseDice, 10 - 3, '7 層 → floor(7/2)=3 點防禦');
+        assert.ok(Number.isInteger(captured.stReview.baseDice), '骰數必須是整數');
     });
 
     test('無任何加減項時 damageMods 為空（明細不塞無關項目）', () => {

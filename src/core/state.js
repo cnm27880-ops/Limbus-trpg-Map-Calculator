@@ -21,6 +21,12 @@ let state = {
     isCombatActive: false,      // 是否處於戰鬥狀態
     roundNum: 0,                // 戰鬥回合數（開戰=1，先攻列表輪完一圈 +1；未開戰=0）
     activeBossId: null,         // 當前顯示大血條的 BOSS 單位 ID
+    // 全隊共用資源池（人格卡的 team pools，如拉·曼卻領公主的【血宴】）。
+    // 與 unit.status 不同：這些資源不屬於任何單位，全房間共用一份，透過 Firebase 同步。
+    //   bloodFeast       目前池量（上限見 IDENTITY_TEAM_POOLS）
+    //   bloodFeastSpent  本場戰鬥累計消耗量（【落幕】依此計算最終傷害）
+    //   bleedDamageAcc   流血傷害的累計餘數（每滿 5 點 → 血宴 +1，餘數保留到下次結算）
+    teamPools: { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 },
     lastBatchState: null        // 用於 AOE 的備份狀態
 };
 
@@ -78,7 +84,8 @@ function resetState() {
         statusExclusions: [],
         isCombatActive: false,
         roundNum: 0,
-        activeBossId: null
+        activeBossId: null,
+        teamPools: { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 }
     };
 }
 

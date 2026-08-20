@@ -28,7 +28,10 @@ const STATUS_FA_ICONS = {
     excitement: 'fa-face-grin-stars', fascinated: 'fa-heart', fatigue: 'fa-battery-quarter', fear: 'fa-ghost',
     love: 'fa-heart', mental_bind: 'fa-brain', pain: 'fa-bolt', addiction: 'fa-pills',
     knowledge: 'fa-book', true: 'fa-certificate', limb_disabled: 'fa-crutch', limb_impair: 'fa-bandage',
-    frozen_solid: 'fa-icicles'
+    frozen_solid: 'fa-icicles',
+    magicBullet: 'fa-wand-magic', blackFlame: 'fa-fire-flame-simple', trueKnowledge: 'fa-magnifying-glass',
+    loveHate: 'fa-heart-crack', duelOtis: 'fa-khanda', duelDon: 'fa-khanda',
+    bloomingThorns: 'fa-fan', fanaticism: 'fa-fire-flame-curved', bloodFeast: 'fa-wine-glass'
 };
 
 /**
@@ -62,9 +65,16 @@ function toggleCombat() {
 
         // 戰鬥結束清除全場狀態（ST 於排除名單勾選的狀態除外）
         const cleared = (typeof clearBattleEndStatuses === 'function') ? clearBattleEndStatuses() : [];
+        // 全隊共用資源池（血宴）同樣是「本場戰鬥限定」的資源，連同累計消耗量一併歸零；
+        // 它不掛在任何單位身上，故不會被 clearBattleEndStatuses 掃到，必須在此另外重置。
+        const poolsCleared = clearBattleEndTeamPools();
+        // 「每場戰鬥限一次」的宣告技使用紀錄同樣隨戰鬥結束重置
+        if (typeof idtResetDeclaredUses === 'function') idtResetDeclaredUses();
 
         broadcastState();
-        showToast('戰鬥已結束，先攻已歸零' + (cleared.length ? `，並清除狀態：${cleared.join('、')}` : ''));
+        showToast('戰鬥已結束，先攻已歸零'
+            + (cleared.length ? `，並清除狀態：${cleared.join('、')}` : '')
+            + (poolsCleared.length ? `，並重置資源池：${poolsCleared.join('、')}` : ''));
         // 戰鬥日誌：寫入結束標記（供回合分析切分戰鬥區段；附當下時鐘刻度供刻度消耗統計）
         if (typeof bbPushCombatLog === 'function') {
             bbPushCombatLog({
@@ -78,6 +88,8 @@ function toggleCombat() {
     } else {
         // 開始戰鬥：排序並設定第一回合
         state.isCombatActive = true;
+        // 「每場戰鬥限一次」的宣告技紀錄以「開戰」為界重置，避免上一場沒按結束就開新戰鬥時殘留
+        if (typeof idtResetDeclaredUses === 'function') idtResetDeclaredUses();
         // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
@@ -1282,6 +1294,14 @@ function nextTurn() {
             activeUnit.moveUsed = 0;
         }
 
+        // 受傷紀錄輪替：把「上一回合累計受到的傷害」定格下來，再把本回合的計數歸零。
+        // 人格卡的「上一回合未受到任何傷害」條件（浮士德倖存者【伺機而動】）就是讀這個欄位；
+        // 在回合開始時輪替，才能讓該單位整個回合內的攻擊都以同一份「上回合」資料判定。
+        if (activeUnit && !activeUnit.actionSlotOf) {
+            activeUnit.dmgTakenLastTurn = parseInt(activeUnit.dmgTakenThisTurn) || 0;
+            activeUnit.dmgTakenThisTurn = 0;
+        }
+
         // 防禦附加成功是回合刷新資源：輪到 BOSS 主體（非多重行動子條目）的行動時重置滿額，
         // 而非每次被攻擊都視為全額可用——本回合內被消耗殆盡後要到下回合才會重置。
         if (activeUnit && !activeUnit.actionSlotOf && (activeUnit.defAuto || 0) > 0) {
@@ -1731,9 +1751,11 @@ function savePlayerStats(unitId) {
  */
 const TURN_END_RULES = {
     '燃燒': { kind: 'damage', dmgType: 'l', desc: pts => `受到 ${pts} 點 L 傷（火焰）` },
-    '流血': { kind: 'damage', dmgType: 'l', desc: pts => `受到 ${pts} 點 L 傷（物理）` },
+    // 流血：除了扣血，還要把傷害累計進全隊共用的【血宴】資源池（每 5 點 +1，餘數保留）
+    '流血': { kind: 'damage', dmgType: 'l', bleedPool: true, desc: pts => `受到 ${pts} 點 L 傷（物理）` },
     '再生': { kind: 'heal', desc: pts => `回復 ${pts} 點傷害` },
-    '尖釘': { kind: 'remind', desc: () => '回合結束受到流血，並增加麻痺點數（請手動處理）' }
+    // 尖釘（N 公司釘刑）：受等同層數的 L 傷 → 疊加等同層數的流血 → 層數減半
+    '尖釘': { kind: 'nails', dmgType: 'l', desc: pts => `受到 ${pts} 點 L 傷、疊加 ${pts} 點流血，隨後層數減半（→ ${Math.floor(pts / 2)}）` }
 };
 
 // 本回合結算面板目前顯示的項目（供 onclick 依索引套用；避免把 closure 塞進 inline onclick）
@@ -1815,6 +1837,7 @@ function buildTurnEndItems(unit) {
         const def = (typeof getStatusByName === 'function') ? getStatusByName(name) : null;
         items.push({
             icon: def?.icon || '📌', kind: rule.kind, statusName: name, dmgType: rule.dmgType, amount: pts,
+            bleedPool: !!rule.bleedPool,
             label: `${name} ${rule.kind === 'remind' ? '' : pts}：${rule.desc(pts)}`
         });
     }
@@ -1834,6 +1857,61 @@ function buildTurnEndItems(unit) {
 
     getUnitTerrainTurnEffects(unit).turnEnd.forEach(t => items.push(t));
     return items;
+}
+
+/**
+ * 戰鬥結束時重置全隊共用資源池（血宴等）。
+ * 這些資源不屬於任何單位，clearBattleEndStatuses() 只掃 unit.status，掃不到它們。
+ * @returns {string[]} 被重置的資源池名稱（原本就是 0 的不列出，避免每場戰鬥都跳無意義的提示）
+ */
+function clearBattleEndTeamPools() {
+    if (typeof IDENTITY_TEAM_POOLS === 'undefined' || typeof state === 'undefined') return [];
+    const names = [];
+    const before = state.teamPools || {};
+    for (const def of Object.values(IDENTITY_TEAM_POOLS)) {
+        if ((parseInt(before[def.key]) || 0) > 0 || (parseInt(before[def.key + 'Spent']) || 0) > 0) {
+            names.push(def.name);
+        }
+    }
+    const reset = { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 };
+    if (typeof syncTeamPools === 'function') syncTeamPools(reset);
+    else state.teamPools = reset;
+    return names;
+}
+
+/**
+ * 把一次流血傷害累計進全隊共用的【血宴】資源池：每滿 5 點傷害 +1 點血宴，餘數保留到下次結算。
+ *
+ * 之所以把餘數存在資源池物件裡（bleedDamageAcc）而不是每次各自取整：
+ * 卡面規則是「戰場上任何單位每受到 5 點流血傷害 +1」，是全場累計而非逐次結算——
+ * 三個單位各受 2 點流血，合計 6 點就該給 1 點血宴；逐次 floor(2/5) 會全部歸零，整場都拿不到。
+ * @param {number} bleedDamage - 本次流血造成的傷害點數
+ * @returns {number} 本次實際增加的血宴點數
+ */
+function accumulateBloodFeastFromBleed(bleedDamage) {
+    const dmg = Math.max(0, parseInt(bleedDamage) || 0);
+    if (!dmg || typeof IDENTITY_TEAM_POOLS === 'undefined') return 0;
+    const def = IDENTITY_TEAM_POOLS.bloodFeast;
+    if (!def || !def.gainPer) return 0;
+
+    const per = Math.max(1, parseInt(def.gainPer.amount) || 5);
+    const pools = (typeof idtGetTeamPools === 'function')
+        ? idtGetTeamPools()
+        : Object.assign({ bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 },
+                        (typeof state !== 'undefined' && state.teamPools) || {});
+
+    const acc = (pools.bleedDamageAcc || 0) + dmg;
+    const gain = Math.floor(acc / per);
+    pools.bleedDamageAcc = acc % per;
+    if (gain > 0) pools.bloodFeast = Math.min(def.max || 100, (pools.bloodFeast || 0) + gain);
+
+    if (typeof syncTeamPools === 'function') syncTeamPools(pools);
+    else if (typeof state !== 'undefined') state.teamPools = pools;
+
+    if (gain > 0 && typeof showToast === 'function') {
+        showToast(`${def.icon || '🍷'} ${def.name} +${gain} → ${pools.bloodFeast}/${def.max}（全隊共用）`);
+    }
+    return gain;
 }
 
 /**
@@ -1899,6 +1977,15 @@ function applyTurnEndItem(unitId, index) {
 
     if (item.kind === 'damage') {
         if (item.amount > 0 && typeof modifyHPInternal === 'function') modifyHPInternal(u, item.dmgType || 'l', item.amount);
+        // 流血傷害 → 累計進全隊共用的【血宴】資源池
+        if (item.bleedPool) accumulateBloodFeastFromBleed(item.amount);
+        showToast(`${u.name || '單位'}：${item.label}`);
+    } else if (item.kind === 'nails') {
+        // 尖釘釘刑三段式：扣血 → 疊加等量流血 → 層數減半（無條件捨去，歸零時移除狀態）
+        const pts = Math.max(0, parseInt(item.amount) || 0);
+        if (pts > 0 && typeof modifyHPInternal === 'function') modifyHPInternal(u, item.dmgType || 'l', pts);
+        if (pts > 0 && typeof addStatusToUnit === 'function') addStatusToUnit(unitId, 'bleed', pts);
+        if (typeof updateStatusStacks === 'function') updateStatusStacks(unitId, item.statusName, Math.floor(pts / 2));
         showToast(`${u.name || '單位'}：${item.label}`);
     } else if (item.kind === 'heal') {
         if (item.amount > 0 && typeof modifyHPInternal === 'function') modifyHPInternal(u, 'heal', item.amount);

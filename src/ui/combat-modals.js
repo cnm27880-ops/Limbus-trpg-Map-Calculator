@@ -106,6 +106,9 @@ function openAttackModal(unitId) {
     threatUnopposedInfo = null;
     cmRenderThreatActions();
 
+    // 人格卡可自動決定的攻擊欄位（嚴重轉惡性／加骰門檻）：於 memo 帶入後覆寫，玩家仍可再改
+    cmPrefillIdentityAttackFields(u);
+
     openModal('attack-modal');
 
     // ST 開啟威脅視窗時，自動點選第一個可用行動，預先帶入其 DP / 狀態（仍可再手動切換）
@@ -114,6 +117,48 @@ function openAttackModal(unitId) {
             const firstBtn = document.querySelector('#attack-boss-actions .threat-action-btn');
             if (firstBtn) firstBtn.click();
         }, 0);
+    }
+}
+
+/**
+ * 把「加骰下推級數」換算成實際的加骰門檻：10 → 9 → 8，最低 8。
+ * @param {number} steps
+ * @returns {number}
+ */
+function cmIdentityExplodeAt(steps) {
+    return Math.max(8, 10 - Math.max(0, parseInt(steps) || 0));
+}
+
+/**
+ * 玩家開啟攻擊視窗時，依人格卡自動預填「嚴重轉惡性」與「加骰」兩個欄位。
+ *
+ * 這兩項過去只能靠玩家讀著卡面說明自己換算再手動填（良秀的流血轉惡性、羅佳的燃燒轉惡性、
+ * 黑雲會的流血加骰…），漏填就等於白白少算傷害。現在依目標當下的狀態算好直接帶入，
+ * 玩家仍可手動改（例如還想再多轉幾點）。
+ * @param {object} targetUnit
+ */
+function cmPrefillIdentityAttackFields(targetUnit) {
+    if (myRole === 'st') return;
+    const attackerUnit = (typeof state !== 'undefined' && Array.isArray(state.units))
+        ? state.units.find(u => u.ownerId === myPlayerId) : null;
+    if (!attackerUnit) return;
+
+    const bonus = cmResolveIdentityBonus(attackerUnit, targetUnit);
+    const notes = [];
+
+    const critInput = document.getElementById('attack-crit-vicious');
+    if (critInput && (bonus.critVicious || 0) > 0) {
+        critInput.value = bonus.critVicious;
+        notes.push(`嚴重轉惡性 ${bonus.critVicious} 點`);
+    }
+    const explodeSel = document.getElementById('attack-explode');
+    if (explodeSel && (bonus.explodeStep || 0) > 0) {
+        const at = cmIdentityExplodeAt(bonus.explodeStep);
+        explodeSel.value = String(at);
+        notes.push(`加骰門檻 ${at}`);
+    }
+    if (notes.length && typeof showToast === 'function') {
+        showToast('🃏 人格卡已自動帶入：' + notes.join('、') + '（可手動調整）');
     }
 }
 
@@ -304,7 +349,10 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         onKillKilledStatus: {},
         onKillSelfStatus: {}, onKillSelfStatusNotes: [],
         onResolveDamagedSelfStatus: {}, onResolveDamagedSelfStatusNotes: [], onResolveDamagedTargetStatus: {},
-        onResolveNoDamageSelfStatus: {}, onResolveNoDamageSelfStatusNotes: [], onResolveNoDamageTargetStatus: {}
+        onResolveNoDamageSelfStatus: {}, onResolveNoDamageSelfStatusNotes: [], onResolveNoDamageTargetStatus: {},
+        onResolveTable: [],
+        poolDelta: {},
+        critVicious: 0, explodeStep: 0
     };
     if (myRole === 'st') return empty;
     if (typeof evaluatePlayerAttack !== 'function' || typeof identityHudState === 'undefined') return empty;
@@ -362,6 +410,7 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         resolveNoDamage = evaluatePlayerResolve(ownedCards, attackerState, targetState, { hit: false, damage: 0 });
     }
 
+
     // 人格引擎在攻擊／命中時會對目標（減益）與攻擊者自身（如迅捷/呼吸法等資源）施加的狀態。
     // 整理成「中文狀態名＋層數」清單，供發起攻擊時自動施加並在 ST 明細中列出。
     const buildStatusNotes = (statusMap) => Object.entries(statusMap).map(([engKey, layers]) => {
@@ -371,6 +420,13 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         return `${name}+${amount}`;
     }).filter(Boolean);
 
+    // 依「實際造成多少傷害」分級的結算表：
+    // 只算「造成傷害 vs 沒造成傷害」兩種分支不夠用——有些卡的門檻寫在傷害數值上
+    // （浮士德倖存者【伺機而動】：至少造成 3 點傷害才再施加 3 層破裂）。
+    // 玩家端無從得知結算結果，故在此把 0～CM_RESOLVE_SAMPLE_MAX 點傷害各算一次、
+    // 壓成「階梯表」隨攻擊資料送出，由 ST 端依實際傷害查表套用（見 cmApplyOnResolveIdentityStatuses）。
+    const onResolveTable = cmBuildResolveTable(ownedCards, attackerState, targetState, buildStatusNotes);
+
     const onAttackTargetStatus = result.onAttackTargetStatus || {};
     const onAttackSelfStatus = result.onAttackSelfStatus || {};
     const onHitTargetStatus = result.onHitTargetStatus || {};
@@ -379,6 +435,9 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
     return {
         dpBonus: result.totalDpBonus || 0,
         extraSuccess: result.totalExtraSuccess || 0,
+        // 攻擊視窗可預填的兩個欄位：嚴重轉惡性點數、加骰門檻下推級數
+        critVicious: (result.totals && result.totals.critVicious) || 0,
+        explodeStep: (result.totals && result.totals.explodeStep) || 0,
         names: [...new Set(result.triggerLogs.filter(l => !l.manual).map(l => l.identityName).filter(Boolean))],
         onAttackTargetStatus,
         statusNotes: buildStatusNotes(onAttackTargetStatus),
@@ -400,8 +459,53 @@ function cmResolveIdentityBonus(attackerUnit, targetUnit) {
         onResolveDamagedTargetStatus: resolveDamaged.targetStatus || {},
         onResolveNoDamageSelfStatus: resolveNoDamage.selfStatus || {},
         onResolveNoDamageSelfStatusNotes: buildStatusNotes(resolveNoDamage.selfStatus || {}),
-        onResolveNoDamageTargetStatus: resolveNoDamage.targetStatus || {}
+        onResolveNoDamageTargetStatus: resolveNoDamage.targetStatus || {},
+        // 依實際傷害查表套用的結算效果（優先於上面兩個分支，見 cmApplyOnResolveIdentityStatuses）
+        onResolveTable,
+        // 全隊共用資源池（血宴）的增減：攻擊／命中時機的合計，由發起攻擊端寫回 state.teamPools
+        poolDelta: result.poolDelta || {}
     };
+}
+
+// 建立「傷害 → 結算效果」階梯表時取樣到幾點傷害為止。
+// 目前所有卡的傷害門檻都遠低於此值；超過此值一律沿用最後一格（門檻只會是「≥ N」，故安全）。
+const CM_RESOLVE_SAMPLE_MAX = 40;
+
+/**
+ * 把 onResolve 的結果壓成「以傷害為索引的階梯表」。
+ *
+ * onResolve 的 hook 條件都是對 outcome.damage 的門檻比較（≥ N），結果是傷害的單調階梯函式，
+ * 因此逐點取樣 0..CM_RESOLVE_SAMPLE_MAX 再把「與前一格相同」的取樣合併，就能無損地表示整段函式。
+ * 傷害 0 一律以 { hit:false, damage:0 } 取樣（與既有「未造成傷害含未命中」的解讀一致）。
+ *
+ * @param {Array<{id:string,unlocked:boolean}>} ownedCards
+ * @param {object} attackerState
+ * @param {object} targetState
+ * @param {function} buildStatusNotes - 把狀態物件轉成中文說明字串陣列
+ * @returns {Array<{from:number, selfStatus:object, targetStatus:object, selfStatusNotes:string[], targetStatusNotes:string[]}>}
+ */
+function cmBuildResolveTable(ownedCards, attackerState, targetState, buildStatusNotes) {
+    if (typeof evaluatePlayerResolve !== 'function') return [];
+    const table = [];
+    let lastKey = null;
+    for (let dmg = 0; dmg <= CM_RESOLVE_SAMPLE_MAX; dmg++) {
+        const res = evaluatePlayerResolve(ownedCards, attackerState, targetState,
+            { hit: dmg > 0, damage: dmg });
+        const selfStatus = res.selfStatus || {};
+        const targetStatus = res.targetStatus || {};
+        const key = JSON.stringify([selfStatus, targetStatus]);
+        if (key === lastKey) continue;   // 與前一格相同 → 併入前一格，不另立階梯
+        lastKey = key;
+        table.push({
+            from: dmg,
+            selfStatus, targetStatus,
+            selfStatusNotes: buildStatusNotes(selfStatus),
+            targetStatusNotes: buildStatusNotes(targetStatus)
+        });
+    }
+    // 全部取樣結果都是空的 → 這組卡根本沒有 onResolve 效果，不必送表
+    const anyEffect = table.some(e => Object.keys(e.selfStatus).length || Object.keys(e.targetStatus).length);
+    return anyEffect ? table : [];
 }
 
 /**
@@ -507,6 +611,8 @@ function submitAttackModal() {
         onResolveNoDamageSelfStatus: identityBonus.onResolveNoDamageSelfStatus || {},
         onResolveNoDamageSelfStatusNotes: identityBonus.onResolveNoDamageSelfStatusNotes || [],
         onResolveNoDamageTargetStatus: identityBonus.onResolveNoDamageTargetStatus || {},
+        // 依實際傷害查表套用的結算效果（門檻寫在傷害數值上的技能，如【伺機而動】造成 3 點以上傷害）
+        onResolveTable: identityBonus.onResolveTable || [],
         counterPhaseDpBonus,
         // 主動宣告技折算的傷害加值（spellPower／weaponDamage／finalDamage），於擲骰套傷時併入
         declaredDamageBonus,
@@ -606,12 +712,30 @@ function submitAttackModal() {
                 showToast('已對自己套用：' + identityBonus.selfStatusNotes.join('、'));
             }
         }
+        // 全隊共用資源池（血宴）的增減：由發起攻擊的玩家端寫回並同步全房間
+        if (identityBonus.poolDelta && typeof applyEnginePoolDelta === 'function') {
+            applyEnginePoolDelta(identityBonus.poolDelta);
+        }
 
         const bonusTotal = identityBonus.dpBonus + identityBonus.extraSuccess;
         const bonusMsg = bonusTotal ? `（已自動套用人格卡加值 +${bonusTotal}）` : '';
         if (typeof showToast === 'function') showToast('攻擊已送出，等待系統判定...' + bonusMsg);
     }
     closeAttackModal();
+}
+
+/**
+ * 玩家目前持有的人格卡中，是否存在「被攻擊時觸發」的效果（onDefend）。
+ * 用於在被攻擊時提示玩家去面板宣告攻擊型態，避免反應效果被忘記結算。
+ * @returns {boolean}
+ */
+function cmHasDefendReactions() {
+    if (typeof collectOwnedIdentities !== 'function' || typeof getIdentityById !== 'function') return false;
+    return collectOwnedIdentities().some(({ id, unlocked }) => {
+        const card = getIdentityById(id);
+        if (!card || !card.hooks || !Array.isArray(card.hooks.onDefend)) return false;
+        return card.hooks.onDefend.some(h => h && (!h.locked || unlocked));
+    });
 }
 
 /**
@@ -631,6 +755,17 @@ function cqOnPendingDefense(data) {
     // target.id 是棋子(Token)的 unit.id，不是玩家帳號 ID，必須先找到對應單位再比對其 ownerId
     const targetUnit = typeof findUnitById === 'function' ? findUnitById(target.id) : null;
     if (!targetUnit || targetUnit.ownerId !== myPlayerId) return;
+
+    // 人格卡的「被攻擊反應」（綻放荊棘近戰反傷、狂信反擊流血…）：
+    // 先記住是誰在打我，反應才知道反傷要施加給誰；接著提示玩家至面板宣告攻擊型態。
+    // 之所以不自動結算：系統的攻擊資料沒有近戰／遠程之分，而綻放荊棘只對近戰生效，
+    // 猜錯任一邊都會偷偷改動戰場狀態，故一律由玩家按下對應按鈕。
+    if (typeof idtNoteIncomingAttacker === 'function' && data.attacker && data.attacker.unitId) {
+        idtNoteIncomingAttacker(data.attacker.unitId);
+    }
+    if (typeof cmHasDefendReactions === 'function' && cmHasDefendReactions() && typeof showToast === 'function') {
+        showToast('🛡 你持有「被攻擊反應」類人格卡：結算防禦後請至人格卡面板的「被攻擊反應」區宣告近戰／遠程');
+    }
 
     // 【單方面攻擊】措手不及：不開防禦 QTE，直接以角色卡上填寫的「措手不及防禦」應戰
     // （較弱的防禦狀態，於右鍵「角色數值」預先填寫；未填視為 0）。
@@ -674,7 +809,7 @@ function submitDefenseModal() {
  * 把黑箱輸出的結構化明細（calcDetail）渲染成逐項相加的表格。
  *
  * 解決的問題：先前審核面板只顯示「系統建議骰數 / 附加成功」兩個數字，加上幾張零散的
- * 修正卡片；破甲、雙方狀態修正、破裂／易損／強壯／不屈、攻擊上限等會實際改動結果的項目
+ * 修正卡片；破甲、雙方狀態修正、破裂／易損／不屈、攻擊上限等會實際改動結果的項目
  * 都不在明細內。ST 按下結算後跳出來的攻擊／防禦／傷害因此和明細對不起來，
  * 無從判斷是「明細省略但內容正確」還是「根本算錯」。
  *
@@ -877,7 +1012,7 @@ function cqOnSTReview(data) {
         ctx.textContent = '';
 
         // ① 逐項相加的完整計算明細（攻擊 DP／防禦 DP／附加成功／傷害加減項）。
-        //    先前這裡只有幾張零散的修正卡片，破甲、狀態修正、破裂／強壯／不屈、攻擊上限
+        //    先前這裡只有幾張零散的修正卡片，破甲、狀態修正、破裂／不屈、攻擊上限
         //    等會實際改動結果的項目都不在明細內，導致按下結算後跳出的數字對不起來。
         //    現在改讀黑箱輸出的結構化明細，分項相加即等於採用的數字。
         cmRenderCalcDetail(ctx, data.calcDetail, baseDice, baseExtraSuccess);
@@ -1036,30 +1171,80 @@ function cmHasOnHitIdentityStatuses(atk) {
  * @param {string[]} [targetIds] - 施加目標狀態的單位 id 清單
  * @returns {boolean} 是否有任何狀態被套用
  */
-function cmApplyOnResolveIdentityStatuses(atk, dealtDamage, targetIds) {
+function cmApplyOnResolveIdentityStatuses(atk, dealtDamage, targetIds, damageInfo) {
     if (!atk || typeof applyEngineStatusesToUnit !== 'function') return false;
-    const selfStatus = dealtDamage ? atk.onResolveDamagedSelfStatus : atk.onResolveNoDamageSelfStatus;
-    const targetStatus = dealtDamage ? atk.onResolveDamagedTargetStatus : atk.onResolveNoDamageTargetStatus;
-    const notes = dealtDamage ? atk.onResolveDamagedSelfStatusNotes : atk.onResolveNoDamageSelfStatusNotes;
+
+    const ids = (targetIds || []).filter(Boolean);
+    // 每個目標實際吃到多少傷害：damageInfo 可為數字（所有目標相同）或 { unitId: 傷害 } 對照表。
+    // 缺值時退回「有造成傷害＝1 點」的最保守解讀，行為與加入階梯表之前一致。
+    const damageOf = (id) => {
+        if (typeof damageInfo === 'number') return Math.max(0, damageInfo);
+        if (damageInfo && typeof damageInfo === 'object') return Math.max(0, parseInt(damageInfo[id]) || 0);
+        return dealtDamage ? 1 : 0;
+    };
 
     let applied = false;
-    if (atk.unitId && selfStatus && Object.keys(selfStatus).length) {
-        if (applyEngineStatusesToUnit(atk.unitId, selfStatus) > 0) applied = true;
+    const noteSet = new Set();
+
+    // 攻擊者自身的結算效果只結算一次（多目標時不該逐目標重複給），以實際打出的最大傷害查表
+    const selfDamage = ids.length ? Math.max(...ids.map(damageOf)) : (dealtDamage ? 1 : 0);
+    const selfEntry = cmLookupResolveEntry(atk, selfDamage, dealtDamage, 'self');
+    if (atk.unitId && selfEntry.selfStatus && Object.keys(selfEntry.selfStatus).length) {
+        if (applyEngineStatusesToUnit(atk.unitId, selfEntry.selfStatus) > 0) applied = true;
+        (selfEntry.selfStatusNotes || []).forEach(n => noteSet.add(n));
     }
-    if (targetStatus && Object.keys(targetStatus).length) {
-        (targetIds || []).filter(Boolean).forEach(id => {
-            if (applyEngineStatusesToUnit(id, targetStatus) > 0) applied = true;
-        });
-    }
-    if (applied && Array.isArray(notes) && notes.length && typeof showToast === 'function') {
-        showToast(`${dealtDamage ? '結算（造成傷害）' : '結算（未造成傷害）'}效果已套用：` + notes.join('、'));
+
+    // 目標端逐一查表：同一次攻擊打到多個目標時，各目標依自己吃到的傷害結算
+    ids.forEach(id => {
+        const entry = cmLookupResolveEntry(atk, damageOf(id), dealtDamage, 'target');
+        if (!entry.targetStatus || !Object.keys(entry.targetStatus).length) return;
+        if (applyEngineStatusesToUnit(id, entry.targetStatus) > 0) applied = true;
+        (entry.targetStatusNotes || []).forEach(n => noteSet.add(n));
+    });
+
+    if (applied && noteSet.size && typeof showToast === 'function') {
+        showToast(`${dealtDamage ? '結算（造成傷害）' : '結算（未造成傷害）'}效果已套用：` + [...noteSet].join('、'));
     }
     return applied;
+}
+
+/**
+ * 依實際傷害查出該套用哪一格結算效果。
+ * 有階梯表（onResolveTable）就查表；沒有（舊版攻擊資料）則退回「造成傷害／未造成傷害」兩分支。
+ * @param {object} atk
+ * @param {number} damage - 該對象實際吃到的傷害
+ * @param {boolean} dealtDamage - 本次攻擊是否造成傷害（無表時的分支依據）
+ * @returns {{selfStatus:object, targetStatus:object, selfStatusNotes:string[], targetStatusNotes:string[]}}
+ */
+function cmLookupResolveEntry(atk, damage, dealtDamage) {
+    const table = Array.isArray(atk.onResolveTable) ? atk.onResolveTable : null;
+    if (table && table.length) {
+        const dmg = Math.max(0, parseInt(damage) || 0);
+        // 表為遞增階梯：取最後一個 from <= dmg 的項目
+        let picked = table[0];
+        for (const entry of table) {
+            if ((parseInt(entry.from) || 0) <= dmg) picked = entry; else break;
+        }
+        return {
+            selfStatus: picked.selfStatus || {}, targetStatus: picked.targetStatus || {},
+            selfStatusNotes: picked.selfStatusNotes || [], targetStatusNotes: picked.targetStatusNotes || []
+        };
+    }
+    return dealtDamage
+        ? { selfStatus: atk.onResolveDamagedSelfStatus || {}, targetStatus: atk.onResolveDamagedTargetStatus || {},
+            selfStatusNotes: atk.onResolveDamagedSelfStatusNotes || [], targetStatusNotes: [] }
+        : { selfStatus: atk.onResolveNoDamageSelfStatus || {}, targetStatus: atk.onResolveNoDamageTargetStatus || {},
+            selfStatusNotes: atk.onResolveNoDamageSelfStatusNotes || [], targetStatusNotes: [] };
 }
 
 /** 攻擊方資料是否帶有任何「結算後依傷害分歧」的人格卡狀態 */
 function cmHasOnResolveIdentityStatuses(atk) {
     if (!atk) return false;
+    if (Array.isArray(atk.onResolveTable)
+        && atk.onResolveTable.some(e => e && ((e.selfStatus && Object.keys(e.selfStatus).length)
+            || (e.targetStatus && Object.keys(e.targetStatus).length)))) {
+        return true;
+    }
     const buckets = [
         atk.onResolveDamagedSelfStatus, atk.onResolveDamagedTargetStatus,
         atk.onResolveNoDamageSelfStatus, atk.onResolveNoDamageTargetStatus
@@ -1207,7 +1392,9 @@ function confirmSTReview() {
         } else {
             dealtDamage = confirm('此次攻擊是否造成傷害？\n（取消＝未造成傷害／未命中，人格卡會依此分支結算）');
         }
-        cmApplyOnResolveIdentityStatuses(hitAtk, dealtDamage, [targetId]);
+        // 自動擲骰知道確切傷害 → 傳入實際數值，讓「至少造成 N 點傷害」類門檻查得到表
+        cmApplyOnResolveIdentityStatuses(hitAtk, dealtDamage, [targetId],
+            rollResult ? (Number(rollResult.damage) || 0) : undefined);
     }
 
     // 擊殺／昏迷判定：自動擲骰造成傷害後，目標若陷入喪失行動（嚴重槽填滿）→ 套用 onKill 效果。
@@ -1230,11 +1417,30 @@ function cmGetStatusLayers(unit, statusId) {
 }
 
 /**
+ * 加總單位身上所有標註 damageReduction 的狀態提供的傷害減免（如狂信 -2）。
+ * 與不屈（依層數扣減）分開計算：damageReduction 是狀態自帶的固定減免值，不隨層數放大。
+ * @param {object} unit
+ * @returns {number}
+ */
+function cmSumDamageReduction(unit) {
+    if (!unit || !unit.status || typeof STATUS_LIBRARY === 'undefined') return 0;
+    let total = 0;
+    for (const category of Object.values(STATUS_LIBRARY)) {
+        for (const def of category) {
+            if (!def || !def.damageReduction) continue;
+            if ((parseInt(unit.status[def.name]) || 0) <= 0) continue;
+            total += parseInt(def.damageReduction) || 0;
+        }
+    }
+    return Math.max(0, total);
+}
+
+/**
  * ST 端：自動擲骰並把最終傷害套用到防禦方（防禦扣除模式）。
  * 傷害計算：擲骰成功數（8/9/10 成功、依攻擊方宣告的加骰門檻追加骰子）＋ 附加成功
- * ＋ 目標身上的破裂（受擊消耗）與易損層數 ＋ 攻擊者身上的強壯層數 ＋ 主動宣告技傷害
- * → 合計後玩家攻擊受「攻擊上限」封頂（破裂/易損/強壯/宣告技傷害皆計入上限內；BOSS 攻擊不受限）
- * → 再扣除目標身上的不屈層數（不受攻擊上限限制，最低 0）
+ * ＋ 目標身上的破裂（受擊消耗）與易損層數 ＋ 主動宣告技傷害
+ * → 合計後玩家攻擊受「攻擊上限」封頂（破裂/易損/宣告技傷害皆計入上限內；BOSS 攻擊不受限）
+ * → 再扣除目標身上的不屈層數與傷害減免狀態（不受攻擊上限限制，最低 0）
  * → 以 L 傷套用（「嚴重轉惡性」宣告點數的部分轉為 A 傷），走護盾吸收邏輯。
  * 擲骰明細（各骰點數、10 的數量）隨廣播同步，供「骰到兩個 10 觸發」類人格卡判定。
  * 注意：豁免抵擋模式走 confirmSTReviewSaveMode，不經此函式。
@@ -1266,20 +1472,20 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         }
     }
 
-    // 攻擊者身上的強壯：提升物理攻擊傷害（計入攻擊上限）
-    const attackerUnit = (typeof findUnitById === 'function' && atk.unitId) ? findUnitById(atk.unitId) : null;
-    const strengthBonus = cmGetStatusLayers(attackerUnit, 'strength');
+    // 註：強壯已改為「攻擊檢定 +1 DP/層」（黑箱引擎 calcMod），不再於此重複加傷。
     // 主動宣告技傷害（法術威力／武器傷害）：成本已於宣告當下扣除，套傷時併入
     const declaredDmgBonus = Number(atk.declaredDamageBonus) || 0;
 
-    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 強壯加傷 + 主動宣告技傷害 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
-    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + strengthBonus + declaredDmgBonus;
+    // 總和 = 成功數 + 附加成功 + 破裂/易損加傷 + 主動宣告技傷害 → 攻擊上限封頂（僅玩家攻擊；BOSS 無上限）
+    const totalBeforeCap = roll.successes + (Number(extraSuccess) || 0) + statusBonus + declaredDmgBonus;
     const cap = isPlayerAttack ? Math.max(0, parseInt(atk.damageCap, 10) || 0) : 0;
     const capApplied = (cap > 0 && totalBeforeCap > cap);
     const cappedDamage = capApplied ? cap : totalBeforeCap;
 
-    // 目標身上的不屈：受到的傷害降低（不受攻擊上限限制，套用在封頂之後，最低 0）
-    const enduranceReduction = Math.min(cappedDamage, cmGetStatusLayers(targetUnit, 'endurance'));
+    // 目標身上的不屈與帶 damageReduction 的狀態（狂信 -2）：受到的傷害降低
+    //（不受攻擊上限限制，套用在封頂之後，最低 0）
+    const reductionRaw = cmGetStatusLayers(targetUnit, 'endurance') + cmSumDamageReduction(targetUnit);
+    const enduranceReduction = Math.min(cappedDamage, reductionRaw);
     const damage = cappedDamage - enduranceReduction;
 
     // 套用傷害：L 傷為主，「嚴重轉惡性」宣告的點數轉為 A 傷；走護盾吸收
@@ -1300,10 +1506,9 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         const m = /^(.*)\+(\d+)$/.exec(txt);
         if (m) damageParts.push({ label: `目標${m[1]}`, value: parseInt(m[2], 10) || 0 });
     });
-    if (strengthBonus > 0) damageParts.push({ label: '攻擊者強壯', value: strengthBonus });
     if (declaredDmgBonus > 0) damageParts.push({ label: '主動宣告技傷害', value: declaredDmgBonus });
     if (capApplied) damageParts.push({ label: `攻擊上限（${totalBeforeCap} → ${cap}）`, value: cap - totalBeforeCap });
-    if (enduranceReduction > 0) damageParts.push({ label: '目標不屈（上限後扣除）', value: -enduranceReduction });
+    if (enduranceReduction > 0) damageParts.push({ label: '目標傷害減免（上限後扣除）', value: -enduranceReduction });
 
     return {
         rolls: roll.rolls,             // 各骰點數明細（供「骰到 N 個 10 觸發」類人格卡判定）
@@ -1318,7 +1523,7 @@ function cmAutoRollAndApply(finalDice, extraSuccess, targetId) {
         capApplied: capApplied,
         statusBonus: statusBonus,
         statusBonusText: statusBonusParts.join('、'),
-        strengthBonus: strengthBonus,
+        strengthBonus: 0,   // 保留欄位相容舊廣播格式；強壯已改為 DP 加值，恆為 0
         declaredDamageBonus: declaredDmgBonus,
         enduranceReduction: enduranceReduction,
         damageParts: damageParts,
@@ -1390,7 +1595,7 @@ function cmShowSettlementDetail(rollResult, targetName) {
  * ST 端：豁免抵擋模式的確認結算。
  * 攻擊已於黑箱端擲出（saveInfo.atkRoll.successes）；此處讀取 ST 輸入的
  * 豁免骰數／豁免附加成功／最終調整，替每個目標各擲一次豁免骰對銷：
- *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 + 攻擊者強壯 + 主動宣告技傷害 − 豁免成功 − 豁免附加 + 最終調整 − 該目標不屈)
+ *   每目標傷害 = max(0, 攻擊成功 + 攻擊附加 + 主動宣告技傷害 − 豁免成功 − 豁免附加 + 最終調整 − 該目標不屈／傷害減免)
  * 逐目標套用（護盾優先消耗），結算後廣播逐目標結果並寫入戰鬥日誌。
  * @param {object} saveInfo - 黑箱釘上的豁免資訊（含 atkRoll 與 targets）
  */
@@ -1413,12 +1618,11 @@ function confirmSTReviewSaveMode(saveInfo) {
         ? saveInfo.targets
         : [{ id: (combatQueueLast && combatQueueLast.target && combatQueueLast.target.id) || '', name: '目標', saveDice: saveDiceInput, saveAuto: saveExtraInput }];
 
-    // 攻擊命中總量（成功 + 附加 + 攻擊者強壯），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷
-    const attackerUnit = (typeof findUnitById === 'function' && atk.unitId) ? findUnitById(atk.unitId) : null;
-    const strengthBonus = cmGetStatusLayers(attackerUnit, 'strength');
+    // 攻擊命中總量（成功 + 附加），逐目標扣豁免；「嚴重轉惡性」點數部分轉 A 傷。
+    // 註：強壯已改為「攻擊檢定 +1 DP/層」（黑箱引擎 calcMod），不再於此重複加傷。
     // 主動宣告技傷害（法術威力／武器傷害）：成本已於宣告當下扣除，套傷時併入
     const declaredDmgBonus = Number(atk.declaredDamageBonus) || 0;
-    const atkHitTotal = atkSuccess + baseExtra + strengthBonus + declaredDmgBonus;
+    const atkHitTotal = atkSuccess + baseExtra + declaredDmgBonus;
     const critVicious = Math.max(0, parseInt(atk.critVicious, 10) || 0);
 
     const results = targets.map(t => {
@@ -1429,8 +1633,9 @@ function confirmSTReviewSaveMode(saveInfo) {
         const saveExtra = useInput ? saveExtraInput : Math.max(0, parseInt(t.saveAuto, 10) || 0);
         const saveRoll = (typeof bbRollAttackDice === 'function') ? bbRollAttackDice(pool, 10) : { successes: 0 };
         const u = (typeof findUnitById === 'function' && t.id) ? findUnitById(t.id) : null;
-        // 目標身上的不屈：受到的傷害降低
-        const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust - cmGetStatusLayers(u, 'endurance'));
+        // 目標身上的不屈與帶 damageReduction 的狀態（狂信 -2）：受到的傷害降低
+        const dmg = Math.max(0, atkHitTotal - saveRoll.successes - saveExtra + adjust
+            - cmGetStatusLayers(u, 'endurance') - cmSumDamageReduction(u));
 
         if (u && Array.isArray(u.hpArr) && typeof modifyHPInternal === 'function' && dmg > 0) {
             const aPart = Math.min(critVicious, dmg);
@@ -1450,8 +1655,11 @@ function confirmSTReviewSaveMode(saveInfo) {
     // onResolve：任一目標實際受創即視為「造成傷害」，否則走「未造成傷害」分支
     if (cmHasOnResolveIdentityStatuses(atk)) {
         const damagedIds = results.filter(r => r.dmg > 0).map(r => r.id);
+        // 逐目標傷害對照表：多體攻擊時各目標吃到的傷害不同，門檻要各自判定
+        const damageByTarget = {};
+        results.forEach(r => { if (r.id) damageByTarget[r.id] = r.dmg; });
         cmApplyOnResolveIdentityStatuses(atk, damagedIds.length > 0,
-            damagedIds.length ? damagedIds : results.map(r => r.id));
+            damagedIds.length ? damagedIds : results.map(r => r.id), damageByTarget);
     }
 
     // 擊殺／昏迷：逐目標若受創後陷入喪失行動 → 套用 onKill 效果（各被擊殺目標分別觸發）
@@ -1465,7 +1673,7 @@ function confirmSTReviewSaveMode(saveInfo) {
 
     const attackerName = String(atk.name || 'BOSS');
     const detail = results.map(r => `${r.name}(${saveName}${r.saveSuccess}→受${r.dmg})`).join('、');
-    const summary = `【${attackerName}】豁免抵擋：攻擊 ${atkSuccess}${baseExtra ? `+附${baseExtra}` : ''}${strengthBonus ? `+強壯${strengthBonus}` : ''} 成功｜${detail}`;
+    const summary = `【${attackerName}】豁免抵擋：攻擊 ${atkSuccess}${baseExtra ? `+附${baseExtra}` : ''} 成功｜${detail}`;
 
     // 戰鬥日誌
     if (typeof bbPushCombatLog === 'function') {
@@ -1507,7 +1715,7 @@ function confirmSTReviewSaveMode(saveInfo) {
                     <button onclick="document.getElementById('save-mode-results').remove()" style="background:none;font-size:1.2rem;">×</button>
                 </div>
                 <div class="modal-body">
-                    <div style="font-size:0.85rem;color:var(--accent-orange);margin-bottom:4px;">⚔ 攻擊 ${atkSuccess} 成功${baseExtra ? ` ＋ 附加 ${baseExtra}` : ''}${strengthBonus ? ` ＋ 強壯 ${strengthBonus}` : ''}${adjust ? `，調整 ${adjust > 0 ? '+' : ''}${adjust}` : ''}</div>
+                    <div style="font-size:0.85rem;color:var(--accent-orange);margin-bottom:4px;">⚔ 攻擊 ${atkSuccess} 成功${baseExtra ? ` ＋ 附加 ${baseExtra}` : ''}${adjust ? `，調整 ${adjust > 0 ? '+' : ''}${adjust}` : ''}</div>
                     ${rows}
                     <div style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;">傷害已套用（護盾優先消耗）。</div>
                 </div>

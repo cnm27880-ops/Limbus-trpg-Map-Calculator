@@ -417,6 +417,7 @@ function initializeNewRoom() {
             turnIdx: state.turnIdx,
             isCombatActive: false,
             roundNum: 0,
+            teamPools: { bloodFeast: 0, bloodFeastSpent: 0, bleedDamageAcc: 0 },
             activeBossId: null
         },
         mapData: state.mapData,
@@ -571,6 +572,7 @@ function loadRoomData(data) {
         state.isCombatActive = data.state.isCombatActive || false;
         state.roundNum = data.state.roundNum || 0;
         state.activeBossId = data.state.activeBossId || null;
+        state.teamPools = normalizeTeamPools(data.state.teamPools);
     }
 
     if (data.mapData) {
@@ -796,6 +798,9 @@ function setupRoomListeners() {
             state.isCombatActive = newState.isCombatActive === true;
             state.roundNum = (typeof newState.roundNum === 'number') ? Math.max(0, Math.floor(newState.roundNum)) : 0;
             state.activeBossId = (typeof newState.activeBossId === 'string') ? newState.activeBossId : null;
+            // 全隊共用資源池（血宴等）：任何人增減都會即時同步給整個房間
+            state.teamPools = normalizeTeamPools(newState.teamPools);
+            if (typeof renderIdentityTeamPools === 'function') renderIdentityTeamPools();
             renderUnitsList();
             renderUnitsToolbar();
             scheduleRenderMap();
@@ -1322,8 +1327,37 @@ function syncState() {
         turnIdx: state.turnIdx,
         isCombatActive: state.isCombatActive || false,
         roundNum: state.roundNum || 0,
-        activeBossId: state.activeBossId || null
+        activeBossId: state.activeBossId || null,
+        teamPools: normalizeTeamPools(state.teamPools)
     });
+}
+
+/**
+ * 把全隊共用資源池正規化為固定形狀的數值物件。
+ * Firebase 會把 0 值欄位整個吃掉、也可能收到別人寫壞的資料，故每次讀寫都過一次這道防呆，
+ * 避免 undefined 參與運算後把整個池子污染成 NaN。
+ * @param {object} raw
+ * @returns {{bloodFeast:number, bloodFeastSpent:number, bleedDamageAcc:number}}
+ */
+function normalizeTeamPools(raw) {
+    const src = (raw && typeof raw === 'object') ? raw : {};
+    const num = (v, max) => Math.max(0, Math.min(max, parseInt(v) || 0));
+    return {
+        bloodFeast: num(src.bloodFeast, 100),
+        bloodFeastSpent: num(src.bloodFeastSpent, 99999),
+        bleedDamageAcc: num(src.bleedDamageAcc, 9999)
+    };
+}
+
+/**
+ * 寫回全隊共用資源池。玩家與 ST 都能直接寫（資源池本來就是全隊共用的），
+ * 寫入前先正規化並夾限，避免任何一端把池量寫成負數或超過上限。
+ * @param {object} pools - 新的資源池內容（會先經 normalizeTeamPools 夾限）
+ */
+function syncTeamPools(pools) {
+    const next = normalizeTeamPools(pools);
+    state.teamPools = next;
+    if (roomRef) roomRef.child('state/teamPools').set(next);
 }
 
 /**
@@ -1510,6 +1544,9 @@ function sendToHost(message) {
                 // 護盾可能在 modifyHPInternal 中被消耗，一併同步
                 roomRef.child(`units/${message.unitId}/shieldTemp`).set(unit.shieldTemp || 0);
                 roomRef.child(`units/${message.unitId}/shieldAuto`).set(unit.shieldAuto || 0);
+                // 本回合累計受傷點數（人格卡「上一回合未受到任何傷害」條件的來源）也要同步，
+                // 否則玩家端自行扣血時 ST 與其他人看到的計數會與實際不符
+                roomRef.child(`units/${message.unitId}/dmgTakenThisTurn`).set(unit.dmgTakenThisTurn || 0);
             }
             break;
 

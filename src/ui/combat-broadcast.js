@@ -37,12 +37,13 @@ function cqOnBroadcasting(data) {
         let text = `【${attackerName}】攻擊【${targetName}】！🎲 擲 ${roll.totalRolled || finalDice} 顆${explodeNote}${tensNote} → 成功 ${roll.successes}`;
         if (roll.extraSuccess > 0) text += ` ＋ 附加 ${roll.extraSuccess}`;
         if (roll.statusBonus > 0) text += ` ＋ ${roll.statusBonusText}`;
+        // 註：強壯已改為「攻擊檢定 +1 DP/層」，不再是傷害加值；舊廣播資料仍可能帶著它，故保留顯示。
         if (roll.strengthBonus > 0) text += ` ＋ 強壯${roll.strengthBonus}`;
         // 主動宣告技傷害同樣計入最終傷害，先前漏在廣播文字外，
         // 於是橫幅上的算式加起來對不上「總傷害」那個數字。
         if (roll.declaredDamageBonus > 0) text += ` ＋ 宣告技${roll.declaredDamageBonus}`;
         if (roll.capApplied) text += ` ＝ ${roll.totalBeforeCap}，上限 ${roll.cap}`;
-        if (roll.enduranceReduction > 0) text += ` － 不屈${roll.enduranceReduction}`;
+        if (roll.enduranceReduction > 0) text += ` － 傷害減免${roll.enduranceReduction}`;
         banner.appendChild(document.createTextNode(text + ' ➡️ 總傷害 '));
         const dmgSpan = document.createElement('span');
         dmgSpan.className = 'combat-broadcast-dice';

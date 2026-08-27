@@ -425,6 +425,14 @@ function initializeNewRoom() {
         players: {}
     };
 
+    // 地圖庫跟著 ST 走，不屬於「這一場」：新房間直接帶上 ST 本機已有的地圖庫。
+    // roomRef.set() 是整包覆寫，漏掉這個欄位的話新房間會先空一輪，
+    // 期間任何人連進來看到的都是空的地圖庫。
+    try {
+        const lib = (typeof maiLoadLibrary === 'function') ? maiLoadLibrary() : [];
+        if (Array.isArray(lib) && lib.length) roomData.mapLibrary = lib;
+    } catch (e) { /* 地圖助手未載入時略過，不影響建房 */ }
+
     roomRef.set(roomData);
 }
 

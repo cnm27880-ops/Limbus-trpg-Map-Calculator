@@ -35,6 +35,10 @@ function initCameraEvents() {
     const ZOOM_SENSITIVITY = 0.002;    // 捏合縮放靈敏度（沿用舊值）
     let dragStartX = 0, dragStartY = 0;
     let pinchPrevDist = 0;             // 上一次雙指距離
+    // 已按下但還沒超過 threshold 的「可能是拖曳」。先前沒有宣告，靠 pointerdown 的隱含賦值
+    // 才產生全域變數；因此在第一次按下地圖之前，只要視窗失焦／切分頁觸發 resetPanState()，
+    // 讀取它就會丟 ReferenceError，安全網反而整個不執行（游標可能卡在抓握手勢）。
+    let isPotentialDrag = false;
 
     // 計算雙指距離與中心點（螢幕座標）
     function pinchInfo() {

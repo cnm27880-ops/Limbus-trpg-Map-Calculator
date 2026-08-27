@@ -21,6 +21,7 @@ const MAI_AI_DEFAULT_MODEL = 'gpt-4o-mini';
 const MAI_MAX_CELLS_IN_CONTEXT = 500; // 序列化畫布給 AI 時，非地板格子的上限（避免超大畫布 token 爆量）
 const MAI_DEFAULT_CANVAS_SIZE = 15;
 const MAI_MAP_LIB_KEY = 'limbus-map-library';
+const MAI_MAP_LIB_BACKUP_KEY = 'limbus-map-library-backup'; // 本機地圖庫「變少」前的自動備份（最後防線）
 
 function maiGetSetting(key, fallback) {
     try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
@@ -370,49 +371,155 @@ function maiResetCanvas() {
 }
 
 // ===== 地圖庫（Firebase 房間共享，localStorage 作為離線快取／備援）=====
+//
+// 資料安全的核心原則：**房間永遠不能把本機的地圖庫變少。**
+//
+// 先前這裡把房間當成唯一真相來源，收到什麼就整包覆寫 localStorage。但 localStorage 是
+// 使用者唯一的另一份拷貝，所以「房間裡沒有」會直接變成「永遠沒有」。實測會遺失的路徑：
+//   1. 以玩家身分加入任何沒有地圖庫的房間（例如去別人的房看看）→ 本機三張地圖全部歸零
+//   2. 連線中房間資料被整包重寫（initializeNewRoom() 的 roomRef.set() 不帶 mapLibrary）→ 同樣歸零
+// 兩者都無聲無息，使用者只會發現「某次之後地圖就不見了」。
+//
+// 改為合併（union by id）：房間有的以房間為準、本機獨有的一律保留，遠端資料只會讓本機
+// 變多不會變少。使用者自己按下的刪除仍然有效，因為那條路徑直接寫入縮減後的陣列。
 let maiLibSynced = null;
 
-function maiLoadLibrary() {
-    if (Array.isArray(maiLibSynced)) return maiLibSynced;
+function maiReadLocalLibrary() {
     try {
         const raw = localStorage.getItem(MAI_MAP_LIB_KEY);
         const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
+        return Array.isArray(arr) ? arr.filter(Boolean) : [];
     } catch (e) { return []; }
 }
 
-function maiSaveLibrary(arr) {
-    try { localStorage.setItem(MAI_MAP_LIB_KEY, JSON.stringify(arr)); } catch (e) { /* quota */ }
-    try {
-        if (typeof roomRef !== 'undefined' && roomRef && typeof myRole !== 'undefined' && myRole === 'st') {
-            roomRef.child('mapLibrary').set(arr);
-        }
-    } catch (e) { /* 同步失敗不影響本機快取 */ }
-    maiLibSynced = Array.isArray(arr) ? arr : [];
+function maiLoadLibrary() {
+    if (Array.isArray(maiLibSynced)) return maiLibSynced;
+    return maiReadLocalLibrary();
 }
 
-/** 監聽房間地圖庫（由 setupRoomListeners 呼叫）。首次同步時若房間為空而本機有存貨，ST 自動上傳。 */
+/**
+ * 寫入本機地圖庫。若這次會讓筆數變少，先把舊的整份存到備份金鑰。
+ * 備份是最後一道防線：萬一還有沒想到的路徑把地圖庫清掉，使用者仍可按「還原」救回來。
+ */
+function maiWriteLocalLibrary(arr) {
+    const next = Array.isArray(arr) ? arr.filter(Boolean) : [];
+    try {
+        const prev = maiReadLocalLibrary();
+        if (prev.length > next.length) {
+            localStorage.setItem(MAI_MAP_LIB_BACKUP_KEY, JSON.stringify({ savedAt: Date.now(), entries: prev }));
+        }
+        localStorage.setItem(MAI_MAP_LIB_KEY, JSON.stringify(next));
+    } catch (e) { /* 隱私模式／配額用盡：本機留不住，但房間那份仍在 */ }
+    return next;
+}
+
+/**
+ * 以 id 合併兩份地圖庫：房間版本優先，本機獨有的接在後面保留。
+ * @param {Array} remote - 房間裡的地圖庫
+ * @param {Array} local - 本機快取
+ * @returns {Array} 合併後的地圖庫
+ */
+function maiMergeLibraries(remote, local) {
+    const merged = [];
+    const seen = new Set();
+    for (const e of (Array.isArray(remote) ? remote : [])) {
+        if (!e || !e.id || seen.has(e.id)) continue;
+        seen.add(e.id);
+        merged.push(e);
+    }
+    for (const e of (Array.isArray(local) ? local : [])) {
+        if (!e || !e.id || seen.has(e.id)) continue;
+        seen.add(e.id);
+        merged.push(e);
+    }
+    return merged;
+}
+
+function maiSaveLibrary(arr) {
+    const next = maiWriteLocalLibrary(arr);
+    // 先認定本機為真相再往房間推。順序反過來的話，推上去觸發的 value 事件會讀到
+    // 還沒更新的 maiLibSynced，把使用者剛刪掉的那筆又合併回來。
+    maiLibSynced = next;
+    try {
+        if (typeof roomRef !== 'undefined' && roomRef && typeof myRole !== 'undefined' && myRole === 'st') {
+            roomRef.child('mapLibrary').set(next);
+        }
+    } catch (e) { /* 同步失敗不影響本機快取 */ }
+}
+
+/**
+ * 監聽房間地圖庫（由 setupRoomListeners 呼叫）。
+ *
+ * 三種情況分開處理，兼顧「刪除要能傳播」與「房間空掉不能清空本機」：
+ *   ① 本次連線第一次同步：還不知道這個分頁的真相，本機快取一律保留，與房間聯集。
+ *      本機獨有的是「還沒上傳」，不是「已被刪除」。
+ *   ② 已同步過、房間有內容：房間是共享庫的真相，直接鏡射，ST 的刪除才傳得到其他人。
+ *   ③ 已同步過、房間卻空了：房間被整包重寫或被清掉了，但我們手上有本回合的真相，
+ *      以本機為準，絕不跟著歸零。（使用者自己刪到最後一張時，maiSaveLibrary 已先把
+ *      maiLibSynced 設成 []，所以那是正常的空，會照實反映。）
+ */
 function maiSetupListener() {
     if (typeof roomRef === 'undefined' || !roomRef) return;
     const ref = roomRef.child('mapLibrary');
     const listener = ref.on('value', snapshot => {
         const val = snapshot.val();
-        const arr = Array.isArray(val) ? val.filter(Boolean)
+        const remote = Array.isArray(val) ? val.filter(Boolean)
             : (val && typeof val === 'object') ? Object.values(val).filter(Boolean) : [];
-        if (!arr.length && maiLibSynced === null && typeof myRole !== 'undefined' && myRole === 'st') {
-            let local = [];
-            try { local = JSON.parse(localStorage.getItem(MAI_MAP_LIB_KEY) || '[]') || []; } catch (e) { local = []; }
-            maiLibSynced = Array.isArray(local) ? local : [];
-            if (maiLibSynced.length) ref.set(maiLibSynced);
-        } else {
-            maiLibSynced = arr;
-            try { localStorage.setItem(MAI_MAP_LIB_KEY, JSON.stringify(arr)); } catch (e) { /* quota */ }
-        }
+
+        let next;
+        if (maiLibSynced === null) next = maiMergeLibraries(remote, maiReadLocalLibrary());  // ①
+        else if (remote.length) next = remote;                                               // ②
+        else next = maiLibSynced;                                                            // ③
+
+        maiLibSynced = maiWriteLocalLibrary(next);
+
+        // ST 是共享庫的擁有者：本機有而房間沒有的（新房間、房間被重建過）補回去，
+        // 讓其他人也看得到。玩家只讀，不會把自己的私藏推上別人的房間。
+        try {
+            if (next.length > remote.length && typeof myRole !== 'undefined' && myRole === 'st') {
+                ref.set(next);
+            }
+        } catch (e) { /* 補寫失敗不影響本機 */ }
+
         maiRenderLibrary();
     });
     if (typeof unsubscribeListeners !== 'undefined') {
         unsubscribeListeners.push(() => ref.off('value', listener));
     }
+}
+
+/** 讀取自動備份（本機地圖庫變少前留下的那一份）。 */
+function maiReadBackup() {
+    try {
+        const raw = localStorage.getItem(MAI_MAP_LIB_BACKUP_KEY);
+        const data = raw ? JSON.parse(raw) : null;
+        if (!data || !Array.isArray(data.entries)) return null;
+        return { savedAt: data.savedAt || 0, entries: data.entries.filter(Boolean) };
+    } catch (e) { return null; }
+}
+
+/** 把自動備份合併回地圖庫（只加不減，已存在的 id 不會被覆蓋）。 */
+function maiRestoreBackup() {
+    const backup = maiReadBackup();
+    if (!backup || !backup.entries.length) return;
+    const current = maiLoadLibrary();
+    const merged = maiMergeLibraries(current, backup.entries);
+    const added = merged.length - current.length;
+    if (!added) {
+        if (typeof showToast === 'function') showToast('備份裡的地圖都還在，不需要還原');
+        return;
+    }
+    if (!confirm(`從備份還原 ${added} 張地圖到地圖庫？（現有的地圖不會被覆蓋）`)) return;
+    maiSaveLibrary(merged);
+    maiRenderLibrary();
+    if (typeof showToast === 'function') showToast(`已還原 ${added} 張地圖`);
+}
+
+/** 捨棄自動備份（使用者確認現有地圖庫才是對的）。 */
+function maiDiscardBackup() {
+    if (!confirm('捨棄這份備份？此動作無法復原。')) return;
+    try { localStorage.removeItem(MAI_MAP_LIB_BACKUP_KEY); } catch (e) { /* ignore */ }
+    maiRenderLibrary();
 }
 
 function maiSaveCanvasToLibrary() {
@@ -531,6 +638,35 @@ function maiRenderLibrary() {
     const lib = maiLoadLibrary();
 
     box.textContent = '';
+
+    // 自動備份提示：地圖庫曾經變少過，把救得回來的張數與還原入口直接放在最上面
+    const backup = maiReadBackup();
+    if (backup && backup.entries.length) {
+        const known = new Set(lib.map(e => e && e.id));
+        const missing = backup.entries.filter(e => e && !known.has(e.id));
+        if (missing.length) {
+            const bar = document.createElement('div');
+            bar.className = 'mai-lib-backup-bar';
+            const txt = document.createElement('span');
+            const when = backup.savedAt ? new Date(backup.savedAt).toLocaleString() : '先前';
+            txt.textContent = `偵測到備份：有 ${missing.length} 張地圖不在目前的地圖庫裡（備份於 ${when}）`;
+            bar.appendChild(txt);
+            const restore = document.createElement('button');
+            restore.className = 'lv-btn lv-btn-tpl';
+            restore.textContent = '↩️ 還原';
+            restore.title = '把備份裡缺少的地圖加回地圖庫（不會覆蓋現有的）';
+            restore.addEventListener('click', maiRestoreBackup);
+            bar.appendChild(restore);
+            const discard = document.createElement('button');
+            discard.className = 'lv-btn lv-btn-del';
+            discard.textContent = '捨棄';
+            discard.title = '確認現在的地圖庫才是對的，刪掉這份備份';
+            discard.addEventListener('click', maiDiscardBackup);
+            bar.appendChild(discard);
+            box.appendChild(bar);
+        }
+    }
+
     if (!lib.length) {
         const empty = document.createElement('div');
         empty.className = 'log-empty';

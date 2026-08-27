@@ -1375,7 +1375,7 @@ function saveLyricsPresets() {
 }
 
 function loadLyricsPresets() {
-    const saved = localStorage.getItem(LYRICS_PRESETS_KEY);
+    const saved = safeLocalGet(LYRICS_PRESETS_KEY);
     if (saved) {
         const data = safeParse(saved);
         if (data) {
@@ -1488,7 +1488,7 @@ const LYRICS_LIBRARY_KEY = 'limbus_lyrics_library';
  * @returns {Array} 歌詞清單 [{id, name, text, timestamps, perLineSpeeds, speed, linePause, loop, savedAt}]
  */
 function loadLyricsLibrary() {
-    const saved = localStorage.getItem(LYRICS_LIBRARY_KEY);
+    const saved = safeLocalGet(LYRICS_LIBRARY_KEY);
     if (saved) {
         const parsed = safeParse(saved);
         if (Array.isArray(parsed)) return parsed;
@@ -1624,12 +1624,17 @@ function deleteLyricsFromLibrary(id) {
  */
 function getSavedLyricsList() {
     const list = [];
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('lyrics_data_')) {
-            const name = key.replace('lyrics_data_', '');
-            list.push(name);
+    try {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('lyrics_data_')) {
+                const name = key.replace('lyrics_data_', '');
+                list.push(name);
+            }
         }
+    } catch (e) {
+        // 瀏覽器封鎖網站資料時，連列舉 localStorage 都會丟例外；當成沒有存過的歌詞即可
+        console.warn('[Lyrics] 無法讀取 localStorage，已存的歌詞清單將顯示為空');
     }
     return list;
 }
@@ -1639,7 +1644,7 @@ function getSavedLyricsList() {
  * @param {string} name - 歌名
  */
 function loadLyrics(name) {
-    const raw = localStorage.getItem('lyrics_data_' + name);
+    const raw = safeLocalGet('lyrics_data_' + name);
     if (!raw) return;
 
     const data = safeParse(raw);
@@ -1711,7 +1716,7 @@ function getAllLyricsEntries() {
     dataNames.forEach(name => {
         if (knownNames.has(name)) return; // 跳過重複
 
-        const raw = localStorage.getItem('lyrics_data_' + name);
+        const raw = safeLocalGet('lyrics_data_' + name);
         const data = safeParse(raw);
         if (!data) return;
 

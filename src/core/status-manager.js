@@ -1241,7 +1241,7 @@ function recordRecentStatus(statusId) {
     if (recent.length > RECENT_STATUS_MAX) {
         recent = recent.slice(0, RECENT_STATUS_MAX);
     }
-    localStorage.setItem(RECENT_STATUS_KEY, JSON.stringify(recent));
+    safeLocalSet(RECENT_STATUS_KEY, JSON.stringify(recent));
 }
 
 /**

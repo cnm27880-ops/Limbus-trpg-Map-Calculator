@@ -282,8 +282,8 @@ class MusicManager {
         if (this.currentAudio) {
             this.currentAudio.volume = this.volume;
         }
-        // 儲存到 LocalStorage
-        localStorage.setItem(this.VOLUME_KEY, this.volume.toString());
+        // 儲存到 LocalStorage（隱私模式／配額問題不應中斷音量調整）
+        if (typeof safeLocalSet === 'function') safeLocalSet(this.VOLUME_KEY, this.volume.toString());
         this.updateUI();
     }
 
@@ -1075,36 +1075,15 @@ function handleStopMusic() {
 }
 
 /**
- * 切換音樂播放器面板
+ * 切換音樂播放器面板（相容舊呼叫）
+ *
+ * 舊版音樂面板（#music-player-panel／#qab-music-btn）早已被媒體中心（#media-panel）取代，
+ * 這裡不再自行操作 DOM，一律轉呼叫 main.js 的媒體中心開關；
+ * 先前這個檔案另外定義了一份同名的 toggleMusicPanel()，靠「main.js 比 audio.js 晚載入」
+ * 才沒有蓋掉正確版本——一旦 index.html 的 <script> 順序調動，音樂面板就會打不開。
  */
 function toggleMusicPlayer() {
-    toggleMusicPanel();
-}
-
-/**
- * 切換音樂面板
- */
-function toggleMusicPanel() {
-    const panel = document.getElementById('music-player-panel');
-    const musicBtn = document.getElementById('qab-music-btn');
-
-    if (!panel) return;
-
-    const isExpanded = panel.classList.contains('expanded');
-
-    if (!isExpanded) {
-        panel.classList.add('expanded');
-        if (musicBtn) musicBtn.classList.add('active');
-
-        // 關閉其他面板
-        const hotkeyPanel = document.getElementById('hotkey-help');
-        if (hotkeyPanel && !hotkeyPanel.classList.contains('hidden')) {
-            hotkeyPanel.classList.add('hidden');
-        }
-    } else {
-        panel.classList.remove('expanded');
-        if (musicBtn) musicBtn.classList.remove('active');
-    }
+    if (typeof toggleMusicPanel === 'function') toggleMusicPanel();
 }
 
 // ===== Firebase 同步功能（向後兼容）=====

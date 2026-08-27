@@ -51,6 +51,26 @@ function escapeJsAttr(text) {
         .replace(/"/g, '&quot;');
 }
 
+/**
+ * 過濾棋子頭像字串，只放行本站自己產生的 base64 圖片。
+ *
+ * 頭像一律由 processAvatarImage() 以 canvas 轉成 `data:image/...;base64,...` 後才寫進 Firebase，
+ * 但房間資料是公開可寫的，資料庫規則也只限制長度、沒有限制內容，因此不能相信讀回來的字串。
+ * 未過濾時它會被直接塞進 `url('...')` 或 style 屬性裡：
+ *   - 放進 innerHTML 的 style="background-image:url('…')"：字串裡的引號可以脫出屬性、注入標籤（XSS）
+ *   - 放進 element.style：字串裡的 `)` 與 `;` 可以追加任意 CSS 宣告
+ * 這裡採用與 modals.js 相同的白名單判斷；不合法時回傳空字串（呼叫端會退回文字頭像）。
+ *
+ * @param {*} avatar - 來源不可信的頭像字串
+ * @returns {string} 合法的 data:image URL，或空字串
+ */
+function safeAvatarSrc(avatar) {
+    if (typeof avatar !== 'string') return '';
+    // data:image/<subtype>;base64,<payload>——不允許引號、括號、分號等可脫出上下文的字元
+    if (!/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]*$/i.test(avatar)) return '';
+    return avatar;
+}
+
 // ===== Toast 通知 =====
 /**
  * 顯示 Toast 通知
@@ -498,7 +518,7 @@ function modifyHPInternal(unit, type, amount) {
 // 同時掛回 window，確保仍為 classic script 的既有檔案以全域呼叫 showToast / escapeHtml /
 // createUnit 等仍正常運作。
 export {
-    escapeHtml, escapeJsAttr, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
+    escapeHtml, escapeJsAttr, safeAvatarSrc, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
     generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
     calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
     countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus,
@@ -508,7 +528,7 @@ export {
 
 if (typeof window !== 'undefined') {
     Object.assign(window, {
-        escapeHtml, escapeJsAttr, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
+        escapeHtml, escapeJsAttr, safeAvatarSrc, showToast, copyId, copyPlayerCode, copyMyCode, updateCodeDisplay,
         generatePlayerId, generatePlayerCode, switchPage, toggleSidebar,
         calculateWeightedHpPercent, getVagueStatus, createUnit, modifyHPInternal,
         countSevereSlots, isSevereGaugeFull, parseDicePlus, formatDicePlus,

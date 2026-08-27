@@ -11,6 +11,12 @@
     <meta name="theme-color" content="#141418">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
 
+    <!-- 提前建立第三方連線（DNS + TCP + TLS）：下面的 Firebase SDK 與 Google Fonts 都是
+         會擋住首次繪製的資源，先握手可以省下數百毫秒的連線等待。 -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
     <!-- Firebase SDK (使用 Compat 版本以支援舊版語法) -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js" crossorigin="anonymous"></script>
@@ -20,10 +26,10 @@
     <link rel="stylesheet" href="assets/vendor/fontawesome/css/fontawesome.min.css">
     <link rel="stylesheet" href="assets/vendor/fontawesome/css/solid.min.css">
     <!-- CSS 檔案 -->
-    <link rel="stylesheet" href="styles/main.css?v=20260820">
-    <link rel="stylesheet" href="styles/components.css?v=20260820">
-    <link rel="stylesheet" href="styles/st-skill-hud.css?v=20260820">
-    <link rel="stylesheet" href="styles/combat-ui.css?v=20260820">
+    <link rel="stylesheet" href="styles/main.css?v=20260827">
+    <link rel="stylesheet" href="styles/components.css?v=20260827">
+    <link rel="stylesheet" href="styles/st-skill-hud.css?v=20260827">
+    <link rel="stylesheet" href="styles/combat-ui.css?v=20260827">
 </head>
 <body>
 <input type="file" id="file-upload" accept="image/*" style="display:none;">
@@ -690,60 +696,60 @@
 <!-- JS 檔案 - 分層載入，順序很重要！ -->
 <!-- 配置層 -->
 <!-- status-config / roulette-config / identity-config 已轉為 ES Module，改由 src/entry.js 匯入 -->
-<script src="src/config/config.js?v=20260820"></script>
-<script src="src/config/firebase-config.js?v=20260820"></script>
+<script src="src/config/config.js?v=20260827"></script>
+<script src="src/config/firebase-config.js?v=20260827"></script>
 
 <!-- 核心層 -->
-<script src="src/core/state.js?v=20260820"></script>
+<script src="src/core/state.js?v=20260827"></script>
 
 <!-- 人格卡牌與條件觸發引擎 -->
-<script src="src/core/identity-engine.js?v=20260820"></script>
+<script src="src/core/identity-engine.js?v=20260827"></script>
 
 <!-- 工具層（已轉為 ES Module，經 src/entry.js 匯入並掛回 window 相容層）。
      注意：type=module 會 defer 到所有 classic script 之後執行，僅適用於
      「無 classic script 在載入時引用其符號」的檔案（security/utils 皆符合）。 -->
-<script type="module" src="src/entry.js?v=20260820"></script>
+<script type="module" src="src/entry.js?v=20260827"></script>
 
 <!-- 資料層 -->
-<script src="src/data/storage.js?v=20260820"></script>
-<script src="src/data/firebase-connection.js?v=20260820"></script>
+<script src="src/data/storage.js?v=20260827"></script>
+<script src="src/data/firebase-connection.js?v=20260827"></script>
 
 <!-- 戰鬥隊列核心（盲盒戰鬥與 QTE 系統，依賴 firebase-connection.js 的 roomRef） -->
-<script src="src/core/combat-queue.js?v=20260820"></script>
-<script src="src/core/counter-phase.js?v=20260820"></script>
-<script src="src/core/black-box-engine.js?v=20260820"></script>
+<script src="src/core/combat-queue.js?v=20260827"></script>
+<script src="src/core/counter-phase.js?v=20260827"></script>
+<script src="src/core/black-box-engine.js?v=20260827"></script>
 
 <!-- UI 層 -->
-<script src="src/utils/floating-dismiss.js?v=20260820"></script>
-<script src="src/ui/window-manager.js?v=20260820"></script>
-<script src="src/ui/panel-dock.js?v=20260820"></script>
-<script src="src/ui/side-rail.js?v=20260820"></script>
-<script src="src/ui/camera.js?v=20260820"></script>
-<script src="src/ui/map-canvas.js?v=20260820"></script>
-<script src="src/ui/map.js?v=20260820"></script>
-<script src="src/ui/units.js?v=20260820"></script>
-<script src="src/ui/turn-axis.js?v=20260820"></script>
-<script src="src/core/status-manager.js?v=20260820"></script>
-<script src="src/ui/hotkeys.js?v=20260820"></script>
-<script src="src/ui/modals.js?v=20260820"></script>
-<script src="src/utils/audio.js?v=20260820"></script>
-<script src="src/ui/lyrics.js?v=20260820"></script>
-<script src="src/ui/combat-modals.js?v=20260820"></script>
-<script src="src/ui/combat-broadcast.js?v=20260820"></script>
-<script src="src/ui/st-combat-queue.js?v=20260820"></script>
-<script src="src/ui/st-skill-hud.js?v=20260820"></script>
-<script src="src/ui/aoe-select.js?v=20260820"></script>
-<script src="src/ui/boss-battle-hud.js?v=20260820"></script>
-<script src="src/ui/identity-hud.js?v=20260820"></script>
+<script src="src/utils/floating-dismiss.js?v=20260827"></script>
+<script src="src/ui/window-manager.js?v=20260827"></script>
+<script src="src/ui/panel-dock.js?v=20260827"></script>
+<script src="src/ui/side-rail.js?v=20260827"></script>
+<script src="src/ui/camera.js?v=20260827"></script>
+<script src="src/ui/map-canvas.js?v=20260827"></script>
+<script src="src/ui/map.js?v=20260827"></script>
+<script src="src/ui/units.js?v=20260827"></script>
+<script src="src/ui/turn-axis.js?v=20260827"></script>
+<script src="src/core/status-manager.js?v=20260827"></script>
+<script src="src/ui/hotkeys.js?v=20260827"></script>
+<script src="src/ui/modals.js?v=20260827"></script>
+<script src="src/utils/audio.js?v=20260827"></script>
+<script src="src/ui/lyrics.js?v=20260827"></script>
+<script src="src/ui/combat-modals.js?v=20260827"></script>
+<script src="src/ui/combat-broadcast.js?v=20260827"></script>
+<script src="src/ui/st-combat-queue.js?v=20260827"></script>
+<script src="src/ui/st-skill-hud.js?v=20260827"></script>
+<script src="src/ui/aoe-select.js?v=20260827"></script>
+<script src="src/ui/boss-battle-hud.js?v=20260827"></script>
+<script src="src/ui/identity-hud.js?v=20260827"></script>
 <!-- 戰鬥日誌 / 構築室（系統 A）與 E.G.O 侵蝕系統（系統 B）：依賴 status-manager / firebase-connection，於 main 之前載入 -->
-<script src="src/ui/log-view.js?v=20260820"></script>
-<script src="src/ui/erosion-hud.js?v=20260820"></script>
-<script src="src/ui/fog.js?v=20260820"></script>
-<script src="src/ui/map-ai-assistant.js?v=20260820"></script>
-<script src="src/ui/main.js?v=20260820"></script>
+<script src="src/ui/log-view.js?v=20260827"></script>
+<script src="src/ui/erosion-hud.js?v=20260827"></script>
+<script src="src/ui/fog.js?v=20260827"></script>
+<script src="src/ui/map-ai-assistant.js?v=20260827"></script>
+<script src="src/ui/main.js?v=20260827"></script>
 
 <!-- 幸運大轉盤 -->
-<script src="src/ui/roulette-ui.js?v=20260820"></script>
-<script src="src/ui/st-roulette-manager.js?v=20260820"></script>
+<script src="src/ui/roulette-ui.js?v=20260827"></script>
+<script src="src/ui/st-roulette-manager.js?v=20260827"></script>
 </body>
 </html>

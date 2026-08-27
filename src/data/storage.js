@@ -11,6 +11,44 @@ const STORAGE_KEYS = {
     UNIT_TEMPLATES: 'limbus_unit_templates'  // 單位模板
 };
 
+// ===== localStorage 安全存取 =====
+
+/**
+ * 安全地寫入 localStorage。
+ *
+ * localStorage 在幾種常見情況下會直接丟例外：無痕／隱私模式（Safari）、
+ * 使用者在瀏覽器設定中封鎖網站資料、以及配額用盡（QuotaExceededError）。
+ * 這些例外原本會從呼叫端往外炸開，把「順手記一下偏好」變成中斷整個操作
+ * （例如調音量時寫入失敗，連音量 UI 都來不及更新）。
+ * 記住偏好失敗不應該影響主要流程，因此一律吞下例外並回報成敗。
+ *
+ * @param {string} key
+ * @param {string} value
+ * @returns {boolean} 是否成功寫入
+ */
+function safeLocalSet(key, value) {
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch (e) {
+        console.warn(`[storage] 無法寫入 localStorage（${key}）：`, e && e.name ? e.name : e);
+        return false;
+    }
+}
+
+/**
+ * 安全地讀取 localStorage（讀取同樣可能因隱私設定而丟例外）。
+ * @param {string} key
+ * @returns {string|null} 讀不到或發生例外時回傳 null
+ */
+function safeLocalGet(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch (e) {
+        return null;
+    }
+}
+
 // ===== 房間管理 =====
 
 /**

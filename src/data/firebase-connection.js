@@ -1765,7 +1765,7 @@ function logoutAndReset() {
         if (session) {
             // 標記為已登出，但保留識別碼供下次預填
             session.loggedOut = true;
-            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            safeLocalSet(SESSION_KEY, JSON.stringify(session));
         } else {
             clearSession();
         }
@@ -1852,11 +1852,8 @@ function checkExistingSession() {
 function prefillInputsFromStorage() {
     const session = getSession();
 
-    // 嘗試預填名稱
-    const nameInput = document.getElementById('input-name');
-    if (nameInput && session && session.name) {
-        nameInput.value = session.name;
-    }
+    // 註：登入畫面已不再輸入代號（代號改為登入後自行修改），
+    // 因此這裡只預填玩家／ST 的 4 碼識別碼。
 
     // 嘗試預填玩家識別碼
     const playerCodeInput = document.getElementById('input-player-code');

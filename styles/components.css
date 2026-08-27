@@ -170,7 +170,7 @@ body.aoe-select-active .token {
     height: 115%;
     top: -7.5%;
     left: -7.5%;
-    background-image: url('../assets/images/boss_frame.png');
+    background-image: url('../assets/images/boss_frame.png?v=20260827');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;

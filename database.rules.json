@@ -17,7 +17,7 @@
         "units": {
           "$unitId": {
             "name":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)" },
-            "avatar": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500000)" },
+            "avatar": { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500000 && newData.val().matches(/^data:image[/][a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]*$/))" },
             "type":   { ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 20)" },
             "hp":     { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 9999)" },
             "maxHp":  { ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 9999)" },

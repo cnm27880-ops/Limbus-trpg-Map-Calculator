@@ -15,13 +15,26 @@ const firebaseConfig = {
   measurementId: "G-LB2J0DC2SB"
 };
 
-// 初始化 Firebase（使用 Compat 版本）
-const app = firebase.initializeApp(firebaseConfig);
+/**
+ * 初始化 Firebase（Compat 版本）
+ *
+ * SDK 由 <head> 的 CDN <script> 提供，載入失敗時（離線、公司網路擋 gstatic.com、
+ * 瀏覽器封鎖第三方腳本）這個檔案原本會直接丟出未捕捉的 ReferenceError 而整支中斷，
+ * 主控台只留下一行看不出原因的錯誤。改為明確偵測並留下可讀訊息：
+ * window.database 維持未定義，initSystem() 既有的 SDK 檢查會據此提示使用者。
+ */
+(function initFirebase() {
+  if (typeof firebase === 'undefined' || typeof firebase.initializeApp !== 'function') {
+    console.error('❌ Firebase SDK 未載入（CDN 被封鎖或網路不通），連線功能將無法使用；請檢查網路後重新整理頁面');
+    return;
+  }
 
-// 初始化 Realtime Database
-const database = firebase.database();
-
-// 將 database 掛載到 window，讓其他檔案可以存取
-window.database = database;
-
-console.log('✅ Firebase 已初始化（Compat 版本）');
+  try {
+    firebase.initializeApp(firebaseConfig);
+    // 將 database 掛到 window，讓其他檔案可以存取
+    window.database = firebase.database();
+    console.log('✅ Firebase 已初始化（Compat 版本）');
+  } catch (err) {
+    console.error('❌ Firebase 初始化失敗：', err);
+  }
+})();

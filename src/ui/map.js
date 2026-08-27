@@ -506,15 +506,18 @@ function renderMap() {
         }
 
         // ===== 頭像處理 =====
-        if (u.avatar) {
+        // 頭像來自公開可寫的房間資料，未過濾就塞進 url() 的話，字串裡的 `)` 與 `;`
+        // 可以在這個 inline style 上追加任意 CSS 宣告；safeAvatarSrc 只放行本站產生的 base64 圖片。
+        const avatarSrc = (typeof safeAvatarSrc === 'function') ? safeAvatarSrc(u.avatar) : '';
+        if (avatarSrc) {
             if (isBoss) {
                 // BOSS 使用 CSS 變數，讓 ::before 偽元素顯示頭像
                 // 這樣頭像會被 ::before 的 overflow:hidden 裁切成圓形
                 // 而 ::after 的金框不受影響
-                t.style.setProperty('--avatar-url', `url(${u.avatar})`);
+                t.style.setProperty('--avatar-url', `url(${avatarSrc})`);
             } else {
                 // 一般單位直接設定背景圖片
-                t.style.backgroundImage = `url(${u.avatar})`;
+                t.style.backgroundImage = `url(${avatarSrc})`;
             }
         } else {
             // 沒有頭像時顯示名字首字

@@ -52,8 +52,12 @@ function ensureTurnAxisDom() {
 /** 產生棋子頭像（有頭像用背景圖，否則用名字首字）。 */
 function taUnitFaceHtml(u, faceClass) {
     const cls = faceClass || 'tc-face';
-    if (u.avatar) {
-        return `<span class="${cls}" style="background-image:url('${u.avatar}')"></span>`;
+    // 這段字串會直接進 innerHTML。頭像來自公開可寫的房間資料，未過濾時字串裡的引號
+    // 可以脫出 style 屬性、注入任意標籤（儲存型 XSS）；safeAvatarSrc 只放行本站產生的 base64 圖片，
+    // 不合法時 fall through 到下面的文字頭像。
+    const avatarSrc = (typeof safeAvatarSrc === 'function') ? safeAvatarSrc(u.avatar) : '';
+    if (avatarSrc) {
+        return `<span class="${cls}" style="background-image:url('${avatarSrc}')"></span>`;
     }
     const initial = (u.name && u.name.length) ? u.name[0].toUpperCase() : '?';
     const esc = (typeof escapeHtml === 'function') ? escapeHtml(initial) : initial;

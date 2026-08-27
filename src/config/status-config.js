@@ -1254,7 +1254,7 @@ function addToFavorites(statusId) {
     const favorites = getFavoriteStatuses();
     if (!favorites.includes(statusId) && favorites.length < 12) {
         favorites.push(statusId);
-        localStorage.setItem(FAVORITE_STATUS_KEY, JSON.stringify(favorites));
+        safeLocalSet(FAVORITE_STATUS_KEY, JSON.stringify(favorites));
     }
 }
 
@@ -1265,7 +1265,7 @@ function addToFavorites(statusId) {
 function removeFromFavorites(statusId) {
     let favorites = getFavoriteStatuses();
     favorites = favorites.filter(id => id !== statusId);
-    localStorage.setItem(FAVORITE_STATUS_KEY, JSON.stringify(favorites));
+    safeLocalSet(FAVORITE_STATUS_KEY, JSON.stringify(favorites));
 }
 
 /**

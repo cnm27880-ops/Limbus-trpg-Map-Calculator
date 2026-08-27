@@ -1630,11 +1630,19 @@ function idtPlanDeclareCost(eff, unit, targetUnit) {
     return out;
 }
 
-/** 宣告是否需要二次確認：只要會扣掉任何資源／自傷就要，避免誤按把資源灌掉。 */
+/**
+ * 宣告是否需要二次確認：只要會扣掉任何資源／自傷就要，避免誤按把資源灌掉。
+ * plan 可能是 idtPlanDeclareCost() 的完整結果，也可能是「沒有我方單位」時的
+ * 簡化替代物（只有 affordable / blockers / costParts），因此各成本欄位都要當成可能不存在。
+ * @param {object} plan
+ * @returns {boolean}
+ */
 function idtDeclareHasCost(plan) {
-    return Object.keys(plan.selfCost).length > 0
-        || Object.keys(plan.poolCost).length > 0
-        || Object.keys(plan.targetCost).length > 0
+    if (!plan) return false;
+    const n = (o) => (o && typeof o === 'object') ? Object.keys(o).length : 0;
+    return n(plan.selfCost) > 0
+        || n(plan.poolCost) > 0
+        || n(plan.targetCost) > 0
         || !!(plan.selfHp && plan.selfHp.amount > 0);
 }
 
@@ -1952,8 +1960,11 @@ function renderIdentityActiveSkills() {
             if (idtIsDeclarable(h) && !lockedOut) {
                 const eff = h.effect;
                 // 成本試算與宣告時走同一個 idtPlanDeclareCost，按鈕顯示的數字必定等於實際會扣的數字
+                // 沒有我方單位時給一個與 idtPlanDeclareCost() 同形狀的空計畫，
+                // 讓後續讀 selfCost／poolCost／targetCost 的程式不會踩到 undefined。
                 const plan = unit ? idtPlanDeclareCost(eff, unit, targetUnit)
-                                  : { affordable: false, blockers: ['尚未指定我方單位'], costParts: [] };
+                                  : { affordable: false, blockers: ['尚未指定我方單位'], costParts: [],
+                                      selfCost: {}, poolCost: {}, targetCost: {}, selfHp: null };
                 const limit = unit ? idtCheckUseLimit(unit.id, id, i, eff.once) : { ok: true, reason: '' };
                 const affordable = plan.affordable && limit.ok;
                 const why = !limit.ok ? limit.reason : (plan.blockers[0] || '');

@@ -2783,6 +2783,155 @@ console.log('\n[轉義] escapeJsAttr：含單引號的曲名／玩家代號不�
     });
 })();
 
+// ====================================================================
+console.log('\n[頭像] safeAvatarSrc：只放行本站產生的 base64 圖片');
+// ====================================================================
+(function () {
+    const uSandbox = { console, String, Object };
+    vm.createContext(uSandbox);
+    vm.runInContext(readSource('src/utils/utils.js') + '\n;\nvar __u = { safeAvatarSrc };',
+        uSandbox, { filename: 'utils.js' });
+    const { safeAvatarSrc } = uSandbox.__u;
+
+    test('放行 processAvatarImage() 實際產出的 JPEG data URL', () => {
+        const real = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ==';
+        assert.strictEqual(safeAvatarSrc(real), real);
+    });
+
+    test('放行 PNG／WebP 等其他 base64 圖片子型別', () => {
+        const png = 'data:image/png;base64,iVBORw0KGgo=';
+        const webp = 'data:image/webp;base64,UklGRg==';
+        assert.strictEqual(safeAvatarSrc(png), png);
+        assert.strictEqual(safeAvatarSrc(webp), webp);
+    });
+
+    test('擋下可脫出 style 屬性、注入標籤的頭像字串（儲存型 XSS）', () => {
+        const payload = "x'></span><img src=x onerror=alert(1)><span class='";
+        assert.strictEqual(safeAvatarSrc(payload), '', '不合法時應回傳空字串，讓呼叫端退回文字頭像');
+        // 即使前綴偽裝成合法 data URL，尾端帶引號仍應被擋下
+        assert.strictEqual(safeAvatarSrc("data:image/png;base64,AAA'></span><img src=x onerror=alert(1)>"), '');
+    });
+
+    test('擋下可在 inline style 追加 CSS 宣告的頭像字串', () => {
+        assert.strictEqual(safeAvatarSrc('a); background: url(//evil.example/x'), '');
+        assert.strictEqual(safeAvatarSrc('data:image/png;base64,AAA); color:red;('), '');
+    });
+
+    test('擋下外部網址與非字串輸入（頭像一律是本站自產的 base64）', () => {
+        assert.strictEqual(safeAvatarSrc('https://evil.example/a.png'), '');
+        assert.strictEqual(safeAvatarSrc('javascript:alert(1)'), '');
+        assert.strictEqual(safeAvatarSrc(null), '');
+        assert.strictEqual(safeAvatarSrc(undefined), '');
+        assert.strictEqual(safeAvatarSrc({}), '');
+    });
+})();
+
+// ====================================================================
+console.log('\n[行動軸] taUnitFaceHtml：惡意頭像字串不能脫出 style 屬性注入標籤');
+// ====================================================================
+(function () {
+    const taSandbox = {
+        console, String, Object, Array, Math, JSON, Number, parseInt, parseFloat,
+        setTimeout, clearTimeout,
+        document: {
+            getElementById: () => null,
+            querySelector: () => null,
+            createElement: () => ({ style: {}, classList: { add() {}, remove() {}, toggle() {} }, appendChild() {} }),
+            addEventListener() {}
+        },
+        window: undefined,
+        state: { units: [] }
+    };
+    vm.createContext(taSandbox);
+    // taUnitFaceHtml 需要 utils.js 的 escapeHtml / safeAvatarSrc，與瀏覽器一樣串接載入
+    const combinedTa = [readSource('src/utils/utils.js'), readSource('src/ui/turn-axis.js')].join('\n;\n')
+        + '\n;\nvar __t = { taUnitFaceHtml };';
+    vm.runInContext(combinedTa, taSandbox, { filename: 'utils+turn-axis.js' });
+    const { taUnitFaceHtml } = taSandbox.__t;
+
+    test('合法 base64 頭像照常輸出背景圖', () => {
+        const png = 'data:image/png;base64,iVBORw0KGgo=';
+        const html = taUnitFaceHtml({ name: '阿爾法', avatar: png }, 'tc-face');
+        assert.ok(html.includes(`url('${png}')`), '應輸出背景圖：' + html);
+    });
+
+    test('帶雙引號的頭像會脫出 style="..."（記錄舊行為，說明為何要過濾）', () => {
+        // 這段字串沒有經過過濾時，產出的 HTML 會是：
+        //   <span class="tc-face" style="background-image:url('x"><img ...>')"></span>
+        // 雙引號提前關掉 style 屬性、`>` 關掉 span，之後的 <img onerror=...> 就成了真正的標籤。
+        const payload = 'x"><img src=q onerror=alert(1)>';
+        const unfiltered = `<span class="tc-face" style="background-image:url('${payload}')"></span>`;
+        assert.ok(unfiltered.includes('"><img'), '未過濾時確實會脫出屬性');
+    });
+
+    test('惡意頭像被擋下，退回文字頭像且不含任何標籤片段', () => {
+        const html = taUnitFaceHtml({ name: 'evil', avatar: 'x"><img src=q onerror=alert(1)>' }, 'tc-face');
+        assert.ok(!html.includes('<img'), '不得含有注入的 <img>：' + html);
+        assert.ok(!html.includes('onerror'), '不得含有事件處理器：' + html);
+        assert.ok(html.includes('tc-face-text'), '應退回文字頭像：' + html);
+    });
+
+    test('單引號、括號、外部網址等頭像同樣退回文字頭像', () => {
+        for (const bad of ["x'></span><b>", 'a); background:url(//evil.example/x', 'https://evil.example/a.png']) {
+            const html = taUnitFaceHtml({ name: 'evil', avatar: bad }, 'tc-face');
+            assert.ok(html.includes('tc-face-text'), `應退回文字頭像（${bad}）：` + html);
+            assert.ok(!html.includes('background-image'), `不得輸出背景圖（${bad}）：` + html);
+        }
+    });
+})();
+
+// ====================================================================
+console.log('\n[人格卡] idtDeclareHasCost：沒有我方單位時也不能整個面板開不起來');
+// ====================================================================
+(function () {
+    const idtSandbox = {
+        console, String, Object, Array, Math, JSON, Number, parseInt, parseFloat, isNaN,
+        setTimeout, clearTimeout,
+        document: {
+            getElementById: () => null,
+            querySelector: () => null,
+            createElement: () => ({ style: {}, classList: { add() {}, remove() {}, toggle() {} }, appendChild() {} }),
+            addEventListener() {},
+            head: { appendChild() {} },
+            body: { appendChild() {} }
+        },
+        window: undefined,
+        state: { units: [] }
+    };
+    vm.createContext(idtSandbox);
+    vm.runInContext(readSource('src/ui/identity-hud.js') + '\n;\nvar __i = { idtDeclareHasCost };',
+        idtSandbox, { filename: 'identity-hud.js' });
+    const { idtDeclareHasCost } = idtSandbox.__i;
+
+    // renderIdentityActiveSkills() 在「尚未指定我方單位」時不會呼叫 idtPlanDeclareCost()，
+    // 而是自行組一份簡化的 plan；先前它少了 selfCost／poolCost／targetCost，
+    // 於是 Object.keys(undefined) 丟出 TypeError，整個人格卡引擎面板都打不開。
+    test('簡化 plan（沒有 selfCost／poolCost／targetCost 欄位）不丟例外', () => {
+        const plan = { affordable: false, blockers: ['尚未指定我方單位'], costParts: [] };
+        assert.doesNotThrow(() => idtDeclareHasCost(plan));
+        assert.strictEqual(idtDeclareHasCost(plan), false, '沒有任何成本欄位 → 不需要二次確認');
+    });
+
+    test('null／undefined plan 也安全處理', () => {
+        assert.strictEqual(idtDeclareHasCost(null), false);
+        assert.strictEqual(idtDeclareHasCost(undefined), false);
+    });
+
+    test('完整 plan：任一成本桶有內容就需要二次確認', () => {
+        const base = { selfCost: {}, poolCost: {}, targetCost: {}, selfHp: null };
+        assert.strictEqual(idtDeclareHasCost(base), false, '完全沒有成本 → 不確認');
+        assert.strictEqual(idtDeclareHasCost({ ...base, selfCost: { tremor: 3 } }), true);
+        assert.strictEqual(idtDeclareHasCost({ ...base, poolCost: { charge: 2 } }), true);
+        assert.strictEqual(idtDeclareHasCost({ ...base, targetCost: { rupture: 1 } }), true);
+    });
+
+    test('自傷成本：amount 大於 0 才需要二次確認', () => {
+        const base = { selfCost: {}, poolCost: {}, targetCost: {} };
+        assert.strictEqual(idtDeclareHasCost({ ...base, selfHp: { type: 'a', amount: 0 } }), false);
+        assert.strictEqual(idtDeclareHasCost({ ...base, selfHp: { type: 'a', amount: 4 } }), true);
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

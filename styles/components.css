@@ -170,7 +170,7 @@ body.aoe-select-active .token {
     height: 115%;
     top: -7.5%;
     left: -7.5%;
-    background-image: url('../assets/images/boss_frame.png?v=20260827');
+    background-image: url('../assets/images/boss_frame.png?v=20260828');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -5755,6 +5755,21 @@ body.combat-mode .boss-hud-container {
 
 /* 地圖庫卡片列表 */
 .mai-library-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-height: 220px; overflow-y: auto; }
+/* 自動備份提示條：地圖庫曾經變少過，把還原入口放在清單最上面 */
+.mai-lib-backup-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 10px;
+    border: 1px solid var(--accent-yellow, #fdd835);
+    border-radius: 8px;
+    background: rgba(253, 216, 53, 0.08);
+    color: var(--text-main, #e8e8ea);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.mai-lib-backup-bar > span { flex: 1 1 180px; }
 .mai-lib-card {
     display: flex;
     justify-content: space-between;

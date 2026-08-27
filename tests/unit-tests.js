@@ -2932,6 +2932,90 @@ console.log('\n[人格卡] idtDeclareHasCost：沒有我方單位時也不能整
     });
 })();
 
+// ====================================================================
+console.log('\n[地圖庫] 房間永遠不能把本機的地圖庫變少');
+// ====================================================================
+(function () {
+    // 每個測試用全新的假 localStorage 與全新的模組實例，避免互相汙染
+    function freshMai(seed) {
+        const store = {};
+        if (seed) store['limbus-map-library'] = JSON.stringify(seed);
+        const sb = {
+            console, String, Object, Array, Math, JSON, Number, parseInt, parseFloat, Date, Set,
+            setTimeout, clearTimeout,
+            localStorage: {
+                getItem: (k) => (k in store ? store[k] : null),
+                setItem: (k, v) => { store[k] = String(v); },
+                removeItem: (k) => { delete store[k]; }
+            },
+            document: {
+                getElementById: () => null,
+                querySelector: () => null,
+                createElement: () => ({ style: {}, classList: { add() {}, remove() {}, toggle() {} }, appendChild() {}, addEventListener() {} }),
+                addEventListener() {},
+                createDocumentFragment: () => ({ appendChild() {} })
+            },
+            window: undefined,
+            state: { units: [] }
+        };
+        vm.createContext(sb);
+        vm.runInContext(readSource('src/ui/map-ai-assistant.js')
+            + '\n;\nvar __m = { maiMergeLibraries, maiReadLocalLibrary, maiWriteLocalLibrary, maiReadBackup };',
+            sb, { filename: 'map-ai-assistant.js' });
+        return { api: sb.__m, store };
+    }
+    // 沙箱是獨立 realm，陣列的 prototype 與本地不同，deepStrictEqual 會誤判；改比對字串
+    const ids = (arr) => (arr || []).map(e => e.id).join(',');
+    const M = (id) => ({ id, name: id, mapW: 15, mapH: 15, mapData: [[0]] });
+
+    test('合併：房間版本優先，本機獨有的一律保留', () => {
+        const { api } = freshMai();
+        const merged = api.maiMergeLibraries([M('a')], [{ id: 'a', name: '本機舊版' }, M('b')]);
+        assert.strictEqual(ids(merged), 'a,b', '本機獨有的 b 不可以被丟掉');
+        assert.strictEqual(merged[0].name, 'a', '同一個 id 應以房間版本為準');
+    });
+
+    test('合併：房間是空的 → 本機三張地圖一張都不能少', () => {
+        // 這正是先前的資料遺失路徑：以玩家身分加入一個沒有地圖庫的房間，
+        // 舊程式碼會把房間的空陣列整包寫回 localStorage，本機唯一的一份就沒了。
+        const { api } = freshMai();
+        const local = [M('m1'), M('m2'), M('m3')];
+        assert.strictEqual(ids(api.maiMergeLibraries([], local)), 'm1,m2,m3');
+    });
+
+    test('合併：忽略缺 id 的髒資料，且不產生重複', () => {
+        const { api } = freshMai();
+        const merged = api.maiMergeLibraries([M('a'), null, { name: '沒有 id' }], [M('a'), M('b'), M('b')]);
+        assert.strictEqual(ids(merged), 'a,b');
+    });
+
+    test('寫入變少時自動留下備份（最後一道防線）', () => {
+        const { api } = freshMai();
+        api.maiWriteLocalLibrary([M('a'), M('b'), M('c')]);
+        assert.strictEqual(api.maiReadBackup(), null, '只是變多時不需要備份');
+        api.maiWriteLocalLibrary([M('a')]);
+        const backup = api.maiReadBackup();
+        assert.ok(backup, '變少時應留下備份');
+        assert.strictEqual(ids(backup.entries), 'a,b,c', '備份的是變少之前的整份');
+        assert.strictEqual(ids(api.maiReadLocalLibrary()), 'a', '目前的地圖庫仍照使用者本意縮減');
+    });
+
+    test('清空到零也留得下備份（刪掉最後一張仍可還原）', () => {
+        const { api } = freshMai([M('唯一一張')]);
+        api.maiWriteLocalLibrary([]);
+        assert.strictEqual(ids(api.maiReadLocalLibrary()), '', '空是使用者本意，要照實反映');
+        assert.strictEqual(ids(api.maiReadBackup().entries), '唯一一張', '但備份救得回來');
+    });
+
+    test('本機讀取容錯：壞掉的 JSON／非陣列都回傳空陣列而不是丟例外', () => {
+        const { api, store } = freshMai();
+        store['limbus-map-library'] = '{ 這不是 JSON';
+        assert.strictEqual(ids(api.maiReadLocalLibrary()), '');
+        store['limbus-map-library'] = '{"a":1}';
+        assert.strictEqual(ids(api.maiReadLocalLibrary()), '');
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);

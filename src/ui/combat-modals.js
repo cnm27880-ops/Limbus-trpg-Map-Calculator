@@ -7,6 +7,10 @@ const ATTACK_MODAL_MEMO_KEY = 'limbus-attack-modal-memo';
 const DEFENSE_MODAL_MEMO_KEY = 'limbus-defense-modal-memo';
 
 let attackModalTarget = null; // { id, name }
+// 送出鎖：防止玩家/ST 連續快速點擊發送按鈕，在 closeAttackModal() 真正把視窗關掉前
+// 重入 submitAttackModal()，對同一次攻擊意圖重複發起 cqInitiateAttack/cqInitiateThreat
+// （進而在戰鬥隊列等候區疊出多筆重複結算）。openAttackModal 開啟時重置。
+let attackModalSubmitting = false;
 // 侵蝕攻擊模式：玩家對其他玩家發動（E.G.O 失控）。true 時 submitAttackModal 走威脅流程
 // 並自動加入「每層侵蝕增幅 = 1 附加成功」。openAttackModal 每次開啟一律重置為 false。
 let attackModalErosion = false;
@@ -77,6 +81,9 @@ function openAttackModal(unitId) {
     if (!u) return;
     attackModalTarget = { id: u.id, name: u.name || '目標' };
     attackModalErosion = false;  // 一般攻擊／威脅；侵蝕攻擊由 openErosionAttackModal 另行設定
+    attackModalSubmitting = false;  // 新開一次攻擊視窗，解除上一次的送出鎖
+    const submitBtn = document.getElementById('attack-modal-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
 
     document.getElementById('attack-target-name').innerText = `目標：${u.name || '---'}`;
     cmUpdateAttackDistance(u);
@@ -513,6 +520,19 @@ function cmBuildResolveTable(ownedCards, attackerState, targetState, buildStatus
  */
 function submitAttackModal() {
     if (!attackModalTarget) return;
+    // 送出鎖：連續快速點擊（或連點 Enter）只讓第一次真正發起攻擊，後續在
+    // closeAttackModal() 關閉視窗前的重入呼叫一律忽略，避免同一次攻擊意圖
+    // 被 cqInitiateAttack/cqInitiateThreat 送出多次、疊出多筆重複結算。
+    if (attackModalSubmitting) return;
+    // 身分尚未就緒（極少數情況下 myPlayerId/myName 因重新整理/斷線重連而暫時未賦值）
+    // 時直接擋下，避免把 undefined 寫進 attacker.id/name，讓其他人看到「未知攻擊者」。
+    if (myRole !== 'st' && (!myPlayerId || !myName)) {
+        if (typeof showToast === 'function') showToast('身分尚未就緒，請稍候再試一次');
+        return;
+    }
+    attackModalSubmitting = true;
+    const submitBtn = document.getElementById('attack-modal-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
     // A+B 記法：A＝擲骰 DP、B＝附加成功；解析後仍以 dp / auto 兩個數值走原本的計算契約
     const atkParsed = (typeof parseDicePlus === 'function')
         ? parseDicePlus(document.getElementById('attack-dp').value)

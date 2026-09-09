@@ -48,7 +48,11 @@ function logViewSetupListener() {
         lvRenderDpsStat();
     });
     if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => roomRef.child('combatLogs').off('value', listener));
+        // 注意：off() 必須對「同一個 Query」呼叫才會真的解除監聽——off() 是用查詢參數
+        // （這裡是 limitToLast(100)）比對監聽器，對不帶查詢條件的 roomRef.child('combatLogs')
+        // 呼叫 off() 並不會移除掛在 ref（帶 limitToLast）上的這個監聽器，會變成解不掉的
+        // 殭屍監聽器，長期下來造成連線與畫面卡頓。必須用同一個 ref 變數解除。
+        unsubscribeListeners.push(() => ref.off('value', listener));
     }
 
     lvSetupMonsterLibListener(); // 怪物庫房間共享

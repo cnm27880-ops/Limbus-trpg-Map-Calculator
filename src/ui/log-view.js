@@ -34,8 +34,9 @@ function logViewSetupListener() {
     // 套用權限：玩家隱藏 AI 構築面板與 DPS 統計
     lvApplyRolePermissions();
 
-    const ref = roomRef.child('combatLogs').limitToLast(100);
-    const listener = ref.on('value', snapshot => {
+    // registerRoomListener 內部用同一個 ref（含這裡的 limitToLast(100)）掛/解監聽，
+    // 避免 off() 對不帶查詢條件的 ref 呼叫而解不掉監聽器（見該函式註解）。
+    registerRoomListener(roomRef.child('combatLogs').limitToLast(100), 'value', snapshot => {
         const val = snapshot.val();
         lvCombatLogs = val
             ? Object.keys(val).map(k => {
@@ -47,13 +48,6 @@ function logViewSetupListener() {
         renderCombatLogs();
         lvRenderDpsStat();
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        // 注意：off() 必須對「同一個 Query」呼叫才會真的解除監聽——off() 是用查詢參數
-        // （這裡是 limitToLast(100)）比對監聽器，對不帶查詢條件的 roomRef.child('combatLogs')
-        // 呼叫 off() 並不會移除掛在 ref（帶 limitToLast）上的這個監聽器，會變成解不掉的
-        // 殭屍監聽器，長期下來造成連線與畫面卡頓。必須用同一個 ref 變數解除。
-        unsubscribeListeners.push(() => ref.off('value', listener));
-    }
 
     lvSetupMonsterLibListener(); // 怪物庫房間共享
     lvRenderMonsterLibrary();
@@ -654,7 +648,7 @@ function lvSaveMonsterLibrary(arr) {
 function lvSetupMonsterLibListener() {
     if (typeof roomRef === 'undefined' || !roomRef) return;
     const ref = roomRef.child('monsterLibrary');
-    const listener = ref.on('value', snapshot => {
+    registerRoomListener(ref, 'value', snapshot => {
         const val = snapshot.val();
         const arr = Array.isArray(val) ? val.filter(Boolean)
             : (val && typeof val === 'object') ? Object.values(val).filter(Boolean) : [];
@@ -670,9 +664,6 @@ function lvSetupMonsterLibListener() {
         }
         lvRenderMonsterLibrary();
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => ref.off('value', listener));
-    }
 }
 
 /** 把任意 AI 回傳結構正規化為怪物陣列（接受 {monsters:[]}／陣列／單一物件）。 */

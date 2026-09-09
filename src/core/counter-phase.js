@@ -94,13 +94,10 @@ function cpSetupListener() {
     cpSeenRoundId = null;
     cpSeenFinalized = null;
 
-    counterPhaseListener = ref.on('value', snapshot => {
+    counterPhaseListener = registerRoomListener(ref, 'value', snapshot => {
         counterPhaseState = cpNormalizeState(snapshot.val());
         cpHandleUpdate();
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => ref.off('value', counterPhaseListener));
-    }
 }
 
 function cpHandleUpdate() {

@@ -19,6 +19,32 @@ let _syncedMapDataStr = null;   // 上次「確認」Firebase 已同步的 mapDa
 let _mapDataReceivedOnce = false; // 本次連線是否已收過至少一次 mapData 快照（首個快照永遠套用，見下方監聽器）
 let _syncedPaletteStr = null;   // 上次 Firebase 已知的 mapPalette（JSON 字串）
 
+// ===== 監聽器註冊輔助 =====
+/**
+ * 統一註冊房間內的 Firebase 監聽器：在傳入的 ref/query 上掛 on()，並保證用「同一個」
+ * ref 變數解除。
+ *
+ * 背景：Firebase 的 off() 必須對「同一個 Query」呼叫才會真的解除監聽——它是用查詢參數
+ * （例如 limitToLast(100)）比對監聽器，對不帶查詢條件的 ref 呼叫 off() 並不會移除掛在
+ * 帶查詢條件的 ref 上的監聽器。先前 combatLogs 的監聽器就是這樣寫錯（on() 掛在
+ * limitToLast(100) 的 Query 上、off() 卻對不帶查詢的 ref 呼叫），導致監聽器解不掉、
+ * 長期累積成殭屍監聽器拖垮連線。全房間的 .on('value', ...) 一律改用這個函式掛，
+ * 讓「掛的 ref」與「解除的 ref」永遠是同一個，未來新增監聽器也不會再犯同樣的錯。
+ *
+ * @param {object} ref - Firebase Reference 或 Query（如 roomRef.child('x')，或再加 .limitToLast(n)）
+ * @param {string} eventType - 'value' 等 Firebase 事件類型
+ * @param {function} callback
+ * @returns {function} Firebase 內部使用的 listener（一般呼叫端不需要接這個回傳值；
+ *   少數需要在下次呼叫前主動 off() 舊監聽器的情境〔如換房時重新掛監聽〕才需要存起來）
+ */
+function registerRoomListener(ref, eventType, callback) {
+    const listener = ref.on(eventType, callback);
+    if (typeof unsubscribeListeners !== 'undefined') {
+        unsubscribeListeners.push(() => ref.off(eventType, listener));
+    }
+    return listener;
+}
+
 // ===== 連線狀態 UI =====
 /**
  * 更新連線狀態 UI
@@ -654,7 +680,7 @@ function setupRoomListeners() {
     _syncedPaletteStr = null;
 
     // 監聽地圖資料變更
-    const mapDataListener = roomRef.child('mapData').on('value', snapshot => {
+    registerRoomListener(roomRef.child('mapData'), 'value', snapshot => {
         if (snapshot.exists()) {
             const raw = snapshot.val();
             // 驗證地圖資料格式
@@ -690,10 +716,9 @@ function setupRoomListeners() {
             scheduleRenderMap();
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('mapData').off('value', mapDataListener));
 
     // 監聽調色盤變更
-    const paletteListener = roomRef.child('mapPalette').on('value', snapshot => {
+    registerRoomListener(roomRef.child('mapPalette'), 'value', snapshot => {
         if (snapshot.exists()) {
             const val = snapshot.val();
             state.mapPalette = Array.isArray(val) ? val : Object.values(val);
@@ -706,10 +731,9 @@ function setupRoomListeners() {
         updateToolbar();
         scheduleRenderMap();
     });
-    unsubscribeListeners.push(() => roomRef.child('mapPalette').off('value', paletteListener));
 
     // 監聽地圖背景圖變更（ST 上傳後同步給所有玩家）
-    const mapBgListener = roomRef.child('mapBg').on('value', snapshot => {
+    registerRoomListener(roomRef.child('mapBg'), 'value', snapshot => {
         const val = snapshot.exists() ? snapshot.val() : null;
         if (typeof val === 'string' && val.startsWith('data:image/') && val.length < 3000000) {
             state.mapBgImage = val;
@@ -726,10 +750,9 @@ function setupRoomListeners() {
         }
         if (typeof applyMapBg === 'function') applyMapBg();
     });
-    unsubscribeListeners.push(() => roomRef.child('mapBg').off('value', mapBgListener));
 
     // 監聽單位變更
-    const unitsListener = roomRef.child('units').on('value', snapshot => {
+    registerRoomListener(roomRef.child('units'), 'value', snapshot => {
         if (snapshot.exists()) {
             const rawVal = snapshot.val();
             if (!rawVal || typeof rawVal !== 'object') {
@@ -782,10 +805,9 @@ function setupRoomListeners() {
         }
         scheduleUnitsAndMapRefresh();  // 單位清單／側欄／地圖，合流成每影格一次重繪
     });
-    unsubscribeListeners.push(() => roomRef.child('units').off('value', unitsListener));
 
     // 監聯狀態變更
-    const stateListener = roomRef.child('state').on('value', snapshot => {
+    registerRoomListener(roomRef.child('state'), 'value', snapshot => {
         if (snapshot.exists()) {
             const newState = snapshot.val();
             if (!newState || typeof newState !== 'object') return;
@@ -834,10 +856,9 @@ function setupRoomListeners() {
             }
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('state').off('value', stateListener));
 
     // 監聽玩家列表
-    const playersListener = roomRef.child('players').on('value', snapshot => {
+    registerRoomListener(roomRef.child('players'), 'value', snapshot => {
         if (snapshot.exists()) {
             state.players = snapshot.val();
         } else {
@@ -848,18 +869,16 @@ function setupRoomListeners() {
         if (typeof renderRouletteUI === 'function') renderRouletteUI();
         if (typeof renderSTRouletteManager === 'function') renderSTRouletteManager();
     });
-    unsubscribeListeners.push(() => roomRef.child('players').off('value', playersListener));
 
     // 監聽幸運大轉盤廣播事件（全服中獎動畫）
-    const rouletteListener = roomRef.child('events/roulette').on('value', snapshot => {
+    registerRoomListener(roomRef.child('events/roulette'), 'value', snapshot => {
         if (snapshot.exists() && typeof handleRouletteBroadcast === 'function') {
             handleRouletteBroadcast(snapshot.val());
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('events/roulette').off('value', rouletteListener));
 
     // 監聽自訂狀態變更（房間共享）
-    const customStatusesListener = roomRef.child('customStatuses').on('value', snapshot => {
+    registerRoomListener(roomRef.child('customStatuses'), 'value', snapshot => {
         if (snapshot.exists()) {
             state.customStatuses = Object.values(snapshot.val());
         } else {
@@ -871,10 +890,9 @@ function setupRoomListeners() {
             statusGrid.innerHTML = renderStatusGrid('custom');
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('customStatuses').off('value', customStatusesListener));
 
     // 監聽常駐狀態覆寫變更（房間共享）
-    const statusOverridesListener = roomRef.child('statusOverrides').on('value', snapshot => {
+    registerRoomListener(roomRef.child('statusOverrides'), 'value', snapshot => {
         state.statusOverrides = snapshot.exists() ? (snapshot.val() || {}) : {};
         // 圖示/名稱可能變更，重繪單位列表與開啟中的狀態網格
         if (typeof renderUnitsList === 'function') renderUnitsList();
@@ -884,10 +902,9 @@ function setupRoomListeners() {
             overrideGrid.innerHTML = renderStatusGrid(currentStatusCategory);
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('statusOverrides').off('value', statusOverridesListener));
 
     // 監聽狀態庫排序變更（房間共享）
-    const statusOrderListener = roomRef.child('statusOrder').on('value', snapshot => {
+    registerRoomListener(roomRef.child('statusOrder'), 'value', snapshot => {
         state.statusOrder = snapshot.exists() ? (snapshot.val() || {}) : {};
         const orderGrid = document.getElementById('status-grid');
         if (orderGrid && typeof currentStatusCategory !== 'undefined' && typeof renderStatusGrid === 'function') {
@@ -898,10 +915,9 @@ function setupRoomListeners() {
             orderTabs.innerHTML = renderCategoryTabs();
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('statusOrder').off('value', statusOrderListener));
 
     // 監聽戰鬥結束狀態排除名單變更（房間共享）
-    const statusExclusionsListener = roomRef.child('statusExclusions').on('value', snapshot => {
+    registerRoomListener(roomRef.child('statusExclusions'), 'value', snapshot => {
         state.statusExclusions = (snapshot.exists() && Array.isArray(snapshot.val())) ? snapshot.val() : [];
         // 若排除名單設定面板正開啟中，刷新其網格以反映最新勾選狀態
         const exclusionGrid = document.getElementById('se-status-grid');
@@ -909,17 +925,15 @@ function setupRoomListeners() {
             exclusionGrid.innerHTML = renderExclusionStatusGrid(statusExclusionCategory);
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('statusExclusions').off('value', statusExclusionsListener));
 
     // 監聽使用者在線列表（用於分配權限功能）
-    const usersListener = roomRef.child('users').on('value', snapshot => {
+    registerRoomListener(roomRef.child('users'), 'value', snapshot => {
         if (snapshot.exists()) {
             roomUsers = snapshot.val();
         } else {
             roomUsers = {};
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('users').off('value', usersListener));
 
     // ST 進房時把自己 localStorage 裡的播放清單推上去，讓所有（含之後才加入的）玩家
     // 拿得到同一份清單。先前清單只存在 ST 本機，玩家看到的永遠是自己瀏覽器的舊資料。
@@ -930,20 +944,18 @@ function setupRoomListeners() {
     }
 
     // 監聽音樂狀態變更
-    const musicListener = roomRef.child('music').on('value', snapshot => {
+    registerRoomListener(roomRef.child('music'), 'value', snapshot => {
         if (typeof handleMusicUpdate === 'function') {
             handleMusicUpdate(snapshot.val());
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('music').off('value', musicListener));
 
     // 監聽歌詞狀態變更
-    const lyricsListener = roomRef.child('lyrics').on('value', snapshot => {
+    registerRoomListener(roomRef.child('lyrics'), 'value', snapshot => {
         if (typeof handleLyricsUpdate === 'function') {
             handleLyricsUpdate(snapshot.val());
         }
     });
-    unsubscribeListeners.push(() => roomRef.child('lyrics').off('value', lyricsListener));
 
     // 定期更新活動時間（每 30 秒）
     const activityInterval = setInterval(() => {
@@ -984,7 +996,7 @@ function setupRoomListeners() {
 function setupConnectionMonitor() {
     // 監聽 Firebase 連線狀態
     const connectedRef = database.ref('.info/connected');
-    const connectionListener = connectedRef.on('value', (snapshot) => {
+    registerRoomListener(connectedRef, 'value', (snapshot) => {
         const wasConnected = isConnected;
         isConnected = snapshot.val() === true;
 
@@ -1012,7 +1024,6 @@ function setupConnectionMonitor() {
             stopHeartbeat();
         }
     });
-    unsubscribeListeners.push(() => connectedRef.off('value', connectionListener));
 
     // 設置玩家 presence（在線狀態）
     if (roomRef && myPlayerId) {

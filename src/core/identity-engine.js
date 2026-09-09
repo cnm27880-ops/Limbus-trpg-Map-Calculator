@@ -292,6 +292,39 @@ function processHooks(hooks, phase, card, unlocked, target, attacker, result) {
 }
 
 /**
+ * 遍歷玩家持有的所有人格卡，對每張卡片依序處理 phasePairs 指定的各個 hook 時機，疊加進 result。
+ *
+ * 下面 7 個 evaluatePlayerXxx 函式（攻擊／命中／擊殺／回合開始／回合結束／結算／被攻擊反應／
+ * 消耗動作）原本各自寫了一份幾乎一模一樣的「遍歷卡片 → 找卡 → 呼叫 processHooks」迴圈，
+ * 差別只在於要處理哪個 hookKey（card.hooks 底下的鍵）、對應的 phase 字串，以及 target/attacker
+ * 是誰。這裡抽成共用函式，純粹消除重複、不改變任何判斷邏輯：
+ *   - phasePairs 是 [hookKey, phase] 的陣列而非單一值，是為了讓 evaluatePlayerAttack 能在
+ *     「同一輪遍歷卡片」時依序處理 onAttack 與 onHit 兩個時機——這點很重要，若拆成兩次各自
+ *     獨立呼叫本函式，會變成「所有卡片的 onAttack 都先跑完，onHit 才開始跑」，觸發紀錄
+ *     （result.triggerLogs，UI 顯示順序依此排列）的先後順序就會跟原本「同一張卡片
+ *     onAttack、onHit 相鄰」的順序不一致，雖然數值加總結果相同，但畫面上看到的觸發順序會變。
+ *   - 缺 card.hooks[hookKey] 或整包 card.hooks 時直接跳過該時機：processHooks() 本身在
+ *     hooks 不是陣列時也會安全地立刻 return，故這裡不特別判斷該鍵是否存在，行為與
+ *     先前各函式個別寫的 `if (!Array.isArray(card.hooks.onXxx)) continue;` 完全等價。
+ * @param {Array<string|object>} playerIdentities
+ * @param {Array<[string, string]>} phasePairs - [[hookKey, phase], ...]，同一張卡片依序處理
+ * @param {object} target
+ * @param {object} attacker
+ * @param {object} result
+ */
+function runIdentityHooks(playerIdentities, phasePairs, target, attacker, result) {
+    if (!Array.isArray(playerIdentities)) return;
+    for (const rawEntry of playerIdentities) {
+        const { id, unlocked } = normalizeIdentityEntry(rawEntry);
+        const card = resolveIdentityCard(id);
+        if (!card || !card.hooks) continue;
+        for (const [hookKey, phase] of phasePairs) {
+            processHooks(card.hooks[hookKey], phase, card, unlocked, target, attacker, result);
+        }
+    }
+}
+
+/**
  * 評估玩家本次攻擊：遍歷玩家持有的所有人格卡，疊加所有符合條件的 hook 效果。
  *
  * @param {Array<string|object>} playerIdentities - 玩家持有的所有卡片（字串或 {id,unlocked}）
@@ -334,17 +367,7 @@ function evaluatePlayerAttack(playerIdentities, attackerState, targetState) {
         onHitSelfStatus: {}
     };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-
-            if (!card || !card.hooks) continue;
-
-            processHooks(card.hooks.onAttack, 'attack', card, unlocked, target, attacker, result);
-            processHooks(card.hooks.onHit, 'hit', card, unlocked, target, attacker, result);
-        }
-    }
+    runIdentityHooks(playerIdentities, [['onAttack', 'attack'], ['onHit', 'hit']], target, attacker, result);
 
     // 便利別名（與舊版回傳格式相容）
     result.totalDpBonus = result.totals.dpBonus;
@@ -373,15 +396,8 @@ function evaluatePlayerTurnStart(playerIdentities, attackerState) {
     const attacker = ensureStatefulUnit(attackerState);
     const result = { triggerLogs: [], totals: makeZeroTotals(), poolDelta: {}, onAttackTargetStatus: {}, onAttackSelfStatus: {}, onHitTargetStatus: {}, onHitSelfStatus: {} };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-            if (!card || !card.hooks || !Array.isArray(card.hooks.onTurnStart)) continue;
-            // 回合開始的對象只有自己，故 target 以 attacker 代入
-            processHooks(card.hooks.onTurnStart, 'turnStart', card, unlocked, attacker, attacker, result);
-        }
-    }
+    // 回合開始的對象只有自己，故 target 以 attacker 代入
+    runIdentityHooks(playerIdentities, [['onTurnStart', 'turnStart']], attacker, attacker, result);
     result.expectedSelfStatus = mergeStatuses(result.onAttackSelfStatus, result.onHitSelfStatus);
     result.expectedTargetStatus = mergeStatuses(result.onAttackTargetStatus, result.onHitTargetStatus);
     return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs,
@@ -416,14 +432,7 @@ function evaluatePlayerKill(playerIdentities, attackerState, killedTargetState) 
         onKillSelfStatus: {}
     };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-            if (!card || !card.hooks || !Array.isArray(card.hooks.onKill)) continue;
-            processHooks(card.hooks.onKill, 'kill', card, unlocked, target, attacker, result);
-        }
-    }
+    runIdentityHooks(playerIdentities, [['onKill', 'kill']], target, attacker, result);
 
     result.killedTargetStatus = result.onKillTargetStatus;
     result.othersTargetStatus = result.onKillOthersStatus;
@@ -447,14 +456,7 @@ function evaluatePlayerTurnEnd(playerIdentities, attackerState) {
     const attacker = ensureStatefulUnit(attackerState);
     const result = { totals: makeZeroTotals(), triggerLogs: [], poolDelta: {}, onTurnEndSelfStatus: {} };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-            if (!card || !card.hooks || !Array.isArray(card.hooks.onTurnEnd)) continue;
-            processHooks(card.hooks.onTurnEnd, 'turnEnd', card, unlocked, attacker, attacker, result);
-        }
-    }
+    runIdentityHooks(playerIdentities, [['onTurnEnd', 'turnEnd']], attacker, attacker, result);
 
     result.expectedSelfStatus = mergeStatuses(result.onTurnEndSelfStatus);
     return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs,
@@ -498,14 +500,7 @@ function evaluatePlayerResolve(playerIdentities, attackerState, targetState, out
         onResolveTargetStatus: {}
     };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-            if (!card || !card.hooks || !Array.isArray(card.hooks.onResolve)) continue;
-            processHooks(card.hooks.onResolve, 'resolve', card, unlocked, target, attacker, result);
-        }
-    }
+    runIdentityHooks(playerIdentities, [['onResolve', 'resolve']], target, attacker, result);
 
     result.selfStatus = result.onResolveSelfStatus;
     result.targetStatus = result.onResolveTargetStatus;
@@ -532,15 +527,8 @@ function evaluatePlayerActionUsed(playerIdentities, attackerState, actionType) {
 
     const result = { totals: makeZeroTotals(), triggerLogs: [], poolDelta: {}, onActionUsedSelfStatus: {} };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-            if (!card || !card.hooks || !Array.isArray(card.hooks.onActionUsed)) continue;
-            // 消耗動作的對象只有自己，故 target 以 attacker 代入
-            processHooks(card.hooks.onActionUsed, 'actionUsed', card, unlocked, attacker, attacker, result);
-        }
-    }
+    // 消耗動作的對象只有自己，故 target 以 attacker 代入
+    runIdentityHooks(playerIdentities, [['onActionUsed', 'actionUsed']], attacker, attacker, result);
 
     result.expectedSelfStatus = mergeStatuses(result.onActionUsedSelfStatus);
     return { expectedSelfStatus: result.expectedSelfStatus, triggerLogs: result.triggerLogs,
@@ -580,14 +568,7 @@ function evaluatePlayerDefend(playerIdentities, defenderState, attackerUnitState
         onDefendAttackerStatus: {}
     };
 
-    if (Array.isArray(playerIdentities)) {
-        for (const rawEntry of playerIdentities) {
-            const { id, unlocked } = normalizeIdentityEntry(rawEntry);
-            const card = resolveIdentityCard(id);
-            if (!card || !card.hooks || !Array.isArray(card.hooks.onDefend)) continue;
-            processHooks(card.hooks.onDefend, 'defend', card, unlocked, foe, self, result);
-        }
-    }
+    runIdentityHooks(playerIdentities, [['onDefend', 'defend']], foe, self, result);
 
     result.selfStatus = result.onDefendSelfStatus;
     result.attackerStatus = result.onDefendAttackerStatus;

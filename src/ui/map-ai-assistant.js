@@ -461,7 +461,7 @@ function maiSaveLibrary(arr) {
 function maiSetupListener() {
     if (typeof roomRef === 'undefined' || !roomRef) return;
     const ref = roomRef.child('mapLibrary');
-    const listener = ref.on('value', snapshot => {
+    registerRoomListener(ref, 'value', snapshot => {
         const val = snapshot.val();
         const remote = Array.isArray(val) ? val.filter(Boolean)
             : (val && typeof val === 'object') ? Object.values(val).filter(Boolean) : [];
@@ -483,9 +483,6 @@ function maiSetupListener() {
 
         maiRenderLibrary();
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => ref.off('value', listener));
-    }
 }
 
 /** 讀取自動備份（本機地圖庫變少前留下的那一份）。 */

@@ -1387,7 +1387,10 @@ function confirmSTReview() {
         }
     }
 
-    // 命中判定後套用「命中時施加」的人格卡狀態（成功數 > 0 視為命中）。
+    // 命中判定後套用「命中時施加」的人格卡狀態（以「實際造成傷害 > 0」視為命中，
+    // 而非只看擲骰成功數——附加成功／破裂易損加傷／主動宣告技傷害等就算擲骰成功數
+    // 是 0，只要 rollResult.damage 仍 > 0，就代表這次攻擊確實命中並造成了傷害，
+    // 「命中時」效果理應觸發，否則會出現有傷害卻沒套用命中減益的矛盾狀況）。
     // 自動擲骰：直接依擲骰結果判定；手動擲骰／機運骰（無系統擲骰結果）：
     // 改以確認視窗詢問 ST 是否命中——確定即自動套用，讓命中狀態（含攻擊者
     // 自身增益）在所有結算路徑都全自動化，ST 不再需要手動補狀態。
@@ -1395,7 +1398,7 @@ function confirmSTReview() {
     let manualHitAnswer = null;   // 手動擲骰時 ST 的命中回答，供 onResolve 判定重用（避免問兩次）
     if (cmHasOnHitIdentityStatuses(hitAtk)) {
         const hit = rollResult
-            ? rollResult.successes > 0
+            ? rollResult.damage > 0
             : (manualHitAnswer = confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）'));
         if (hit) cmApplyOnHitIdentityStatuses(hitAtk, [targetId]);
     }

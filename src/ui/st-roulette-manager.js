@@ -57,7 +57,17 @@ function renderSTRouletteManager() {
     const esc = (typeof escapeHtml === 'function') ? escapeHtml : (s => String(s));
 
     container.innerHTML = entries.map(([pid, p]) => {
-        const name = esc(p.name || '未知玩家');
+        const accountName = p.name || '未知玩家';
+        // 轉盤次數／庫存一律以 playerId（登入識別碼）為準，但 ST 畫面上若只顯示帳號代號，
+        // 遇到代號與棋子名稱不同（或同代號改過名）時很難對應到場上的哪個角色，容易發錯次數。
+        // 這裡額外找出該玩家目前操控的棋子，顯示「角色名稱（帳號代號）」，兩者不一致時一眼就能看出。
+        const units = (typeof state !== 'undefined' && Array.isArray(state.units))
+            ? state.units.filter(u => u.ownerId === pid)
+            : [];
+        const characterName = units.map(u => u.name).filter(Boolean).join('、');
+        const name = characterName
+            ? `${esc(characterName)}（${esc(accountName)}）`
+            : esc(accountName);
         const spins = parseInt(p.spins) || 0;
         // 在線判定僅採用 isOnline（由 Firebase onDisconnect 可靠維護），
         // 不再參考舊的 online 欄位——它在玩家未正常關閉分頁時會殘留為 true，造成「幽靈在線」。

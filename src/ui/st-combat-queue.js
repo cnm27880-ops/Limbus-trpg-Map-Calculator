@@ -39,6 +39,52 @@ function stqCurrentQueue() {
     return (typeof combatQueueLast !== 'undefined' && combatQueueLast) ? combatQueueLast : null;
 }
 
+// ===== 卡住偵測（TTL 提示，不自動解鎖）=====
+// 只提示、不自動強制中止：結算牽涉傷害/資源扣除，若只是玩家網路延遲、其實還在填防禦 QTE，
+// 自動解鎖可能誤傷正常進行中的結算。真正要不要中止仍由 ST 按下既有的「強制中止」按鈕決定。
+const STQ_STUCK_THRESHOLD_MS = 30000; // 判定「疑似卡住」的等待門檻：30 秒
+let stqStuckWarnedTs = null; // 已經提示過的這筆隊列的 ts，避免同一筆重複跳 toast 打擾
+let stqTickTimer = null;     // 定期檢查計時器：沒有新的 Firebase 事件時，靠這個讓「已等待秒數」持續更新
+
+/**
+ * 取得目前隊列「已進行中」的毫秒數。
+ * q.ts 在寫入當下是 firebase.database.ServerValue.TIMESTAMP 佔位物件，要等伺服器回填確認值
+ * 才會變成數字，回填前一律視為「還不知道」（回傳 null），避免把佔位物件誤算成距今數十年。
+ * @param {object|null} q
+ * @returns {number|null}
+ */
+function stqQueueElapsedMs(q) {
+    if (!q || typeof q.ts !== 'number') return null;
+    return Date.now() - q.ts;
+}
+
+/**
+ * 每隔幾秒檢查一次目前隊列是否疑似卡住太久。只有 ST 需要看到這個提示。
+ * 由 stqInitPanel() 啟動的 setInterval 呼叫，與 Firebase 監聽器事件無關——
+ * 卡住的定義就是「已經一段時間沒有新事件」，所以不能只靠事件觸發，要靠時間本身輪詢。
+ */
+function stqCheckStuck() {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return;
+    const q = stqCurrentQueue();
+    const status = (q && q.status) ? q.status : 'idle';
+    if (status === 'idle') {
+        stqStuckWarnedTs = null;
+        return;
+    }
+    const elapsed = stqQueueElapsedMs(q);
+    if (elapsed === null || elapsed <= STQ_STUCK_THRESHOLD_MS) return;
+
+    if (q.ts !== stqStuckWarnedTs) {
+        stqStuckWarnedTs = q.ts;
+        if (typeof showToast === 'function') {
+            showToast(`⚠️ 戰鬥隊列已等待超過 ${Math.round(STQ_STUCK_THRESHOLD_MS / 1000)} 秒，疑似卡住，請開啟「戰鬥隊列主控台」檢查`);
+        }
+    }
+    // 面板開著時即時更新「已等待秒數」與警示文字（面板關著就只靠上面的 toast 提醒）
+    const panel = document.getElementById(STQ_PANEL_ID);
+    if (panel && !panel.classList.contains('hidden')) stqRender();
+}
+
 /** 目前等候區清單（combat-queue.js 維護的快照） */
 function stqPendingList() {
     return (typeof cqPendingList !== 'undefined' && Array.isArray(cqPendingList)) ? cqPendingList : [];
@@ -95,6 +141,15 @@ function stqRender() {
             <span class="stq-status-pair">${pairTxt}</span>
         </div>
         <div class="stq-status-desc">${esc(meta.desc)}</div>`;
+
+    // 疑似卡住：閒置以外的狀態已經等待超過門檻，顯示已等待秒數並提醒 ST 檢查
+    if (status !== 'idle') {
+        const elapsed = stqQueueElapsedMs(q);
+        if (elapsed !== null && elapsed > STQ_STUCK_THRESHOLD_MS) {
+            head += `
+        <div class="stq-warn">⚠️ 已等待 ${Math.round(elapsed / 1000)} 秒，可能卡住了（例如玩家離線／忘記填防禦），建議檢查或直接強制中止。</div>`;
+        }
+    }
 
     // ===== 代填防禦（僅在等待防禦時出現）=====
     let defenseBlock = '';
@@ -242,6 +297,10 @@ function stqInitPanel() {
         dock: { icon: '⚔️', title: '戰鬥隊列主控台' },
         restoreDock: true,
     });
+
+    // 卡住偵測輪詢：只讀本機快取、不寫入 Firebase，跟頁面生命週期綁在一起即可，
+    // 不需要隨換房/登出特別清理（stqCheckStuck 內部本來就會依 myRole／目前隊列狀態自行判斷要不要動作）。
+    if (!stqTickTimer) stqTickTimer = setInterval(stqCheckStuck, 5000);
 }
 
 if (document.readyState === 'loading') {

@@ -46,18 +46,17 @@ function cqSetupListener() {
     if (!ref) return;
     if (combatQueueListener) ref.off('value', combatQueueListener);
 
-    combatQueueListener = ref.on('value', snapshot => {
+    combatQueueListener = registerRoomListener(ref, 'value', snapshot => {
         const data = snapshot.val();
         cqHandleUpdate(data);
         combatQueueLast = data;
     });
-    unsubscribeListeners.push(() => ref.off('value', combatQueueListener));
 
     // 等候區：所有人都監聽（玩家可看到自己排在第幾位；ST 負責推進與管理）
     const pRef = cqPendingRef();
     if (pRef) {
         if (cqPendingListener) pRef.off('value', cqPendingListener);
-        cqPendingListener = pRef.on('value', snapshot => {
+        cqPendingListener = registerRoomListener(pRef, 'value', snapshot => {
             const val = snapshot.val() || {};
             // push 鍵本身依時間遞增，明確 sort() 確保「最舊的先結算」與物件列舉順序無關
             cqPendingList = Object.keys(val).sort().map(key => Object.assign({ key }, val[key]));
@@ -65,7 +64,6 @@ function cqSetupListener() {
             // 作用中槽位已閒置且等候區有人 → 推進下一筆
             cqTryAdvancePending();
         });
-        unsubscribeListeners.push(() => pRef.off('value', cqPendingListener));
     }
 }
 

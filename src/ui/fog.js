@@ -51,33 +51,24 @@ function fogSetupListener() {
     fogGateUI();
     if (typeof roomRef === 'undefined' || !roomRef) return;
 
-    const enabledListener = roomRef.child('fog/enabled').on('value', snapshot => {
+    registerRoomListener(roomRef.child('fog/enabled'), 'value', snapshot => {
         fogEnabled = snapshot.exists() ? !!snapshot.val() : false;
         if (typeof renderMap === 'function') renderMap();
         fogRenderPanel();
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => roomRef.child('fog/enabled').off('value', enabledListener));
-    }
 
     if (typeof myRole !== 'undefined' && myRole === 'st') {
         // ST 快取所有玩家的揭露資料，供檢視玩家視角／補畫使用
-        const allListener = roomRef.child('fog/revealed').on('value', snapshot => {
+        registerRoomListener(roomRef.child('fog/revealed'), 'value', snapshot => {
             fogRevealedAll = snapshot.val() || {};
             fogRevealRev++;
         });
-        if (typeof unsubscribeListeners !== 'undefined') {
-            unsubscribeListeners.push(() => roomRef.child('fog/revealed').off('value', allListener));
-        }
     } else if (typeof myPlayerId !== 'undefined' && myPlayerId) {
-        const mineListener = roomRef.child('fog/revealed/' + myPlayerId).on('value', snapshot => {
+        registerRoomListener(roomRef.child('fog/revealed/' + myPlayerId), 'value', snapshot => {
             fogRevealedMine = snapshot.val() || {};
             fogRevealRev++;
             if (typeof renderMap === 'function') renderMap();
         });
-        if (typeof unsubscribeListeners !== 'undefined') {
-            unsubscribeListeners.push(() => roomRef.child('fog/revealed/' + myPlayerId).off('value', mineListener));
-        }
     }
 }
 

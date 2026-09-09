@@ -22,7 +22,7 @@ function erosionSetupListener() {
     eroGateUI();
 
     // 刻度時鐘
-    const clockListener = roomRef.child('clockTicks').on('value', snapshot => {
+    registerRoomListener(roomRef.child('clockTicks'), 'value', snapshot => {
         if (snapshot.exists()) {
             const v = Number(snapshot.val());
             eroClockTicks = Number.isFinite(v) ? Math.max(0, Math.min(ERO_CLOCK_MAX, v)) : ERO_CLOCK_MAX;
@@ -38,20 +38,14 @@ function erosionSetupListener() {
             renderErosionConsole();
         }
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => roomRef.child('clockTicks').off('value', clockListener));
-    }
 
     // 侵蝕暴走全場警告廣播
-    const eroEventListener = roomRef.child('events/erosion').on('value', snapshot => {
+    registerRoomListener(roomRef.child('events/erosion'), 'value', snapshot => {
         if (snapshot.exists()) handleErosionBroadcast(snapshot.val());
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => roomRef.child('events/erosion').off('value', eroEventListener));
-    }
 
     // 侵蝕攻擊門檻（房間共享）：所有客戶端同步，玩家端右鍵選單依此判斷是否顯示「侵蝕攻擊」
-    const eroThresholdListener = roomRef.child('erosionAttackThreshold').on('value', snapshot => {
+    registerRoomListener(roomRef.child('erosionAttackThreshold'), 'value', snapshot => {
         if (snapshot.exists()) {
             const v = parseInt(snapshot.val(), 10);
             eroAttackThreshold = Number.isFinite(v) && v >= 1 ? v : ERO_DEFAULT_THRESHOLD;
@@ -64,9 +58,6 @@ function erosionSetupListener() {
         const hud = document.getElementById('erosion-hud');
         if (hud && !hud.classList.contains('hidden')) renderErosionConsole();
     });
-    if (typeof unsubscribeListeners !== 'undefined') {
-        unsubscribeListeners.push(() => roomRef.child('erosionAttackThreshold').off('value', eroThresholdListener));
-    }
 }
 
 /** 僅 ST 可見侵蝕控制台的 QAB 開關。 */

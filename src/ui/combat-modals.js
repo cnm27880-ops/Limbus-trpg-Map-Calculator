@@ -1325,6 +1325,26 @@ function cmApplyOnKillIdentityStatuses(atk, killedTargetId) {
     return applied;
 }
 
+/**
+ * 取得「是否命中／是否造成傷害／是否擊殺」這類判定值：有自動擲骰結果（rollResult）時
+ * 直接用 autoCheck 從中算出；沒有（手動擲骰／機運骰）時改跳 confirm() 問 ST。
+ *
+ * knownAnswer 用來承接「這個問題其實剛剛已經問過、不必再問一次」的情境——
+ * 例如 ST 手動判定「未命中」後，緊接著的「是否造成傷害」問題答案必然是「否」，
+ * 不必再彈一次 confirm() 讓 ST 回答同一件事。傳 undefined（預設）代表沒有已知答案，
+ * 照常在手動路徑跳出確認視窗。
+ * @param {object|null} rollResult
+ * @param {function(object): boolean} autoCheck - rollResult 存在時，如何從中算出判定值
+ * @param {string} confirmMsg - 手動路徑要問 ST 的確認訊息
+ * @param {boolean} [knownAnswer] - 已知答案（不為 undefined 時，手動路徑直接沿用、不再詢問）
+ * @returns {boolean}
+ */
+function cmResolveOutcome(rollResult, autoCheck, confirmMsg, knownAnswer) {
+    if (rollResult) return autoCheck(rollResult);
+    if (knownAnswer !== undefined) return knownAnswer;
+    return confirm(confirmMsg);
+}
+
 function confirmSTReview() {
     // 優先從 Modal 的 data-* 屬性讀取初步骰數（cqOnSTReview 渲染時已釘上），
     // 全域 combatQueueLast 僅作為退路，避免監聽器更新時序造成骰數讀成 0。
@@ -1395,11 +1415,11 @@ function confirmSTReview() {
     // 改以確認視窗詢問 ST 是否命中——確定即自動套用，讓命中狀態（含攻擊者
     // 自身增益）在所有結算路徑都全自動化，ST 不再需要手動補狀態。
     const hitAtk = (combatQueueLast && combatQueueLast.attacker) || null;
-    let manualHitAnswer = null;   // 手動擲骰時 ST 的命中回答，供 onResolve 判定重用（避免問兩次）
+    let manualHitAnswer;   // 手動擲骰時 ST 的命中回答，供 onResolve 判定重用（避免問兩次）
     if (cmHasOnHitIdentityStatuses(hitAtk)) {
-        const hit = rollResult
-            ? rollResult.damage > 0
-            : (manualHitAnswer = confirm('此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）'));
+        const hit = cmResolveOutcome(rollResult, r => r.damage > 0,
+            '此次攻擊是否命中？\n（確定＝自動套用人格卡的「命中時」狀態與自身增益）');
+        if (!rollResult) manualHitAnswer = hit;
         if (hit) cmApplyOnHitIdentityStatuses(hitAtk, [targetId]);
     }
 
@@ -1407,14 +1427,9 @@ function confirmSTReview() {
     // 造成傷害 +4 層、未造成傷害含未命中 +6 層）。
     // 自動擲骰知道確切傷害；手動擲骰改詢問 ST（若剛才已問過命中且回答未命中，直接視為未造成傷害）。
     if (cmHasOnResolveIdentityStatuses(hitAtk)) {
-        let dealtDamage;
-        if (rollResult) {
-            dealtDamage = (Number(rollResult.damage) || 0) > 0;
-        } else if (manualHitAnswer === false) {
-            dealtDamage = false;
-        } else {
-            dealtDamage = confirm('此次攻擊是否造成傷害？\n（取消＝未造成傷害／未命中，人格卡會依此分支結算）');
-        }
+        const dealtDamage = cmResolveOutcome(rollResult, r => (Number(r.damage) || 0) > 0,
+            '此次攻擊是否造成傷害？\n（取消＝未造成傷害／未命中，人格卡會依此分支結算）',
+            (manualHitAnswer === false) ? false : undefined);
         // 自動擲骰知道確切傷害 → 傳入實際數值，讓「至少造成 N 點傷害」類門檻查得到表
         cmApplyOnResolveIdentityStatuses(hitAtk, dealtDamage, [targetId],
             rollResult ? (Number(rollResult.damage) || 0) : undefined);
@@ -1423,9 +1438,8 @@ function confirmSTReview() {
     // 擊殺／昏迷判定：自動擲骰造成傷害後，目標若陷入喪失行動（嚴重槽填滿）→ 套用 onKill 效果。
     // 手動擲骰（無 rollResult）時系統無從得知實際傷害，改詢問 ST 是否已擊倒目標。
     if (targetId && cmHasOnKillIdentityStatuses(hitAtk)) {
-        const killed = rollResult
-            ? (rollResult.damage > 0 && cmIsDefeated(findUnitById(targetId)))
-            : confirm('此次攻擊是否擊殺／使目標昏迷？\n（確定＝自動套用人格卡的「擊殺時」效果）');
+        const killed = cmResolveOutcome(rollResult, r => r.damage > 0 && cmIsDefeated(findUnitById(targetId)),
+            '此次攻擊是否擊殺／使目標昏迷？\n（確定＝自動套用人格卡的「擊殺時」效果）');
         if (killed) cmApplyOnKillIdentityStatuses(hitAtk, targetId);
     }
 }

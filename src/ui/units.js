@@ -93,6 +93,9 @@ function toggleCombat() {
         // 直接排序，不透過 sortByInit() 避免雙重 broadcastState
         state.units.sort((a, b) => b.init - a.init);
         state.turnIdx = 0;
+        // 排序後最前面若是隱藏中／未部署的單位，跳到第一個真正可行動的單位開場
+        const firstEligible = findEligibleTurnIdx(0, 1);
+        if (firstEligible !== null) state.turnIdx = firstEligible;
         state.roundNum = 1;
         // 戰鬥開始時所有自動護盾回滿、移動能量條回滿（moveUsed 歸零）
         state.units.forEach(u => {
@@ -1238,6 +1241,36 @@ function getEffectiveInit(unit) {
 }
 
 /**
+ * 判斷單位在戰鬥回合輪替時是否該被跳過：隱藏中，或尚未部署到地圖上（x<0）。
+ * BOSS 多重行動的子條目（actionSlotOf 指向本體）本來就不會被部署（x 固定 -1），
+ * 那只是先攻軌道上額外多出來的一個行動格，不是「未部署的敵人」，故不受此規則影響。
+ * @param {object} u - 單位
+ */
+function isUnitTurnSkippable(u) {
+    if (!u) return true;
+    if (u.actionSlotOf) return false;
+    if (u.hidden === true) return true;
+    return !(u.x >= 0);
+}
+
+/**
+ * 從 fromIdx（含）開始依 step（+1 或 -1）尋找第一個「可行動」的單位索引，
+ * 跳過隱藏中或未部署的單位；繞完一圈仍找不到時回傳 null（全員皆不可行動）。
+ * @param {number} fromIdx
+ * @param {number} step
+ */
+function findEligibleTurnIdx(fromIdx, step) {
+    const n = state.units.length;
+    if (!n) return null;
+    let idx = ((fromIdx % n) + n) % n;
+    for (let hops = 0; hops < n; hops++) {
+        if (!isUnitTurnSkippable(state.units[idx])) return idx;
+        idx = ((idx + step) % n + n) % n;
+    }
+    return null;
+}
+
+/**
  * 依先攻排序：以「有效先攻」（先攻序列 + 當下迅捷／束縛層數）排序，
  * 不需要 ST 手動把這兩個狀態換算進先攻數值——每次排序都即時反映目前狀態。
  */
@@ -1274,10 +1307,18 @@ function nextTurn() {
         // 記下剛結束回合的單位（用於狀態結算提醒）
         const endingUnit = state.units[state.turnIdx];
 
-        state.turnIdx = (state.turnIdx + 1) % state.units.length;
+        // 跳過隱藏中／未部署的單位，找下一個真正該行動的單位
+        const nextIdx = findEligibleTurnIdx((state.turnIdx + 1) % state.units.length, 1);
+        if (nextIdx === null) {
+            showToast('⚠️ 所有單位皆隱藏中或未部署，無法切換回合');
+            return;
+        }
+        // 是否繞過先攻列表起點（跨越到 nextIdx 的路上經過了索引 0）→ 新回合
+        const newRound = nextIdx <= state.turnIdx;
+        state.turnIdx = nextIdx;
 
         // 先攻列表輪完一圈 → 新回合（供戰鬥日誌回合分析使用）
-        if (state.turnIdx === 0 && state.isCombatActive) {
+        if (newRound && state.isCombatActive) {
             state.roundNum = (state.roundNum || 1) + 1;
             showToast(`🔄 第 ${state.roundNum} 回合開始`);
         }
@@ -1347,8 +1388,13 @@ function prevTurn() {
         return;
     }
     if (state.units.length) {
-        // 處理 < 0 的循環情況
-        state.turnIdx = (state.turnIdx - 1 + state.units.length) % state.units.length;
+        // 跳過隱藏中／未部署的單位，找上一個真正該行動的單位（處理 < 0 的循環情況）
+        const prevIdx = findEligibleTurnIdx((state.turnIdx - 1 + state.units.length) % state.units.length, -1);
+        if (prevIdx === null) {
+            showToast('⚠️ 所有單位皆隱藏中或未部署，無法切換回合');
+            return;
+        }
+        state.turnIdx = prevIdx;
         broadcastState();
 
         setTimeout(() => {

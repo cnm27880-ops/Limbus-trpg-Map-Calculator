@@ -74,7 +74,12 @@ function cqOnBroadcasting(data) {
     combatBroadcastTimer = setTimeout(() => banner.classList.remove('show'), 4500);
 
     // 戰鬥日誌（系統 A）：把這次廣播寫入 combatLogs（ST 端單一寫入，函式內已防呆）
-    if (typeof bbPushCombatLog === 'function') {
+    // 同一筆廣播（同 ts）只寫一次：Firebase 對同一筆 broadcasting 可能重複觸發 value，
+    // 先前每次觸發都會多寫一筆一模一樣的日誌，造成結算區出現「幽靈結算」。
+    const logKey = data.ts != null ? data.ts : null;
+    const alreadyLogged = logKey !== null && logKey === cqLastLoggedTs;
+    if (!alreadyLogged && typeof bbPushCombatLog === 'function') {
+        if (logKey !== null) cqLastLoggedTs = logKey;
         const defenderName = String((data.target && data.target.name) || '');
         // 以攻擊發起時記下的 attackerRole 區分玩家／ST 操作怪物，而非用 id 前綴猜測
         // （ST 發起威脅時 attacker.id 仍是 ST 自己的 myPlayerId，用前綴判斷會誤判為玩家攻擊）。

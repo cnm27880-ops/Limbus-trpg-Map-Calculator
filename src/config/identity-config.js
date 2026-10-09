@@ -60,7 +60,8 @@ const IDENTITY_STATUS_KEYMAP = {
     duelOtis: 'duelOtis', duelDon: 'duelDon', vulnerable: 'vulnerable',
     strength: 'strength', endurance: 'endurance',
     magicBullet: 'magicBullet', blackFlame: 'blackFlame',
-    bloomingThorns: 'bloomingThorns', fanaticism: 'fanaticism'
+    bloomingThorns: 'bloomingThorns', fanaticism: 'fanaticism',
+    trauma: 'trauma'
 };
 
 /**
@@ -223,6 +224,119 @@ const IDENTITY_LIBRARY = {
                       targetMaxHpReduce: (ctx) => ctx.targetBefore.status.tremor || 0,
                       targetCostMax: { tremor: 2 }
                   } }
+            ]
+        }
+    },
+
+    // 格里高爾 - 夜錐組隊長 ── 流血 / 震顫 / 迅捷 / 創傷
+    gregor_nightcone: {
+        id: 'gregor_nightcone',
+        name: '格里高爾 - 夜錐組隊長',
+        owner: '格里高爾',
+        repeatUnlockSkill: '處決',
+        keyStatuses: ['bleed', 'tremor', 'swiftness', 'trauma'],
+        // 【創傷】以單一狀態的層數代表三個階段：1＝創傷、2＝深度創傷（防禦檢定 −3）、
+        // 3＝致命創傷（最終傷害 +3，不受傷害上限影響）。每次被施加創傷 +1 層；已是致命創傷時回到 2 層。
+        formNote: '【流血】：目標回合結束時受到等同層數的嚴重傷害 (L)。【震顫】：目標受到攻擊時，削減同等數值之目標因惡性傷害昏迷的閾值（若不會昏迷，則扣除其生命上限）。【震顫引爆】：特殊宣告，立即結算一次【震顫】，結算後層數僅減少 1 層。【創傷】（以層數表示階段）：1 層＝創傷；2 層＝深度創傷（目標防禦檢定 −3）；3 層＝致命創傷（目標受到的最終傷害 +3，不受傷害上限影響）。再次被施加創傷時依序升級，已是致命創傷（3 層）時回到深度創傷（2 層）。',
+        hooks: {
+            onAttack: [
+                // 乘隙突擊 1：宣告攻擊 → 自身獲得 2 層迅捷
+                { condition: () => true, selfStatus: { swiftness: 2 }, source: '乘隙突擊', skill: '乘隙突擊' },
+                // 乘隙突擊 2：目標【流血】＋【震顫】每 6 層 → +3 DP（最多 +15）
+                { condition: (t) => ((t.status.bleed || 0) + (t.status.tremor || 0)) >= 6,
+                  dpBonus: (t) => Math.min(15, Math.floor(((t.status.bleed || 0) + (t.status.tremor || 0)) / 6) * 3),
+                  source: '乘隙突擊（流血＋震顫每 6 層 +3 DP）', skill: '乘隙突擊' }
+            ],
+            onHit: [
+                // 乘隙突擊 3：命中施加 2 流血、2 震顫並施加創傷
+                { condition: () => true, targetStatus: { bleed: 2, tremor: 2 }, source: '乘隙突擊', skill: '乘隙突擊' },
+                { condition: (t) => (t.status.trauma || 0) < 3, targetStatus: { trauma: 1 }, source: '乘隙突擊（施加創傷）', skill: '乘隙突擊' },
+                { condition: (t) => (t.status.trauma || 0) >= 3, manual: true, source: '乘隙突擊（致命創傷再施加）', skill: '乘隙突擊',
+                  desc: '目標已是【致命創傷】：再次施加創傷會讓它回到【深度創傷】——請把目標的創傷層數手動改回 2 層。' },
+                // 雙錐 1：命中再施加 2 流血、2 震顫（隨後的震顫引爆見「主動宣告技」）
+                { condition: () => true, targetStatus: { bleed: 2, tremor: 2 }, source: '雙錐', skill: '雙錐' },
+                // 雙錐 2：追擊【慈悲】
+                { condition: () => true, manual: true, source: '雙錐（追擊【慈悲】）', skill: '雙錐',
+                  desc: '命中結算後，若本次攻擊檢定擲出 5 個以上的「10」，或目標身上具有【深度創傷】（創傷 2 層以上），可立刻進行一次不消耗動作的追擊【慈悲】，本次追擊 +2 附加成功（兩種條件皆成立可疊加為 +4）；追擊不再觸發追擊。' },
+                // 處決 1：目標帶有致命創傷 → 夜錐：再 3 流血、3 震顫（3 次引爆見「主動宣告技」）
+                { condition: (t) => (t.status.trauma || 0) >= 3, targetStatus: { bleed: 3, tremor: 3 }, source: '處決（夜錐）', skill: '處決', locked: true },
+                // 處決 2：於慈悲中觸發夜錐 → 額外再 3 流血、3 震顫
+                { condition: (t) => (t.status.trauma || 0) >= 3, manual: true, source: '處決（慈悲中觸發夜錐）', skill: '處決', locked: true,
+                  desc: '若在追擊【慈悲】中觸發【夜錐】，額外再對目標施加 3 點【流血】與 3 層【震顫】。' }
+            ],
+            onActive: [
+                { name: '震顫引爆（雙錐）', source: '雙錐', skill: '雙錐',
+                  desc: '命中時宣告發動「震顫引爆」：立即結算一次【震顫】效果（依引爆前的層數削減目標生命上限），結算後目標的【震顫】層數僅減少 1 層。',
+                  effect: {
+                      requireTarget: { tremor: 1 },
+                      targetMaxHpReduce: (ctx) => ctx.targetBefore.status.tremor || 0,
+                      targetCostMax: { tremor: 1 }
+                  } },
+                { name: '震顫引爆 ×3（處決・夜錐）', source: '處決', skill: '處決', locked: true,
+                  desc: '目標帶有【致命創傷】時觸發【夜錐】：連續發動 3 次「震顫引爆」，每次依當下層數削減目標生命上限，結算後目標的【震顫】層數各再減少 1 層（合計 −3）。',
+                  effect: {
+                      requireTarget: { tremor: 1, trauma: 3 },
+                      targetMaxHpReduce: (ctx) => {
+                          const n = ctx.targetBefore.status.tremor || 0;
+                          return Math.max(0, n) + Math.max(0, n - 1) + Math.max(0, n - 2);
+                      },
+                      targetCostMax: { tremor: 3 }
+                  } }
+            ]
+        }
+    },
+
+    // 格里高爾 - Zwei協會南部4科 ── 人民之盾（防禦洞察）
+    gregor_zwei: {
+        id: 'gregor_zwei',
+        name: '格里高爾 - Zwei協會南部4科',
+        owner: '格里高爾',
+        repeatUnlockSkill: '守護者',
+        keyStatuses: ['shield'],
+        formNote: '【人民之盾】（特殊能量池）：每 1 層使你的防禦洞察加值 +2，可與其他來源的洞察加值疊加（防禦洞察請由玩家自行計入防禦檢定）。場景轉換後歸零重置。',
+        hooks: {
+            onTurnStart: [
+                { condition: () => true, selfStatus: { shield: 2 }, source: '針鋒相對', skill: '針鋒相對' },
+                { condition: () => true, selfStatus: { shield: 3 }, source: '靈活壓制', skill: '靈活壓制' },
+                { condition: () => true, manual: true, source: '守護者', skill: '守護者', locked: true,
+                  desc: '回合開始時可使全體友方單位獲得「你當前人民之盾所提供防禦洞察的一半」的防禦洞察加值，持續至你下一回合開始前；若友方同樣擁有人民之盾，改為直接使其額外獲得 3 層人民之盾。' }
+            ],
+            onAttack: [
+                // 靈活壓制 4：人民之盾 ≥6 → +3 完美加值（視為 DP）
+                { condition: (t, a) => (a.status.shield || 0) >= 6, dpBonus: 3, source: '靈活壓制（人民之盾 6+）', skill: '靈活壓制' },
+                // 守護者 2：每 4 層 → +2 完美加值（最多 +6）
+                { condition: (t, a) => (a.status.shield || 0) >= 4,
+                  dpBonus: (t, a) => Math.min(6, Math.floor((a.status.shield || 0) / 4) * 2),
+                  source: '守護者（每 4 層 +2 完美加值）', skill: '守護者', locked: true },
+                // 守護者 3：≥10 層 → +3 附加成功
+                { condition: (t, a) => (a.status.shield || 0) >= 10, extraSuccess: 3, source: '守護者（人民之盾 10+）', skill: '守護者', locked: true }
+            ],
+            onHit: [
+                // 靈活壓制 4：命中最終傷害 + 人民之盾層數（最多 +8）
+                { condition: (t, a) => (a.status.shield || 0) >= 6,
+                  finalDamage: (t, a) => Math.min(8, a.status.shield || 0),
+                  source: '靈活壓制（人民之盾 6+ 最終傷害）', skill: '靈活壓制' },
+                // 守護者 3：命中最終傷害 + 層數一半（最多 +6）
+                { condition: (t, a) => (a.status.shield || 0) >= 10,
+                  finalDamage: (t, a) => Math.min(6, Math.floor((a.status.shield || 0) / 2)),
+                  source: '守護者（人民之盾 10+ 最終傷害）', skill: '守護者', locked: true },
+                // 下一回合的資源／先攻（引擎無「下回合先攻」欄位，列為手動）
+                { condition: () => true, manual: true, source: '針鋒相對（命中）', skill: '針鋒相對',
+                  desc: '本回合攻擊命中 → 下一回合先攻 +2，且下回合開始時額外獲得 2 層人民之盾。' },
+                { condition: () => true, manual: true, source: '靈活壓制（命中）', skill: '靈活壓制',
+                  desc: '本回合攻擊命中 → 下回合開始時額外獲得 2 層人民之盾。' },
+                { condition: () => true, manual: true, source: '守護者（命中）', skill: '守護者', locked: true,
+                  desc: '本回合攻擊命中 → 全體友方在面對下一次受到的傷害時，獲得等同你人民之盾層數一半的臨時護盾。' }
+            ],
+            onActive: [
+                { name: '針鋒相對（攻擊未造成傷害）', source: '針鋒相對', skill: '針鋒相對',
+                  desc: '本回合攻擊未造成傷害時宣告：立即獲得等同「人民之盾層數 × 3」的護盾，且下回合開始時額外獲得 3 層人民之盾（下回合的 3 層請於回合開始時手動補上）。',
+                  effect: { once: 'turn', selfShield: (ctx) => (ctx.self.status.shield || 0) * 3 } },
+                { name: '針鋒相對（全防禦動作）', source: '針鋒相對', skill: '針鋒相對',
+                  desc: '每擺出一次全防禦動作，該回合額外獲得 4 層人民之盾。',
+                  effect: { selfStatus: { shield: 4 } } },
+                { name: '靈活壓制（挑釁）', source: '靈活壓制', skill: '靈活壓制',
+                  desc: '宣告此技能時，使你看得見且能看見你的至多 2 名敵方目標陷入挑釁：目標在下一輪宣告單體攻擊時須通過意志檢定（DC＝你的決心＋人民之盾層數的一半），失敗則該次攻擊目標強制變更為你。' }
             ]
         }
     },

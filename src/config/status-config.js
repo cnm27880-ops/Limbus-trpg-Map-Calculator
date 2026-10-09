@@ -840,6 +840,16 @@ const STATUS_LIBRARY = {
     // ========== 人格卡（由 identity-config.js 的人格卡引擎施加的專屬狀態） ==========
     identity: [
         {
+            id: 'trauma',
+            name: '創傷',
+            icon: '🩹',
+            type: 'stack',
+            desc: '層數代表創傷階段（1 創傷／2 深度創傷／3 致命創傷）',
+            fullDesc: '格里高爾【夜錐組隊長】專屬。以層數表示階段：1 層＝【創傷】（基礎標記）；2 層＝【深度創傷】，目標的防禦檢定受到 3 點減值；3 層＝【致命創傷】，目標受到的最終傷害 +3，此傷害不受傷害上限影響。再次被施加創傷時依序升級，已是致命創傷（3 層）時回到深度創傷（2 層，請手動調整）。',
+            keyResist: null,
+            effects: { light: '防禦檢定 −3（2 層）', heavy: '最終傷害 +3（3 層）', destruction: null }
+        },
+        {
             id: 'swiftness',
             name: '迅捷',
             icon: '🏃',

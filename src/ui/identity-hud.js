@@ -275,7 +275,7 @@ const IDT_STATUS_LABELS = {
     flaw: '破綻', bind: '束縛', provoke: '挑釁', nails: '尖釘', defenseDown: '防禦等級降低',
     loveHate: '愛/憎', karma: '業', rupture: '破裂', strength: '強壯', endurance: '不屈',
     magicBullet: '魔彈', blackFlame: '黑焰', vulnerable: '易損',
-    bloomingThorns: '綻放荊棘', fanaticism: '狂信'
+    bloomingThorns: '綻放荊棘', fanaticism: '狂信', trauma: '創傷'
 };
 
 function loadCustomIdentities() {

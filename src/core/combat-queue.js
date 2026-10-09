@@ -28,6 +28,25 @@ let cqPendingList = [];     // 等候區快照 [{ key, ...payload }]，最舊的
 let cqAdvancing = false;    // 正在把等候區的下一筆推進作用中槽位（避免重入造成同一筆推兩次）
 let cqLastAbortedAt = null; // 已提示過的「ST 強制中止」時間戳，避免同一次中止重複跳提示
 
+// ── 重複結算去重（ST 端）──────────────────────────────────────────────
+// 即使玩家端有送出鎖，仍可能因玩家瀏覽器快取到舊版腳本（沒有送出鎖）或網路重送，
+// 對同一次攻擊意圖寫入多筆內容完全相同的結算。ST 端以「內容簽章＋首次看到的時間」判定重複：
+// 內容相同且在 CQ_DUP_WINDOW_MS 內陸續出現的，視為同一次攻擊的重送，只保留第一筆。
+// 一律使用 ST 本機時鐘，避免玩家與 ST 時鐘不同步造成誤判。
+const CQ_DUP_WINDOW_MS = 3000;
+let cqActiveSig = null;      // 作用中（或剛結算完）那筆的內容簽章
+let cqActiveSeenAt = 0;      // ST 首次看到該筆的本機時間
+let cqActiveTsSeen = null;   // 作用中那筆的 ts，用來判斷是不是新的一筆
+const cqPendingSeen = {};    // 等候區項目 key → ST 首次看到的本機時間
+let cqLastLoggedTs = null;   // 已寫入戰鬥日誌的廣播 ts，避免同一筆廣播重複寫日誌
+
+/** 攻擊內容簽章：攻擊者、目標與全部攻擊參數相同才視為同一次攻擊意圖 */
+function cqPayloadSig(p) {
+    if (!p) return '';
+    try { return JSON.stringify([p.attacker || null, p.target || null, p.targets || null]); }
+    catch (e) { return ''; }
+}
+
 function cqRef() {
     return roomRef ? roomRef.child('combatQueue') : null;
 }
@@ -60,11 +79,43 @@ function cqSetupListener() {
             const val = snapshot.val() || {};
             // push 鍵本身依時間遞增，明確 sort() 確保「最舊的先結算」與物件列舉順序無關
             cqPendingList = Object.keys(val).sort().map(key => Object.assign({ key }, val[key]));
+            cqPendingList = cqDropDuplicatePending(cqPendingList);
             if (typeof cqOnPendingListChanged === 'function') cqOnPendingListChanged(cqPendingList);
             // 作用中槽位已閒置且等候區有人 → 推進下一筆
             cqTryAdvancePending();
         });
     }
+}
+
+/**
+ * ST 端：從等候區剔除「同一次攻擊意圖的重送」——與作用中那筆、或與更早進來的等候項目
+ * 內容相同且在 CQ_DUP_WINDOW_MS 內出現者。被剔除的項目同步從 Firebase 移除。
+ * @param {Array} list - 等候區快照（最舊的在前）
+ * @returns {Array} 去重後的清單
+ */
+function cqDropDuplicatePending(list) {
+    if (typeof myRole === 'undefined' || myRole !== 'st') return list;
+    const now = Date.now();
+    const live = new Set(list.map(p => p.key));
+    Object.keys(cqPendingSeen).forEach(k => { if (!live.has(k)) delete cqPendingSeen[k]; });
+    list.forEach(p => { if (!cqPendingSeen[p.key]) cqPendingSeen[p.key] = now; });
+
+    const kept = [];
+    list.forEach(p => {
+        const sig = cqPayloadSig(p);
+        const seen = cqPendingSeen[p.key];
+        const dupOfActive = sig && sig === cqActiveSig && Math.abs(seen - cqActiveSeenAt) <= CQ_DUP_WINDOW_MS;
+        const dupOfEarlier = sig && kept.some(k => cqPayloadSig(k) === sig
+            && Math.abs(cqPendingSeen[k.key] - seen) <= CQ_DUP_WINDOW_MS);
+        if (dupOfActive || dupOfEarlier) {
+            const pRef = cqPendingRef();
+            if (pRef) pRef.child(p.key).remove();
+            console.warn('[combat-queue] 已移除重複送出的攻擊：', p.attacker && p.attacker.name);
+            return;
+        }
+        kept.push(p);
+    });
+    return kept;
 }
 
 function cqHandleUpdate(data) {
@@ -88,6 +139,13 @@ function cqHandleUpdate(data) {
         // 作用中槽位空出來了 → 把等候區最舊的一筆推進來接續結算
         cqTryAdvancePending();
         return;
+    }
+
+    // ST 端記下作用中這筆的簽章與首次看到的時間，供等候區去重比對
+    if (typeof myRole !== 'undefined' && myRole === 'st' && data.ts !== cqActiveTsSeen) {
+        cqActiveTsSeen = data.ts;
+        cqActiveSig = cqPayloadSig(data);
+        cqActiveSeenAt = Date.now();
     }
 
     // 防禦方單位已不存在（ST 直接刪角色／單位被移除）時，這筆結算永遠等不到防禦，

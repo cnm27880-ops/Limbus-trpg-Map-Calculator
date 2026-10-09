@@ -3016,6 +3016,124 @@ console.log('\n[地圖庫] 房間永遠不能把本機的地圖庫變少');
     });
 })();
 
+// ====================================================================
+console.log('\n[格里高爾新卡] 夜錐組隊長／Zwei協會南部4科');
+// ====================================================================
+(function () {
+    const sb = { console, Object, Array, JSON, Math, Number, parseInt, Date };
+    vm.createContext(sb);
+    vm.runInContext(['src/config/status-config.js', 'src/config/identity-config.js', 'src/core/identity-engine.js']
+        .map(f => readSource(f)).join('\n;\n')
+        + '\n;\nvar __g = { evaluatePlayerAttack, evaluatePlayerTurnStart, getIdentityById, IDENTITY_STATUS_KEYMAP };',
+        sb, { filename: 'gregor-new-cards.js' });
+    const { evaluatePlayerAttack, evaluatePlayerTurnStart, getIdentityById, IDENTITY_STATUS_KEYMAP } = sb.__g;
+    const night = (unlocked) => [{ id: 'gregor_nightcone', unlocked: !!unlocked }];
+    const zwei = (unlocked) => [{ id: 'gregor_zwei', unlocked: !!unlocked }];
+
+    test('兩張新卡已註冊且歸在格里高爾名下，創傷狀態鍵有對應', () => {
+        assert.strictEqual(getIdentityById('gregor_nightcone').owner, '格里高爾');
+        assert.strictEqual(getIdentityById('gregor_zwei').owner, '格里高爾');
+        assert.strictEqual(IDENTITY_STATUS_KEYMAP.trauma, 'trauma');
+    });
+
+    test('夜錐：宣告攻擊自身 +2 迅捷；命中 +4 流血、+4 震顫（乘隙突擊＋雙錐）、創傷 +1', () => {
+        const r = evaluatePlayerAttack(night(false), { status: {} }, { status: {} });
+        assert.strictEqual(r.onAttackSelfStatus.swiftness, 2);
+        assert.strictEqual(r.onHitTargetStatus.bleed, 4);
+        assert.strictEqual(r.onHitTargetStatus.tremor, 4);
+        assert.strictEqual(r.onHitTargetStatus.trauma, 1);
+    });
+
+    test('夜錐：流血＋震顫每 6 層 +3 DP，上限 +15', () => {
+        const dp = (bleed, tremor) => evaluatePlayerAttack(night(false), { status: {} }, { status: { bleed, tremor } }).totalDpBonus;
+        assert.strictEqual(dp(2, 3), 0, '5 層 → 0');
+        assert.strictEqual(dp(3, 3), 3, '6 層 → +3');
+        assert.strictEqual(dp(6, 6), 6, '12 層 → +6');
+        assert.strictEqual(dp(40, 40), 15, '上限 +15');
+    });
+
+    test('夜錐：目標致命創傷時不再自動 +1 創傷（改手動回到深度創傷）；處決需解鎖才施加 3 流血 3 震顫', () => {
+        const locked = evaluatePlayerAttack(night(false), { status: {} }, { status: { trauma: 3 } });
+        assert.ok(!locked.onHitTargetStatus.trauma, '致命創傷不自動疊層');
+        assert.strictEqual(locked.onHitTargetStatus.bleed, 4);
+        const unlocked = evaluatePlayerAttack(night(true), { status: {} }, { status: { trauma: 3 } });
+        assert.strictEqual(unlocked.onHitTargetStatus.bleed, 7, '4 + 夜錐 3');
+        assert.strictEqual(unlocked.onHitTargetStatus.tremor, 7);
+    });
+
+    test('Zwei：回合開始 +5 人民之盾（針鋒相對 2＋靈活壓制 3）', () => {
+        const r = evaluatePlayerTurnStart(zwei(false), { status: {} });
+        assert.strictEqual(r.expectedSelfStatus.shield, 5);
+    });
+
+    test('Zwei：人民之盾 6+ → +3 DP 與最終傷害＋層數（最多 +8）', () => {
+        const at = (shield, unlocked) => evaluatePlayerAttack(zwei(unlocked), { status: { shield } }, { status: {} });
+        assert.strictEqual(at(5, false).totalDpBonus, 0);
+        assert.strictEqual(at(6, false).totalDpBonus, 3);
+        assert.strictEqual(at(6, false).totalFinalDamage, 6);
+        assert.strictEqual(at(20, false).totalFinalDamage, 8, '最終傷害上限 +8');
+    });
+
+    test('Zwei：守護者（需解鎖）每 4 層 +2 DP（最多 +6）、10 層以上 +3 附加成功與一半層數傷害（最多 +6）', () => {
+        const at = (shield, unlocked) => evaluatePlayerAttack(zwei(unlocked), { status: { shield } }, { status: {} });
+        assert.strictEqual(at(12, false).totalExtraSuccess, 0, '未解鎖不計入');
+        assert.strictEqual(at(8, true).totalDpBonus, 3 + 4, '靈活壓制 +3、守護者 8 層 +4');
+        assert.strictEqual(at(40, true).totalDpBonus, 3 + 6, '守護者上限 +6');
+        assert.strictEqual(at(10, true).totalExtraSuccess, 3);
+        assert.strictEqual(at(10, true).totalFinalDamage, 8 + 5, '靈活壓制 min(8,10)＋守護者 10/2');
+        assert.strictEqual(at(40, true).totalFinalDamage, 8 + 6, '兩段各自封頂');
+    });
+})();
+
+// ====================================================================
+console.log('\n[戰鬥隊列] 重複送出的攻擊由 ST 端去重');
+// ====================================================================
+(function () {
+    function load(role) {
+        const sandbox = {
+            console, Object, Array, JSON, Math, Promise, parseInt, Number, Date, Set,
+            myRole: role, roomRef: null, unsubscribeListeners: [], removed: [],
+            showToast() {}, findUnitById: () => ({})
+        };
+        sandbox.roomRef = { child: () => ({ child: (k) => ({ remove() { sandbox.removed.push(k); } }) }) };
+        vm.createContext(sandbox);
+        vm.runInContext(readSource('src/core/combat-queue.js')
+            + '\n;\nvar __d = { cqDropDuplicatePending, cqHandleUpdate };', sandbox, { filename: 'cq-dedupe.js' });
+        return sandbox;
+    }
+    const mk = (key, name) => ({ key, attacker: { name, id: 'p1', dp: 5 }, target: { id: 't1', name: '敵人' } });
+
+    test('等候區兩筆內容完全相同（連點／舊版快取重送）→ 只保留第一筆', () => {
+        const sb = load('st');
+        const kept = sb.__d.cqDropDuplicatePending([mk('k1', '甲'), mk('k2', '甲')]);
+        assert.strictEqual(kept.length, 1);
+        assert.strictEqual(kept[0].key, 'k1');
+        assert.deepStrictEqual(Array.from(sb.removed), ['k2'], '重複那筆應從 Firebase 移除');
+    });
+
+    test('與作用中那筆內容相同的等候項目 → 視為重送並移除', () => {
+        const sb = load('st');
+        sb.__d.cqHandleUpdate({ status: 'calculating', ts: 1, attacker: { name: '甲', id: 'p1', dp: 5 }, target: { id: 't1', name: '敵人' } });
+        const kept = sb.__d.cqDropDuplicatePending([mk('k1', '甲')]);
+        assert.strictEqual(kept.length, 0);
+    });
+
+    test('不同攻擊者／不同參數的等候項目不受影響', () => {
+        const sb = load('st');
+        const b = mk('k2', '乙');
+        const c = mk('k3', '甲'); c.attacker.dp = 9;
+        const kept = sb.__d.cqDropDuplicatePending([mk('k1', '甲'), b, c]);
+        assert.strictEqual(kept.length, 3);
+    });
+
+    test('玩家端不做去重（只有 ST 動手刪除）', () => {
+        const sb = load('player');
+        const kept = sb.__d.cqDropDuplicatePending([mk('k1', '甲'), mk('k2', '甲')]);
+        assert.strictEqual(kept.length, 2);
+        assert.strictEqual(sb.removed.length, 0);
+    });
+})();
+
 // ===== 結算 =====
 console.log(`\n結果：${passed} 通過，${failed} 失敗\n`);
 process.exit(failed ? 1 : 0);
